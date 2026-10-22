@@ -5,6 +5,9 @@ using System.Security.Cryptography;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
+using ERP.Domain.Security;
+using ERP.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 
@@ -13,10 +16,12 @@ namespace ERP.Infrastructure.Services
     public class TokenService : ITokenService
     {
         private readonly IConfiguration _configuration;
+        private readonly ErpKhoDbContext? _db;
 
-        public TokenService(IConfiguration configuration)
+        public TokenService(IConfiguration configuration, ErpKhoDbContext? db = null)
         {
             _configuration = configuration;
+            _db = db;
         }
 
         public AccessTokenDto GenerateAccessToken(User user)
@@ -34,15 +39,32 @@ namespace ERP.Infrastructure.Services
             var jti = Guid.NewGuid().ToString("N");
             var expiresAtUtc = DateTime.UtcNow.AddMinutes(double.Parse(jwtSettings["ExpiryMinutes"] ?? "15"));
             var tenantId = user.TenantId > 0 ? user.TenantId : 1;
-            var claims = new[]
+            var roleName = user.Role?.RoleName;
+            if (string.IsNullOrWhiteSpace(roleName) && _db is not null && user.RoleId > 0)
             {
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Name, user.Username),
-                new Claim(ClaimTypes.Role, user.Role?.RoleName ?? string.Empty),
-                new Claim(TenantClaimTypes.TenantId, tenantId.ToString()),
-                new Claim(TenantClaimTypes.TenantCode, tenantId == 1 ? "DEFAULT" : $"TENANT-{tenantId}"),
-                new Claim(JwtRegisteredClaimNames.Jti, jti)
+                roleName = _db.Roles
+                    .IgnoreQueryFilters()
+                    .AsNoTracking()
+                    .Where(r => r.Id == user.RoleId)
+                    .Select(r => r.RoleName)
+                    .FirstOrDefault();
+            }
+
+            var permissionCodes = ResolvePermissionCodes(user, roleName);
+            var claims = new List<Claim>
+            {
+                new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new(ClaimTypes.Name, user.Username),
+                new(ClaimTypes.Role, roleName ?? string.Empty),
+                new(TenantClaimTypes.TenantId, tenantId.ToString()),
+                new(TenantClaimTypes.TenantCode, tenantId == 1 ? "DEFAULT" : $"TENANT-{tenantId}"),
+                new(JwtRegisteredClaimNames.Jti, jti)
             };
+
+            foreach (var permissionCode in permissionCodes)
+            {
+                claims.Add(new Claim("permission", permissionCode));
+            }
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
@@ -56,6 +78,107 @@ namespace ERP.Infrastructure.Services
             var tokenHandler = new JwtSecurityTokenHandler();
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return new AccessTokenDto(tokenHandler.WriteToken(token), jti, expiresAtUtc);
+        }
+
+        private IReadOnlyCollection<string> ResolvePermissionCodes(User user, string? roleName)
+        {
+            var effectivePermissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var defaultPerm in AppPermissions.GetDefaultPermissionsForRole(roleName))
+            {
+                effectivePermissions.Add(defaultPerm.Trim().ToLowerInvariant());
+            }
+
+            if (user.Role?.Permissions is { Count: > 0 })
+            {
+                foreach (var rp in user.Role.Permissions)
+                {
+                    if (!string.IsNullOrWhiteSpace(rp.Permission?.Code))
+                    {
+                        effectivePermissions.Add(rp.Permission.Code.Trim().ToLowerInvariant());
+                    }
+                }
+            }
+
+            if (_db is not null)
+            {
+                try
+                {
+                    var roleId = user.RoleId;
+                    if (roleId <= 0 && user.Id > 0)
+                    {
+                        roleId = _db.Users
+                            .IgnoreQueryFilters()
+                            .AsNoTracking()
+                            .Where(u => u.Id == user.Id)
+                            .Select(u => u.RoleId)
+                            .FirstOrDefault();
+                    }
+
+                    if (roleId > 0)
+                    {
+                        var anyRolePermissionsSeeded = _db.RolePermissions
+                            .IgnoreQueryFilters()
+                            .AsNoTracking()
+                            .Any();
+
+                        if (anyRolePermissionsSeeded)
+                        {
+                            var seededPermissionCodes = _db.Permissions
+                                .IgnoreQueryFilters()
+                                .AsNoTracking()
+                                .Where(p => !string.IsNullOrWhiteSpace(p.Code))
+                                .Select(p => p.Code)
+                                .ToList();
+
+                            var grantedDbCodes = _db.RolePermissions
+                                .IgnoreQueryFilters()
+                                .AsNoTracking()
+                                .Where(rp => rp.RoleId == roleId && rp.Permission != null && !string.IsNullOrWhiteSpace(rp.Permission.Code))
+                                .Select(rp => rp.Permission.Code)
+                                .ToList();
+
+                            var grantedSet = new HashSet<string>(
+                                grantedDbCodes.Select(c => c.Trim().ToLowerInvariant()),
+                                StringComparer.OrdinalIgnoreCase);
+
+                            foreach (var seededCode in seededPermissionCodes)
+                            {
+                                var normalized = seededCode.Trim().ToLowerInvariant();
+                                if (grantedSet.Contains(normalized))
+                                {
+                                    effectivePermissions.Add(normalized);
+                                }
+                                else
+                                {
+                                    effectivePermissions.Remove(normalized);
+                                }
+                            }
+
+                            foreach (var granted in grantedSet)
+                            {
+                                effectivePermissions.Add(granted);
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // Fallback to default role permissions when DB is unavailable in isolated unit tests.
+                }
+            }
+
+            if (string.Equals(roleName, "WarehouseStaff", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(roleName, "Viewer", StringComparison.OrdinalIgnoreCase))
+            {
+                var explicitlyGrantedOnEntity = user.Role?.Permissions?.Any(rp =>
+                    string.Equals(rp.Permission?.Code, AppPermissions.InventoryCostRead, StringComparison.OrdinalIgnoreCase)) == true;
+                if (!explicitlyGrantedOnEntity)
+                {
+                    effectivePermissions.Remove(AppPermissions.InventoryCostRead);
+                }
+            }
+
+            return effectivePermissions.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
         }
 
         public string GenerateToken(User user) => GenerateAccessToken(user).Token;

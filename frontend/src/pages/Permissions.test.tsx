@@ -110,9 +110,35 @@ describe('quản trị quyền truy cập', () => {
     expect((view.getByText('Mở khóa tài khoản') as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it('hiển thị thẻ Hạn ngạch Thuê bao Đa Doanh nghiệp & Xác thực Đa yếu tố', async () => {
+  it('hiển thị thẻ Hạn ngạch Thuê bao Đa Doanh nghiệp & Xác thực Đa yếu tố với số liệu động từ API', async () => {
+    get.mockImplementation(async url => {
+      if (url === '/api/permissions') return { data: catalog } as never;
+      if (url === '/api/auth/me') return { data: { permissions: grants } } as never;
+      if (url === '/api/v1/permissions/saas/subscription-billing') {
+        return {
+          data: {
+            planName: 'Gói Tăng trưởng Thương mại Điện tử',
+            subscriptionStatus: 'ACTIVE',
+            activeWarehouses: 2,
+            maxWarehouses: 3,
+            activeUsers: 11,
+            maxUsers: 20,
+            activeProducts: 420,
+            maxProducts: 5000,
+            currentMonthOrderCount: 1280,
+            monthlyOrderQuota: 10000,
+          },
+        } as never;
+      }
+      return { data: [role] } as never;
+    });
     const view = render(<Permissions />);
     expect(await view.findByText('Hạn ngạch Thuê bao Đa Doanh nghiệp & Xác thực Đa yếu tố')).toBeTruthy();
+    expect(await view.findByText('Gói Tăng trưởng Thương mại Điện tử')).toBeTruthy();
+    expect(view.getByText('2 / 3 kho')).toBeTruthy();
+    expect(view.getByText('11 / 20 người dùng')).toBeTruthy();
+    expect(view.getByText('420 / 5.000 mặt hàng')).toBeTruthy();
+    expect(view.getByText('Đơn hàng tháng: 1280 / 10000')).toBeTruthy();
     expect(view.getByText('JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP')).toBeTruthy();
     expect(view.getByText('Khởi tạo Khóa Bảo mật 2 Lớp')).toBeTruthy();
     expect(view.getByText('Xác minh Mã 6 Chữ số')).toBeTruthy();
@@ -161,18 +187,35 @@ describe('quản trị quyền truy cập', () => {
     fireEvent.click(view.getByTestId('btn-grant-support-impersonation'));
     expect(await view.findByText(/Đã cấp phiên hỗ trợ kỹ thuật tạm thời \(#501, TTL 30 phút\)/)).toBeTruthy();
     expect(post).toHaveBeenCalledWith(
-      '/api/account-security/1/support-impersonation',
+      '/api/v1/security/support-impersonation/sessions',
       expect.objectContaining({
         ticketReference: 'ZALO-SUP-2026-001',
         ttlMinutes: 30,
       }),
     );
 
+    get.mockResolvedValueOnce({
+      data: [
+        {
+          id: 501,
+          targetUserId: 1,
+          supportAgentName: 'Chuyên viên Kỹ thuật ERP KHO',
+          ticketReference: 'ZALO-SUP-2026-001',
+          status: 'ACTIVE',
+          expiresAtUtc: '2026-10-22T12:30:00Z',
+        },
+      ],
+    } as never);
+    fireEvent.click(view.getByTestId('btn-load-support-impersonation'));
+    await waitFor(() =>
+      expect(get).toHaveBeenCalledWith('/api/v1/security/support-impersonation/sessions'),
+    );
+
     post.mockResolvedValueOnce({ data: {} } as never);
     fireEvent.click(view.getByTestId('btn-revoke-support-501'));
     expect(await view.findByText(/Đã thu hồi tức thì phiên hỗ trợ kỹ thuật #501/)).toBeTruthy();
     expect(post).toHaveBeenCalledWith(
-      '/api/account-security/support-impersonation/501/revoke',
+      '/api/v1/security/support-impersonation/501/revoke',
       expect.objectContaining({ reason: 'Chủ shop thu hồi phiên hỗ trợ kỹ thuật' }),
     );
   });

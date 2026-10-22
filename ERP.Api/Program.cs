@@ -208,6 +208,7 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IPutawayService>(sp => sp.
 builder.Services.AddScoped<ERP.Application.Interfaces.IReceiptPutawayIntegration>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PutawayService>());
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHostedService<ERP.Api.Hosting.BuyerPiiRetentionAnonymizerJob>();
+builder.Services.AddHostedService<ERP.Api.Hosting.IntegrationOutboxDispatcherJob>();
 var approvalAgingOptions = builder.Configuration.GetSection("ApprovalAging").Get<ERP.Application.Options.ApprovalAgingOptions>() ?? new ERP.Application.Options.ApprovalAgingOptions();
 approvalAgingOptions.Validate();
 builder.Services.AddSingleton(approvalAgingOptions);
@@ -307,6 +308,7 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
 });
 app.UseHttpsRedirection();
 app.UseAuthentication();
+app.UseMiddleware<ERP.Api.Middleware.SupportImpersonationMiddleware>();
 app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();
@@ -341,4 +343,3 @@ static Task WriteHealthResponseAsync(HttpContext context, HealthReport report)
 }
 
 public partial class Program { }
-

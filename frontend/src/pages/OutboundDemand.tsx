@@ -272,6 +272,7 @@ export default function OutboundDemand(){
       setGovernanceBusy(false);
     }
   };
+  const [selectedOrderExcelFile,setSelectedOrderExcelFile]=useState<File|null>(null);
   const [marketplaceChannel,setMarketplaceChannel]=useState<string>('Shopee');
   const [marketplaceFileName,setMarketplaceFileName]=useState<string>('DonHang_Shopee_TikTok_Mau.xlsx');
   const [marketplaceImportResult,setMarketplaceImportResult]=useState<{importBatchId:string;importedOrders:number;channel:string;status:string}|null>(null);
@@ -303,10 +304,16 @@ export default function OutboundDemand(){
     setError('');
     setNotice('');
     try{
-      const res=await apiClient.post('/api/v1/sales-orders/import-marketplace-excel',{
-        channel:marketplaceChannel,
-        fileName:marketplaceFileName,
-        warehouseId:orders[0]?.warehouseId??(warehouseId?Number(warehouseId):1),
+      const resolvedWarehouseId=orders[0]?.warehouseId??(warehouseId?Number(warehouseId):1);
+      const formData=new FormData();
+      if(selectedOrderExcelFile){
+        formData.append('file',selectedOrderExcelFile);
+      }
+      formData.append('channel',marketplaceChannel);
+      formData.append('warehouseId',String(resolvedWarehouseId));
+      formData.append('fileName',marketplaceFileName);
+      const res=await apiClient.post('/api/v1/sales-orders/import-marketplace-excel',formData,{
+        headers:{'Content-Type':'multipart/form-data'},
       });
       const d=(res?.data??{}) as Record<string,unknown>;
       setMarketplaceImportResult({
@@ -408,7 +415,11 @@ export default function OutboundDemand(){
                 aria-label="Tệp Excel đơn hàng sàn"
                 type="file"
                 accept=".xlsx,.xls,.csv"
-                onChange={e=>setMarketplaceFileName(e.target.files?.[0]?.name||'DonHang_Shopee_TikTok_Mau.xlsx')}
+                onChange={e=>{
+                  const file=e.target.files?.[0]??null;
+                  setSelectedOrderExcelFile(file);
+                  setMarketplaceFileName(file?.name||'DonHang_Shopee_TikTok_Mau.xlsx');
+                }}
               />
             </label>
             <button type="submit" disabled={!!busy}>Nhập Excel Đơn hàng Sàn</button>

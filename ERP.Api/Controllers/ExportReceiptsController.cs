@@ -19,15 +19,70 @@ namespace ERP.Api.Controllers
         private readonly IExportReceiptService _exportReceiptService;
         private readonly ErpKhoDbContext? _db;
         private readonly IWarehouseAuthorizationService? _warehouseAccess;
+        private readonly ICurrentUser? _currentUser;
 
         public ExportReceiptsController(
             IExportReceiptService exportReceiptService,
             ErpKhoDbContext db = null!,
-            IWarehouseAuthorizationService warehouseAccess = null!)
+            IWarehouseAuthorizationService warehouseAccess = null!,
+            ICurrentUser? currentUser = null)
         {
             _exportReceiptService = exportReceiptService;
             _db = db;
             _warehouseAccess = warehouseAccess;
+            _currentUser = currentUser;
+        }
+
+        private bool CanReadInventoryCost()
+        {
+            if (_currentUser != null)
+            {
+                return _currentUser.HasPermission(AppPermissions.InventoryCostRead);
+            }
+
+            if (User != null && User.Claims.Any())
+            {
+                if (User.Claims.Any(c =>
+                    (string.Equals(c.Type, "permission", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(c.Type, "permissions", StringComparison.OrdinalIgnoreCase)) &&
+                    string.Equals(c.Value, AppPermissions.InventoryCostRead, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return true;
+                }
+
+                if (User.IsInRole(AppRoles.WarehouseStaff) || User.IsInRole(AppRoles.Viewer))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private bool CanReprintAwb()
+        {
+            if (_currentUser != null)
+            {
+                return _currentUser.HasPermission(ERP.Domain.Security.AppPermissions.ExportReceiptReprintAwb);
+            }
+
+            if (User != null && User.Claims.Any())
+            {
+                if (User.Claims.Any(c =>
+                    (string.Equals(c.Type, "permission", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(c.Type, "permissions", StringComparison.OrdinalIgnoreCase)) &&
+                    string.Equals(c.Value, ERP.Domain.Security.AppPermissions.ExportReceiptReprintAwb, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return true;
+                }
+
+                if (User.IsInRole(AppRoles.WarehouseStaff) || User.IsInRole(AppRoles.Viewer))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private bool TryGetUserId(out int userId)
@@ -76,15 +131,16 @@ namespace ERP.Api.Controllers
         {
             var items = (await _exportReceiptService.GetAllAsync()).ToList();
             var now = DateTime.UtcNow;
-            var activePending = items.Where(x => x.Status is not ("Dispatched" or "Completed" or "Cancelled")).ToList();
+            var activePending = items.Where(x => x.Status is not ("Dispatched" or "Completed" or "Cancelled" or "CancelPendingPutback")).ToList();
             var slaOverdueCount = activePending.Count(x => x.MarketplaceShipByUtc.HasValue && x.MarketplaceShipByUtc.Value < now);
             var slaAtRiskUnder2HoursCount = activePending.Count(x =>
                 x.MarketplaceShipByUtc.HasValue &&
                 x.MarketplaceShipByUtc.Value >= now &&
                 x.MarketplaceShipByUtc.Value <= now.AddHours(2));
             var slaDueTodayCount = activePending.Count(x =>
-                !x.MarketplaceShipByUtc.HasValue ||
-                (x.MarketplaceShipByUtc.Value > now.AddHours(2) && x.MarketplaceShipByUtc.Value.Date == now.Date));
+                x.MarketplaceShipByUtc.HasValue &&
+                x.MarketplaceShipByUtc.Value > now.AddHours(2) &&
+                x.MarketplaceShipByUtc.Value.Date == now.Date);
             var marketplacePrioritizedCount = items.Count(x => !string.IsNullOrWhiteSpace(x.MarketplaceOrderId) || !string.IsNullOrWhiteSpace(x.TrackingNumber));
             var slaComplianceRatePct = items.Count == 0
                 ? 100m
@@ -107,6 +163,79 @@ namespace ERP.Api.Controllers
             });
         }
 
+        [HttpGet("sla-queue")]
+        [HttpGet("marketplace-sla-queue")]
+        [HttpGet("~/api/v1/outbound/sla-queue")]
+        [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
+        public async Task<IActionResult> GetSlaQueue([FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
+        {
+            var now = DateTime.UtcNow;
+            if (_db != null)
+            {
+                var query = _db.ExportReceipts
+                    .AsNoTracking()
+                    .Where(r => r.Status != ERP.Domain.Enums.ReceiptStatus.Cancelled &&
+                                r.Status != ERP.Domain.Enums.ReceiptStatus.CancelPendingPutback &&
+                                r.Status != ERP.Domain.Enums.ReceiptStatus.Dispatched &&
+                                r.MarketplaceShipByUtc.HasValue);
+
+                if (warehouseId.HasValue)
+                {
+                    query = query.Where(r => r.WarehouseId == warehouseId.Value);
+                }
+
+                var receipts = await query
+                    .OrderBy(r => r.MarketplaceShipByUtc)
+                    .ToListAsync(cancellationToken);
+
+                var queueItems = receipts.Select(r =>
+                {
+                    var shipBy = r.MarketplaceShipByUtc!.Value;
+                    var remainingMinutes = (int)Math.Round((shipBy - now).TotalMinutes);
+                    var slaTier = shipBy < now
+                        ? "BREACHED"
+                        : (shipBy <= now.AddHours(2) ? "AT_RISK_UNDER_2H" : "ON_TRACK");
+                    return new
+                    {
+                        exportReceiptId = r.Id,
+                        exportReceiptCode = r.Code,
+                        warehouseId = r.WarehouseId,
+                        marketplaceOrderId = r.MarketplaceOrderId,
+                        carrierCode = r.CarrierCode,
+                        trackingNumber = r.TrackingNumber,
+                        marketplaceShipByUtc = shipBy,
+                        remainingMinutes,
+                        slaTier,
+                        status = r.Status.ToString()
+                    };
+                }).ToList();
+
+                return Ok(new
+                {
+                    totalCount = queueItems.Count,
+                    breachedCount = queueItems.Count(x => x.slaTier == "BREACHED"),
+                    atRiskUnder2HoursCount = queueItems.Count(x => x.slaTier == "AT_RISK_UNDER_2H"),
+                    onTrackCount = queueItems.Count(x => x.slaTier == "ON_TRACK"),
+                    items = queueItems
+                });
+            }
+
+            var dtoItems = (await _exportReceiptService.GetAllAsync())
+                .Where(x => x.MarketplaceShipByUtc.HasValue &&
+                            x.Status is not ("Dispatched" or "Completed" or "Cancelled" or "CancelPendingPutback"))
+                .OrderBy(x => x.MarketplaceShipByUtc)
+                .ToList();
+
+            return Ok(new
+            {
+                totalCount = dtoItems.Count,
+                breachedCount = dtoItems.Count(x => x.MarketplaceShipByUtc!.Value < now),
+                atRiskUnder2HoursCount = dtoItems.Count(x => x.MarketplaceShipByUtc!.Value >= now && x.MarketplaceShipByUtc!.Value <= now.AddHours(2)),
+                onTrackCount = dtoItems.Count(x => x.MarketplaceShipByUtc!.Value > now.AddHours(2)),
+                items = dtoItems
+            });
+        }
+
         [HttpGet("{id}")]
         [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
         public async Task<IActionResult> GetById(int id)
@@ -125,20 +254,23 @@ namespace ERP.Api.Controllers
                 return Unauthorized(new { message = "Không xác định được danh tính người dùng" });
             }
 
+            ERP.Domain.Entities.TenantSubscription? sub = null;
             if (_db != null)
             {
                 var tenantId = _db.CurrentTenantId;
-                var sub = await _db.TenantSubscriptions.FirstOrDefaultAsync(s => s.TenantId == tenantId, cancellationToken);
+                sub = await _db.TenantSubscriptions.FirstOrDefaultAsync(s => s.TenantId == tenantId, cancellationToken);
                 if (sub != null)
                 {
                     var quota = sub.MonthlyOrderQuota > 0 ? sub.MonthlyOrderQuota : 1500;
+                    var maxAllowed = (int)Math.Ceiling(quota * 1.15m);
                     var usagePct = decimal.Round((sub.CurrentMonthOrderCount * 100m) / quota, 2);
                     var isExpiredPastDue = string.Equals(sub.Status, "PAST_DUE", StringComparison.OrdinalIgnoreCase) &&
                                            sub.CurrentPeriodEndUtc.AddHours(72) < DateTime.UtcNow;
-                    if (usagePct > 115m || isExpiredPastDue)
+                    if (sub.CurrentMonthOrderCount >= maxAllowed || usagePct > 115m || isExpiredPastDue)
                     {
                         return StatusCode(403, new
                         {
+                            code = "SUBSCRIPTION_QUOTA_EXCEEDED",
                             errorCode = "SUBSCRIPTION_QUOTA_EXCEEDED",
                             message = $"Thuê bao đã vượt ngưỡng cứng 115% hạn ngạch đơn hàng tháng ({sub.CurrentMonthOrderCount}/{quota} đơn - {usagePct}%) hoặc quá hạn thanh toán 72h. Hệ thống chuyển sang chế độ Chỉ Đọc cho đơn mới."
                         });
@@ -149,6 +281,12 @@ namespace ERP.Api.Controllers
             try
             {
                 var receipt = await _exportReceiptService.CreateAsync(dto, userId);
+                if (_db != null && sub != null)
+                {
+                    sub.CurrentMonthOrderCount += 1;
+                    sub.UpdatedAtUtc = DateTime.UtcNow;
+                    await _db.SaveChangesAsync(cancellationToken);
+                }
                 return CreatedAtAction(nameof(GetById), new { id = receipt.Id }, receipt);
             }
             catch (ERP.Application.Exceptions.BusinessRuleException ex)
@@ -356,6 +494,7 @@ namespace ERP.Api.Controllers
             List<OpeningBalanceItemRequest>? Items = null);
 
         [HttpPost("batch-print-awb")]
+        [HttpPost("batch-print-thermal-awb")]
         [HttpPost("~/api/v1/outbound/print-thermal-labels")]
         [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
         [IdempotentCommand("ExportReceipt.BatchPrintAwb")]
@@ -377,7 +516,8 @@ namespace ERP.Api.Controllers
                     paperSize = "100x150mm",
                     printedCount = 0,
                     duplicatePrintBlocked = true,
-                    labels = Array.Empty<object>()
+                    labels = Array.Empty<object>(),
+                    items = Array.Empty<object>()
                 });
             }
 
@@ -405,21 +545,35 @@ namespace ERP.Api.Controllers
                 query = query.Where(r => r.WarehouseId == request.WarehouseId.Value);
             }
 
+            var hasExplicitReceiptIds = request?.ReceiptIds is { Count: > 0 };
             var receipts = await query.OrderBy(r => r.Id).Take(100).ToListAsync(cancellationToken);
 
-            var alreadyPrintedReceipts = receipts.Where(r => r.AwbPrintCount > 0).ToList();
-            if (alreadyPrintedReceipts.Count > 0 &&
-                explicitReceiptIds is { Count: > 0 } &&
-                request?.EnforceReprintReason == true &&
-                string.IsNullOrWhiteSpace(request.ReprintReason))
+            var alreadyPrintedReceipts = receipts.Where(r => r.AwbPrintCount >= 1).ToList();
+            if (alreadyPrintedReceipts.Count > 0)
             {
-                return Conflict(new
+                if (!CanReprintAwb())
                 {
-                    code = "REPRINT_REASON_REQUIRED",
-                    errorCode = "REPRINT_REASON_REQUIRED",
-                    message = "Phiếu xuất đã được in vận đơn trước đó. Bắt buộc nhập lý do in lại (tem rách, kẹt giấy, mờ mã vạch).",
-                    reprintReceiptIds = alreadyPrintedReceipts.Select(r => r.Id).ToList()
-                });
+                    return StatusCode(403, new
+                    {
+                        code = "AWB_REPRINT_PERMISSION_DENIED",
+                        errorCode = "AWB_REPRINT_PERMISSION_DENIED",
+                        message = "Bạn không có quyền in lại tem vận đơn (export_receipt.reprint_awb).",
+                        reprintReceiptIds = alreadyPrintedReceipts.Select(r => r.Id).ToList()
+                    });
+                }
+
+                var enforceReprintReason = hasExplicitReceiptIds && (request?.EnforceReprintReason ?? true);
+                if (enforceReprintReason && string.IsNullOrWhiteSpace(request?.ReprintReason))
+                {
+                    return Conflict(new
+                    {
+                        code = "AWB_REPRINT_REASON_REQUIRED",
+                        errorCode = "REPRINT_REASON_REQUIRED",
+                        reprintErrorCode = "AWB_REPRINT_REASON_REQUIRED",
+                        message = "Phiếu đã từng in tem vận đơn; bắt buộc nhập lý do in lại (ReprintReason).",
+                        reprintReceiptIds = alreadyPrintedReceipts.Select(r => r.Id).ToList()
+                    });
+                }
             }
 
             var warehouseIds = receipts.Select(r => r.WarehouseId).Distinct().ToList();
@@ -458,6 +612,7 @@ namespace ERP.Api.Controllers
             var validAuditUserId = await ResolveValidAuditUserIdAsync(cancellationToken);
             var labels = new List<object>();
             var htmlPages = new List<string>();
+            var pdfTextLines = new List<string>();
             var seq = 1;
             foreach (var item in enriched)
             {
@@ -467,6 +622,7 @@ namespace ERP.Api.Controllers
                 r.AwbFirstPrintedAtUtc ??= now;
 
                 var footer = $"[Kệ: {item.PrimaryPickLocationCode} | SKU: {item.PrimaryProductCode} x {item.TotalQuantity:0.##}]";
+                var watermarkText = r.AwbPrintCount > 1 ? "REPRINT - BẢN SAO" : null;
                 var watermarkHtml = wasReprint
                     ? $"<div class=\"watermark\">REPRINT - BẢN SAO LẦN {r.AwbPrintCount} ({System.Net.WebUtility.HtmlEncode(request?.ReprintReason ?? "In lại")})</div>"
                     : string.Empty;
@@ -489,23 +645,32 @@ namespace ERP.Api.Controllers
   <footer class=""pick-footer"">{System.Net.WebUtility.HtmlEncode(footer)}</footer>
 </section>";
                 htmlPages.Add(labelHtml);
+                pdfTextLines.Add($"AWB:{r.TrackingNumber} | CARRIER:{r.CarrierCode} | {footer}{(wasReprint ? $" | REPRINT - BAN SAO ({request?.ReprintReason})" : string.Empty)}");
 
                 labels.Add(new
                 {
                     sequence = seq++,
+                    receiptId = r.Id,
                     exportReceiptId = r.Id,
+                    receiptCode = r.Code,
                     exportReceiptCode = r.Code,
                     trackingNumber = r.TrackingNumber,
+                    awbCode = r.TrackingNumber,
                     carrierCode = r.CarrierCode,
+                    carrierName = r.CarrierCode,
                     marketplaceOrderId = r.MarketplaceOrderId ?? $"MP-{r.Code}",
                     paperSize = "100x150mm",
                     primaryPickLocationCode = item.PrimaryPickLocationCode,
                     primaryProductCode = item.PrimaryProductCode,
                     totalQuantity = item.TotalQuantity,
                     pickingSummaryFooter = footer,
+                    pickSequenceFooter = footer,
                     awbPrintCount = r.AwbPrintCount,
+                    printCount = r.AwbPrintCount,
                     awbFirstPrintedAtUtc = r.AwbFirstPrintedAtUtc,
                     isReprint = wasReprint,
+                    isReprintWatermark = wasReprint,
+                    watermarkText,
                     reprintReason = wasReprint ? request?.ReprintReason : null,
                     labelHtml
                 });
@@ -542,7 +707,8 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
 .cod-box {{ margin: 8px 0; padding: 6px; border: 2px solid #000; font-size: 14px; }}
 .pick-footer {{ margin-top: 10px; padding-top: 6px; border-top: 1px dashed #000; font-weight: bold; font-size: 11px; }}
 </style></head><body>{string.Join("\n", htmlPages)}</body></html>";
-            var pdfBase64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(printHtmlDocument));
+            var pdfBytes = BuildThermalAwbPdf14Bytes(batchCode, pdfTextLines);
+            var pdfBase64 = Convert.ToBase64String(pdfBytes);
 
             return Ok(new
             {
@@ -552,11 +718,59 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 printedCount = labels.Count,
                 duplicatePrintBlocked = true,
                 printHtmlDocument,
+                thermalPrintHtml = printHtmlDocument,
                 pdfBase64,
                 labels,
+                items = labels,
                 printedAtUtc = now,
                 statusLabel = $"Đã kết xuất lô in nhiệt {labels.Count} vận đơn 100x150mm theo thứ tự tuyến kệ nhặt"
             });
+        }
+
+        private static byte[] BuildThermalAwbPdf14Bytes(string batchCode, IReadOnlyList<string> lines)
+        {
+            var sanitizedLines = lines.Count > 0 ? lines : new[] { $"Batch {batchCode} - Thermal AWB 100x150mm" };
+            var streamBuilder = new System.Text.StringBuilder();
+            streamBuilder.Append("BT\n/F1 9 Tf\n14 405 Td\n");
+            streamBuilder.Append($"(Thermal AWB 100x150mm - {EscapePdfText(batchCode)}) Tj\n");
+            foreach (var line in sanitizedLines)
+            {
+                streamBuilder.Append("0 -16 Td\n");
+                streamBuilder.Append($"({EscapePdfText(line)}) Tj\n");
+            }
+            streamBuilder.Append("ET\n");
+            var contentStream = streamBuilder.ToString();
+            var contentByteLength = System.Text.Encoding.UTF8.GetByteCount(contentStream);
+
+            var pdf = new System.Text.StringBuilder();
+            pdf.Append("%PDF-1.4\n");
+            var obj1Offset = System.Text.Encoding.UTF8.GetByteCount(pdf.ToString());
+            pdf.Append("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+            var obj2Offset = System.Text.Encoding.UTF8.GetByteCount(pdf.ToString());
+            pdf.Append("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+            var obj3Offset = System.Text.Encoding.UTF8.GetByteCount(pdf.ToString());
+            pdf.Append("3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 283.46 425.20] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n");
+            var obj4Offset = System.Text.Encoding.UTF8.GetByteCount(pdf.ToString());
+            pdf.Append($"4 0 obj\n<< /Length {contentByteLength} >>\nstream\n{contentStream}endstream\nendobj\n");
+            var obj5Offset = System.Text.Encoding.UTF8.GetByteCount(pdf.ToString());
+            pdf.Append("5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n");
+            var xrefOffset = System.Text.Encoding.UTF8.GetByteCount(pdf.ToString());
+            pdf.Append("xref\n0 6\n0000000000 65535 f \n");
+            pdf.Append($"{obj1Offset:D10} 00000 n \n");
+            pdf.Append($"{obj2Offset:D10} 00000 n \n");
+            pdf.Append($"{obj3Offset:D10} 00000 n \n");
+            pdf.Append($"{obj4Offset:D10} 00000 n \n");
+            pdf.Append($"{obj5Offset:D10} 00000 n \n");
+            pdf.Append($"trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n{xrefOffset}\n%%EOF");
+            return System.Text.Encoding.UTF8.GetBytes(pdf.ToString());
+        }
+
+        private static string EscapePdfText(string input)
+        {
+            return (input ?? string.Empty)
+                .Replace("\\", "\\\\")
+                .Replace("(", "\\(")
+                .Replace(")", "\\)");
         }
 
         [HttpGet("~/api/v1/handover-manifests")]
@@ -800,6 +1014,144 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
             });
         }
 
+        private async Task<IActionResult?> DispatchManifestReceiptsAsync(
+            List<ERP.Domain.Entities.ExportReceipt> receipts,
+            int actorUserId,
+            DateTime now,
+            CancellationToken cancellationToken)
+        {
+            if (_db == null || receipts.Count == 0)
+            {
+                return null;
+            }
+
+            foreach (var receipt in receipts)
+            {
+                var linkedOrderCancelled = receipt.SalesOrderId.HasValue && await _db.SalesOrders
+                    .AsNoTracking()
+                    .AnyAsync(o => o.Id == receipt.SalesOrderId.Value &&
+                                   (o.Status == ERP.Domain.Enums.SalesOrderStatus.Cancelled ||
+                                    o.Status == ERP.Domain.Enums.SalesOrderStatus.CancelPendingPutback),
+                              cancellationToken);
+
+                if (receipt.Status == ERP.Domain.Enums.ReceiptStatus.Cancelled ||
+                    receipt.Status == ERP.Domain.Enums.ReceiptStatus.CancelPendingPutback ||
+                    linkedOrderCancelled)
+                {
+                    return Conflict(new
+                    {
+                        code = "ORDER_CANCELLED_PUTBACK_REQUIRED",
+                        errorCode = "ORDER_CANCELLED_PUTBACK_REQUIRED",
+                        exportReceiptId = receipt.Id,
+                        exportReceiptCode = receipt.Code,
+                        trackingNumber = receipt.TrackingNumber,
+                        message = "Đơn hàng đã hủy hoặc đang chờ hoàn kệ (Putback), không thể bàn giao vận chuyển."
+                    });
+                }
+            }
+
+            foreach (var receipt in receipts.Where(r => r.Status == ERP.Domain.Enums.ReceiptStatus.Approved))
+            {
+                try
+                {
+                    await _exportReceiptService.DispatchAsync(receipt.Id, actorUserId);
+                }
+                catch (ERP.Application.Exceptions.BusinessRuleException ex)
+                {
+                    return Conflict(new
+                    {
+                        code = "ORDER_CANCELLED_PUTBACK_REQUIRED",
+                        errorCode = "ORDER_CANCELLED_PUTBACK_REQUIRED",
+                        exportReceiptId = receipt.Id,
+                        message = ex.Message
+                    });
+                }
+
+                var refreshed = await _db.ExportReceipts
+                    .Include(r => r.Details)
+                    .FirstOrDefaultAsync(r => r.Id == receipt.Id, cancellationToken);
+
+                if (refreshed != null && refreshed.Status != ERP.Domain.Enums.ReceiptStatus.Dispatched)
+                {
+                    var productIds = refreshed.Details.Select(d => d.ProductId).Distinct().ToList();
+                    if (productIds.Count > 0)
+                    {
+                        await _db.AcquireInventoryAllocationLocksAsync(refreshed.WarehouseId, productIds, cancellationToken);
+                    }
+
+                    foreach (var detail in refreshed.Details)
+                    {
+                        var stocks = await _db.InventoryStocks
+                            .Where(s => s.WarehouseId == refreshed.WarehouseId &&
+                                        s.ProductId == detail.ProductId &&
+                                        s.Status == ERP.Domain.Enums.InventoryStatus.Available)
+                            .OrderByDescending(s => s.Quantity)
+                            .ToListAsync(cancellationToken);
+
+                        var remainingToDeduct = detail.Quantity;
+                        decimal unitCostSnapshot = 0m;
+                        foreach (var stock in stocks)
+                        {
+                            if (remainingToDeduct <= 0m) break;
+                            unitCostSnapshot = stock.MovingAverageCost;
+                            var deduct = Math.Min(stock.Quantity, remainingToDeduct);
+                            if (deduct <= 0m) deduct = remainingToDeduct;
+                            stock.Quantity = Math.Max(0m, stock.Quantity - deduct);
+                            if (stock.ReservedQuantity > 0m)
+                            {
+                                stock.ReservedQuantity = Math.Max(0m, stock.ReservedQuantity - deduct);
+                            }
+                            if (stock.AllocatedQuantity > 0m)
+                            {
+                                stock.AllocatedQuantity = Math.Max(0m, stock.AllocatedQuantity - deduct);
+                            }
+                            stock.LastUpdated = now;
+                            remainingToDeduct -= deduct;
+                        }
+
+                        var reservations = await _db.StockReservations
+                            .Include(r => r.Allocations)
+                            .Where(r => r.WarehouseId == refreshed.WarehouseId &&
+                                        r.ProductId == detail.ProductId &&
+                                        r.Status == ERP.Domain.Enums.StockReservationStatus.Active &&
+                                        ((r.SourceType == "ExportReceipt" && r.SourceId == refreshed.Id) ||
+                                         (refreshed.SalesOrderId.HasValue && r.SourceType == "SalesOrder" && r.SourceId == refreshed.SalesOrderId.Value)))
+                            .ToListAsync(cancellationToken);
+
+                        foreach (var res in reservations)
+                        {
+                            res.Status = ERP.Domain.Enums.StockReservationStatus.Consumed;
+                            res.ConsumedQuantity = res.Quantity;
+                            foreach (var alloc in res.Allocations)
+                            {
+                                alloc.Status = ERP.Domain.Enums.StockAllocationStatus.Picked;
+                            }
+                        }
+
+                        _db.InventoryTransactions.Add(new ERP.Domain.Entities.InventoryTransaction
+                        {
+                            ProductId = detail.ProductId,
+                            WarehouseId = refreshed.WarehouseId,
+                            TransactionType = ERP.Domain.Enums.TransactionType.Export,
+                            Quantity = -detail.Quantity,
+                            UnitCost = unitCostSnapshot,
+                            ReferenceId = refreshed.Id,
+                            ReferenceType = "ExportReceipt",
+                            CreatedBy = actorUserId,
+                            TransactionDate = now,
+                            Note = $"Xuất kho bàn giao vận chuyển phiếu {refreshed.Code}"
+                        });
+                    }
+
+                    refreshed.Status = ERP.Domain.Enums.ReceiptStatus.Dispatched;
+                    refreshed.DispatchedAt = now;
+                    await _db.SaveChangesAsync(cancellationToken);
+                }
+            }
+
+            return null;
+        }
+
         [HttpPost("~/api/v1/handover-manifests/{id:int}/seal")]
         [HttpPost("~/api/handover-manifests/{id:int}/seal")]
         [HttpPost("handover-manifests/{id:int}/seal")]
@@ -835,6 +1187,19 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
 
             var now = DateTime.UtcNow;
             var actorUserId = TryGetUserId(out var uid) ? uid : 1;
+
+            var lineReceiptIds = manifest.Lines.Where(l => l.ExportReceiptId > 0).Select(l => l.ExportReceiptId).Distinct().ToList();
+            var lineTrackings = manifest.Lines.Where(l => !string.IsNullOrWhiteSpace(l.TrackingNumber)).Select(l => l.TrackingNumber).Distinct().ToList();
+            var manifestReceipts = await _db.ExportReceipts
+                .Include(r => r.Details)
+                .Where(r => lineReceiptIds.Contains(r.Id) || (r.TrackingNumber != null && lineTrackings.Contains(r.TrackingNumber)))
+                .ToListAsync(cancellationToken);
+
+            var dispatchConflict = await DispatchManifestReceiptsAsync(manifestReceipts, actorUserId, now, cancellationToken);
+            if (dispatchConflict != null)
+            {
+                return dispatchConflict;
+            }
 
             manifest.Status = "SEALED";
             manifest.SealedBy = actorUserId;
@@ -881,6 +1246,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 manifest.VehiclePlate,
                 manifest.SealedAtUtc,
                 digitalSignatureHash,
+                dispatchedReceiptIds = manifestReceipts.Select(r => r.Id).ToList(),
                 statusLabel = $"Đã niêm phong biên bản bàn giao {manifest.ManifestCode} ({manifest.TotalPackages} kiện)"
             });
         }
@@ -891,7 +1257,9 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
             List<string>? TrackingNumbers = null,
             string? VehiclePlate = null,
             string? DriverName = null,
-            string? DriverPhone = null);
+            string? DriverPhone = null,
+            int? ManifestId = null,
+            List<int>? ExportReceiptIds = null);
 
         [HttpPost("confirm-carrier-handover")]
         [HttpPost("handover-manifests/confirm")]
@@ -909,7 +1277,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
             var carrierCode = string.IsNullOrWhiteSpace(request?.CarrierCode) ? "GHN" : request.CarrierCode.Trim().ToUpperInvariant();
             var trackingNumbers = request?.TrackingNumbers is { Count: > 0 }
                 ? request.TrackingNumbers.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
-                : new List<string> { $"GHN{now:yyMMdd}01" };
+                : new List<string>();
 
             if (_db == null)
             {
@@ -933,7 +1301,14 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 await _warehouseAccess.EnsureWarehouseAccessAsync(targetWarehouseId, cancellationToken);
             }
 
-            var manifest = await _db.HandoverManifests
+            ERP.Domain.Entities.HandoverManifest? manifest = null;
+            if (request?.ManifestId is > 0)
+            {
+                manifest = await _db.HandoverManifests
+                    .Include(m => m.Lines)
+                    .FirstOrDefaultAsync(m => m.Id == request.ManifestId.Value, cancellationToken);
+            }
+            manifest ??= await _db.HandoverManifests
                 .Include(m => m.Lines)
                 .OrderByDescending(m => m.Id)
                 .FirstOrDefaultAsync(m => m.WarehouseId == targetWarehouseId && m.CarrierCode == carrierCode, cancellationToken)
@@ -942,12 +1317,62 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                     .OrderByDescending(m => m.Id)
                     .FirstOrDefaultAsync(cancellationToken);
 
-            var defaultReceiptId = await _db.ExportReceipts
+            var explicitReceiptIds = request?.ExportReceiptIds ?? new List<int>();
+            var matchedReceipts = await _db.ExportReceipts
+                .Include(r => r.Details)
+                .Where(r => explicitReceiptIds.Contains(r.Id) ||
+                            (r.TrackingNumber != null && trackingNumbers.Contains(r.TrackingNumber)) ||
+                            trackingNumbers.Contains(r.Code))
+                .ToListAsync(cancellationToken);
+
+            if (manifest != null && manifest.Lines.Count > 0)
+            {
+                var manifestLineReceiptIds = manifest.Lines.Where(l => l.ExportReceiptId > 0).Select(l => l.ExportReceiptId).Distinct().ToList();
+                var manifestLineTrackings = manifest.Lines.Where(l => !string.IsNullOrWhiteSpace(l.TrackingNumber)).Select(l => l.TrackingNumber).Distinct().ToList();
+                var fromManifest = await _db.ExportReceipts
+                    .Include(r => r.Details)
+                    .Where(r => manifestLineReceiptIds.Contains(r.Id) ||
+                                (r.TrackingNumber != null && manifestLineTrackings.Contains(r.TrackingNumber)))
+                    .ToListAsync(cancellationToken);
+                foreach (var r in fromManifest)
+                {
+                    if (matchedReceipts.All(x => x.Id != r.Id))
+                    {
+                        matchedReceipts.Add(r);
+                    }
+                }
+            }
+
+            if (matchedReceipts.Count == 0 && request?.WarehouseId.HasValue == true)
+            {
+                matchedReceipts = await _db.ExportReceipts
+                    .Include(r => r.Details)
+                    .Where(r => r.WarehouseId == targetWarehouseId &&
+                                r.Status == ERP.Domain.Enums.ReceiptStatus.Approved)
+                    .OrderByDescending(r => r.Id)
+                    .ToListAsync(cancellationToken);
+            }
+
+            var dispatchConflict = await DispatchManifestReceiptsAsync(matchedReceipts, actorUserId, now, cancellationToken);
+            if (dispatchConflict != null)
+            {
+                return dispatchConflict;
+            }
+
+            var defaultReceiptId = matchedReceipts.FirstOrDefault()?.Id ?? await _db.ExportReceipts
                 .AsNoTracking()
                 .Where(r => r.Status != ERP.Domain.Enums.ReceiptStatus.Cancelled && r.Status != ERP.Domain.Enums.ReceiptStatus.CancelPendingPutback)
                 .OrderByDescending(r => r.Id)
                 .Select(r => r.Id)
                 .FirstOrDefaultAsync(cancellationToken);
+
+            if (trackingNumbers.Count == 0 && matchedReceipts.Count > 0)
+            {
+                trackingNumbers = matchedReceipts
+                    .Select(r => !string.IsNullOrWhiteSpace(r.TrackingNumber) ? r.TrackingNumber! : r.Code)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
 
             if (manifest == null)
             {
@@ -960,7 +1385,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                     DriverName = request?.DriverName ?? "Bưu tá lấy hàng",
                     DriverPhone = request?.DriverPhone ?? "0909123456",
                     Status = "SEALED",
-                    TotalPackages = trackingNumbers.Count,
+                    TotalPackages = Math.Max(1, trackingNumbers.Count),
                     CreatedBy = actorUserId,
                     CreatedAtUtc = now,
                     SealedBy = actorUserId,
@@ -977,10 +1402,13 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                     .AnyAsync(l => l.TrackingNumber == tracking, cancellationToken);
                 if (!exists && defaultReceiptId > 0)
                 {
+                    var matchedForTracking = matchedReceipts.FirstOrDefault(r =>
+                        string.Equals(r.TrackingNumber, tracking, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(r.Code, tracking, StringComparison.OrdinalIgnoreCase));
                     _db.HandoverManifestLines.Add(new ERP.Domain.Entities.HandoverManifestLine
                     {
                         ManifestId = manifest.Id,
-                        ExportReceiptId = defaultReceiptId,
+                        ExportReceiptId = matchedForTracking?.Id ?? defaultReceiptId,
                         TrackingNumber = tracking,
                         ScannedBy = actorUserId,
                         ScannedAtUtc = now
@@ -1008,6 +1436,8 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 manifest.VehiclePlate,
                 manifest.SealedAtUtc,
                 trackingNumbers,
+                dispatchedCount = matchedReceipts.Count(r => r.Status == ERP.Domain.Enums.ReceiptStatus.Dispatched),
+                dispatchedReceiptIds = matchedReceipts.Where(r => r.Status == ERP.Domain.Enums.ReceiptStatus.Dispatched).Select(r => r.Id).ToList(),
                 statusLabel = $"Đã chốt & niêm phong biên bản bàn giao bưu tá điện tử {manifest.ManifestCode} ({manifest.TotalPackages} kiện)"
             });
         }
@@ -1015,6 +1445,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
         [HttpGet("~/api/v1/carriers/address-mappings")]
         [HttpGet("~/api/carriers/address-mappings")]
         [HttpGet("carriers/address-mappings")]
+        [HttpGet("carrier-address-mappings")]
         [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
         public async Task<IActionResult> GetCarrierAddressMappings(
             [FromQuery] string? province = null,
@@ -1022,32 +1453,120 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
             [FromQuery] string? ward = null,
             CancellationToken cancellationToken = default)
         {
-            var normalizedProvince = string.IsNullOrWhiteSpace(province) ? "TP. Hồ Chí Minh" : province.Trim();
-            var normalizedDistrict = string.IsNullOrWhiteSpace(district) ? "Thành phố Thủ Đức" : district.Trim();
-            var normalizedWard = string.IsNullOrWhiteSpace(ward) ? "Phường An Khánh" : ward.Trim();
-
-            var dbUnitsCount = 0;
-            if (_db != null)
+            if (_db == null)
             {
-                await ShipmentsController.EnsureVnAdministrativeSeededAsync(_db, cancellationToken);
-                dbUnitsCount = await _db.VnAdministrativeUnits.AsNoTracking().CountAsync(cancellationToken);
+                return Ok(new
+                {
+                    administrativeModel = "VN_2_TIER_2025_2026",
+                    matched = false,
+                    persistedUnitsCount = 0,
+                    units = Array.Empty<object>(),
+                    carrierMappings = Array.Empty<object>()
+                });
             }
+
+            await ShipmentsController.EnsureVnAdministrativeSeededAsync(_db, cancellationToken);
+
+            var allUnits = await _db.VnAdministrativeUnits
+                .AsNoTracking()
+                .Include(u => u.CarrierMappings)
+                .Where(u => u.IsActive)
+                .ToListAsync(cancellationToken);
+
+            var filteredUnits = allUnits.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(province))
+            {
+                var p = province.Trim();
+                filteredUnits = filteredUnits.Where(u =>
+                    u.ProvinceName.Contains(p, StringComparison.OrdinalIgnoreCase) ||
+                    p.Contains(u.ProvinceName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(u.ProvinceCode, p, StringComparison.OrdinalIgnoreCase));
+            }
+            if (!string.IsNullOrWhiteSpace(ward))
+            {
+                var w = ward.Trim();
+                filteredUnits = filteredUnits.Where(u =>
+                    u.WardName.Contains(w, StringComparison.OrdinalIgnoreCase) ||
+                    w.Contains(u.WardName, StringComparison.OrdinalIgnoreCase) ||
+                    (u.Keywords != null && u.Keywords.Contains(w, StringComparison.OrdinalIgnoreCase)) ||
+                    string.Equals(u.WardCode, w, StringComparison.OrdinalIgnoreCase));
+            }
+            if (!string.IsNullOrWhiteSpace(district))
+            {
+                var d = district.Trim();
+                var byDistrict = filteredUnits.Where(u =>
+                    (!string.IsNullOrWhiteSpace(u.DistrictName) && (u.DistrictName.Contains(d, StringComparison.OrdinalIgnoreCase) || d.Contains(u.DistrictName, StringComparison.OrdinalIgnoreCase))) ||
+                    (!string.IsNullOrWhiteSpace(u.DistrictCode) && string.Equals(u.DistrictCode, d, StringComparison.OrdinalIgnoreCase))).ToList();
+                if (byDistrict.Count > 0)
+                {
+                    filteredUnits = byDistrict;
+                }
+            }
+
+            var matchedUnits = filteredUnits.ToList();
+            var matched = matchedUnits.Count > 0;
+            var primaryUnit = matchedUnits.FirstOrDefault() ?? allUnits.FirstOrDefault();
+            var unitIds = matchedUnits.Select(u => u.Id).ToHashSet();
+            var dbMappings = await _db.CarrierLocationMappings
+                .AsNoTracking()
+                .Where(m => unitIds.Count == 0 || unitIds.Contains(m.AdministrativeUnitId))
+                .ToListAsync(cancellationToken);
+
+            var ghnMap = primaryUnit?.CarrierMappings.FirstOrDefault(m => m.CarrierCode == "GHN");
+            var ghtkMap = primaryUnit?.CarrierMappings.FirstOrDefault(m => m.CarrierCode == "GHTK");
+            var vtpMap = primaryUnit?.CarrierMappings.FirstOrDefault(m => m.CarrierCode == "VTP" || m.CarrierCode == "VIETTELPOST" || m.CarrierCode == "VTPOST");
+            var jtMap = primaryUnit?.CarrierMappings.FirstOrDefault(m => m.CarrierCode == "JT" || m.CarrierCode == "J&T" || m.CarrierCode == "SPX");
 
             return Ok(new
             {
-                input = new { province = normalizedProvince, district = normalizedDistrict, ward = normalizedWard },
-                persistedUnitsCount = dbUnitsCount,
-                normalized = new
+                administrativeModel = "VN_2_TIER_2025_2026",
+                matched,
+                input = new { province, district, ward },
+                persistedUnitsCount = allUnits.Count,
+                matchedUnitsCount = matchedUnits.Count,
+                units = matchedUnits.Select(u => new
                 {
-                    provinceName = normalizedProvince,
-                    districtName = normalizedDistrict,
-                    wardName = normalizedWard,
-                    ghn = new { provinceId = 202, districtId = 3695, wardCode = "90737", routeCode = "HCM-TD-AK-01" },
-                    ghtk = new { provinceCode = "SG", districtCode = "SG-TD", wardCode = "SG-TD-AK", sortingHub = "HUB-HCM-DONG" },
-                    viettelPost = new { provinceId = 2, districtId = 25, wardId = 412, postOfficeCode = "BCP-THUDUC" },
-                    jtExpress = new { areaCode = "700000-TD", sortingCode = "SGN-E02" }
+                    u.Id,
+                    u.ProvinceCode,
+                    u.ProvinceName,
+                    u.WardCode,
+                    u.WardName,
+                    legacyDistrictCode = u.DistrictCode,
+                    legacyDistrictName = u.DistrictName,
+                    legacyWardAliases = u.Keywords,
+                    carrierMappings = u.CarrierMappings.Select(m => new
+                    {
+                        m.Id,
+                        m.CarrierCode,
+                        m.CarrierProvinceId,
+                        m.CarrierDistrictId,
+                        m.CarrierWardCode,
+                        sortingRouteCode = m.RouteCode
+                    })
+                }),
+                carrierMappings = dbMappings.Select(m => new
+                {
+                    m.Id,
+                    m.AdministrativeUnitId,
+                    m.CarrierCode,
+                    m.CarrierProvinceId,
+                    m.CarrierDistrictId,
+                    m.CarrierWardCode,
+                    sortingRouteCode = m.RouteCode
+                }),
+                normalized = primaryUnit == null ? null : new
+                {
+                    provinceCode = primaryUnit.ProvinceCode,
+                    provinceName = primaryUnit.ProvinceName,
+                    districtName = primaryUnit.DistrictName,
+                    wardCode = primaryUnit.WardCode,
+                    wardName = primaryUnit.WardName,
+                    ghn = ghnMap == null ? null : new { provinceId = ghnMap.CarrierProvinceId, districtId = ghnMap.CarrierDistrictId, wardCode = ghnMap.CarrierWardCode, routeCode = ghnMap.RouteCode },
+                    ghtk = ghtkMap == null ? null : new { provinceCode = ghtkMap.CarrierProvinceId, districtCode = ghtkMap.CarrierDistrictId, wardCode = ghtkMap.CarrierWardCode, sortingHub = ghtkMap.RouteCode },
+                    viettelPost = vtpMap == null ? null : new { provinceId = vtpMap.CarrierProvinceId, districtId = vtpMap.CarrierDistrictId, wardId = vtpMap.CarrierWardCode, postOfficeCode = vtpMap.RouteCode },
+                    jtExpress = jtMap == null ? null : new { areaCode = jtMap.CarrierDistrictId, sortingCode = jtMap.RouteCode }
                 },
-                statusLabel = "Đã chuẩn hóa địa giới hành chính 3 cấp Việt Nam sang mã định tuyến GHN / GHTK / ViettelPost / J&T"
+                statusLabel = "Đã truy vấn & chuẩn hóa địa giới hành chính Việt Nam sang mã định tuyến 3PL từ cơ sở dữ liệu"
             });
         }
 
@@ -1084,11 +1603,14 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
         [HttpPost("~/api/data-imports/opening-balance")]
         [HttpPost("data-imports/opening-balance")]
         [HttpPost("~/api/v1/inventory/opening-balances/import")]
+        [HttpPost("~/api/v1/inventory/opening-balance-import")]
+        [HttpPost("~/api/inventory/opening-balance-import")]
         [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
         [IdempotentCommand("Inventory.ImportOpeningBalance")]
         public async Task<IActionResult> ImportOpeningBalance(
-            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ImportOpeningBalanceRequest? request = null,
-            CancellationToken cancellationToken = default)
+            [ModelBinder(BinderType = typeof(FlexibleBodyOrFormModelBinder))] ImportOpeningBalanceRequest? request = null,
+            CancellationToken cancellationToken = default,
+            [ModelBinder(BinderType = typeof(FlexibleFormFileModelBinder))] Microsoft.AspNetCore.Http.IFormFile? file = null)
         {
             if (User?.IsInRole(AppRoles.Viewer) == true)
                 return Forbid();
@@ -1101,6 +1623,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
             var now = DateTime.UtcNow;
             var actorUserId = TryGetUserId(out var uid) ? uid : 1;
             var warehouseId = request?.WarehouseId ?? await _db.Warehouses.AsNoTracking().OrderBy(w => w.Id).Select(w => w.Id).FirstOrDefaultAsync(cancellationToken);
+            if (warehouseId <= 0) warehouseId = 1;
 
             if (warehouseId > 0 && _warehouseAccess != null)
             {
@@ -1108,34 +1631,67 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
             }
 
             var items = new List<OpeningBalanceItemRequest>();
-            if (Request?.HasFormContentType == true && Request.Form.Files.Count > 0)
+            var uploadedFile = file ?? (Request?.HasFormContentType == true && Request.Form.Files.Count > 0 ? Request.Form.Files[0] : null);
+            if (uploadedFile != null && uploadedFile.Length > 0)
             {
-                using var stream = Request.Form.Files[0].OpenReadStream();
+                using var stream = uploadedFile.OpenReadStream();
                 using var wb = new ClosedXML.Excel.XLWorkbook(stream);
                 var ws = wb.Worksheets.First();
                 foreach (var row in ws.RowsUsed().Skip(1))
                 {
                     var pCode = row.Cell(1).GetString()?.Trim();
-                    var qtyVal = row.Cell(3).TryGetValue<decimal>(out var q) ? q : 10m;
-                    var costVal = row.Cell(4).TryGetValue<decimal>(out var c) ? c : 85000m;
-                    if (!string.IsNullOrWhiteSpace(pCode))
+                    var locCode = row.Cell(2).GetString()?.Trim();
+                    var qtyVal = row.Cell(3).TryGetValue<decimal>(out var q)
+                        ? q
+                        : (decimal.TryParse(row.Cell(3).GetString()?.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var qParsed) ? qParsed : 0m);
+                    var costVal = row.Cell(4).TryGetValue<decimal>(out var c)
+                        ? c
+                        : (decimal.TryParse(row.Cell(4).GetString()?.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var cParsed) ? cParsed : 0m);
+                    var lotNumber = row.Cell(5).GetString()?.Trim();
+                    DateTime? expiryDate = null;
+                    if (row.Cell(6).TryGetValue<DateTime>(out var dt))
                     {
-                        items.Add(new OpeningBalanceItemRequest(ProductCode: pCode, Quantity: qtyVal, UnitCost: costVal));
+                        expiryDate = DateTime.SpecifyKind(dt.Date, DateTimeKind.Utc);
+                    }
+                    else if (DateTime.TryParse(row.Cell(6).GetString()?.Trim(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var dtParsed))
+                    {
+                        expiryDate = DateTime.SpecifyKind(dtParsed.Date, DateTimeKind.Utc);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(pCode) && qtyVal > 0m)
+                    {
+                        items.Add(new OpeningBalanceItemRequest(
+                            ProductCode: pCode,
+                            LocationCode: string.IsNullOrWhiteSpace(locCode) ? null : locCode,
+                            Quantity: qtyVal,
+                            UnitCost: costVal,
+                            LotNumber: string.IsNullOrWhiteSpace(lotNumber) ? null : lotNumber,
+                            ExpiryDate: expiryDate));
                     }
                 }
             }
+
+            if (items.Count == 0 && request?.Items is { Count: > 0 })
+            {
+                items.AddRange(request.Items);
+            }
+            else if (items.Count == 0 && (request?.ProductId is > 0 || request?.Quantity is > 0m))
+            {
+                items.Add(new OpeningBalanceItemRequest(
+                    ProductId: request.ProductId,
+                    LocationId: request.LocationId,
+                    Quantity: request.Quantity ?? 0m,
+                    UnitCost: request.UnitCost ?? 0m));
+            }
+
             if (items.Count == 0)
             {
-                items = request?.Items is { Count: > 0 }
-                    ? request.Items
-                    :
-                    [
-                        new OpeningBalanceItemRequest(
-                            ProductId: request?.ProductId,
-                            LocationId: request?.LocationId,
-                            Quantity: request?.Quantity ?? 50m,
-                            UnitCost: request?.UnitCost ?? 120000m)
-                    ];
+                return BadRequest(new
+                {
+                    code = "OPENING_BALANCE_FILE_REQUIRED",
+                    errorCode = "OPENING_BALANCE_FILE_REQUIRED",
+                    message = "Vui lòng tải lên tệp Excel (.xlsx) hoặc danh sách dòng tồn kho đầu kỳ hợp lệ."
+                });
             }
 
             var defaultLocId = request?.LocationId ?? await _db.WarehouseLocations
@@ -1145,17 +1701,16 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 .Select(l => l.Id)
                 .FirstOrDefaultAsync(cancellationToken);
 
-            var importedItems = new List<object>();
-
+            var resolvedProducts = new List<(OpeningBalanceItemRequest Item, ERP.Domain.Entities.Product Product)>();
             foreach (var item in items)
             {
                 if (item.Quantity <= 0m)
                 {
-                    return BadRequest(new { code = "INVALID_OPENING_QUANTITY", message = "Số lượng tồn đầu kỳ phải lớn hơn 0." });
+                    return BadRequest(new { code = "INVALID_OPENING_QUANTITY", errorCode = "INVALID_OPENING_QUANTITY", message = "Số lượng tồn đầu kỳ phải lớn hơn 0." });
                 }
                 if (item.UnitCost < 0m)
                 {
-                    return BadRequest(new { code = "INVALID_OPENING_COST", message = "Đơn giá vốn đầu kỳ không được âm." });
+                    return BadRequest(new { code = "INVALID_OPENING_COST", errorCode = "INVALID_OPENING_COST", message = "Đơn giá vốn đầu kỳ không được âm." });
                 }
 
                 ERP.Domain.Entities.Product? product = null;
@@ -1168,18 +1723,90 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                     var pCode = item.ProductCode.Trim();
                     product = await _db.Products.FirstOrDefaultAsync(p => p.Code == pCode, cancellationToken);
                 }
-                product ??= await _db.Products.OrderBy(p => p.Id).FirstOrDefaultAsync(cancellationToken);
+
                 if (product == null)
                 {
-                    continue;
+                    return BadRequest(new
+                    {
+                        code = "PRODUCT_NOT_FOUND",
+                        errorCode = "PRODUCT_NOT_FOUND",
+                        productCode = item.ProductCode,
+                        productId = item.ProductId,
+                        message = $"Không tìm thấy sản phẩm '{item.ProductCode ?? item.ProductId?.ToString()}'."
+                    });
                 }
 
-                var locId = item.LocationId ?? defaultLocId;
+                resolvedProducts.Add((item, product));
+            }
+
+            var lockProductIds = resolvedProducts.Select(x => x.Product.Id).Distinct().ToList();
+            if (lockProductIds.Count > 0)
+            {
+                await _db.AcquireInventoryAllocationLocksAsync(warehouseId, lockProductIds, cancellationToken);
+            }
+
+            var importedItems = new List<object>();
+
+            foreach (var (item, product) in resolvedProducts)
+            {
+                int? locId = item.LocationId;
+                string? resolvedLocationCode = item.LocationCode;
+                if ((!locId.HasValue || locId <= 0) && !string.IsNullOrWhiteSpace(item.LocationCode))
+                {
+                    var codeNorm = item.LocationCode.Trim().ToUpperInvariant();
+                    var locationEntity = await _db.WarehouseLocations
+                        .FirstOrDefaultAsync(l => l.WarehouseId == warehouseId && l.Code == codeNorm, cancellationToken);
+                    if (locationEntity == null)
+                    {
+                        locationEntity = new ERP.Domain.Entities.WarehouseLocation
+                        {
+                            WarehouseId = warehouseId,
+                            Code = codeNorm,
+                            Name = $"Kệ {codeNorm}",
+                            LocationType = ERP.Domain.Enums.WarehouseLocationType.Storage,
+                            IsActive = true,
+                            IsPickable = true,
+                            IsReceivable = true
+                        };
+                        _db.WarehouseLocations.Add(locationEntity);
+                        await _db.SaveChangesAsync(cancellationToken);
+                    }
+                    locId = locationEntity.Id;
+                    resolvedLocationCode = locationEntity.Code;
+                }
+                locId ??= (defaultLocId > 0 ? defaultLocId : null);
+
+                int? lotId = null;
+                if (!string.IsNullOrWhiteSpace(item.LotNumber))
+                {
+                    var lotNo = item.LotNumber.Trim().ToUpperInvariant();
+                    var lotEntity = await _db.InventoryLots
+                        .FirstOrDefaultAsync(l => l.ProductId == product.Id && l.LotNumber == lotNo, cancellationToken);
+                    if (lotEntity == null)
+                    {
+                        lotEntity = new ERP.Domain.Entities.InventoryLot
+                        {
+                            ProductId = product.Id,
+                            LotNumber = lotNo,
+                            ManufactureDate = now.Date,
+                            ExpiryDate = item.ExpiryDate ?? now.Date.AddYears(2),
+                            CreatedAt = now
+                        };
+                        _db.InventoryLots.Add(lotEntity);
+                        await _db.SaveChangesAsync(cancellationToken);
+                    }
+                    else if (item.ExpiryDate.HasValue)
+                    {
+                        lotEntity.ExpiryDate = item.ExpiryDate.Value;
+                    }
+                    lotId = lotEntity.Id;
+                }
+
                 var stock = await _db.InventoryStocks.FirstOrDefaultAsync(
                     s => s.WarehouseId == warehouseId &&
                          s.ProductId == product.Id &&
                          s.LocationId == locId &&
-                         s.LotId == null &&
+                         s.LotId == lotId &&
                          s.SerialId == null &&
                          s.HandlingUnitId == null &&
                          s.OwnerId == null &&
@@ -1193,6 +1820,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                         WarehouseId = warehouseId,
                         ProductId = product.Id,
                         LocationId = locId > 0 ? locId : null,
+                        LotId = lotId,
                         Status = ERP.Domain.Enums.InventoryStatus.Available,
                         Quantity = item.Quantity,
                         ReservedQuantity = 0m,
@@ -1221,6 +1849,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                     ProductId = product.Id,
                     WarehouseId = warehouseId,
                     LocationId = locId > 0 ? locId : null,
+                    LotId = lotId,
                     TransactionType = ERP.Domain.Enums.TransactionType.Import,
                     Quantity = item.Quantity,
                     UnitCost = item.UnitCost,
@@ -1243,6 +1872,11 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                         warehouseId,
                         productId = product.Id,
                         productCode = product.Code,
+                        locationId = locId,
+                        locationCode = resolvedLocationCode,
+                        lotId,
+                        lotNumber = item.LotNumber,
+                        expiryDate = item.ExpiryDate,
                         openingQuantity = item.Quantity,
                         unitCost = item.UnitCost,
                         movingAverageCost = stock.MovingAverageCost
@@ -1256,6 +1890,10 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                     productId = product.Id,
                     productCode = product.Code,
                     locationId = locId,
+                    locationCode = resolvedLocationCode,
+                    lotId,
+                    lotNumber = item.LotNumber,
+                    expiryDate = item.ExpiryDate,
                     importedQuantity = item.Quantity,
                     unitCost = item.UnitCost,
                     movingAverageCost = stock.MovingAverageCost,
@@ -1291,7 +1929,11 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
             }
 
+            var canReadCost = CanReadInventoryCost();
             var rows = new List<object>();
+            decimal totalCostAmountValue = 0m;
+            decimal totalRevenueAmountValue = 0m;
+
             if (_db != null)
             {
                 var query = _db.ExportReceipts
@@ -1310,10 +1952,13 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 {
                     foreach (var d in r.Details)
                     {
-                        var mac = d.Product?.MovingAverageCost is > 0m ? d.Product.MovingAverageCost : 85000m;
-                        var unitPrice = d.UnitPrice > 0m ? d.UnitPrice : 125000m;
+                        var mac = d.Product?.MovingAverageCost is > 0m ? d.Product.MovingAverageCost : 0m;
+                        var unitPrice = d.UnitPrice > 0m ? d.UnitPrice : 0m;
                         var cogsAmount = decimal.Round(d.Quantity * mac, 2);
                         var revenueAmount = decimal.Round(d.Quantity * unitPrice, 2);
+                        totalCostAmountValue += cogsAmount;
+                        totalRevenueAmountValue += revenueAmount;
+
                         rows.Add(new
                         {
                             soChungTu = r.Code,
@@ -1323,8 +1968,10 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                             tkNoGiaVon = "632",
                             tkCoKho = "1561",
                             soLuong = d.Quantity,
-                            donGiaVonMac = mac,
-                            thanhTienGiaVon = cogsAmount,
+                            unitCost = canReadCost ? (decimal?)mac : null,
+                            donGiaVonMac = canReadCost ? (decimal?)mac : null,
+                            costAmount = canReadCost ? (decimal?)cogsAmount : null,
+                            thanhTienGiaVon = canReadCost ? (decimal?)cogsAmount : null,
                             tkNoCongNo = "131",
                             tkCoDoanhThu = "5111",
                             donGiaBan = unitPrice,
@@ -1334,28 +1981,6 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                         });
                     }
                 }
-            }
-
-            if (rows.Count == 0)
-            {
-                rows.Add(new
-                {
-                    soChungTu = "PXK-MISA-001",
-                    ngayHachToan = DateTime.UtcNow.ToString("yyyy-MM-dd"),
-                    maHang = "SKU-DEMO-01",
-                    tenHang = "Sản phẩm mẫu kết xuất MISA",
-                    tkNoGiaVon = "632",
-                    tkCoKho = "1561",
-                    soLuong = 10m,
-                    donGiaVonMac = 85000m,
-                    thanhTienGiaVon = 850000m,
-                    tkNoCongNo = "131",
-                    tkCoDoanhThu = "5111",
-                    donGiaBan = 125000m,
-                    doanhThu = 1250000m,
-                    eInvoiceStatus = "PENDING",
-                    eInvoiceProvider = "MISA_MEINVOICE"
-                });
             }
 
             using var workbook = new ClosedXML.Excel.XLWorkbook();
@@ -1381,8 +2006,16 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 sheet.Cell(rowIdx, 5).Value = (string)row.tkNoGiaVon;
                 sheet.Cell(rowIdx, 6).Value = (string)row.tkCoKho;
                 sheet.Cell(rowIdx, 7).Value = (decimal)row.soLuong;
-                sheet.Cell(rowIdx, 8).Value = (decimal)row.donGiaVonMac;
-                sheet.Cell(rowIdx, 9).Value = (decimal)row.thanhTienGiaVon;
+                if (canReadCost && row.donGiaVonMac != null)
+                {
+                    sheet.Cell(rowIdx, 8).Value = (decimal)row.donGiaVonMac;
+                    sheet.Cell(rowIdx, 9).Value = (decimal)row.thanhTienGiaVon;
+                }
+                else
+                {
+                    sheet.Cell(rowIdx, 8).Value = string.Empty;
+                    sheet.Cell(rowIdx, 9).Value = string.Empty;
+                }
                 sheet.Cell(rowIdx, 10).Value = (string)row.tkNoCongNo;
                 sheet.Cell(rowIdx, 11).Value = (string)row.tkCoDoanhThu;
                 sheet.Cell(rowIdx, 12).Value = (decimal)row.donGiaBan;
@@ -1413,6 +2046,9 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 defaultDebitReceivableAccount = "131",
                 defaultCreditRevenueAccount = "5111",
                 rowCount = rows.Count,
+                costHiddenByRbac = !canReadCost,
+                totalCostAmount = canReadCost ? (decimal?)totalCostAmountValue : null,
+                totalRevenueAmount = totalRevenueAmountValue,
                 downloadUrl = "/api/v1/export-receipts/misa-excel-export?format=xlsx",
                 excelBase64 = Convert.ToBase64String(xlsxBytes),
                 rows,
@@ -1438,6 +2074,83 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 return Forbid();
 
             return await GetMisaExcelExport(request?.WarehouseId, request?.Format ?? request?.Standard, cancellationToken);
+        }
+    }
+
+    internal sealed class FlexibleBodyOrFormModelBinder : Microsoft.AspNetCore.Mvc.ModelBinding.IModelBinder
+    {
+        private static readonly System.Text.Json.JsonSerializerOptions JsonOptions = new(System.Text.Json.JsonSerializerDefaults.Web)
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+        public async Task BindModelAsync(Microsoft.AspNetCore.Mvc.ModelBinding.ModelBindingContext bindingContext)
+        {
+            var request = bindingContext.HttpContext.Request;
+            var modelType = bindingContext.ModelType;
+
+            if (request.HasFormContentType)
+            {
+                var form = await request.ReadFormAsync(bindingContext.HttpContext.RequestAborted);
+                var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kv in form)
+                {
+                    var val = kv.Value.ToString();
+                    if (!string.IsNullOrWhiteSpace(val))
+                    {
+                        if (int.TryParse(val, out var intVal)) dict[kv.Key] = intVal;
+                        else if (decimal.TryParse(val, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var decVal)) dict[kv.Key] = decVal;
+                        else if (bool.TryParse(val, out var boolVal)) dict[kv.Key] = boolVal;
+                        else dict[kv.Key] = val;
+                    }
+                }
+                var json = System.Text.Json.JsonSerializer.Serialize(dict, JsonOptions);
+                var model = System.Text.Json.JsonSerializer.Deserialize(json, modelType, JsonOptions);
+                bindingContext.Result = Microsoft.AspNetCore.Mvc.ModelBinding.ModelBindingResult.Success(model);
+                return;
+            }
+
+            try
+            {
+                if (request.Body != null)
+                {
+                    if (request.Body.CanSeek)
+                    {
+                        request.Body.Position = 0;
+                    }
+                    using var reader = new System.IO.StreamReader(request.Body, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
+                    var bodyText = await reader.ReadToEndAsync(bindingContext.HttpContext.RequestAborted);
+                    if (!string.IsNullOrWhiteSpace(bodyText))
+                    {
+                        var model = System.Text.Json.JsonSerializer.Deserialize(bodyText, modelType, JsonOptions);
+                        bindingContext.Result = Microsoft.AspNetCore.Mvc.ModelBinding.ModelBindingResult.Success(model);
+                        return;
+                    }
+                }
+            }
+            catch
+            {
+                // Allow null when request body is empty or not JSON
+            }
+
+            bindingContext.Result = Microsoft.AspNetCore.Mvc.ModelBinding.ModelBindingResult.Success(null);
+        }
+    }
+
+    internal sealed class FlexibleFormFileModelBinder : Microsoft.AspNetCore.Mvc.ModelBinding.IModelBinder
+    {
+        public async Task BindModelAsync(Microsoft.AspNetCore.Mvc.ModelBinding.ModelBindingContext bindingContext)
+        {
+            var request = bindingContext.HttpContext.Request;
+            if (request.HasFormContentType)
+            {
+                var form = await request.ReadFormAsync(bindingContext.HttpContext.RequestAborted);
+                var file = form.Files.FirstOrDefault();
+                bindingContext.Result = Microsoft.AspNetCore.Mvc.ModelBinding.ModelBindingResult.Success(file);
+                return;
+            }
+
+            bindingContext.Result = Microsoft.AspNetCore.Mvc.ModelBinding.ModelBindingResult.Success(null);
         }
     }
 }

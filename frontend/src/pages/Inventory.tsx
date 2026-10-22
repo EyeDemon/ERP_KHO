@@ -557,6 +557,7 @@ const Inventory = () => {
     }
   };
 
+  const [selectedOpeningFile, setSelectedOpeningFile] = useState<File | null>(null);
   const [openingBalanceFileName, setOpeningBalanceFileName] = useState('TonKho_DauKy_Mau.xlsx');
   const [openingBalanceNotice, setOpeningBalanceNotice] = useState('');
   const [openingBalanceResult, setOpeningBalanceResult] = useState<{ importBatchId: string; importedRows: number; status: string } | null>(null);
@@ -586,9 +587,15 @@ const Inventory = () => {
     setStockError('');
     setOpeningBalanceNotice('');
     try {
-      const res = await apiClient.post('/api/v1/inventory/opening-balance-import', {
-        warehouseId: stockFilter.warehouseId ? Number(stockFilter.warehouseId) : (warehouses[0]?.id ?? 1),
-        fileName: openingBalanceFileName,
+      const resolvedWarehouseId = stockFilter.warehouseId ? Number(stockFilter.warehouseId) : (warehouses[0]?.id ?? 1);
+      const formData = new FormData();
+      if (selectedOpeningFile) {
+        formData.append('file', selectedOpeningFile);
+      }
+      formData.append('warehouseId', String(resolvedWarehouseId));
+      formData.append('fileName', openingBalanceFileName);
+      const res = await apiClient.post('/api/v1/inventory/opening-balances/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
       const d = (res?.data ?? {}) as Record<string, unknown>;
       setOpeningBalanceResult({
@@ -615,7 +622,11 @@ const Inventory = () => {
               aria-label="Tệp Excel tồn kho đầu kỳ"
               type="file"
               accept=".xlsx,.xls,.csv"
-              onChange={e => setOpeningBalanceFileName(e.target.files?.[0]?.name || 'TonKho_DauKy_Mau.xlsx')}
+              onChange={e => {
+                const file = e.target.files?.[0] ?? null;
+                setSelectedOpeningFile(file);
+                setOpeningBalanceFileName(file?.name || 'TonKho_DauKy_Mau.xlsx');
+              }}
             />
           </label>
           <button type="submit">Nhập Excel Tồn kho Đầu kỳ</button>

@@ -9,6 +9,7 @@ namespace ERP.Api.Controllers;
 
 [ApiController]
 [Route("api/backorders")]
+[Route("api/v1/backorders")]
 [Authorize]
 public sealed class BackordersController(ISalesOrderBackorderService service) : ControllerBase
 {

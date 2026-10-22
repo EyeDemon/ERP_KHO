@@ -11,6 +11,7 @@ namespace ERP.Api.Controllers;
 
 [ApiController]
 [Route("api/handling-units")]
+[Route("api/v1/handling-units")]
 [Authorize]
 [PermissionAuthorize(AppPermissions.HandlingUnitRead)]
 public sealed class HandlingUnitsController(

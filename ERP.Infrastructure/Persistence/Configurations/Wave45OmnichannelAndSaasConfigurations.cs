@@ -230,6 +230,14 @@ public sealed class PackingVideoEvidenceConfiguration : IEntityTypeConfiguration
         builder.Property(x => x.StorageUrl).HasMaxLength(500).IsRequired();
         builder.HasIndex(x => new { x.TenantId, x.TrackingNumber })
                .HasDatabaseName("IX_PackingVideoEvidences_TenantId_TrackingNumber");
+        builder.HasOne<PackingSession>()
+               .WithMany()
+               .HasForeignKey(x => x.PackingSessionId)
+               .OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<ExportReceipt>()
+               .WithMany()
+               .HasForeignKey(x => x.ExportReceiptId)
+               .OnDelete(DeleteBehavior.NoAction);
     }
 }
 
@@ -248,6 +256,18 @@ public sealed class PromotionGiftRuleConfiguration : IEntityTypeConfiguration<Pr
         builder.HasIndex(x => new { x.TenantId, x.RuleCode })
                .IsUnique()
                .HasDatabaseName("UX_PromotionGiftRules_TenantId_RuleCode");
+        builder.HasOne<Warehouse>()
+               .WithMany()
+               .HasForeignKey(x => x.WarehouseId)
+               .OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<Product>()
+               .WithMany()
+               .HasForeignKey(x => x.TriggerProductId)
+               .OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<Product>()
+               .WithMany()
+               .HasForeignKey(x => x.GiftProductId)
+               .OnDelete(DeleteBehavior.Restrict);
     }
 }
 
@@ -281,6 +301,18 @@ public sealed class CustomerReturnConfiguration : IEntityTypeConfiguration<Custo
         builder.HasIndex(x => new { x.TenantId, x.ReturnCode })
                .IsUnique()
                .HasDatabaseName("UX_CustomerReturns_TenantId_ReturnCode");
+        builder.HasOne<Warehouse>()
+               .WithMany()
+               .HasForeignKey(x => x.WarehouseId)
+               .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<SalesOrder>()
+               .WithMany()
+               .HasForeignKey(x => x.SalesOrderId)
+               .OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<ExportReceipt>()
+               .WithMany()
+               .HasForeignKey(x => x.ExportReceiptId)
+               .OnDelete(DeleteBehavior.NoAction);
     }
 }
 
@@ -299,6 +331,22 @@ public sealed class CustomerReturnLineConfiguration : IEntityTypeConfiguration<C
                .WithMany(r => r.Lines)
                .HasForeignKey(x => x.CustomerReturnId)
                .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Product>()
+               .WithMany()
+               .HasForeignKey(x => x.ProductId)
+               .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<WarehouseLocation>()
+               .WithMany()
+               .HasForeignKey(x => x.QuarantineLocationId)
+               .OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<WarehouseLocation>()
+               .WithMany()
+               .HasForeignKey(x => x.TargetLocationId)
+               .OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<Product>()
+               .WithMany()
+               .HasForeignKey(x => x.PackagingProductId)
+               .OnDelete(DeleteBehavior.NoAction);
     }
 }
 
@@ -321,5 +369,21 @@ public sealed class StocktakeAdjustmentProposalConfiguration : IEntityTypeConfig
         builder.HasIndex(x => new { x.TenantId, x.ProposalCode })
                .IsUnique()
                .HasDatabaseName("UX_StocktakeAdjustmentProposals_TenantId_ProposalCode");
+        builder.HasOne<Warehouse>()
+               .WithMany()
+               .HasForeignKey(x => x.WarehouseId)
+               .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Stocktake>()
+               .WithMany()
+               .HasForeignKey(x => x.StocktakeId)
+               .OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<Product>()
+               .WithMany()
+               .HasForeignKey(x => x.ProductId)
+               .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<WarehouseLocation>()
+               .WithMany()
+               .HasForeignKey(x => x.LocationId)
+               .OnDelete(DeleteBehavior.NoAction);
     }
 }

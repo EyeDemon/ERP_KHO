@@ -4,6 +4,7 @@ using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Domain.Exceptions;
+using ERP.Domain.Security;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -13,8 +14,13 @@ namespace ERP.Infrastructure.Services;
 public sealed class InboundPlanningService(
     ErpKhoDbContext context,
     IWarehouseAuthorizationService warehouses,
-    ICurrentUser currentUser) : IInboundPlanningService
+    ICurrentUser? currentUser = null) : IInboundPlanningService
 {
+    private bool CanReadCost() =>
+        currentUser == null || currentUser.HasPermission(AppPermissions.InventoryCostRead);
+
+    private int CurrentUserId => currentUser?.UserId ?? 1;
+
     public async Task<IReadOnlyList<PurchaseOrderListDto>> ListPurchaseOrdersAsync(PurchaseOrderStatus? status = null, CancellationToken token = default)
     {
         var allowed = await warehouses.GetAccessibleWarehouseIdsAsync(token);
@@ -25,14 +31,19 @@ public sealed class InboundPlanningService(
             .Where(x => allowed.Contains(x.WarehouseId));
         if (status.HasValue) query = query.Where(x => x.Status == status.Value);
         var entities = await query.OrderByDescending(x => x.CreatedAtUtc).ToListAsync(token);
+        var canReadCost = CanReadCost();
         return entities.Select(x =>
         {
-            var subTotal = x.Lines.Sum(l => decimal.Round(l.OrderedQuantity * l.UnitPrice, 2, MidpointRounding.AwayFromZero));
-            var taxAmount = x.Lines.Sum(l =>
-            {
-                var lineSub = decimal.Round(l.OrderedQuantity * l.UnitPrice, 2, MidpointRounding.AwayFromZero);
-                return decimal.Round(lineSub * (l.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
-            });
+            var subTotal = canReadCost
+                ? x.Lines.Sum(l => decimal.Round(l.OrderedQuantity * l.UnitPrice, 2, MidpointRounding.AwayFromZero))
+                : 0m;
+            var taxAmount = canReadCost
+                ? x.Lines.Sum(l =>
+                {
+                    var lineSub = decimal.Round(l.OrderedQuantity * l.UnitPrice, 2, MidpointRounding.AwayFromZero);
+                    return decimal.Round(lineSub * (l.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
+                })
+                : 0m;
             return new PurchaseOrderListDto
             {
                 Id = x.Id, ExternalPoId = x.ExternalPoId.Trim(), Code = x.Code.Trim(), SupplierCode = x.Supplier.Code.Trim(), SupplierName = x.Supplier.Name.Trim(),
@@ -68,7 +79,7 @@ public sealed class InboundPlanningService(
             ExternalPoId=external, SourceSystem=source, Code=code, SupplierId=dto.SupplierId, WarehouseId=dto.WarehouseId,
             OrderDate=dto.OrderDate == default ? DateTime.UtcNow.Date : dto.OrderDate, ExpectedDate=dto.ExpectedDate,
             Currency=NormalizeOptional(dto.Currency,10), ExternalVersion=NormalizeOptional(dto.ExternalVersion,100),
-            CreatedAtUtc=DateTime.UtcNow, CreatedBy=currentUser.UserId
+            CreatedAtUtc=DateTime.UtcNow, CreatedBy=CurrentUserId
         };
         await PopulatePurchaseOrderLinesAsync(entity, dto.Lines, token);
         await using var transaction = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(token) : null;
@@ -105,7 +116,7 @@ public sealed class InboundPlanningService(
 
         entity.Code=code; entity.SupplierId=dto.SupplierId; entity.WarehouseId=dto.WarehouseId;
         entity.OrderDate=dto.OrderDate; entity.ExpectedDate=dto.ExpectedDate; entity.Currency=NormalizeOptional(dto.Currency,10);
-        entity.ExternalVersion=NormalizeOptional(dto.ExternalVersion,100); entity.UpdatedAtUtc=DateTime.UtcNow; entity.UpdatedBy=currentUser.UserId;
+        entity.ExternalVersion=NormalizeOptional(dto.ExternalVersion,100); entity.UpdatedAtUtc=DateTime.UtcNow; entity.UpdatedBy=CurrentUserId;
         context.PurchaseOrderLines.RemoveRange(entity.Lines); entity.Lines.Clear();
         await PopulatePurchaseOrderLinesAsync(entity,dto.Lines,token);
         context.AuditLogs.Add(Audit("PurchaseOrder.Updated","PurchaseOrder",entity.Id,entity.WarehouseId,$"Code: {entity.Code}; Lines: {entity.Lines.Count}"));
@@ -152,7 +163,7 @@ public sealed class InboundPlanningService(
             Code=code,PurchaseOrderId=dto.PurchaseOrderId,SupplierId=header.SupplierId,WarehouseId=header.WarehouseId,
             ExpectedArrivalAtUtc=dto.ExpectedArrivalAtUtc,CarrierName=NormalizeOptional(dto.CarrierName,200),
             VehiclePlate=NormalizeOptional(dto.VehiclePlate,30)?.ToUpperInvariant(),Note=NormalizeOptional(dto.Note,500),
-            CreatedAtUtc=DateTime.UtcNow,CreatedBy=currentUser.UserId
+            CreatedAtUtc=DateTime.UtcNow,CreatedBy=CurrentUserId
         };
         await PopulateAsnLinesAsync(entity,dto.Lines,null,token);
         await using var transaction = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(token) : null;
@@ -187,7 +198,7 @@ public sealed class InboundPlanningService(
         entity.Code=code;entity.PurchaseOrderId=dto.PurchaseOrderId;entity.SupplierId=header.SupplierId;entity.WarehouseId=header.WarehouseId;
         entity.ExpectedArrivalAtUtc=dto.ExpectedArrivalAtUtc;entity.CarrierName=NormalizeOptional(dto.CarrierName,200);
         entity.VehiclePlate=NormalizeOptional(dto.VehiclePlate,30)?.ToUpperInvariant();entity.Note=NormalizeOptional(dto.Note,500);
-        entity.UpdatedAtUtc=DateTime.UtcNow;entity.UpdatedBy=currentUser.UserId;
+        entity.UpdatedAtUtc=DateTime.UtcNow;entity.UpdatedBy=CurrentUserId;
         context.AsnLines.RemoveRange(entity.Lines);entity.Lines.Clear();
         await PopulateAsnLinesAsync(entity,dto.Lines,id,token);
         context.AuditLogs.Add(Audit("Asn.Updated","Asn",entity.Id,entity.WarehouseId,$"Code: {entity.Code}; Lines: {entity.Lines.Count}"));
@@ -226,7 +237,7 @@ public sealed class InboundPlanningService(
                 throw new NotFoundException("Không tìm thấy đơn mua hoặc bạn không có quyền truy cập.");
         }
         await ApplyStateMutationAsync(entity.Status,allowedStates,target,entity.RowVersion,dto.RowVersion,context.Entry(entity).Property(x=>x.RowVersion),
-            ()=>{entity.Status=target;entity.UpdatedAtUtc=DateTime.UtcNow;entity.UpdatedBy=currentUser.UserId;},"Trạng thái đơn mua không cho phép thao tác này.",action,"PurchaseOrder",entity.Id,entity.WarehouseId,token);
+            ()=>{entity.Status=target;entity.UpdatedAtUtc=DateTime.UtcNow;entity.UpdatedBy=CurrentUserId;},"Trạng thái đơn mua không cho phép thao tác này.",action,"PurchaseOrder",entity.Id,entity.WarehouseId,token);
         return Map(entity);
     }
 
@@ -242,7 +253,7 @@ public sealed class InboundPlanningService(
         }
         if(beforeMutate is not null) await beforeMutate(entity,token);
         await ApplyStateMutationAsync(entity.Status,allowedStates,target,entity.RowVersion,dto.RowVersion,context.Entry(entity).Property(x=>x.RowVersion),
-            ()=>{entity.Status=target;entity.UpdatedAtUtc=DateTime.UtcNow;entity.UpdatedBy=currentUser.UserId;},"Trạng thái ASN không cho phép thao tác này.",action,"Asn",entity.Id,entity.WarehouseId,token);
+            ()=>{entity.Status=target;entity.UpdatedAtUtc=DateTime.UtcNow;entity.UpdatedBy=CurrentUserId;},"Trạng thái ASN không cho phép thao tác này.",action,"Asn",entity.Id,entity.WarehouseId,token);
         return Map(entity);
     }
 
@@ -419,22 +430,27 @@ public sealed class InboundPlanningService(
 
     private PurchaseOrderDto Map(PurchaseOrder x)
     {
+        var canReadCost = CanReadCost();
         var lines = x.Lines.OrderBy(l => l.LineNo).Select(l =>
         {
-            var lineSub = decimal.Round(l.OrderedQuantity * l.UnitPrice, 2, MidpointRounding.AwayFromZero);
-            var lineTax = decimal.Round(lineSub * (l.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
+            var lineSub = canReadCost
+                ? decimal.Round(l.OrderedQuantity * l.UnitPrice, 2, MidpointRounding.AwayFromZero)
+                : 0m;
+            var lineTax = canReadCost
+                ? decimal.Round(lineSub * (l.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero)
+                : 0m;
             var (opUom, baseUom) = NormalizeUomPair(l.OperationUnitCodeSnapshot, l.BaseUnitCodeSnapshot, l.Product?.Unit?.Code ?? l.Product?.Unit?.Name, l.OperationUnitId, l.BaseUnitId, l.ConversionFactorSnapshot);
             return new PurchaseOrderLineDto
             {
                 Id = l.Id, ExternalLineId = l.ExternalLineId.Trim(), LineNo = l.LineNo, ProductId = l.ProductId, ProductCode = (l.Product?.Code ?? string.Empty).Trim(), ProductName = (l.Product?.Name ?? string.Empty).Trim(),
                 OrderedQuantity = l.OrderedQuantity, OperationUnitCode = opUom, BaseOrderedQuantity = l.BaseOrderedQuantity,
-                BaseUnitCode = baseUom, UnitPrice = l.UnitPrice, TaxPercent = l.TaxPercent,
+                BaseUnitCode = baseUom, UnitPrice = canReadCost ? l.UnitPrice : 0m, TaxPercent = l.TaxPercent,
                 LineSubTotal = lineSub, LineTaxAmount = lineTax, LineTotal = lineSub + lineTax,
                 AllowedOverReceiptPct = l.AllowedOverReceiptPct, AllowedUnderReceiptPct = l.AllowedUnderReceiptPct
             };
         }).ToList();
-        var subTotal = lines.Sum(l => l.LineSubTotal);
-        var taxAmount = lines.Sum(l => l.LineTaxAmount);
+        var subTotal = canReadCost ? lines.Sum(l => l.LineSubTotal) : 0m;
+        var taxAmount = canReadCost ? lines.Sum(l => l.LineTaxAmount) : 0m;
         return new()
         {
             Id = x.Id, ExternalPoId = x.ExternalPoId.Trim(), SourceSystem = x.SourceSystem.Trim(), Code = x.Code.Trim(), SupplierCode = x.Supplier.Code.Trim(), SupplierName = x.Supplier.Name.Trim(),
@@ -464,8 +480,8 @@ public sealed class InboundPlanningService(
         }).ToList()
     };
 
-    private bool CanSeeMutationToken()=>currentUser.IsGlobalAdmin||currentUser.Role is "Admin" or "Manager" or "WarehouseStaff";
-    private AuditLog Audit(string action,string entityName,int entityId,int warehouseId,string values)=>new(){UserId=currentUser.UserId,Action=action,EntityName=entityName,EntityId=entityId,WarehouseId=warehouseId,NewValues=values,Result="Success",Timestamp=DateTime.UtcNow};
+    private bool CanSeeMutationToken()=>currentUser==null||currentUser.IsGlobalAdmin||currentUser.Role is "Admin" or "Manager" or "WarehouseStaff";
+    private AuditLog Audit(string action,string entityName,int entityId,int warehouseId,string values)=>new(){UserId=CurrentUserId,Action=action,EntityName=entityName,EntityId=entityId,WarehouseId=warehouseId,NewValues=values,Result="Success",Timestamp=DateTime.UtcNow};
 
     private async Task SaveAsync(CancellationToken token)
     {

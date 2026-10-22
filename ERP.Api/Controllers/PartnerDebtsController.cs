@@ -10,6 +10,7 @@ namespace ERP.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/partner-debts")]
+[Route("api/v1/partner-debts")]
 public sealed class PartnerDebtsController(IPartnerDebtService service) : ControllerBase
 {
     [HttpGet("summary")]

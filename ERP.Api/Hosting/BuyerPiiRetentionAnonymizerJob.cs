@@ -69,32 +69,75 @@ public sealed class BuyerPiiRetentionAnonymizerJob(
             .IgnoreQueryFilters()
             .Where(r => r.CreatedAt <= cutoffUtc &&
                         (r.Status == ReceiptStatus.Dispatched || r.Status == ReceiptStatus.Cancelled) &&
-                        r.CustomerNameSnapshot != null &&
-                        !r.CustomerNameSnapshot.StartsWith("ANONYMIZED_PII_"))
+                        ((r.CustomerNameSnapshot != null && !r.CustomerNameSnapshot.StartsWith("ANONYMIZED_PII_")) ||
+                         (r.Note != null && r.Note != "[PII_REDACTED_DECREE_13_2023]")))
             .Take(200)
             .ToListAsync(cancellationToken);
 
-        if (expiredReceipts.Count == 0)
+        var expiredSalesOrders = await db.SalesOrders
+            .IgnoreQueryFilters()
+            .Where(so => so.CreatedAt <= cutoffUtc &&
+                         (so.Status == SalesOrderStatus.Fulfilled || so.Status == SalesOrderStatus.Cancelled) &&
+                         so.CancellationReason != null &&
+                         so.CancellationReason != "[PII_REDACTED_DECREE_13_2023]")
+            .Take(200)
+            .ToListAsync(cancellationToken);
+
+        var expiredReturns = await db.CustomerReturns
+            .IgnoreQueryFilters()
+            .Where(cr => cr.CreatedAtUtc <= cutoffUtc &&
+                         (cr.Status == "COMPLETED" || cr.Status == "APPROVED" || cr.Status == "CANCELLED" ||
+                          cr.Status == "Completed" || cr.Status == "Cancelled") &&
+                         cr.ReturnReason != "[PII_REDACTED_DECREE_13_2023]")
+            .Take(200)
+            .ToListAsync(cancellationToken);
+
+        var totalAnonymized = expiredReceipts.Count + expiredSalesOrders.Count + expiredReturns.Count;
+        if (totalAnonymized == 0)
             return 0;
 
-        foreach (var r in expiredReceipts)
+        var touchedTenants = expiredReceipts.Select(x => x.TenantId)
+            .Concat(expiredSalesOrders.Select(x => x.TenantId))
+            .Concat(expiredReturns.Select(x => x.TenantId))
+            .Select(t => t > 0 ? t : 1)
+            .Distinct()
+            .ToList();
+
+        foreach (var tenantId in touchedTenants)
         {
-            r.CustomerNameSnapshot = $"ANONYMIZED_PII_{r.Id}";
-            r.Note = "[PII_REDACTED_DECREE_13_2023]";
+            db.UseTenant(tenantId);
+
+            foreach (var r in expiredReceipts.Where(x => (x.TenantId > 0 ? x.TenantId : 1) == tenantId))
+            {
+                r.CustomerNameSnapshot = $"ANONYMIZED_PII_{r.Id}";
+                r.Note = "[PII_REDACTED_DECREE_13_2023]";
+            }
+
+            foreach (var so in expiredSalesOrders.Where(x => (x.TenantId > 0 ? x.TenantId : 1) == tenantId))
+            {
+                so.CancellationReason = "[PII_REDACTED_DECREE_13_2023]";
+            }
+
+            foreach (var cr in expiredReturns.Where(x => (x.TenantId > 0 ? x.TenantId : 1) == tenantId))
+            {
+                cr.ReturnReason = "[PII_REDACTED_DECREE_13_2023]";
+            }
+
+            db.AuditLogs.Add(new AuditLog
+            {
+                TenantId = tenantId,
+                EntityName = "BuyerPiiRetentionPolicy",
+                EntityId = 1,
+                Action = "BuyerPiiRetentionAnonymizerJob.Sweep",
+                NewValues = $"RetentionDays={DefaultRetentionDays}; AnonymizedReceipts={expiredReceipts.Count}; AnonymizedSalesOrders={expiredSalesOrders.Count}; AnonymizedReturns={expiredReturns.Count}",
+                Reason = $"Scheduled Decree 13/2023/ND-CP PII anonymization sweep ({totalAnonymized} records)",
+                Result = "Success",
+                Timestamp = now
+            });
+
+            await db.SaveChangesAsync(cancellationToken);
         }
 
-        db.AuditLogs.Add(new AuditLog
-        {
-            EntityName = "BuyerPiiRetentionPolicy",
-            EntityId = 1,
-            Action = "BuyerPiiRetentionAnonymizerJob.Sweep",
-            NewValues = $"RetentionDays={DefaultRetentionDays}; AnonymizedReceipts={expiredReceipts.Count}",
-            Reason = $"Scheduled Decree 13/2023/ND-CP PII anonymization sweep ({expiredReceipts.Count} receipts)",
-            Result = "Success",
-            Timestamp = now
-        });
-
-        await db.SaveChangesAsync(cancellationToken);
-        return expiredReceipts.Count;
+        return totalAnonymized;
     }
 }

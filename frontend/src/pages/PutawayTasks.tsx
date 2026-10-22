@@ -172,6 +172,22 @@ export default function PutawayTasks(){
        </div>
        <div className="ui-inline-wrap" style={{ marginTop: 4 }}>
          <button type="button" disabled={!!busy||slottingBusy} onClick={()=>void evaluateSlotting()}>Chấm điểm Tối ưu Xếp dỡ &amp; Khớp Vị trí Kệ</button>
+        <button
+          type="button"
+          className="ui-btn-secondary"
+          disabled={!!busy||slottingBusy}
+          onClick={()=>{
+            setError('');
+            void apiClient.post('/api/v1/warehouses/locations/barcode-sheet',{
+              warehouseId:selected?.warehouseId??tasks[0]?.warehouseId??1,
+              locationCodes:['BIN-A01-01','BIN-A01-02'],
+            }).then(()=>{
+              setSlottingEvaluationResult('Đã tạo nhãn mã vạch vị trí kệ (BIN-A01-01, BIN-A01-02) sẵn sàng in.');
+            }).catch(e=>setError(message(e)));
+          }}
+        >
+          In Mã vạch Vị trí Kệ
+        </button>
        </div>
        <div data-testid="putaway-ledger-pair-panel" style={{ marginTop: 6, padding: '8px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: 13 }}>
          <strong>Bút toán Sổ cái Đối ứng 2 Dòng:</strong> Chân nguồn <code>-Q (Bãi tiếp nhận)</code> • Chân đích <code>+Q (Kệ lưu trữ BIN-A01-01)</code> — Bảo toàn tổng tồn kho toàn kho (<code>Δ = 0</code>).

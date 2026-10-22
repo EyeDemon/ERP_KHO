@@ -124,8 +124,9 @@ describe('Packing workbench',()=>{
     fireEvent.click(view.getByRole('button',{name:'Ghi nhận Video Đóng gói & Ký số SHA-256'}));
     expect(await view.findByText(/Đã lưu bằng chứng video đóng gói cho mã vận đơn SPXVN058291042/)).toBeTruthy();
     expect(apiClient.post).toHaveBeenCalledWith(
-      '/api/packing-sessions/77/video-evidence',
+      '/api/v1/packing-sessions/video-evidence',
       expect.objectContaining({
+        sessionId:77,
         awbCode:'SPXVN058291042',
         cameraStation:'CAM-PACK-01',
       }),
@@ -134,6 +135,6 @@ describe('Packing workbench',()=>{
 
     fireEvent.change(view.getByLabelText('Tra cứu video theo mã vận đơn AWB'),{target:{value:'SPXVN058291042'}});
     fireEvent.click(view.getByRole('button',{name:'Tra cứu Video theo Mã vận đơn (AWB)'}));
-    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith('/api/packing-sessions/video-evidences',{params:{awbCode:'SPXVN058291042'}}));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith('/api/v1/packing-sessions/video-evidence',{params:{awbCode:'SPXVN058291042'}}));
   });
 });

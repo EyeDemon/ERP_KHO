@@ -13,6 +13,9 @@ namespace ERP.Api.Controllers;
 [Route("api/users/{userId:int}/warehouse-access")]
 [Route("api/user-warehouse-access/{userId:int}")]
 [Route("api/users/{userId:int}/warehouses")]
+[Route("api/v1/users/{userId:int}/warehouse-access")]
+[Route("api/v1/user-warehouse-access/{userId:int}")]
+[Route("api/v1/users/{userId:int}/warehouses")]
 [Authorize]
 public sealed class UserWarehouseAccessController(
     IUserWarehouseAccessService service,

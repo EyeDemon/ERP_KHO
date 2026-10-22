@@ -396,6 +396,8 @@ public sealed class AccountSecurityController(
 
     [HttpPost("~/api/v1/security/support-impersonation/grant")]
     [HttpPost("~/api/security/support-impersonation/grant")]
+    [HttpPost("~/api/v1/account-security/support-impersonation/grant")]
+    [HttpPost("~/api/account-security/support-impersonation/grant")]
     [IdempotentCommand("AccountSecurity.GrantSupportImpersonation")]
     public async Task<IActionResult> GrantSupportImpersonation(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GrantSupportImpersonationRequest? request = null,
@@ -461,6 +463,8 @@ public sealed class AccountSecurityController(
 
     [HttpGet("~/api/v1/security/support-impersonation/sessions")]
     [HttpGet("~/api/security/support-impersonation/sessions")]
+    [HttpGet("~/api/v1/account-security/support-impersonation/sessions")]
+    [HttpGet("~/api/account-security/support-impersonation/sessions")]
     public async Task<IActionResult> ListSupportImpersonationSessions(CancellationToken cancellationToken = default)
     {
         if (db is null)
@@ -477,6 +481,8 @@ public sealed class AccountSecurityController(
 
     [HttpPost("~/api/v1/security/support-impersonation/{sessionId:int}/revoke")]
     [HttpPost("~/api/security/support-impersonation/{sessionId:int}/revoke")]
+    [HttpPost("~/api/v1/account-security/support-impersonation/{sessionId:int}/revoke")]
+    [HttpPost("~/api/account-security/support-impersonation/{sessionId:int}/revoke")]
     [IdempotentCommand("AccountSecurity.RevokeSupportImpersonation")]
     public async Task<IActionResult> RevokeSupportImpersonation(int sessionId, CancellationToken cancellationToken = default)
     {
@@ -519,6 +525,9 @@ public sealed class AccountSecurityController(
 
     [HttpPost("~/api/v1/security/anonymize-expired-buyer-pii")]
     [HttpPost("~/api/security/anonymize-expired-buyer-pii")]
+    [HttpPost("~/api/v1/account-security/anonymize-expired-buyer-pii")]
+    [HttpPost("~/api/account-security/anonymize-expired-buyer-pii")]
+    [HttpPost("~/api/v1/account-security/pdpa/anonymize-expired-pii")]
     [IdempotentCommand("AccountSecurity.AnonymizeExpiredBuyerPii")]
     public async Task<IActionResult> AnonymizeExpiredBuyerPii(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] AnonymizeBuyerPiiRequest? request = null,
@@ -531,6 +540,9 @@ public sealed class AccountSecurityController(
         var retentionDays = Math.Max(1, request?.RetentionDays ?? 90);
         var cutoffUtc = now.AddDays(-retentionDays);
         var anonymizedCount = 0;
+        var anonymizedReceiptsCount = 0;
+        var anonymizedOrdersCount = 0;
+        var anonymizedReturnsCount = 0;
 
         if (db is not null)
         {
@@ -546,6 +558,44 @@ public sealed class AccountSecurityController(
             {
                 r.CustomerNameSnapshot = $"ANONYMIZED_PII_{r.Id}";
                 r.Note = "[PII_REDACTED_DECREE_13_2023]";
+                anonymizedReceiptsCount++;
+                anonymizedCount++;
+            }
+
+            var expiredOrders = await db.SalesOrders
+                .Include(o => o.Customer)
+                .Where(o => o.CreatedAt <= cutoffUtc &&
+                            (o.Status == ERP.Domain.Enums.SalesOrderStatus.Fulfilled ||
+                             o.Status == ERP.Domain.Enums.SalesOrderStatus.Cancelled) &&
+                            (o.CancellationReason == null || !o.CancellationReason.StartsWith("ANONYMIZED_PII_")))
+                .Take(200)
+                .ToListAsync(cancellationToken);
+
+            foreach (var o in expiredOrders)
+            {
+                o.CancellationReason = $"ANONYMIZED_PII_{o.Id}";
+                if (o.Customer != null && !o.Customer.Name.StartsWith("ANONYMIZED_PII_"))
+                {
+                    o.Customer.Name = $"ANONYMIZED_PII_PARTNER_{o.Customer.Id}";
+                    o.Customer.Phone = "***REDACTED***";
+                    o.Customer.Email = null;
+                    o.Customer.Address = "[PII_REDACTED_DECREE_13_2023]";
+                }
+                anonymizedOrdersCount++;
+                anonymizedCount++;
+            }
+
+            var expiredReturns = await db.CustomerReturns
+                .Where(cr => cr.CreatedAtUtc <= cutoffUtc &&
+                             cr.ReturnReason != null &&
+                             !cr.ReturnReason.StartsWith("[PII_REDACTED"))
+                .Take(200)
+                .ToListAsync(cancellationToken);
+
+            foreach (var cr in expiredReturns)
+            {
+                cr.ReturnReason = $"[PII_REDACTED_DECREE_13_2023]_{cr.Id}";
+                anonymizedReturnsCount++;
                 anonymizedCount++;
             }
 
@@ -555,7 +605,7 @@ public sealed class AccountSecurityController(
                 EntityName = "BuyerPiiRetentionPolicy",
                 EntityId = db.CurrentTenantId,
                 Action = "AccountSecurity.AnonymizeExpiredBuyerPii",
-                NewValues = $"RetentionDays={retentionDays}; AnonymizedReceipts={anonymizedCount}",
+                NewValues = $"RetentionDays={retentionDays}; AnonymizedTotal={anonymizedCount}; Receipts={anonymizedReceiptsCount}; Orders={anonymizedOrdersCount}; Returns={anonymizedReturnsCount}",
                 Reason = $"Ẩn danh hóa dữ liệu cá nhân người mua (PII) quá hạn {retentionDays} ngày theo Nghị định 13/2023/NĐ-CP",
                 Result = "Success",
                 Timestamp = now
@@ -568,6 +618,9 @@ public sealed class AccountSecurityController(
             retentionDays,
             cutoffUtc,
             anonymizedCount,
+            anonymizedReceiptsCount,
+            anonymizedOrdersCount,
+            anonymizedReturnsCount,
             complianceStandard = "Nghị định 13/2023/NĐ-CP về Bảo vệ dữ liệu cá nhân",
             ledgerIntegrityPreserved = true,
             executedAtUtc = now,

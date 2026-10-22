@@ -810,5 +810,245 @@ namespace ERP.Api.Controllers
                 savedAtUtc = now
             });
         }
+
+        public sealed record BundleComponentItemInput(
+            int? ComponentProductId = null,
+            int? ChildProductId = null,
+            decimal? ComponentQuantity = null,
+            decimal? Quantity = null,
+            decimal? CostAllocationRatioPct = null);
+
+        public sealed record UpsertBundleComponentRequest(
+            int? ParentProductId = null,
+            int? ComponentProductId = null,
+            int? ChildProductId = null,
+            decimal? ComponentQuantity = null,
+            decimal? Quantity = null,
+            decimal? CostAllocationRatioPct = null,
+            List<BundleComponentItemInput>? Components = null);
+
+        [HttpGet("{id:int}/bundle-components")]
+        [PermissionAuthorize(AppPermissions.ProductRead)]
+        public async Task<IActionResult> GetBundleComponents(
+            int id,
+            [FromQuery] int? warehouseId = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (_db == null)
+            {
+                return Ok(new
+                {
+                    parentProductId = id,
+                    availableBundleQty = 0m,
+                    items = Array.Empty<object>(),
+                    components = Array.Empty<object>()
+                });
+            }
+
+            var components = await _db.ProductBundleComponents
+                .AsNoTracking()
+                .Include(b => b.ComponentProduct)
+                .Where(b => b.ParentProductId == id && b.IsActive)
+                .OrderBy(b => b.Id)
+                .ToListAsync(cancellationToken);
+
+            var componentIds = components.Select(c => c.ComponentProductId).Distinct().ToList();
+            var stockQuery = _db.InventoryStocks
+                .AsNoTracking()
+                .Include(s => s.Location)
+                .Where(s => componentIds.Contains(s.ProductId) &&
+                            s.Status == ERP.Domain.Enums.InventoryStatus.Available &&
+                            (s.Location == null || s.Location.LocationType != ERP.Domain.Enums.WarehouseLocationType.Receiving));
+
+            if (warehouseId.HasValue)
+            {
+                stockQuery = stockQuery.Where(s => s.WarehouseId == warehouseId.Value);
+            }
+
+            var stocks = await stockQuery.ToListAsync(cancellationToken);
+
+            var mapped = components.Select(c =>
+            {
+                var atp = stocks
+                    .Where(s => s.ProductId == c.ComponentProductId)
+                    .Sum(s => Math.Max(0m, s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity));
+                var reqQty = c.ComponentQuantity > 0m ? c.ComponentQuantity : 1m;
+                var maxBundles = Math.Floor(atp / reqQty);
+                return new
+                {
+                    id = c.Id,
+                    parentProductId = c.ParentProductId,
+                    componentProductId = c.ComponentProductId,
+                    childProductId = c.ComponentProductId,
+                    componentProductCode = c.ComponentProduct?.Code ?? $"SKU-{c.ComponentProductId}",
+                    childProductCode = c.ComponentProduct?.Code ?? $"SKU-{c.ComponentProductId}",
+                    componentProductName = c.ComponentProduct?.Name ?? $"Thành phần #{c.ComponentProductId}",
+                    childProductName = c.ComponentProduct?.Name ?? $"Thành phần #{c.ComponentProductId}",
+                    componentQuantity = c.ComponentQuantity,
+                    quantity = c.ComponentQuantity,
+                    costAllocationRatioPct = 100m,
+                    componentAvailableQty = atp,
+                    maxBundlesFromComponent = maxBundles,
+                    isActive = c.IsActive
+                };
+            }).ToList();
+
+            var availableBundleQty = mapped.Count > 0
+                ? mapped.Min(x => x.maxBundlesFromComponent)
+                : 0m;
+
+            return Ok(new
+            {
+                parentProductId = id,
+                availableBundleQty,
+                totalComponents = mapped.Count,
+                items = mapped,
+                components = mapped
+            });
+        }
+
+        [HttpPost("{id:int}/bundle-components")]
+        [PermissionAuthorize(AppPermissions.ProductUpdate)]
+        [ERP.Api.Infrastructure.IdempotentCommand("Product.UpsertBundleComponents")]
+        public async Task<IActionResult> UpsertBundleComponent(
+            int id,
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] UpsertBundleComponentRequest? request = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (User?.IsInRole(AppRoles.Viewer) == true)
+            {
+                return Forbid();
+            }
+
+            if (_db == null)
+            {
+                return StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." });
+            }
+
+            var inputList = new List<(int ComponentProductId, decimal ComponentQuantity, decimal CostAllocationRatioPct)>();
+            if (request?.Components is { Count: > 0 })
+            {
+                foreach (var comp in request.Components)
+                {
+                    var compId = comp.ComponentProductId ?? comp.ChildProductId ?? 0;
+                    var compQty = comp.ComponentQuantity ?? comp.Quantity ?? 0m;
+                    var ratio = comp.CostAllocationRatioPct ?? 100m;
+                    inputList.Add((compId, compQty, ratio));
+                }
+            }
+            else
+            {
+                var compId = request?.ComponentProductId ?? request?.ChildProductId ?? 0;
+                var compQty = request?.ComponentQuantity ?? request?.Quantity ?? 0m;
+                var ratio = request?.CostAllocationRatioPct ?? 100m;
+                inputList.Add((compId, compQty, ratio));
+            }
+
+            foreach (var (compId, compQty, _) in inputList)
+            {
+                if (compId <= 0)
+                {
+                    return BadRequest(new
+                    {
+                        code = "COMPONENT_PRODUCT_REQUIRED",
+                        errorCode = "COMPONENT_PRODUCT_REQUIRED",
+                        message = "Phải chỉ định mã sản phẩm thành phần (ComponentProductId)."
+                    });
+                }
+
+                if (compId == id)
+                {
+                    return BadRequest(new
+                    {
+                        code = "BUNDLE_SELF_REFERENCE_INVALID",
+                        errorCode = "BUNDLE_SELF_REFERENCE_INVALID",
+                        message = "Sản phẩm Combo/Kit không được tự tham chiếu chính nó làm thành phần."
+                    });
+                }
+
+                if (compQty <= 0m)
+                {
+                    return BadRequest(new
+                    {
+                        code = "INVALID_COMPONENT_QUANTITY",
+                        errorCode = "INVALID_COMPONENT_QUANTITY",
+                        message = "Định lượng thành phần Combo phải lớn hơn 0."
+                    });
+                }
+            }
+
+            var now = DateTime.UtcNow;
+            ERP.Domain.Entities.ProductBundleComponent? lastSaved = null;
+            foreach (var (compId, compQty, _) in inputList)
+            {
+                var existing = await _db.ProductBundleComponents
+                    .FirstOrDefaultAsync(b => b.ParentProductId == id && b.ComponentProductId == compId, cancellationToken);
+
+                if (existing != null)
+                {
+                    existing.ComponentQuantity = compQty;
+                    existing.IsActive = true;
+                    lastSaved = existing;
+                }
+                else
+                {
+                    existing = new ERP.Domain.Entities.ProductBundleComponent
+                    {
+                        ParentProductId = id,
+                        ComponentProductId = compId,
+                        ComponentQuantity = compQty,
+                        IsActive = true,
+                        CreatedAt = now
+                    };
+                    _db.ProductBundleComponents.Add(existing);
+                    lastSaved = existing;
+                }
+            }
+
+            await _db.SaveChangesAsync(cancellationToken);
+
+            var allComponents = await _db.ProductBundleComponents
+                .AsNoTracking()
+                .Include(b => b.ComponentProduct)
+                .Where(b => b.ParentProductId == id && b.IsActive)
+                .OrderBy(b => b.Id)
+                .ToListAsync(cancellationToken);
+
+            var mapped = allComponents.Select(c => new
+            {
+                id = c.Id,
+                parentProductId = c.ParentProductId,
+                componentProductId = c.ComponentProductId,
+                childProductId = c.ComponentProductId,
+                componentProductCode = c.ComponentProduct?.Code ?? $"SKU-{c.ComponentProductId}",
+                childProductCode = c.ComponentProduct?.Code ?? $"SKU-{c.ComponentProductId}",
+                componentProductName = c.ComponentProduct?.Name ?? $"Thành phần #{c.ComponentProductId}",
+                childProductName = c.ComponentProduct?.Name ?? $"Thành phần #{c.ComponentProductId}",
+                componentQuantity = c.ComponentQuantity,
+                quantity = c.ComponentQuantity,
+                costAllocationRatioPct = 100m,
+                isActive = c.IsActive
+            }).ToList();
+
+            var primary = mapped.LastOrDefault(m => m.componentProductId == lastSaved?.ComponentProductId) ?? mapped.LastOrDefault();
+
+            return Ok(new
+            {
+                id = primary?.id ?? lastSaved?.Id ?? 0,
+                parentProductId = id,
+                componentProductId = primary?.componentProductId ?? lastSaved?.ComponentProductId ?? 0,
+                childProductId = primary?.childProductId ?? lastSaved?.ComponentProductId ?? 0,
+                componentProductCode = primary?.componentProductCode,
+                childProductCode = primary?.childProductCode,
+                componentProductName = primary?.componentProductName,
+                childProductName = primary?.childProductName,
+                componentQuantity = primary?.componentQuantity ?? lastSaved?.ComponentQuantity ?? 1m,
+                quantity = primary?.quantity ?? lastSaved?.ComponentQuantity ?? 1m,
+                costAllocationRatioPct = primary?.costAllocationRatioPct ?? 100m,
+                items = mapped,
+                components = mapped,
+                statusLabel = "Đã lưu định mức cấu phần Combo / Kit"
+            });
+        }
     }
 }

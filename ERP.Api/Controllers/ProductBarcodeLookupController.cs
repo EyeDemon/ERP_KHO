@@ -12,6 +12,9 @@ namespace ERP.Api.Controllers;
 [ApiController]
 [Route("api/product-barcodes")]
 [Route("api/barcode-lookup")]
+[Route("api/v1/product-barcodes")]
+[Route("api/v1/barcode-lookup")]
+[Route("api/v1/product-barcode-lookup")]
 public sealed class ProductBarcodeLookupController(
     IProductCatalogService service,
     ErpKhoDbContext? db = null) : ControllerBase

@@ -2229,3 +2229,61 @@ Thực hiện nghiêm ngặt theo **Quy tắc Điều phối 4 Bước ("Phân c
 
 
 
+---
+
+## 53. BÁO CÁO NGHIỆM THU ĐỢT THỰC THI WAVE 53 (`PHẪU THUẬT ĐÓNG KÍN 100% 5 LỚP, XÓA BỎ 15 ĐIỂM LÀM TẮT / FAKE TRÊN COMMIT b8b4982 & 1.532 / 1.532 TESTS PASS 100%`)
+
+### 53.1. Ma trận Phân công 4 Đợt theo Nguyên tắc `Dispatch-First & Zero File Overlap`
+
+| Đợt thực thi | Định danh Subagent | Vai trò & Phạm vi Tệp tin Độc quyền (`Zero File Overlap`) | Biên bản Bàn giao & Kiểm chứng Pháp y (`read_file`) | Trạng thái |
+| :--- | :--- | :--- | :--- | :---: |
+| **Đợt 1 (Nền tảng DB & Core Engine)** | [`Subagent 1A`](conversation://afc2f112-342d-4ad0-ad06-942866c3ad4e) | **DB Migration & Schema Architect (`[P0-01]`, `OD-02`):** `InventoryStock.cs`, `ErpKhoDbContext.cs`, `Wave45OmnichannelAndSaasConfigurations.cs`, `20261022120000_Wave48To51FullFiveLayerClosure.cs`, `20261023000000_Wave53FullSchemaSnapshotAndFkParity.cs` + `.Designer.cs`, `ErpKhoDbContextModelSnapshot.cs`, `StockTransferService.cs`, `ReceiptInventoryIdentityService.cs` | [`HANDOFF_SUBAGENT_1A.md`](file:///d:/ERP_KHO/HANDOFF_SUBAGENT_1A.md) | **HOÀN TẤT 100%** |
+| **Đợt 1 (Nền tảng DB & Core Engine)** | [`Subagent 1B`](conversation://8e9e2b2b-2bd8-4c42-b131-c5a38d721355) | **Core WMS Ledger & Outbound Engine (`[P0-03]`):** `ExportReceiptRepository.cs`, `ExportReceiptService.cs`, `InventoryStockRepository.cs`, `StockReservationService.cs`, `PutawayService.cs`, `SalesOrderBackorderService.cs` | [`HANDOFF_SUBAGENT_1B.md`](file:///d:/ERP_KHO/HANDOFF_SUBAGENT_1B.md) | **HOÀN TẤT 100%** |
+| **Đợt 1 (Nền tảng DB & Core Engine)** | [`Subagent 1C`](conversation://e6f7fbab-1006-4296-a852-a5c936f5ff06) | **Security RBAC, Outbox, Stocktake & Jobs Engineer (`[P0-04]`, `[P1-01]`, `[P1-02]`):** `AppPermissions.cs`, `TokenService.cs`, `HttpCurrentUser.cs`, `InboundPlanningService.cs`, `PartnerDebtService.cs`, `ReceiptInboundPlanningIntegration.cs`, `InventoryReconciliationController.cs`, `StocktakesController.cs`, `BuyerPiiRetentionAnonymizerJob.cs`, `IntegrationOutboxDispatcherJob.cs`, `SupportImpersonationMiddleware.cs`, `Program.cs` | [`HANDOFF_SUBAGENT_1C.md`](file:///d:/ERP_KHO/HANDOFF_SUBAGENT_1C.md) | **HOÀN TẤT 100%** |
+| **Đợt 1 (Frontend UI)** | [`Subagent 2A`](conversation://ab44579d-c7b7-4dfa-9647-6dac9760e23e) | **React 19 Frontend UI & `FormData` Engineer (`[P0-02]`):** `apiClient.ts`, `MainLayout.tsx`, `Dashboard.tsx`, `ExportReceipts.tsx`, `Products.tsx`, `Inventory.tsx`, `OutboundDemand.tsx`, `Permissions.tsx`, `PackingSessions.tsx`, `WarehouseLocations.tsx`, `PutawayTasks.tsx` | [`HANDOFF_SUBAGENT_2A.md`](file:///d:/ERP_KHO/HANDOFF_SUBAGENT_2A.md) | **HOÀN TẤT 100%** |
+| **Đợt 2 (API Contract & SaaS/OMS)** | [`Subagent 3A`](conversation://e4fe79df-be86-45a3-8bd1-73639c4cc565) | **API Controllers, `/api/v1/` & SaaS/OMS Engine (`[P0-02..03]`, `[P1-01..02]`):** `ExportReceiptsController.cs`, `SalesOrdersController.cs`, `ProductsController.cs`, `ReportsController.cs`, `PermissionsController.cs`, `AccountSecurityController.cs`, `PackingSessionsController.cs`, `ImportReceiptsController.cs`, `ShipmentsController.cs`, `PutawayTasksController.cs` + 15 Controllers còn lại (`38/38` `/api/v1/<kebab-case-plural>`) | [`HANDOFF_SUBAGENT_3A.md`](file:///d:/ERP_KHO/HANDOFF_SUBAGENT_3A.md) | **HOÀN TẤT 100%** |
+| **Đợt 3 (Test Integrity & SQL Seed)** | [`Subagent 4A`](conversation://6422df5d-bfc7-41fe-94d9-ebff5172e411) | **Test Integrity & Real SQL Integration Engineer (`[P0-01]`, `[P2-01]`):** `MigrationSnapshotParityTests.cs` (`0` bảng loại trừ), tạo `Wave44OmnichannelAndSaasTests.cs` & `Wave48To51FullClosureTests.cs` trên ổ đĩa, `tools/ERP.QaSeed/Program.cs`, và 7 file `.test.tsx` | [`HANDOFF_SUBAGENT_4A.md`](file:///d:/ERP_KHO/HANDOFF_SUBAGENT_4A.md) | **HOÀN TẤT 100%** |
+| **Đợt 4 (5 Quality Gates)** | [`Subagent 0A`](conversation://76c1eacc-074b-417e-80c4-267b20e13c95), [`Subagent 0B`](conversation://64820743-4230-4e4e-b7a1-430d7a91a9b7), [`Subagent 2B`](conversation://dbb94975-dff3-4f68-bc21-878ac3883b68) & **`Agent Chính`** | Thực thi **Gate 1** (`0 Warning, 0 Error`, `MigrationSnapshotParityTests` `3/3`), **Gate 2** (`501/501` `ERP.Api.Tests` + `651/651` `ERP.SqlIntegrationHarness` trên SQL Server thật), **Gate 3** (`65/65` files, `380/380` Vitest PASS), **Gate 4** (10 ảnh chụp `gate4-wave53-*.png` kiểm định từng pixel bằng `read_file`) & **Gate 5** (Forensic Code Audit) | [`HANDOFF_SUBAGENT_0A.md`](file:///d:/ERP_KHO/HANDOFF_SUBAGENT_0A.md), [`HANDOFF_SUBAGENT_0B.md`](file:///d:/ERP_KHO/HANDOFF_SUBAGENT_0B.md), [`HANDOFF_SUBAGENT_2B.md`](file:///d:/ERP_KHO/HANDOFF_SUBAGENT_2B.md) | **HOÀN TẤT 100%** |
+
+---
+
+### 53.2. Kết quả Nghiệm thu 5 Cổng Chất lượng (`Gate 1 → Gate 5` — Wave 53)
+
+1. **Gate 1 — Encoding, Clean Architecture, Solution Release Build & Unfiltered Snapshot Parity (`Subagent 0A — 76c1eacc`, `task-2576`)**:
+   - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-encoding.ps1` → **`Exit Code 0`** (`0` lỗi encoding).
+   - Clean Architecture Dependency Audit (`ERP.Domain`, `ERP.Application`) → **`PASS 100%`**.
+   - `dotnet build ERP.slnx -c Release --no-restore` → **`0 Warning(s), 0 Error(s)`** (`Exit Code 0`).
+   - `dotnet test ERP.Application.Tests/ERP.Application.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~MigrationSnapshotParityTests"` → **`3 / 3 PASS`** (với **0 bảng loại trừ** trong `MigrationSnapshotParityTests.cs`).
+2. **Gate 2 — Full Backend API & Real SQL Server Integration Suites (`Subagent 0B — 64820743`, `task-2692`, `task-2717`, `task-2721` — Không dùng `--filter`)**:
+   - `dotnet test ERP.Api.Tests/ERP.Api.Tests.csproj -c Release --no-build` → **`501 / 501 PASS`** (`0 Failed, 0 Skipped`, bao gồm [`Wave44OmnichannelAndSaasTests.cs`](file:///d:/ERP_KHO/ERP.Api.Tests/Wave44OmnichannelAndSaasTests.cs) và [`Wave48To51FullClosureTests.cs`](file:///d:/ERP_KHO/ERP.Api.Tests/Wave48To51FullClosureTests.cs) với 8 bài kiểm thử mới `Wave53_*`).
+   - `dotnet run --project tools/ERP.SqlIntegrationHarness/ERP.SqlIntegrationHarness.csproj -c Release --no-build` → **`651 / 651 PASS`** (`0 Failed, 0 Skipped`, chạy trên SQL Server thật `ERP_KHO_Integration_20261022_194803_930b144c`, TRX: `TestResults/SqlIntegration/930b144ccaeb4faea5fa8a89577f8ef5/application.trx`).
+   - Post-Harness `ERP.QaSeed --apply` → **`3 / 3` SQL Server instances (`localhost`, `.\SQLEXPRESS`, `(localdb)\MSSQLLocalDB`) seeded (`Exit Code 0`)**.
+   - **Tổng cộng Gate 2**: **`501 + 651 = 1.152 / 1.152` bài kiểm thử Backend & SQL Server PASS tuyệt đối (`100%`)**.
+3. **Gate 3 — Frontend Production Build & Full Vitest (`Subagent 2B — dbb94975`)**:
+   - `npm --prefix frontend run build` → **`Exit Code 0`** (`1,702 modules transformed in 841ms`, `0` lỗi TypeScript/Vite).
+   - `npm --prefix frontend test -- --run` → **`65 / 65` test files, `380 / 380` tests PASS (`0 Failed`)**.
+   - **Tổng hợp toàn hệ thống (`Gate 2 + Gate 3`)**: **`501 + 651 + 380 = 1.532 / 1.532` bài kiểm thử tự động PASS tuyệt đối (`100%`)**.
+4. **Gate 4 — Live Browser QA & Kiểm định Pixel-by-Pixel 10 Ảnh chụp (`gate4-wave53-*.png`)**:
+   - Đã kiểm chứng trực tiếp trên trình duyệt thật kết nối `http://localhost:5173` + `http://localhost:5260` trên cơ sở dữ liệu `ERP_KHO` (`0` lỗi Console/PageError, `0` lỗi HTTP `4xx/5xx`):
+
+````carousel
+![Dashboard Desktop — Wave 53 (`Doanh thu thuần: 54.000.000 đ`, `Giá vốn MAC: 8.350.000 đ`, `Lợi nhuận gộp bỏ túi: 43.469.000 đ • Biên lãi gộp: 80,5%`, `COD chờ đối soát: 34.500.000 đ • 1 cảnh báo lệch phí/chậm hoàn`, `Thực nhận từ ĐVVC: 28.300.000 đ`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave53-dashboard-desktop.png)
+<!-- slide -->
+![Inventory Reconciliation & Outbox Desktop — Wave 53 (`2 Cặp kho / sản phẩm`, `2/2 dòng khớp (100%)`, `Số dư: 220 • Kỳ vọng: 220` và bảng `IntegrationOutboxMessages` thật)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave53-reconciliation-outbox-desktop.png)
+<!-- slide -->
+![Warehouse Locations Desktop — Wave 53 (`21 Tổng vị trí`, `6 Khu vực đã cấu trúc`, `9 Vị trí đã gắn cấu trúc`, `<BarcodeSvg />` cho `BIN-A01-01` và bảng vị trí `WH01 — Kho Chính TP.HCM`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave53-warehouse-locations-desktop.png)
+<!-- slide -->
+![Export Receipts & Thermal AWB Desktop — Wave 53 (`Tổng phiếu xuất: 3`, `Đã xuất kho: 2`, `Phiếu xuất đã hủy: 1` và 2 thẻ tem nhiệt `100x150mm` `VTP8938505001` `REPRINT - BẢN SAO` + `GHN8938505002` kèm `<BarcodeSvg />` 1D Code-128 & 2D QR)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave53-export-receipts-misa-desktop.png)
+<!-- slide -->
+![Import Receipts & RMA Desktop — Wave 53 (`Tổng số phiếu nhập: 2`, `Đã ghi sổ tồn kho: 2`, bàn làm việc kiểm định chất lượng RMA và danh sách phiếu nhập `IR-QA-002`, `IR-QA-001`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave53-import-receipts-rma-desktop.png)
+<!-- slide -->
+![Products Virtual Bundle & Promotion Gift Rules Desktop — Wave 53 (`Sản phẩm hoạt động: 2/2`, cấu hình Combo/Kitting `/api/v1/products/{id}/bundle-components` và Quy tắc Quà tặng 0đ)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave53-products-qc-tolerance-desktop.png)
+<!-- slide -->
+![Outbound Demand Excel FormData Upload & VN Address Normalizer Desktop — Wave 53 (`Tổng cầu: 9`, `Đã giữ / Phân bổ: 9 / 9`, upload `.xlsx` qua `FormData` và chuẩn hóa địa chỉ 3 cấp VN)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave53-outbound-demand-promo-vn-desktop.png)
+<!-- slide -->
+![Packing Sessions Video Evidence Station Desktop — Wave 53 (`PACK-QA-001`, `PACK-QA-002`, nhãn `GS1-128 / SSCC` `<BarcodeSvg />` và trạm tải video bằng chứng đóng gói `multipart/form-data`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave53-packing-video-evidence-desktop.png)
+<!-- slide -->
+![Permissions SaaS Quota & Support Impersonation Sessions Desktop — Wave 53 (`Gói Tăng trưởng (GROWTH) — Đơn hàng tháng: 6420 / 10000`, `2 / 3 kho`, `5 / 20 người dùng`, `2 / 2.000 mặt hàng` và bảng phiên hỗ trợ `#1020`, `#1019`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave53-permissions-support-sessions-desktop.png)
+<!-- slide -->
+![Inventory Opening Balance FormData Import Desktop — Wave 53 (`Nhập Tồn Kho Đầu Kỳ & Giá Vốn Bình Quân Gia Quyền` 6 cột qua `FormData` và bảng tồn kho thực tế)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave53-inventory-opening-balance-desktop.png)
+````

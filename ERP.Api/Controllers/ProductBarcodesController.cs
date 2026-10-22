@@ -9,6 +9,7 @@ namespace ERP.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/products/{productId:int}/barcodes")]
+[Route("api/v1/products/{productId:int}/barcodes")]
 public sealed class ProductBarcodesController(IProductCatalogService service) : ControllerBase
 {
     [HttpGet, PermissionAuthorize(AppPermissions.ProductRead)]

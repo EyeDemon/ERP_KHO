@@ -112,7 +112,7 @@ describe('Outbound demand and backorder workbench',()=>{
     expect(second.getByLabelText('SKU Sales Order 1')).toBeTruthy();
   });
 
-  it('imports marketplace Excel orders, downloads template, and normalizes 3-tier VN address',async()=>{
+  it('imports marketplace Excel orders via FormData with real File, downloads template, and normalizes 3-tier VN address',async()=>{
     vi.mocked(apiClient.post).mockImplementation(async url=>{
       if(url==='/api/v1/sales-orders/import-marketplace-excel'){
         return {data:{importBatchId:'IMP-MKT-99',importedOrders:8,channel:'Shopee',status:'Đã đồng bộ 8 đơn Shopee'}} as never;
@@ -125,9 +125,21 @@ describe('Outbound demand and backorder workbench',()=>{
     const view=render(<OutboundDemand/>);
     await view.findByText('SO-0088');
 
+    const fileInput=view.getByLabelText('Tệp Excel đơn hàng sàn') as HTMLInputElement;
+    const excelFile=new File(['xlsx-bytes'],'orders.xlsx',{
+      type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    fireEvent.change(fileInput,{target:{files:[excelFile]}});
+
     fireEvent.click(view.getByRole('button',{name:'Nhập Excel Đơn hàng Sàn'}));
     expect(await view.findByText(/IMP-MKT-99/)).toBeTruthy();
-    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/sales-orders/import-marketplace-excel',expect.objectContaining({channel:'Shopee'}));
+    const importCall=vi.mocked(apiClient.post).mock.calls.find(c=>c[0]==='/api/v1/sales-orders/import-marketplace-excel');
+    expect(importCall).toBeTruthy();
+    const sentFormData=importCall?.[1] as FormData;
+    expect(sentFormData).toBeInstanceOf(FormData);
+    expect(sentFormData.get('file')).toBeInstanceOf(File);
+    expect((sentFormData.get('file') as File).name).toBe('orders.xlsx');
+    expect(sentFormData.get('channel')).toBe('Shopee');
 
     fireEvent.click(view.getByRole('button',{name:'Tải file mẫu .xlsx'}));
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith('/api/v1/import-templates/marketplace-orders',{responseType:'blob'}));

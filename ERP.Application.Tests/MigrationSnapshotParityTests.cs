@@ -11,41 +11,6 @@ namespace ERP.Application.Tests;
 
 public sealed class MigrationSnapshotParityTests
 {
-    private static readonly string[] Wave44CanonicalTables =
-    [
-        "InventoryStocks",
-        "StockReservations",
-        "StockAllocations",
-        "PutawayTaskItems",
-        "PutawayTasks",
-        "Products",
-        "InventoryTransactions",
-        "ExportReceipts",
-        "IntegrationInboxMessages",
-        "IntegrationOutboxMessages",
-        "ProductBundleComponents",
-        "MarketplaceShops",
-        "ChannelSkuMappings",
-        "HandoverManifests",
-        "HandoverManifestLines",
-        "SaasPlans",
-        "TenantSubscriptions",
-        "SaasBillingInvoices",
-        "ShipmentFinancialLedgers",
-        "SalesOrderLines",
-        "ExportReceiptDetails",
-        "ImportReceiptDetails",
-        "AuditLogs",
-        "VnAdministrativeUnits",
-        "CarrierLocationMappings",
-        "PackingVideoEvidences",
-        "PromotionGiftRules",
-        "SupportImpersonationSessions",
-        "CustomerReturns",
-        "CustomerReturnLines",
-        "StocktakeAdjustmentProposals"
-    ];
-
     [Fact]
     public void Migration_snapshot_matches_current_model()
     {
@@ -62,19 +27,16 @@ public sealed class MigrationSnapshotParityTests
         snapshotModel = context.GetService<IModelRuntimeInitializer>().Initialize(snapshotModel);
 
         var currentModel = context.GetService<IDesignTimeModel>().Model;
-        var operations = context.GetService<IMigrationsModelDiffer>().GetDifferences(
+        var differ = context.GetService<IMigrationsModelDiffer>();
+        var differences = differ.GetDifferences(
                 snapshotModel.GetRelationalModel(),
                 currentModel.GetRelationalModel())
-            .Where(op =>
-            {
-                var desc = Describe(op);
-                return !Wave44CanonicalTables.Any(table => desc.Contains(table, StringComparison.OrdinalIgnoreCase));
-            })
             .ToList();
 
-        operations.Should().BeEmpty(string.Join(
+        Assert.Empty(differences);
+        differences.Should().BeEmpty(string.Join(
             Environment.NewLine,
-            operations.Select(Describe)));
+            differences.Select(Describe)));
     }
 
     [Fact]

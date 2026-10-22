@@ -182,8 +182,9 @@ const Products = () => {
     const parentId = targetParent?.id || bundleParentId || 1;
     await mutate(async () => {
       try {
-        const res = await apiClient.get(`/api/Products/${parentId}/bundle-components`);
-        const items = Array.isArray(res?.data) ? res.data : (Array.isArray(res?.data?.items) ? res.data.items : []);
+        const res = await apiClient.get(`/api/v1/products/${parentId}/bundle-components`);
+        const rawList = res?.data?.items ?? res?.data?.components ?? res?.data;
+        const items = Array.isArray(rawList) ? rawList : [];
         setBundleComponents(items.map((item: Record<string, unknown>, idx: number) => ({
           id: Number(item.id ?? idx + 1),
           parentProductId: Number(item.parentProductId ?? parentId),
@@ -208,7 +209,7 @@ const Products = () => {
     const qty = Math.max(1, Number(bundleQuantity) || 1);
     await mutate(async () => {
       try {
-        const res = await apiClient.post(`/api/Products/${parentId}/bundle-components`, {
+        const res = await apiClient.post(`/api/v1/products/${parentId}/bundle-components`, {
           parentProductId: parentId,
           childProductId: childId,
           quantity: qty,
@@ -236,8 +237,9 @@ const Products = () => {
   const loadPromotionGiftRules = async () => {
     await mutate(async () => {
       try {
-        const res = await apiClient.get('/api/sales-orders/promotion-gift-rules');
-        const items = Array.isArray(res?.data) ? res.data : (Array.isArray(res?.data?.items) ? res.data.items : []);
+        const res = await apiClient.get('/api/v1/sales-orders/promotion-gift-rules');
+        const rawList = res?.data?.items ?? res?.data?.rules ?? res?.data;
+        const items = Array.isArray(rawList) ? rawList : [];
         setGiftRules(items.map((item: Record<string, unknown>, idx: number) => ({
           id: Number(item.id ?? idx + 1),
           ruleName: String(item.ruleName ?? item.name ?? 'Chương trình quà tặng 0đ'),
@@ -263,7 +265,7 @@ const Products = () => {
     const giftQty = Math.max(1, Number(giftQuantity) || 1);
     await mutate(async () => {
       try {
-        const res = await apiClient.post('/api/sales-orders/promotion-gift-rules', {
+        const res = await apiClient.post('/api/v1/sales-orders/promotion-gift-rules', {
           ruleName: giftRuleName.trim() || 'Chương trình quà tặng 0đ',
           minOrderValue: minVal,
           giftProductId: resolvedGiftId,

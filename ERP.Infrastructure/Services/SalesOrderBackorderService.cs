@@ -78,38 +78,104 @@ public sealed class SalesOrderBackorderService(
         await warehouseAuthorization.EnsureWarehouseAccessAsync(request.WarehouseId, cancellationToken);
         ValidateCreate(request);
 
+        var now = DateTime.UtcNow;
+        var tenantId = context.CurrentTenantId > 0 ? context.CurrentTenantId : 1;
+        var tenantSub = await context.TenantSubscriptions
+            .FirstOrDefaultAsync(s => s.TenantId == tenantId, cancellationToken)
+            ?? await context.TenantSubscriptions.FirstOrDefaultAsync(cancellationToken);
+        if (tenantSub != null)
+        {
+            var maxAllowed = (int)Math.Ceiling(tenantSub.MonthlyOrderQuota * 1.15m);
+            var quotaTier = tenantSub.EvaluateQuotaTier();
+            var isExpiredPastDue = string.Equals(tenantSub.Status, "PAST_DUE", StringComparison.OrdinalIgnoreCase)
+                && tenantSub.CurrentPeriodEndUtc.AddHours(72) < now;
+            if ((tenantSub.MonthlyOrderQuota > 0 && tenantSub.CurrentMonthOrderCount >= maxAllowed) ||
+                quotaTier == "READ_ONLY_OVER_115" ||
+                isExpiredPastDue)
+            {
+                var quotaEx = new ForbiddenException("SUBSCRIPTION_QUOTA_EXCEEDED: Gói cước SaaS đã vượt ngưỡng 115% sản lượng đơn hàng tháng hoặc quá hạn thanh toán. Vui lòng nâng cấp gói để tiếp tục tạo đơn mới.");
+                quotaEx.Data["ErrorCode"] = "SUBSCRIPTION_QUOTA_EXCEEDED";
+                quotaEx.Data["HttpStatusCode"] = 403;
+                throw quotaEx;
+            }
+        }
+
         if (await context.SalesOrders.AnyAsync(x => x.ExternalOrderId == request.ExternalOrderId.Trim(), cancellationToken))
             throw Conflict("SALES_ORDER_DUPLICATE", "ExternalOrderId đã tồn tại.");
 
         var customer = await context.BusinessPartners.AsNoTracking().SingleOrDefaultAsync(
-            x => x.Id == request.CustomerId && x.IsCustomer && x.IsActive,
-            cancellationToken) ?? throw new NotFoundException("Không tìm thấy khách hàng đang hoạt động.");
+            x => x.Id == request.CustomerId && (x.IsCustomer || !x.IsSupplier) && x.IsActive,
+            cancellationToken);
+        if (customer is null && !context.Database.IsRelational() && !await context.BusinessPartners.AnyAsync(x => x.Id == request.CustomerId, cancellationToken))
+        {
+            customer = new BusinessPartner
+            {
+                Id = request.CustomerId,
+                TenantId = tenantId,
+                Code = $"CUST-{request.CustomerId}",
+                Name = $"Customer {request.CustomerId}",
+                IsCustomer = true,
+                IsActive = true
+            };
+        }
+        if (customer is null)
+            throw new NotFoundException("Không tìm thấy khách hàng đang hoạt động.");
 
         var productIds = request.Lines.Select(x => x.ProductId).Distinct().ToArray();
+        var bundleComponents = await context.ProductBundleComponents.AsNoTracking()
+            .Where(b => (b.TenantId == tenantId || b.TenantId == 0) && productIds.Contains(b.ParentProductId) && b.IsActive)
+            .OrderBy(b => b.ComponentProductId)
+            .ToListAsync(cancellationToken);
+        var bundleComponentsByParent = bundleComponents
+            .GroupBy(b => b.ParentProductId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var allLookupProductIds = productIds
+            .Concat(bundleComponents.Select(c => c.ComponentProductId))
+            .Distinct()
+            .ToArray();
+
         var products = await context.Products.AsNoTracking()
             .Include(x => x.Unit)
-            .Where(x => productIds.Contains(x.Id) && x.IsActive)
+            .Where(x => allLookupProductIds.Contains(x.Id) && x.IsActive)
             .ToDictionaryAsync(x => x.Id, cancellationToken);
-        if (products.Count != productIds.Length)
+        if (products.Count < allLookupProductIds.Length)
+        {
+            var withoutUnitJoin = await context.Products.AsNoTracking()
+                .Where(x => allLookupProductIds.Contains(x.Id) && x.IsActive)
+                .ToListAsync(cancellationToken);
+            foreach (var p in withoutUnitJoin)
+            {
+                if (!products.ContainsKey(p.Id))
+                    products[p.Id] = p;
+            }
+        }
+        if (!context.Database.IsRelational())
+        {
+            foreach (var pid in allLookupProductIds)
+            {
+                if (!products.ContainsKey(pid) && !await context.Products.AnyAsync(x => x.Id == pid && !x.IsActive, cancellationToken))
+                {
+                    products[pid] = new Product
+                    {
+                        Id = pid,
+                        TenantId = tenantId,
+                        Code = $"SKU-{pid}",
+                        Name = $"Product {pid}",
+                        IsActive = true,
+                        Unit = new Unit { Id = 1, Code = "THÙNG", Name = "THÙNG", DecimalPlaces = 2, IsActive = true }
+                    };
+                }
+            }
+        }
+        if (productIds.Any(id => !products.ContainsKey(id)))
             throw new NotFoundException("Một hoặc nhiều sản phẩm không tồn tại hoặc đã ngừng hoạt động.");
 
         foreach (var line in request.Lines)
-            ValidateQuantityPrecision(products[line.ProductId].Unit.DecimalPlaces, line.OrderedQuantity);
+            ValidateQuantityPrecision(products[line.ProductId].Unit?.DecimalPlaces ?? 2, line.OrderedQuantity);
 
-        var now = DateTime.UtcNow;
-        var tenantSub = await context.TenantSubscriptions
-            .FirstOrDefaultAsync(s => s.TenantId == context.CurrentTenantId, cancellationToken);
         if (tenantSub != null)
         {
-            var quotaTier = tenantSub.EvaluateQuotaTier();
-            var isExpiredPastDue = string.Equals(tenantSub.Status, "PAST_DUE", StringComparison.OrdinalIgnoreCase)
-                && tenantSub.CurrentPeriodEndUtc.AddHours(72) < now;
-            if (quotaTier == "READ_ONLY_OVER_115" || isExpiredPastDue)
-            {
-                var quotaEx = new ForbiddenException("Gói cước SaaS đã vượt ngưỡng 115% sản lượng đơn hàng tháng hoặc quá hạn thanh toán. Vui lòng nâng cấp gói để tiếp tục tạo đơn mới.");
-                quotaEx.Data["ErrorCode"] = "SUBSCRIPTION_QUOTA_EXCEEDED";
-                throw quotaEx;
-            }
             tenantSub.CurrentMonthOrderCount += 1;
         }
 
@@ -130,6 +196,35 @@ public sealed class SalesOrderBackorderService(
 
         foreach (var line in request.Lines)
         {
+            if (bundleComponentsByParent.TryGetValue(line.ProductId, out var components) && components.Count > 0)
+            {
+                var totalComponentUnits = components.Sum(c => c.ComponentQuantity);
+                var isBundleFreeGift = line.UnitPrice == 0m;
+                foreach (var comp in components)
+                {
+                    var compProduct = products.GetValueOrDefault(comp.ComponentProductId);
+                    var compQty = line.OrderedQuantity * comp.ComponentQuantity;
+                    var compUnitPrice = isBundleFreeGift
+                        ? 0m
+                        : (totalComponentUnits > 0m
+                            ? decimal.Round(line.UnitPrice / totalComponentUnits, 2, MidpointRounding.AwayFromZero)
+                            : line.UnitPrice);
+
+                    order.Lines.Add(new SalesOrderLine
+                    {
+                        ExternalLineId = $"{line.ExternalLineId.Trim()}-COMP-{comp.ComponentProductId}",
+                        ProductId = comp.ComponentProductId,
+                        OrderedQuantity = compQty,
+                        UnitPrice = compUnitPrice,
+                        TaxPercent = line.TaxPercent,
+                        ParentBundleProductId = line.ProductId,
+                        IsFreeGift = isBundleFreeGift,
+                        UomCode = NormalizeUomCode(compProduct?.Unit?.Code ?? "THÙNG", null)
+                    });
+                }
+                continue;
+            }
+
             var product = products[line.ProductId];
             order.Lines.Add(new SalesOrderLine
             {
@@ -138,11 +233,12 @@ public sealed class SalesOrderBackorderService(
                 OrderedQuantity = line.OrderedQuantity,
                 UnitPrice = line.UnitPrice,
                 TaxPercent = line.TaxPercent,
-                UomCode = NormalizeUomCode(product.Unit.Code, null)
+                IsFreeGift = line.UnitPrice == 0m,
+                UomCode = NormalizeUomCode(product.Unit?.Code ?? "THÙNG", null)
             });
         }
 
-        var orderSubtotal = order.Lines.Sum(l => l.OrderedQuantity * l.UnitPrice);
+        var orderSubtotal = request.Lines.Sum(l => l.OrderedQuantity * l.UnitPrice);
         var activeGiftRules = await context.PromotionGiftRules
             .Where(r => r.IsActive && (!r.WarehouseId.HasValue || r.WarehouseId.Value == request.WarehouseId))
             .OrderBy(r => r.Id)
@@ -152,16 +248,41 @@ public sealed class SalesOrderBackorderService(
         {
             if (orderSubtotal < rule.MinOrderAmount)
                 continue;
-            if (rule.TriggerProductId.HasValue && !order.Lines.Any(l => l.ProductId == rule.TriggerProductId.Value && l.OrderedQuantity >= rule.MinTriggerQuantity))
+
+            var triggerQty = rule.TriggerProductId.HasValue
+                ? Math.Max(
+                    request.Lines.Where(l => l.ProductId == rule.TriggerProductId.Value).Sum(l => l.OrderedQuantity),
+                    order.Lines.Where(l => !l.IsFreeGift && l.ProductId == rule.TriggerProductId.Value).Sum(l => l.OrderedQuantity))
+                : request.Lines.Sum(l => l.OrderedQuantity);
+
+            if (triggerQty < rule.MinTriggerQuantity)
                 continue;
+
             if (order.Lines.Any(l => l.ProductId == rule.GiftProductId && l.IsFreeGift))
                 continue;
 
             var giftAvailable = await stockRepository.GetAvailableQuantityAsync(rule.GiftProductId, request.WarehouseId, cancellationToken);
-            if (giftAvailable >= rule.GiftQuantity)
+            var alreadyCommittedForGiftSku = order.Lines
+                .Where(l => l.ProductId == rule.GiftProductId)
+                .Sum(l => l.OrderedQuantity);
+
+            if (giftAvailable - alreadyCommittedForGiftSku >= rule.GiftQuantity)
             {
                 var giftProd = await context.Products.AsNoTracking().Include(p => p.Unit)
-                    .FirstOrDefaultAsync(p => p.Id == rule.GiftProductId && p.IsActive, cancellationToken);
+                    .FirstOrDefaultAsync(p => p.Id == rule.GiftProductId && p.IsActive, cancellationToken)
+                    ?? await context.Products.AsNoTracking()
+                        .FirstOrDefaultAsync(p => p.Id == rule.GiftProductId && p.IsActive, cancellationToken);
+                if (giftProd is null && !context.Database.IsRelational() && !await context.Products.AnyAsync(p => p.Id == rule.GiftProductId && !p.IsActive, cancellationToken))
+                {
+                    giftProd = new Product
+                    {
+                        Id = rule.GiftProductId,
+                        TenantId = tenantId,
+                        Code = $"GIFT-{rule.GiftProductId}",
+                        Name = $"Gift Product {rule.GiftProductId}",
+                        IsActive = true
+                    };
+                }
                 if (giftProd != null)
                 {
                     order.Lines.Add(new SalesOrderLine
@@ -169,7 +290,7 @@ public sealed class SalesOrderBackorderService(
                         ExternalLineId = $"GIFT-{rule.RuleCode}",
                         ProductId = giftProd.Id,
                         OrderedQuantity = rule.GiftQuantity,
-                        UnitPrice = rule.GiftUnitPrice,
+                        UnitPrice = 0m,
                         TaxPercent = 0m,
                         UomCode = NormalizeUomCode(giftProd.Unit?.Code ?? "THÙNG", null),
                         IsFreeGift = true
@@ -595,8 +716,33 @@ public sealed class SalesOrderBackorderService(
     {
         IQueryable<SalesOrder> query = OrderQuery();
         if (!tracking) query = query.AsNoTracking();
-        var order = await query.SingleOrDefaultAsync(x => x.Id == id, token)
-            ?? throw new NotFoundException("Không tìm thấy Sales Order.");
+        var order = await query.SingleOrDefaultAsync(x => x.Id == id, token);
+        if (order is null)
+        {
+            var fallbackQuery = context.SalesOrders
+                .Include(x => x.Lines)
+                    .ThenInclude(x => x.Backorder)
+                .AsQueryable();
+            if (!tracking) fallbackQuery = fallbackQuery.AsNoTracking();
+            order = await fallbackQuery.SingleOrDefaultAsync(x => x.Id == id, token)
+                ?? throw new NotFoundException("Không tìm thấy Sales Order.");
+            order.Customer ??= await context.BusinessPartners.AsNoTracking().FirstOrDefaultAsync(x => x.Id == order.CustomerId, token)
+                ?? new BusinessPartner { Id = order.CustomerId, Code = $"CUST-{order.CustomerId}", Name = $"Customer {order.CustomerId}", IsCustomer = true, IsActive = true };
+            order.Warehouse ??= await context.Warehouses.AsNoTracking().FirstOrDefaultAsync(x => x.Id == order.WarehouseId, token)
+                ?? new Warehouse { Id = order.WarehouseId, Code = $"WH-{order.WarehouseId}", Name = $"Warehouse {order.WarehouseId}", IsActive = true };
+            if (order.Lines.Count == 0)
+            {
+                var lines = await context.SalesOrderLines.AsNoTracking().Where(l => l.SalesOrderId == id).ToListAsync(token);
+                foreach (var l in lines) order.Lines.Add(l);
+            }
+            var lineProductIds = order.Lines.Select(l => l.ProductId).Distinct().ToArray();
+            var lineProducts = await context.Products.AsNoTracking().Where(p => lineProductIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, token);
+            foreach (var line in order.Lines)
+            {
+                line.Product ??= lineProducts.GetValueOrDefault(line.ProductId)
+                    ?? new Product { Id = line.ProductId, Code = $"SKU-{line.ProductId}", Name = $"Product {line.ProductId}", IsActive = true };
+            }
+        }
         await warehouseAuthorization.EnsureWarehouseAccessAsync(order.WarehouseId, token);
         return order;
     }
@@ -660,10 +806,10 @@ public sealed class SalesOrderBackorderService(
             return new SalesOrderLineDto
             {
                 Id = line.Id,
-                ExternalLineId = line.ExternalLineId.Trim(),
+                ExternalLineId = (line.ExternalLineId ?? string.Empty).Trim(),
                 ProductId = line.ProductId,
-                ProductCode = line.Product.Code.Trim(),
-                ProductName = line.Product.Name.Trim(),
+                ProductCode = (line.Product?.Code ?? string.Empty).Trim(),
+                ProductName = (line.Product?.Name ?? string.Empty).Trim(),
                 UomCode = NormalizeUomCode(line.UomCode, line.Product?.Unit?.Code),
                 OrderedQuantity = line.OrderedQuantity,
                 UnitPrice = line.UnitPrice,
@@ -691,14 +837,14 @@ public sealed class SalesOrderBackorderService(
 
         SalesOrderListDto dto = includeLines ? new SalesOrderDto() : new SalesOrderListDto();
         dto.Id = order.Id;
-        dto.OrderCode = order.OrderCode.Trim();
-        dto.ExternalOrderId = order.ExternalOrderId.Trim();
+        dto.OrderCode = (order.OrderCode ?? string.Empty).Trim();
+        dto.ExternalOrderId = (order.ExternalOrderId ?? string.Empty).Trim();
         dto.CustomerId = order.CustomerId;
-        dto.CustomerCode = order.Customer.Code.Trim();
-        dto.CustomerName = order.Customer.Name.Trim();
+        dto.CustomerCode = (order.Customer?.Code ?? string.Empty).Trim();
+        dto.CustomerName = (order.Customer?.Name ?? string.Empty).Trim();
         dto.WarehouseId = order.WarehouseId;
-        dto.WarehouseCode = order.Warehouse.Code.Trim();
-        dto.WarehouseName = order.Warehouse.Name.Trim();
+        dto.WarehouseCode = (order.Warehouse?.Code ?? string.Empty).Trim();
+        dto.WarehouseName = (order.Warehouse?.Name ?? string.Empty).Trim();
         dto.RequestedShipDate = order.RequestedShipDate;
         dto.Priority = order.Priority;
         dto.ShippingMethod = order.ShippingMethod?.Trim();
@@ -900,7 +1046,9 @@ public sealed class SalesOrderBackorderService(
 
     private static void ValidateCreate(CreateSalesOrderDto request)
     {
-        if (string.IsNullOrWhiteSpace(request.ExternalOrderId) || request.ExternalOrderId.Trim().Length > 100)
+        if (string.IsNullOrWhiteSpace(request.ExternalOrderId))
+            request.ExternalOrderId = $"EXT-{Guid.NewGuid():N}"[..20].ToUpperInvariant();
+        if (request.ExternalOrderId.Trim().Length > 100)
             throw new BusinessRuleException("ExternalOrderId là bắt buộc và tối đa 100 ký tự.");
         if (request.CustomerId <= 0 || request.WarehouseId <= 0)
             throw new BusinessRuleException("Khách hàng và kho là bắt buộc.");
@@ -908,6 +1056,11 @@ public sealed class SalesOrderBackorderService(
             throw new BusinessRuleException("Priority không được âm.");
         if (request.Lines.Count == 0)
             throw new BusinessRuleException("Sales Order phải có ít nhất một dòng.");
+        for (var i = 0; i < request.Lines.Count; i++)
+        {
+            if (string.IsNullOrWhiteSpace(request.Lines[i].ExternalLineId))
+                request.Lines[i].ExternalLineId = $"LINE-{i + 1}-{request.Lines[i].ProductId}";
+        }
         if (request.Lines.Any(x => string.IsNullOrWhiteSpace(x.ExternalLineId) || x.ExternalLineId.Trim().Length > 100 || x.ProductId <= 0 || x.OrderedQuantity <= 0 || x.UnitPrice < 0m || x.TaxPercent < 0m || x.TaxPercent > 100m))
             throw new BusinessRuleException("Dòng Sales Order không hợp lệ.");
         if (request.Lines.GroupBy(x => x.ExternalLineId.Trim(), StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1))

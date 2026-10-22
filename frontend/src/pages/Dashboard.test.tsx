@@ -47,19 +47,20 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
       if (url === '/api/v1/reports/owner-gross-profit') {
         return {
           data: {
-            netRevenue: 148500000,
-            totalCogs: 92400000,
-            estimatedGrossProfit: 41250000,
-            grossMarginPercent: 27.8,
+            grossRevenue: 85000000,
+            movingAverageCogs: 51000000,
+            netPocketProfit: 24500000,
+            netMarginPct: 28.8,
+            costHiddenByRbac: false,
           },
         } as never;
       }
-      if (url === '/api/v1/finance/cod-reconciliation') {
+      if (url === '/api/v1/reports/cod-shipping-reconciliation') {
         return {
           data: {
-            pendingCodAmount: 36800000,
-            receivedFromCarrierAmount: 111700000,
-            discrepancyWarningCount: 3,
+            totalExpectedCod: 19500000,
+            totalActualCod: 18200000,
+            discrepancyCount: 2,
           },
         } as never;
       }
@@ -83,12 +84,15 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
       ),
     ).toBeTruthy();
 
-    expect(view.getByText('148.500.000 đ')).toBeTruthy();
+    expect(await view.findByText('85.000.000 đ')).toBeTruthy();
     expect(view.getByText('Giá vốn hàng bán bình quân')).toBeTruthy();
     expect(view.container.textContent).not.toContain('(COGS)');
-    expect(view.getByText('92.400.000 đ')).toBeTruthy();
-    expect(view.getByText('41.250.000 đ • Biên lãi gộp 27,8%')).toBeTruthy();
-    expect(view.getByText('36.800.000 đ • 3 cảnh báo lệch phí/chậm hoàn')).toBeTruthy();
+    expect(view.getByText('51.000.000 đ')).toBeTruthy();
+    expect(view.getByText('24.500.000 đ • Biên lãi gộp 28,8%')).toBeTruthy();
+    expect(view.getByText('19.500.000 đ • 2 cảnh báo lệch phí/chậm hoàn')).toBeTruthy();
+    expect(view.getByText('Thực nhận từ ĐVVC: 18.200.000 đ • Đối soát 3 chiều')).toBeTruthy();
+    expect(view.container.textContent).not.toContain('148.500.000');
+    expect(view.container.textContent).not.toContain('36.800.000');
 
     expect(view.getByText('Bước 1: Khởi tạo sơ đồ kệ mẫu (3 giây)')).toBeTruthy();
     expect(view.getByText('Bước 2: Nhập danh mục sản phẩm chuẩn')).toBeTruthy();
@@ -101,7 +105,7 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
       await view.findByText(/Đã khởi tạo thuê bao TENANT-SME-2026 và phân bổ sơ đồ kho mẫu/),
     ).toBeTruthy();
     expect(post).toHaveBeenCalledWith(
-      '/api/permissions/saas-tenants/provision',
+      '/api/v1/permissions/saas/tenants/provision',
       expect.objectContaining({ tenantCode: 'TENANT-SME-2026' }),
     );
 

@@ -85,7 +85,7 @@ namespace ERP.Application.Services
             if (dto.Details == null || !dto.Details.Any())
                 throw new BusinessRuleException("Phiếu xuất phải có ít nhất 1 sản phẩm");
 
-            if (dto.Details.GroupBy(x => x.ProductId).Any(x => x.Count() > 1))
+            if (dto.Details.GroupBy(x => (x.ProductId, IsFreeGift: x.UnitPrice == 0m && dto.Details.Any(y => y.ProductId == x.ProductId && y.UnitPrice > 0m))).Any(x => x.Count() > 1))
                 throw new BusinessRuleException("Một sản phẩm không được lặp nhiều dòng.");
 
             if (await _exportReceiptRepository.ExistsByCodeAsync(dto.Code))
@@ -100,6 +100,8 @@ namespace ERP.Application.Services
                 Status = ReceiptStatus.Draft,
                 Note = dto.Note,
                 CustomerId = dto.CustomerId,
+                SalesOrderId = dto.SalesOrderId,
+                ShipmentId = dto.ShipmentId,
                 MarketplaceOrderId = dto.MarketplaceOrderId?.Trim(),
                 CarrierCode = dto.CarrierCode?.Trim(),
                 TrackingNumber = dto.TrackingNumber?.Trim(),
@@ -124,31 +126,128 @@ namespace ERP.Application.Services
                     throw new BusinessRuleException($"Đơn giá của sản phẩm ID {detailDto.ProductId} không được âm");
                 if (detailDto.TaxPercent is < 0 or > 100)
                     throw new BusinessRuleException($"Thuế suất của sản phẩm ID {detailDto.ProductId} phải từ 0 đến 100%");
+            }
 
-                var stock = await _inventoryStockRepository.GetByProductAndWarehouseAsync(detailDto.ProductId, dto.WarehouseId);
-                if (stock == null)
-                    throw new BusinessRuleException($"Không tìm thấy thông tin tồn kho khả dụng cho sản phẩm ID {detailDto.ProductId} tại kho ID {dto.WarehouseId}");
-                if (stock.Product == null || !stock.Product.IsActive || stock.Product.Unit == null || !stock.Product.Unit.IsActive)
-                    throw new BusinessRuleException($"Sản phẩm ID {detailDto.ProductId} hoặc Base UOM không hoạt động.");
-                if (decimal.Round(detailDto.Quantity, stock.Product.Unit.DecimalPlaces) != detailDto.Quantity)
-                    throw new BusinessRuleException($"Số lượng sản phẩm ID {detailDto.ProductId} vượt quá độ chính xác Base UOM cho phép ({stock.Product.Unit.DecimalPlaces} chữ số thập phân).");
+            var bundleResolver = _exportReceiptRepository as IExportReceiptBundleResolver;
+            var rawProductIds = dto.Details.Select(x => x.ProductId).Distinct().ToArray();
+            var bundleComponents = bundleResolver is not null
+                ? await bundleResolver.GetActiveBundleComponentsAsync(rawProductIds)
+                : Array.Empty<ERP.Domain.Entities.ProductBundleComponent>();
+            var bundleComponentsByParent = bundleComponents
+                .GroupBy(x => x.ParentProductId)
+                .ToDictionary(g => g.Key, g => g.OrderBy(c => c.ComponentProductId).ToList());
+            var salesOrderLines = bundleResolver is not null
+                ? await bundleResolver.GetSalesOrderLinesAsync(dto.SalesOrderId, dto.MarketplaceOrderId)
+                : Array.Empty<ERP.Domain.Entities.SalesOrderLine>();
+            var giftProductIds = bundleResolver is not null
+                ? await bundleResolver.GetActiveGiftProductIdsAsync(dto.WarehouseId)
+                : new HashSet<int>();
 
-                var currentStock = await _inventoryStockRepository.GetAvailableQuantityAsync(detailDto.ProductId, dto.WarehouseId);
+            var usedOrderLineIds = new HashSet<int>();
+            var expandedDetails = new List<(int ProductId, decimal Quantity, decimal UnitPrice, decimal TaxPercent, string? Note, int? ParentBundleProductId, bool IsFreeGift)>();
 
-                if (detailDto.Quantity > currentStock)
+            foreach (var detailDto in dto.Details)
+            {
+                if (bundleComponentsByParent.TryGetValue(detailDto.ProductId, out var components) && components.Count > 0)
                 {
-                    throw new BusinessRuleException($"Sản phẩm có ID {detailDto.ProductId} không đủ tồn kho. Tồn khả dụng: {currentStock}, yêu cầu xuất: {detailDto.Quantity}");
+                    var totalComponentUnits = components.Sum(c => c.ComponentQuantity);
+                    var isBundleFreeGift = detailDto.UnitPrice == 0m;
+                    foreach (var comp in components)
+                    {
+                        var compQty = detailDto.Quantity * comp.ComponentQuantity;
+                        var matchedOrderCompLine = salesOrderLines.FirstOrDefault(l =>
+                            !usedOrderLineIds.Contains(l.Id) &&
+                            l.ProductId == comp.ComponentProductId &&
+                            l.ParentBundleProductId == detailDto.ProductId);
+                        if (matchedOrderCompLine is not null)
+                        {
+                            usedOrderLineIds.Add(matchedOrderCompLine.Id);
+                        }
+
+                        var compUnitPrice = isBundleFreeGift
+                            ? 0m
+                            : matchedOrderCompLine?.UnitPrice ?? (totalComponentUnits > 0m
+                                ? decimal.Round(detailDto.UnitPrice / totalComponentUnits, 2, MidpointRounding.AwayFromZero)
+                                : detailDto.UnitPrice);
+
+                        expandedDetails.Add((
+                            comp.ComponentProductId,
+                            compQty,
+                            compUnitPrice,
+                            detailDto.TaxPercent,
+                            detailDto.Note,
+                            detailDto.ProductId,
+                            isBundleFreeGift));
+                    }
+                    continue;
+                }
+
+                var matchedLine = salesOrderLines.FirstOrDefault(l =>
+                    !usedOrderLineIds.Contains(l.Id) &&
+                    l.ProductId == detailDto.ProductId &&
+                    l.OrderedQuantity == detailDto.Quantity &&
+                    l.UnitPrice == detailDto.UnitPrice)
+                    ?? salesOrderLines.FirstOrDefault(l =>
+                        !usedOrderLineIds.Contains(l.Id) &&
+                        l.ProductId == detailDto.ProductId);
+
+                if (matchedLine is not null)
+                {
+                    usedOrderLineIds.Add(matchedLine.Id);
+                }
+
+                var isFreeGift = (matchedLine?.IsFreeGift == true) ||
+                                 detailDto.UnitPrice == 0m ||
+                                 (detailDto.UnitPrice == 0m && giftProductIds.Contains(detailDto.ProductId));
+                var parentBundleId = matchedLine?.ParentBundleProductId;
+                var effectiveUnitPrice = isFreeGift ? 0m : detailDto.UnitPrice;
+
+                expandedDetails.Add((
+                    detailDto.ProductId,
+                    detailDto.Quantity,
+                    effectiveUnitPrice,
+                    detailDto.TaxPercent,
+                    detailDto.Note,
+                    parentBundleId,
+                    isFreeGift));
+            }
+
+            var requiredByProduct = expandedDetails
+                .GroupBy(x => x.ProductId)
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.Quantity));
+            var checkedProducts = new HashSet<int>();
+
+            foreach (var item in expandedDetails)
+            {
+                var stock = await _inventoryStockRepository.GetByProductAndWarehouseAsync(item.ProductId, dto.WarehouseId);
+                if (stock == null)
+                    throw new BusinessRuleException($"Không tìm thấy thông tin tồn kho khả dụng cho sản phẩm ID {item.ProductId} tại kho ID {dto.WarehouseId}");
+                if (stock.Product == null || !stock.Product.IsActive || stock.Product.Unit == null || !stock.Product.Unit.IsActive)
+                    throw new BusinessRuleException($"Sản phẩm ID {item.ProductId} hoặc Base UOM không hoạt động.");
+                if (decimal.Round(item.Quantity, stock.Product.Unit.DecimalPlaces) != item.Quantity)
+                    throw new BusinessRuleException($"Số lượng sản phẩm ID {item.ProductId} vượt quá độ chính xác Base UOM cho phép ({stock.Product.Unit.DecimalPlaces} chữ số thập phân).");
+
+                if (checkedProducts.Add(item.ProductId))
+                {
+                    var currentStock = await _inventoryStockRepository.GetAvailableQuantityAsync(item.ProductId, dto.WarehouseId);
+                    var totalRequestedForProduct = requiredByProduct[item.ProductId];
+                    if (totalRequestedForProduct > currentStock)
+                    {
+                        throw new BusinessRuleException($"Sản phẩm có ID {item.ProductId} không đủ tồn kho. Tồn khả dụng: {currentStock}, yêu cầu xuất: {totalRequestedForProduct}");
+                    }
                 }
 
                 var baseUomCode = NormalizeUomValue(stock.Product.Unit.Code);
                 var baseUomName = baseUomCode == "THÙNG" ? "THÙNG" : NormalizeUomValue(stock.Product.Unit.Name);
                 receipt.Details.Add(new ERP.Domain.Entities.ExportReceiptDetail
                 {
-                    ProductId = detailDto.ProductId,
-                    Quantity = detailDto.Quantity,
-                    UnitPrice = detailDto.UnitPrice,
-                    TaxPercent = detailDto.TaxPercent,
-                    Note = detailDto.Note?.Trim(),
+                    ProductId = item.ProductId,
+                    Quantity = item.Quantity,
+                    UnitPrice = item.UnitPrice,
+                    TaxPercent = item.TaxPercent,
+                    ParentBundleProductId = item.ParentBundleProductId,
+                    IsFreeGift = item.IsFreeGift,
+                    Note = item.Note?.Trim(),
                     BaseUomIdSnapshot = stock.Product.Unit.Id,
                     BaseUomCodeSnapshot = baseUomCode,
                     BaseUomNameSnapshot = baseUomName,
@@ -207,6 +306,7 @@ namespace ERP.Application.Services
                     var receipt = await _exportReceiptRepository.GetByIdWithDetailsAsync(id);
                     if (receipt == null) throw new NotFoundException($"Không tìm thấy phiếu xuất id {id}");
                     if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
+                    EnsureNotCancelledOrPendingPutback(receipt);
                     Security.ApprovalSafetyGuard.EnsureDifferentChecker(receipt.CreatedBy, approvedByUserId);
                     if (receipt.Status != ReceiptStatus.Draft)
                         throw new ConcurrencyException("Phiếu xuất đã được xử lý hoặc đang được xử lý bởi yêu cầu khác.");
@@ -225,14 +325,23 @@ namespace ERP.Application.Services
                         receipt.WarehouseId,
                         receipt.Details.Select(detail => detail.ProductId));
 
-                    foreach (var detail in receipt.Details.OrderBy(detail => detail.ProductId))
+                    foreach (var productGroup in receipt.Details.GroupBy(detail => detail.ProductId).OrderBy(g => g.Key))
                     {
+                        var groupDetails = productGroup.ToList();
+                        var totalProductQuantity = groupDetails.Sum(d => d.Quantity);
                         var reservation = await _stockReservationService.ReserveForExportAsync(
-                            receipt.Id, receipt.Code, receipt.WarehouseId, detail.ProductId, detail.Quantity, approvedByUserId);
+                            receipt.Id, receipt.Code, receipt.WarehouseId, productGroup.Key, totalProductQuantity, approvedByUserId);
                         if (mode == ExportDispatchMode.DispatchOnApproval)
                         {
                             var consumptions = await _stockReservationService.ConsumeAsync(reservation, approvedByUserId);
-                            await AddExportTransactionsAsync(receipt, detail, consumptions, approvedByUserId);
+                            if (groupDetails.Count == 1)
+                            {
+                                await AddExportTransactionsAsync(receipt, groupDetails[0], consumptions, approvedByUserId);
+                            }
+                            else
+                            {
+                                await AddGroupedExportTransactionsAsync(receipt, groupDetails, consumptions, approvedByUserId);
+                            }
                         }
                     }
 
@@ -304,13 +413,7 @@ namespace ERP.Application.Services
                     var receipt = await _exportReceiptRepository.GetByIdWithDetailsAsync(id);
                     if (receipt is null) throw new NotFoundException($"Không tìm thấy phiếu xuất id {id}");
                     if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
-                    if (receipt.Status == ReceiptStatus.CancelPendingPutback ||
-                        receipt.SalesOrder?.Status is SalesOrderStatus.Cancelled or SalesOrderStatus.CancelPendingPutback)
-                    {
-                        var cancelEx = new ConcurrencyException("Đơn hàng đã bị hủy trên sàn hoặc đang chờ cất trả kệ (CancelPendingPutback). Không thể xác nhận xuất kho.");
-                        cancelEx.Data["ErrorCode"] = "ORDER_CANCELLED_PUTBACK_REQUIRED";
-                        throw cancelEx;
-                    }
+                    EnsureNotCancelledOrPendingPutback(receipt);
                     if (receipt.Status != ReceiptStatus.Approved || receipt.DispatchMode != ExportDispatchMode.RequireSeparateDispatch)
                         throw new ConcurrencyException("Phiếu xuất không ở trạng thái có thể xác nhận xuất.");
                     if (_options.RequireDifferentDispatcher && receipt.ApprovedBy == userId)
@@ -327,11 +430,19 @@ namespace ERP.Application.Services
                         receipt.WarehouseId,
                         receipt.Details.Select(x => x.ProductId));
 
-                    foreach (var detail in receipt.Details.OrderBy(x => x.ProductId))
+                    foreach (var productGroup in receipt.Details.GroupBy(x => x.ProductId).OrderBy(g => g.Key))
                     {
-                        var reservation = await _stockReservationService.GetExportReservationAsync(receipt.Id, receipt.WarehouseId, detail.ProductId);
+                        var groupDetails = productGroup.ToList();
+                        var reservation = await _stockReservationService.GetExportReservationAsync(receipt.Id, receipt.WarehouseId, productGroup.Key);
                         var consumptions = await _stockReservationService.ConsumeAsync(reservation, userId);
-                        await AddExportTransactionsAsync(receipt, detail, consumptions, userId);
+                        if (groupDetails.Count == 1)
+                        {
+                            await AddExportTransactionsAsync(receipt, groupDetails[0], consumptions, userId);
+                        }
+                        else
+                        {
+                            await AddGroupedExportTransactionsAsync(receipt, groupDetails, consumptions, userId);
+                        }
                     }
 
                     receipt.Status = ReceiptStatus.Dispatched;
@@ -417,6 +528,65 @@ namespace ERP.Application.Services
             }
         }
 
+        private async Task AddGroupedExportTransactionsAsync(
+            ERP.Domain.Entities.ExportReceipt receipt,
+            IReadOnlyList<ERP.Domain.Entities.ExportReceiptDetail> groupDetails,
+            IReadOnlyList<InventoryStockConsumption> consumptions,
+            int userId)
+        {
+            var expectedTotal = groupDetails.Sum(d => d.Quantity);
+            if (consumptions.Count == 0 || consumptions.Any(x => x.LocationId <= 0 || x.Quantity <= 0) ||
+                consumptions.Sum(x => x.Quantity) != expectedTotal)
+                throw new ConcurrencyException("Không thể đối soát vị trí tồn kho đã xuất.");
+
+            var pool = consumptions
+                .Select(c => (c.LocationId, c.LotId, c.SerialId, c.Status, Remaining: c.Quantity))
+                .ToList();
+            var poolIndex = 0;
+
+            foreach (var detail in groupDetails)
+            {
+                var needed = detail.Quantity;
+                var detailConsumptions = new List<InventoryStockConsumption>();
+                while (needed > 0m && poolIndex < pool.Count)
+                {
+                    var current = pool[poolIndex];
+                    if (current.Remaining <= 0m)
+                    {
+                        poolIndex++;
+                        continue;
+                    }
+
+                    var take = Math.Min(needed, current.Remaining);
+                    detailConsumptions.Add(new InventoryStockConsumption(
+                        current.LocationId,
+                        take,
+                        current.Status,
+                        current.LotId,
+                        current.SerialId));
+                    current.Remaining -= take;
+                    pool[poolIndex] = current;
+                    needed -= take;
+                    if (current.Remaining <= 0m) poolIndex++;
+                }
+
+                await AddExportTransactionsAsync(receipt, detail, detailConsumptions, userId);
+            }
+        }
+
+        private static void EnsureNotCancelledOrPendingPutback(ERP.Domain.Entities.ExportReceipt receipt)
+        {
+            if (receipt.Status == ReceiptStatus.CancelPendingPutback ||
+                receipt.SalesOrder?.Status is SalesOrderStatus.Cancelled or SalesOrderStatus.CancelPendingPutback)
+            {
+                var cancelEx = new ConcurrencyException(
+                    "Đơn hàng đã bị hủy trên sàn hoặc đang chờ cất trả kệ (CancelPendingPutback). Không thể xác nhận xuất kho.",
+                    "ORDER_CANCELLED_PUTBACK_REQUIRED");
+                cancelEx.Data["ErrorCode"] = "ORDER_CANCELLED_PUTBACK_REQUIRED";
+                throw cancelEx;
+            }
+        }
+
         public async Task<IEnumerable<ExportReceiptDto>> GetAllAsync()
         {
             var receipts = await _exportReceiptRepository.GetListAsync();
@@ -496,6 +666,7 @@ namespace ERP.Application.Services
             decimal taxAmount = 0m;
             foreach (var d in receipt.Details)
             {
+                if (d.IsFreeGift) continue;
                 var lineSub = decimal.Round(d.Quantity * d.UnitPrice, 2, MidpointRounding.AwayFromZero);
                 var lineTax = decimal.Round(lineSub * (d.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
                 subTotal += lineSub;
@@ -535,7 +706,8 @@ namespace ERP.Application.Services
             var canReadCost = _currentUser is null || _currentUser.IsGlobalAdmin || _currentUser.Role is "Admin" or "Manager" or "Accountant" || _currentUser.HasPermission("inventory.cost.read");
             var details = (receipt.Details ?? []).Select(d =>
             {
-                var lineSub = canReadCost ? decimal.Round(d.Quantity * d.UnitPrice, 2, MidpointRounding.AwayFromZero) : 0m;
+                var effectiveUnitPrice = d.IsFreeGift ? 0m : d.UnitPrice;
+                var lineSub = canReadCost ? decimal.Round(d.Quantity * effectiveUnitPrice, 2, MidpointRounding.AwayFromZero) : 0m;
                 var lineTax = canReadCost ? decimal.Round(lineSub * (d.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero) : 0m;
                 var baseUomCode = NormalizeUomValue(!string.IsNullOrWhiteSpace(d.BaseUomCodeSnapshot) ? d.BaseUomCodeSnapshot : d.Product?.Unit?.Code);
                 var baseUomName = NormalizeUomValue(!string.IsNullOrWhiteSpace(d.BaseUomNameSnapshot) ? d.BaseUomNameSnapshot : d.Product?.Unit?.Name);
@@ -548,7 +720,7 @@ namespace ERP.Application.Services
                     ProductName = d.Product?.Name?.Trim(),
                     UnitName = baseUomName,
                     Quantity = d.Quantity,
-                    UnitPrice = canReadCost ? d.UnitPrice : null,
+                    UnitPrice = canReadCost ? effectiveUnitPrice : null,
                     TaxPercent = d.TaxPercent,
                     LineSubTotal = canReadCost ? lineSub : null,
                     LineTaxAmount = canReadCost ? lineTax : null,
@@ -617,5 +789,12 @@ namespace ERP.Application.Services
                 throw new ServiceUnavailableException("Workflow xuất kho đang tạm dừng để bảo trì. Vui lòng thử lại sau.");
         }
 
+    }
+
+    public interface IExportReceiptBundleResolver
+    {
+        Task<IReadOnlyList<ERP.Domain.Entities.ProductBundleComponent>> GetActiveBundleComponentsAsync(IEnumerable<int> parentProductIds, CancellationToken cancellationToken = default);
+        Task<IReadOnlyList<ERP.Domain.Entities.SalesOrderLine>> GetSalesOrderLinesAsync(int? salesOrderId, string? marketplaceOrderId, CancellationToken cancellationToken = default);
+        Task<IReadOnlySet<int>> GetActiveGiftProductIdsAsync(int warehouseId, CancellationToken cancellationToken = default);
     }
 }

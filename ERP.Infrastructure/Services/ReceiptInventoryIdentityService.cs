@@ -146,7 +146,13 @@ public sealed class ReceiptInventoryIdentityService(
         {
             InventoryLot? lot = null;
             if (!string.IsNullOrWhiteSpace(identity.LotNumber))
+            {
                 lot = await ResolveLotAsync(product, identity, cancellationToken);
+                if (lot is { Id: 0 })
+                {
+                    await context.SaveChangesAsync(cancellationToken);
+                }
+            }
 
             InventorySerial? serial = null;
             if (product.TrackingType == ProductTrackingType.Serial)
@@ -166,11 +172,13 @@ public sealed class ReceiptInventoryIdentityService(
                 serial = new InventorySerial
                 {
                     ProductId = product.Id,
+                    LotId = lot?.Id,
                     Lot = lot,
                     SerialNumber = serialNumber,
                     CreatedAt = DateTime.UtcNow
                 };
                 context.InventorySerials.Add(serial);
+                await context.SaveChangesAsync(cancellationToken);
             }
 
             var stock = context.InventoryStocks.Local.FirstOrDefault(
@@ -202,7 +210,9 @@ public sealed class ReceiptInventoryIdentityService(
                     WarehouseId = receipt.WarehouseId,
                     LocationId = locationId,
                     Status = status,
+                    LotId = lot?.Id,
                     Lot = lot,
+                    SerialId = serial?.Id,
                     Serial = serial,
                     Quantity = identity.BaseQuantity,
                     MovingAverageCost = baseUnitCost,

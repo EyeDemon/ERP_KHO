@@ -17,20 +17,50 @@ namespace ERP.Api.Controllers
     [PermissionAuthorize(AppPermissions.InventoryRead)]
     [ApiController]
     [Route("api/[controller]")]
+    [Route("api/v1/reports")]
     public class ReportsController : ControllerBase
     {
         private readonly IReportService _reportService;
         private readonly ErpKhoDbContext? _db;
         private readonly IWarehouseAuthorizationService? _warehouseAuth;
+        private readonly ICurrentUser? _currentUser;
 
         public ReportsController(
             IReportService reportService,
             ErpKhoDbContext? db = null,
-            IWarehouseAuthorizationService? warehouseAuth = null)
+            IWarehouseAuthorizationService? warehouseAuth = null,
+            ICurrentUser? currentUser = null)
         {
             _reportService = reportService;
             _db = db;
             _warehouseAuth = warehouseAuth;
+            _currentUser = currentUser;
+        }
+
+        private bool CanReadInventoryCost()
+        {
+            if (_currentUser is { IsAuthenticated: true })
+            {
+                if (_currentUser.IsGlobalAdmin ||
+                    string.Equals(_currentUser.Role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(_currentUser.Role, AppRoles.Manager, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(_currentUser.Role, "WarehouseManager", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(_currentUser.Role, "Accountant", StringComparison.OrdinalIgnoreCase))
+                    return true;
+                return _currentUser.HasPermission(AppPermissions.InventoryCostRead);
+            }
+
+            if (User?.Identity?.IsAuthenticated == true)
+            {
+                if (User.IsInRole(AppRoles.Admin) || User.IsInRole(AppRoles.Manager) || User.IsInRole("WarehouseManager") || User.IsInRole("Accountant"))
+                    return true;
+                return User.Claims.Any(c =>
+                    (c.Type == "permission" || c.Type == "permissions") &&
+                    (string.Equals(c.Value, AppPermissions.InventoryCostRead, StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(c.Value, "inventory.read_cost", StringComparison.OrdinalIgnoreCase)));
+            }
+
+            return true;
         }
 
         [HttpGet("operational-dashboard")]
@@ -680,11 +710,11 @@ namespace ERP.Api.Controllers
             string? TrackingNumber = null,
             string? CarrierCode = null,
             int? ExportReceiptId = null,
-            decimal ExpectedCodAmount = 500000m,
-            decimal ActualCodCollected = 500000m,
-            decimal EstimatedShippingFee = 25000m,
-            decimal ActualShippingFee = 32000m,
-            decimal PlatformCommissionFee = 35000m,
+            decimal ExpectedCodAmount = 0m,
+            decimal ActualCodCollected = 0m,
+            decimal EstimatedShippingFee = 0m,
+            decimal ActualShippingFee = 0m,
+            decimal PlatformCommissionFee = 0m,
             decimal ReturnFee = 0m);
 
         public sealed record VerifyCodSettlementRequest(
@@ -693,9 +723,8 @@ namespace ERP.Api.Controllers
             List<CodSettlementItemRequest>? Items = null);
 
         [HttpGet("cod-reconciliation")]
+        [HttpGet("cod-shipping-reconciliation")]
         [HttpGet("cod-and-settlement-reconciliation")]
-        [HttpGet("~/api/v1/reports/cod-reconciliation")]
-        [HttpGet("~/api/v1/reports/cod-and-settlement-reconciliation")]
         [HttpGet("~/api/v1/finance/cod-reconciliation")]
         [HttpGet("~/api/finance/cod-reconciliation")]
         [PermissionAuthorize(AppPermissions.InventoryRead)]
@@ -726,7 +755,46 @@ namespace ERP.Api.Controllers
             var totalFeeOverchargeVariance = items.Sum(x => x.FeeOverchargeVariance);
             var totalPlatformFee = items.Sum(x => x.PlatformCommissionFee);
             var totalNetPayout = items.Sum(x => x.NetPayoutAmount);
-            var discrepancyCount = items.Count(x => x.ReconciliationStatus == "DISCREPANCY");
+            var discrepancyItems = items
+                .Where(x => x.ReconciliationStatus == "DISCREPANCY")
+                .Select(x => new
+                {
+                    x.Id,
+                    x.ExportReceiptId,
+                    x.CarrierCode,
+                    x.TrackingNumber,
+                    x.ExpectedCodAmount,
+                    x.ActualCodCollected,
+                    codDiscrepancy = x.ExpectedCodAmount - x.ActualCodCollected,
+                    x.EstimatedShippingFee,
+                    x.ActualShippingFee,
+                    x.FeeOverchargeVariance,
+                    x.PlatformCommissionFee,
+                    x.ReturnFee,
+                    x.NetPayoutAmount,
+                    x.ReconciliationStatus
+                })
+                .ToList();
+            var discrepancyCount = discrepancyItems.Count;
+
+            var mappedItems = items.Select(x => new
+            {
+                x.Id,
+                x.ExportReceiptId,
+                x.CarrierCode,
+                x.TrackingNumber,
+                x.ExpectedCodAmount,
+                x.ActualCodCollected,
+                codDiscrepancy = x.ExpectedCodAmount - x.ActualCodCollected,
+                x.EstimatedShippingFee,
+                x.ActualShippingFee,
+                x.PlatformCommissionFee,
+                x.ReturnFee,
+                x.NetPayoutAmount,
+                x.FeeOverchargeVariance,
+                x.ReconciliationStatus,
+                x.SettledAtUtc
+            }).ToList();
 
             return Ok(new
             {
@@ -737,41 +805,29 @@ namespace ERP.Api.Controllers
                 matchedCount = items.Count(x => x.ReconciliationStatus == "MATCHED"),
                 totalExpectedCod,
                 totalActualCod,
+                pendingCodAmount = Math.Max(0m, totalExpectedCod - totalActualCod),
+                receivedFromCarrierAmount = totalActualCod,
                 totalFeeOverchargeVariance,
                 totalPlatformFee,
                 totalNetPayout,
-                items = items.Select(x => new
-                {
-                    x.Id,
-                    x.ExportReceiptId,
-                    x.CarrierCode,
-                    x.TrackingNumber,
-                    x.ExpectedCodAmount,
-                    x.ActualCodCollected,
-                    x.EstimatedShippingFee,
-                    x.ActualShippingFee,
-                    x.PlatformCommissionFee,
-                    x.ReturnFee,
-                    x.NetPayoutAmount,
-                    x.FeeOverchargeVariance,
-                    x.ReconciliationStatus,
-                    x.SettledAtUtc
-                }),
+                discrepancies = discrepancyItems,
+                feeDiscrepancyWarnings = discrepancyItems,
+                items = mappedItems,
                 statusLabel = $"Đã tải bảng đối soát công nợ thu hộ COD & quyết toán ví sàn ({items.Count} vận đơn, {discrepancyCount} lệch phí/COD)"
             });
         }
 
         [HttpPost("cod-reconciliation/verify")]
+        [HttpPost("cod-shipping-reconciliation")]
         [HttpPost("cod-and-settlement-reconciliation/verify")]
         [HttpPost("reconcile-cod-settlement")]
-        [HttpPost("~/api/v1/reports/cod-reconciliation/verify")]
-        [HttpPost("~/api/v1/reports/cod-and-settlement-reconciliation/verify")]
-        [HttpPost("~/api/v1/reports/cod-reconciliation/import")]
+        [HttpPost("cod-reconciliation/import")]
         [HttpPost("~/api/v1/finance/cod-reconciliation/import")]
         [PermissionAuthorize(AppPermissions.InventoryRead)]
         [IdempotentCommand("Report.VerifyCodAndSettlementReconciliation")]
         public async Task<IActionResult> VerifyCodAndSettlementReconciliation(
-            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyCodSettlementRequest? request = null,
+            [ModelBinder(BinderType = typeof(FlexibleBodyOrFormModelBinder))] VerifyCodSettlementRequest? request = null,
+            [ModelBinder(BinderType = typeof(FlexibleFormFileModelBinder))] Microsoft.AspNetCore.Http.IFormFile? file = null,
             CancellationToken cancellationToken = default)
         {
             if (User?.IsInRole(AppRoles.Viewer) == true)
@@ -784,23 +840,102 @@ namespace ERP.Api.Controllers
                 await _warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
             }
 
-            var inputItems = request?.Items is { Count: > 0 }
-                ? request.Items
-                :
-                [
-                    new CodSettlementItemRequest(
-                        TrackingNumber: $"VN-COD-{now:yyMMdd}-01",
-                        CarrierCode: request?.CarrierCode ?? "GHN",
-                        ExpectedCodAmount: 550000m,
-                        ActualCodCollected: 550000m,
-                        EstimatedShippingFee: 22000m,
-                        ActualShippingFee: 35000m,
-                        PlatformCommissionFee: 38500m,
-                        ReturnFee: 0m)
-                ];
+            var inputItems = new List<CodSettlementItemRequest>();
+            if (file is { Length: > 0 })
+            {
+                var ext = Path.GetExtension(file.FileName ?? string.Empty).ToLowerInvariant();
+                await using var fileStream = file.OpenReadStream();
+                if (ext == ".csv" || ext == ".txt")
+                {
+                    using var reader = new StreamReader(fileStream);
+                    var isFirstRow = true;
+                    while (await reader.ReadLineAsync(cancellationToken) is { } line)
+                    {
+                        if (string.IsNullOrWhiteSpace(line)) continue;
+                        var cols = line.Split([',', ';', '\t']);
+                        if (isFirstRow)
+                        {
+                            isFirstRow = false;
+                            if (cols[0].Contains("Tracking", StringComparison.OrdinalIgnoreCase) ||
+                                cols[0].Contains("Mã", StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+                        }
+
+                        var tracking = cols.ElementAtOrDefault(0)?.Trim();
+                        if (string.IsNullOrWhiteSpace(tracking)) continue;
+                        var carrier = cols.ElementAtOrDefault(1)?.Trim();
+                        decimal.TryParse(cols.ElementAtOrDefault(2)?.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var actualCod);
+                        decimal.TryParse(cols.ElementAtOrDefault(3)?.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var actualShipFee);
+                        decimal.TryParse(cols.ElementAtOrDefault(4)?.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var platformFee);
+                        decimal.TryParse(cols.ElementAtOrDefault(5)?.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var returnFee);
+                        decimal.TryParse(cols.ElementAtOrDefault(6)?.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var expectedCod);
+                        decimal.TryParse(cols.ElementAtOrDefault(7)?.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var estShipFee);
+
+                        inputItems.Add(new CodSettlementItemRequest(
+                            TrackingNumber: tracking,
+                            CarrierCode: string.IsNullOrWhiteSpace(carrier) ? (request?.CarrierCode ?? "GHN") : carrier,
+                            ExpectedCodAmount: expectedCod,
+                            ActualCodCollected: actualCod,
+                            EstimatedShippingFee: estShipFee,
+                            ActualShippingFee: actualShipFee,
+                            PlatformCommissionFee: platformFee,
+                            ReturnFee: returnFee));
+                    }
+                }
+                else
+                {
+                    using var workbook = new XLWorkbook(fileStream);
+                    var ws = workbook.Worksheets.FirstOrDefault();
+                    if (ws != null)
+                    {
+                        var lastRow = ws.LastRowUsed()?.RowNumber() ?? 1;
+                        for (var r = 2; r <= lastRow; r++)
+                        {
+                            var tracking = ws.Cell(r, 1).GetString().Trim();
+                            if (string.IsNullOrWhiteSpace(tracking)) continue;
+                            var carrier = ws.Cell(r, 2).GetString().Trim();
+                            decimal.TryParse(ws.Cell(r, 3).GetString().Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var actualCod);
+                            decimal.TryParse(ws.Cell(r, 4).GetString().Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var actualShipFee);
+                            decimal.TryParse(ws.Cell(r, 5).GetString().Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var platformFee);
+                            decimal.TryParse(ws.Cell(r, 6).GetString().Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var returnFee);
+                            decimal.TryParse(ws.Cell(r, 7).GetString().Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var expectedCod);
+                            decimal.TryParse(ws.Cell(r, 8).GetString().Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var estShipFee);
+
+                            inputItems.Add(new CodSettlementItemRequest(
+                                TrackingNumber: tracking,
+                                CarrierCode: string.IsNullOrWhiteSpace(carrier) ? (request?.CarrierCode ?? "GHN") : carrier,
+                                ExpectedCodAmount: expectedCod,
+                                ActualCodCollected: actualCod,
+                                EstimatedShippingFee: estShipFee,
+                                ActualShippingFee: actualShipFee,
+                                PlatformCommissionFee: platformFee,
+                                ReturnFee: returnFee));
+                        }
+                    }
+                }
+            }
+            else if (request?.Items is { Count: > 0 })
+            {
+                inputItems.AddRange(request.Items);
+            }
+
+            if (inputItems.Count == 0)
+            {
+                return BadRequest(new
+                {
+                    code = "COD_RECONCILIATION_DATA_REQUIRED",
+                    errorCode = "COD_RECONCILIATION_DATA_REQUIRED",
+                    message = "Vui lòng tải lên file đối soát COD (.xlsx / .csv) hoặc truyền danh sách vận đơn cần đối soát."
+                });
+            }
 
             var processed = new List<object>();
+            var discrepancies = new List<object>();
             var discrepancyCount = 0;
+            decimal totalExpectedCod = 0m;
+            decimal totalActualCod = 0m;
 
             if (_db != null)
             {
@@ -813,12 +948,35 @@ namespace ERP.Api.Controllers
                         ? (request?.CarrierCode ?? "GHN").Trim().ToUpperInvariant()
                         : item.CarrierCode.Trim().ToUpperInvariant();
 
+                    ERP.Domain.Entities.ExportReceipt? matchedReceipt = null;
+                    if (item.ExportReceiptId.HasValue)
+                    {
+                        matchedReceipt = await _db.ExportReceipts
+                            .AsNoTracking()
+                            .Include(r => r.Details)
+                            .FirstOrDefaultAsync(r => r.Id == item.ExportReceiptId.Value, cancellationToken);
+                    }
+                    if (matchedReceipt == null && !string.IsNullOrWhiteSpace(tracking))
+                    {
+                        matchedReceipt = await _db.ExportReceipts
+                            .AsNoTracking()
+                            .Include(r => r.Details)
+                            .FirstOrDefaultAsync(r => r.TrackingNumber == tracking, cancellationToken);
+                    }
+
+                    var expectedCodAmount = item.ExpectedCodAmount > 0m
+                        ? item.ExpectedCodAmount
+                        : (matchedReceipt != null ? matchedReceipt.Details.Sum(d => decimal.Round(d.Quantity * d.UnitPrice, 2)) : 0m);
+                    var exportReceiptId = item.ExportReceiptId ?? matchedReceipt?.Id;
+
                     var feeVariance = item.ActualShippingFee - item.EstimatedShippingFee;
-                    var codDiff = item.ExpectedCodAmount - item.ActualCodCollected;
+                    var codDiff = expectedCodAmount - item.ActualCodCollected;
                     var netPayout = item.ActualCodCollected - item.ActualShippingFee - item.PlatformCommissionFee - item.ReturnFee;
                     var hasDiscrepancy = Math.Abs(feeVariance) > 0m || Math.Abs(codDiff) > 0m;
                     var status = hasDiscrepancy ? "DISCREPANCY" : "MATCHED";
-                    if (hasDiscrepancy) discrepancyCount++;
+
+                    totalExpectedCod += expectedCodAmount;
+                    totalActualCod += item.ActualCodCollected;
 
                     var existing = await _db.ShipmentFinancialLedgers
                         .FirstOrDefaultAsync(x => x.TrackingNumber == tracking, cancellationToken);
@@ -826,10 +984,10 @@ namespace ERP.Api.Controllers
                     {
                         existing = new ERP.Domain.Entities.ShipmentFinancialLedger
                         {
-                            ExportReceiptId = item.ExportReceiptId,
+                            ExportReceiptId = exportReceiptId,
                             CarrierCode = carrier,
                             TrackingNumber = tracking,
-                            ExpectedCodAmount = item.ExpectedCodAmount,
+                            ExpectedCodAmount = expectedCodAmount,
                             ActualCodCollected = item.ActualCodCollected,
                             EstimatedShippingFee = item.EstimatedShippingFee,
                             ActualShippingFee = item.ActualShippingFee,
@@ -845,7 +1003,8 @@ namespace ERP.Api.Controllers
                     }
                     else
                     {
-                        existing.ExpectedCodAmount = item.ExpectedCodAmount;
+                        existing.ExportReceiptId = exportReceiptId ?? existing.ExportReceiptId;
+                        existing.ExpectedCodAmount = expectedCodAmount;
                         existing.ActualCodCollected = item.ActualCodCollected;
                         existing.EstimatedShippingFee = item.EstimatedShippingFee;
                         existing.ActualShippingFee = item.ActualShippingFee;
@@ -857,12 +1016,14 @@ namespace ERP.Api.Controllers
                         existing.SettledAtUtc = now;
                     }
 
-                    processed.Add(new
+                    var entryObj = new
                     {
+                        exportReceiptId,
                         trackingNumber = tracking,
                         carrierCode = carrier,
-                        expectedCodAmount = item.ExpectedCodAmount,
+                        expectedCodAmount,
                         actualCodCollected = item.ActualCodCollected,
+                        codDiscrepancy = codDiff,
                         estimatedShippingFee = item.EstimatedShippingFee,
                         actualShippingFee = item.ActualShippingFee,
                         feeOverchargeVariance = feeVariance,
@@ -870,7 +1031,13 @@ namespace ERP.Api.Controllers
                         returnFee = item.ReturnFee,
                         netPayoutAmount = netPayout,
                         reconciliationStatus = status
-                    });
+                    };
+                    processed.Add(entryObj);
+                    if (hasDiscrepancy)
+                    {
+                        discrepancyCount++;
+                        discrepancies.Add(entryObj);
+                    }
                 }
 
                 await _db.SaveChangesAsync(cancellationToken);
@@ -883,6 +1050,12 @@ namespace ERP.Api.Controllers
                 verifiedCount = processed.Count,
                 discrepancyCount,
                 matchedCount = processed.Count - discrepancyCount,
+                totalExpectedCod,
+                totalActualCod,
+                pendingCodAmount = Math.Max(0m, totalExpectedCod - totalActualCod),
+                receivedFromCarrierAmount = totalActualCod,
+                discrepancies,
+                feeDiscrepancyWarnings = discrepancies,
                 items = processed,
                 verifiedAtUtc = now,
                 statusLabel = $"Đã đối soát {processed.Count} vận đơn COD — Phát hiện {discrepancyCount} vận đơn lệch phí cân nặng / thu hộ"
@@ -891,9 +1064,7 @@ namespace ERP.Api.Controllers
 
         [HttpGet("owner-gross-profit")]
         [HttpGet("owner-pnl-summary")]
-        [HttpGet("~/api/v1/reports/owner-gross-profit")]
-        [HttpGet("~/api/v1/reports/owner-pnl-summary")]
-        [HttpGet("~/api/v1/reports/gross-profit-by-sku")]
+        [HttpGet("gross-profit-by-sku")]
         [PermissionAuthorize(AppPermissions.InventoryRead)]
         public async Task<IActionResult> GetOwnerGrossProfit(
             [FromQuery] int? warehouseId = null,
@@ -904,11 +1075,13 @@ namespace ERP.Api.Controllers
                 await _warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
             }
 
+            var canReadCost = CanReadInventoryCost();
             var skuLines = new List<object>();
             decimal totalGrossRevenue = 0m;
             decimal totalMovingAverageCogs = 0m;
             decimal totalPlatformFee = 0m;
             decimal totalShippingFeeDiff = 0m;
+            decimal totalReturnRmaFee = 0m;
             decimal totalPackagingCost = 0m;
 
             if (_db != null)
@@ -917,18 +1090,34 @@ namespace ERP.Api.Controllers
                     .AsNoTracking()
                     .Include(r => r.Details)
                         .ThenInclude(d => d.Product)
-                    .Where(r => r.Status != ERP.Domain.Enums.ReceiptStatus.Cancelled);
+                    .Where(r => r.Status == ERP.Domain.Enums.ReceiptStatus.Dispatched);
 
                 if (warehouseId.HasValue)
                 {
                     receiptsQuery = receiptsQuery.Where(r => r.WarehouseId == warehouseId.Value);
                 }
 
-                var receipts = await receiptsQuery.OrderByDescending(r => r.Id).Take(50).ToListAsync(cancellationToken);
-                var ledgers = await _db.ShipmentFinancialLedgers.AsNoTracking().Take(50).ToListAsync(cancellationToken);
+                var receipts = await receiptsQuery.OrderByDescending(r => r.Id).Take(200).ToListAsync(cancellationToken);
+                var receiptIds = receipts.Select(r => r.Id).ToHashSet();
+                var receiptTrackings = receipts
+                    .Where(r => !string.IsNullOrWhiteSpace(r.TrackingNumber))
+                    .Select(r => r.TrackingNumber!)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                totalPlatformFee = ledgers.Sum(l => l.PlatformCommissionFee);
-                totalShippingFeeDiff = ledgers.Sum(l => Math.Max(0m, l.FeeOverchargeVariance) + l.ReturnFee);
+                var allLedgers = await _db.ShipmentFinancialLedgers.AsNoTracking().Take(200).ToListAsync(cancellationToken);
+                var ledgers = warehouseId.HasValue
+                    ? allLedgers.Where(l =>
+                        (l.ExportReceiptId.HasValue && receiptIds.Contains(l.ExportReceiptId.Value)) ||
+                        (!l.ExportReceiptId.HasValue && receiptTrackings.Contains(l.TrackingNumber)) ||
+                        receiptIds.Count == 0).ToList()
+                    : allLedgers;
+
+                if (receipts.Count > 0)
+                {
+                    totalPlatformFee = ledgers.Sum(l => l.PlatformCommissionFee);
+                    totalReturnRmaFee = ledgers.Sum(l => l.ReturnFee);
+                    totalShippingFeeDiff = ledgers.Sum(l => Math.Max(0m, l.FeeOverchargeVariance) + l.ReturnFee);
+                }
 
                 var grouped = receipts
                     .SelectMany(r => r.Details)
@@ -937,14 +1126,14 @@ namespace ERP.Api.Controllers
                         d.ProductId,
                         Code = d.Product?.Code ?? $"SKU-{d.ProductId}",
                         Name = d.Product?.Name ?? $"Sản phẩm #{d.ProductId}",
-                        Mac = d.Product?.MovingAverageCost is > 0m ? d.Product.MovingAverageCost : 75000m
+                        Mac = d.Product?.MovingAverageCost ?? 0m
                     })
                     .ToList();
 
                 foreach (var g in grouped)
                 {
                     var qty = g.Sum(x => x.Quantity);
-                    var revenue = g.Sum(x => decimal.Round(x.Quantity * (x.UnitPrice > 0m ? x.UnitPrice : 135000m), 2));
+                    var revenue = g.Sum(x => decimal.Round(x.Quantity * x.UnitPrice, 2));
                     var cogs = decimal.Round(qty * g.Key.Mac, 2);
                     var estPlatformFee = decimal.Round(revenue * 0.07m, 2);
                     var estPackCost = decimal.Round(qty * 2500m, 2);
@@ -960,45 +1149,83 @@ namespace ERP.Api.Controllers
                         productCode = g.Key.Code,
                         productName = g.Key.Name,
                         soldQuantity = qty,
-                        movingAverageUnitCost = g.Key.Mac,
+                        movingAverageUnitCost = canReadCost ? (decimal?)g.Key.Mac : null,
                         grossRevenue = revenue,
-                        movingAverageCogs = cogs,
+                        netRevenue = revenue,
+                        movingAverageCogs = canReadCost ? (decimal?)cogs : null,
+                        totalCogs = canReadCost ? (decimal?)cogs : null,
                         platformFee = estPlatformFee,
                         packagingCost = estPackCost,
-                        netPocketProfit = netPocket,
-                        grossMarginPct = revenue > 0m ? decimal.Round((netPocket * 100m) / revenue, 2) : 0m
+                        netPocketProfit = canReadCost ? (decimal?)netPocket : null,
+                        estimatedGrossProfit = canReadCost ? (decimal?)netPocket : null,
+                        grossMarginPct = canReadCost ? (decimal?)(revenue > 0m ? decimal.Round((netPocket * 100m) / revenue, 2) : 0m) : null
                     });
+                }
+
+                if (totalGrossRevenue > 0m && totalPlatformFee == 0m && !allLedgers.Any())
+                {
+                    totalPlatformFee = decimal.Round(totalGrossRevenue * 0.07m, 2);
                 }
             }
 
-            if (totalGrossRevenue == 0m)
-            {
-                totalGrossRevenue = 1350000m;
-                totalMovingAverageCogs = 750000m;
-                totalPlatformFee = 94500m;
-                totalShippingFeeDiff = 13000m;
-                totalPackagingCost = 25000m;
-            }
-            else if (totalPlatformFee == 0m)
-            {
-                totalPlatformFee = decimal.Round(totalGrossRevenue * 0.07m, 2);
-            }
-
             var netPocketProfit = totalGrossRevenue - totalMovingAverageCogs - totalPlatformFee - totalShippingFeeDiff - totalPackagingCost;
+            var netMarginPct = totalGrossRevenue > 0m ? decimal.Round((netPocketProfit * 100m) / totalGrossRevenue, 2) : 0m;
 
             return Ok(new
             {
                 warehouseId,
+                costHiddenByRbac = !canReadCost,
                 grossRevenue = totalGrossRevenue,
-                movingAverageCogs = totalMovingAverageCogs,
+                netRevenue = totalGrossRevenue,
+                movingAverageCogs = canReadCost ? (decimal?)totalMovingAverageCogs : null,
+                totalCogs = canReadCost ? (decimal?)totalMovingAverageCogs : null,
                 platformCommissionFee = totalPlatformFee,
                 shippingFeeDifferentials = totalShippingFeeDiff,
+                returnRmaFee = totalReturnRmaFee,
                 packagingCost = totalPackagingCost,
-                netPocketProfit,
-                netMarginPct = totalGrossRevenue > 0m ? decimal.Round((netPocketProfit * 100m) / totalGrossRevenue, 2) : 0m,
+                netPocketProfit = canReadCost ? (decimal?)netPocketProfit : null,
+                estimatedGrossProfit = canReadCost ? (decimal?)netPocketProfit : null,
+                netMarginPct = canReadCost ? (decimal?)netMarginPct : null,
+                grossMarginPercent = canReadCost ? (decimal?)netMarginPct : null,
                 formula = "NetPocketProfit = GrossRevenue - MovingAverageCogs - PlatformCommissionFee - ShippingFeeDifferentials - PackagingCost",
                 skuBreakdown = skuLines,
-                statusLabel = "Đã tổng hợp báo cáo lãi gộp thực bỏ túi cho Chủ doanh nghiệp (đã trừ Giá vốn MAC, Phí sàn & Phí vận chuyển ẩn)"
+                statusLabel = canReadCost
+                    ? "Đã tổng hợp báo cáo lãi gộp thực bỏ túi cho Chủ doanh nghiệp (đã trừ Giá vốn MAC, Phí sàn & Phí vận chuyển ẩn)"
+                    : "Báo cáo doanh thu (đã ẩn Giá vốn MAC & Lãi gộp theo phân quyền RBAC)"
+            });
+        }
+
+        [HttpGet("onboarding-wizard/status")]
+        [HttpPost("onboarding-wizard/quick-start")]
+        [PermissionAuthorize(AppPermissions.InventoryRead)]
+        public async Task<IActionResult> GetOnboardingWizardStatus(CancellationToken cancellationToken = default)
+        {
+            var hasWarehouse = _db != null && await _db.Warehouses.AsNoTracking().AnyAsync(w => w.IsActive, cancellationToken);
+            var hasLocation = _db != null && await _db.WarehouseLocations.AsNoTracking().AnyAsync(l => l.IsActive, cancellationToken);
+            var hasProduct = _db != null && await _db.Products.AsNoTracking().AnyAsync(p => p.IsActive, cancellationToken);
+            var hasOpeningStock = _db != null && await _db.InventoryStocks.AsNoTracking().AnyAsync(s => s.Quantity > 0, cancellationToken);
+            var hasFirstAwbOrOrder = _db != null && (
+                await _db.ExportReceipts.AsNoTracking().AnyAsync(r => r.AwbPrintCount > 0 || r.Status == ERP.Domain.Enums.ReceiptStatus.Dispatched, cancellationToken) ||
+                await _db.SalesOrders.AsNoTracking().AnyAsync(cancellationToken) ||
+                await _db.MarketplaceShops.AsNoTracking().AnyAsync(s => s.IsActive, cancellationToken));
+
+            var steps = new object[]
+            {
+                new { step = 1, code = "CREATE_WAREHOUSE", title = "Khởi tạo Kho hàng", completed = hasWarehouse },
+                new { step = 2, code = "CREATE_LOCATIONS", title = "Thiết lập Sơ đồ Kệ / Vị trí", completed = hasLocation },
+                new { step = 3, code = "IMPORT_PRODUCTS", title = "Nhập Danh mục Sản phẩm (SKU)", completed = hasProduct },
+                new { step = 4, code = "IMPORT_OPENING_STOCK", title = "Chốt Tồn kho Đầu kỳ & Giá vốn MAC", completed = hasOpeningStock },
+                new { step = 5, code = "CONNECT_SHOP_AND_FIRST_AWB", title = "Kết nối Sàn TMĐT & In vận đơn đầu tiên", completed = hasFirstAwbOrOrder }
+            };
+            var completedSteps = new[] { hasWarehouse, hasLocation, hasProduct, hasOpeningStock, hasFirstAwbOrOrder }.Count(x => x);
+
+            return Ok(new
+            {
+                totalSteps = 5,
+                completedSteps,
+                completionPct = completedSteps * 20,
+                steps,
+                statusLabel = $"Tiến độ hướng dẫn thiết lập nhanh 5 bước ({completedSteps}/5 hoàn tất)"
             });
         }
 

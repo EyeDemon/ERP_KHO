@@ -12,6 +12,8 @@ namespace ERP.Api.Controllers;
 
 [ApiController]
 [Route("api/inventory/allocations")]
+[Route("api/v1/inventory/allocations")]
+[Route("api/v1/stock-allocations")]
 [Authorize]
 public sealed class StockAllocationsController(
     IStockAllocationService service,

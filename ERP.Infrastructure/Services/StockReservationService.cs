@@ -707,7 +707,9 @@ public class StockReservationService(
             allowed = [warehouseId.Value];
         }
 
-        var stocksQuery = context.InventoryStocks.Where(x => allowed.Contains(x.WarehouseId));
+        var stocksQuery = context.InventoryStocks
+            .Include(x => x.Location)
+            .Where(x => allowed.Contains(x.WarehouseId));
         if (productId.HasValue)
             stocksQuery = stocksQuery.Where(x => x.ProductId == productId.Value);
 
@@ -753,18 +755,35 @@ public class StockReservationService(
                 .Where(r => r.WarehouseId == group.Key.WarehouseId && r.ProductId == group.Key.ProductId)
                 .Sum(r => Math.Max(0m, r.Quantity - r.ConsumedQuantity - r.ReleasedQuantity));
 
+            var enforceHuDimension = groupTxs.Any(t => t.HandlingUnitId.HasValue) &&
+                                     group.Select(b => b.HandlingUnitId).Distinct().Count() > 1;
+            var enforceOwnerDimension = groupTxs.Any(t => t.OwnerId.HasValue) &&
+                                        group.Select(b => b.OwnerId).Distinct().Count() > 1;
+
             decimal allocatedSum = 0m;
             foreach (var bucket in group)
             {
                 var bucketTxs = groupTxs.Where(t =>
-                    t.LocationId == bucket.LocationId &&
+                    t.TenantId == bucket.TenantId &&
+                    t.WarehouseId == bucket.WarehouseId &&
+                    t.ProductId == bucket.ProductId &&
                     t.LotId == bucket.LotId &&
                     t.SerialId == bucket.SerialId &&
+                    (!enforceHuDimension || t.HandlingUnitId == bucket.HandlingUnitId) &&
+                    (!enforceOwnerDimension || t.OwnerId == bucket.OwnerId) &&
+                    (t.LocationId == bucket.LocationId ||
+                     (t.TransactionType == TransactionType.Move &&
+                      (t.FromLocationId == bucket.LocationId || t.ToLocationId == bucket.LocationId))) &&
                     (t.InventoryStatus == bucket.Status ||
                      t.FromInventoryStatus == bucket.Status ||
                      t.ToInventoryStatus == bucket.Status)).ToList();
 
-                if (bucketTxs.Count > 0)
+                var hasExplicitMoveLegsForBucket = bucketTxs.Any(t =>
+                    t.TransactionType == TransactionType.Move &&
+                    t.LocationId == bucket.LocationId);
+                var hasMatchingLedgerTx = bucketTxs.Count > 0;
+
+                if (hasMatchingLedgerTx)
                 {
                     decimal ledgerQty = 0m;
                     foreach (var tx in bucketTxs)
@@ -773,6 +792,7 @@ public class StockReservationService(
                             continue;
                         if (tx.TransactionType == TransactionType.StatusChange)
                         {
+                            if (tx.LocationId != bucket.LocationId) continue;
                             if (tx.ToInventoryStatus == bucket.Status && tx.Quantity > 0)
                                 ledgerQty += tx.Quantity;
                             else if (tx.FromInventoryStatus == bucket.Status)
@@ -780,19 +800,62 @@ public class StockReservationService(
                         }
                         else if (tx.TransactionType == TransactionType.Move)
                         {
-                            if (tx.InventoryStatus == bucket.Status)
-                                ledgerQty += tx.Quantity;
+                            if (tx.InventoryStatus != bucket.Status &&
+                                tx.FromInventoryStatus != bucket.Status &&
+                                tx.ToInventoryStatus != bucket.Status)
+                                continue;
+
+                            if (tx.LocationId == bucket.LocationId)
+                            {
+                                if (tx.Quantity < 0m)
+                                {
+                                    ledgerQty += tx.Quantity;
+                                }
+                                else if (tx.FromLocationId == bucket.LocationId &&
+                                         tx.ToLocationId.HasValue &&
+                                         tx.ToLocationId != bucket.LocationId &&
+                                         !groupTxs.Any(other =>
+                                             other.Id != tx.Id &&
+                                             other.TransactionType == TransactionType.Move &&
+                                             other.LocationId == tx.ToLocationId &&
+                                             other.FromLocationId == tx.FromLocationId &&
+                                             other.ToLocationId == tx.ToLocationId &&
+                                             Math.Abs(other.Quantity) == Math.Abs(tx.Quantity)))
+                                {
+                                    ledgerQty -= tx.Quantity;
+                                }
+                                else
+                                {
+                                    ledgerQty += tx.Quantity;
+                                }
+                            }
+                            else if (!hasExplicitMoveLegsForBucket)
+                            {
+                                if (tx.FromLocationId == bucket.LocationId)
+                                    ledgerQty -= Math.Abs(tx.Quantity);
+                                else if (tx.ToLocationId == bucket.LocationId)
+                                    ledgerQty += Math.Abs(tx.Quantity);
+                            }
                         }
-                        else if (tx.InventoryStatus == bucket.Status && tx.Quantity >= 0)
+                        else if (tx.LocationId == bucket.LocationId && tx.InventoryStatus == bucket.Status)
                         {
-                            ledgerQty += tx.TransactionType.ApplySign(tx.Quantity);
+                            if (tx.Quantity < 0m)
+                                ledgerQty += tx.Quantity;
+                            else
+                                ledgerQty += tx.TransactionType.ApplySign(tx.Quantity);
                         }
                     }
 
-                    if (ledgerQty >= 0m && (bucket.Quantity < 0m || group.Count() == 1))
+                    if (hasMatchingLedgerTx && ledgerQty >= 0m)
+                    {
                         bucket.Quantity = ledgerQty;
+                    }
+                    else if (ledgerQty < 0m)
+                    {
+                        bucket.Quantity = 0m;
+                    }
                 }
-                else if (bucket.Quantity < 0m)
+                else if (groupTxs.Count > 0 || bucket.Quantity < 0m)
                 {
                     bucket.Quantity = 0m;
                 }
@@ -803,7 +866,9 @@ public class StockReservationService(
                                 a.LocationId == bucket.LocationId &&
                                 a.InventoryStatus == bucket.Status &&
                                 a.LotId == bucket.LotId &&
-                                a.SerialId == bucket.SerialId)
+                                a.SerialId == bucket.SerialId &&
+                                (!a.HandlingUnitId.HasValue || a.HandlingUnitId == bucket.HandlingUnitId) &&
+                                (!a.OwnerId.HasValue || a.OwnerId == bucket.OwnerId))
                     .Sum(a => a.Quantity);
 
                 var isLocked = activeLocks.Any(l =>
@@ -821,7 +886,11 @@ public class StockReservationService(
             }
 
             var remainingUnallocatedReserve = Math.Max(0m, totalReservedTarget - allocatedSum);
-            foreach (var bucket in group.Where(b => b.Status == InventoryStatus.Available && b.LockedQuantity == 0).OrderBy(b => b.LocationId).ThenBy(b => b.Id))
+            foreach (var bucket in group
+                .Where(b => b.Status == InventoryStatus.Available && b.LockedQuantity == 0)
+                .OrderBy(b => b.Location?.LocationType == WarehouseLocationType.Receiving ? 1 : 0)
+                .ThenBy(b => b.LocationId)
+                .ThenBy(b => b.Id))
             {
                 if (remainingUnallocatedReserve <= 0) break;
                 var freeCapacity = Math.Max(0m, bucket.Quantity - bucket.ReservedQuantity);

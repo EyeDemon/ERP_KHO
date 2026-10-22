@@ -285,7 +285,34 @@ describe('ExportReceipts shared production UI', () => {
   it('renders thermal 100x150mm batch AWB print, SLA badges, carrier handover manifest, and MISA NĐ 70/2025 e-invoice actions', async () => {
     localStorage.setItem('role', 'Manager');
     setCurrentPermissions(['export_receipt.read', 'export_receipt.create', 'export_receipt.dispatch']);
-    vi.mocked(apiClient.post).mockResolvedValue({ data: {} } as never);
+    vi.mocked(apiClient.post).mockImplementation(async (url) => {
+      if (url === '/api/v1/export-receipts/batch-print-awb') {
+        return {
+          data: {
+            labels: [
+              {
+                trackingNumber: 'GHN84920188',
+                carrierCode: 'GHN Express',
+                marketplaceOrderId: 'MP-SHOPEE-901',
+                pickingSummaryFooter: '[Kệ: BIN-A01-01 | SKU: QA-E2E-001 x 5]',
+                printCount: 1,
+                isReprintWatermark: false,
+              },
+              {
+                trackingNumber: 'VTP99201122',
+                carrierCode: 'Viettel Post',
+                marketplaceOrderId: 'MP-TIKTOK-902',
+                pickingSummaryFooter: '[Kệ: BIN-B02-02 | SKU: QA-E2E-002 x 3]',
+                printCount: 2,
+                isReprintWatermark: true,
+                watermarkText: 'Cảnh báo in lại',
+              },
+            ],
+          },
+        } as never;
+      }
+      return { data: {} } as never;
+    });
 
     const view = render(<ExportReceipts />);
     expect(
@@ -296,13 +323,7 @@ describe('ExportReceipts shared production UI', () => {
     expect(view.getByText(/Đơn quá hạn bàn giao sàn:/)).toBeTruthy();
     expect(view.getByText(/Đơn sắp trễ hạn \(< 2 giờ\):/)).toBeTruthy();
     expect(view.getByText(/Đơn phải giao trong ngày:/)).toBeTruthy();
-    expect(view.getByText('[Kệ: BIN-A01-01 | SKU: QA-E2E-001 x 5]')).toBeTruthy();
-    expect(view.getByText('Số lần in: 1 (Bản gốc)')).toBeTruthy();
-    expect(view.getByText('Cảnh báo in lại')).toBeTruthy();
     expect(view.getByText('Viettel SInvoice • Mẫu 1/001 • C26TAA')).toBeTruthy();
-    expect(view.getAllByTestId('barcode-1d-svg').length).toBeGreaterThanOrEqual(2);
-    expect(view.getAllByTestId('barcode-qr-svg').length).toBeGreaterThanOrEqual(2);
-    expect(view.getAllByText('Mã QR vận đơn').length).toBeGreaterThanOrEqual(2);
 
     fireEvent.click(
       view.getByRole('button', { name: 'In Gộp Phiếu Gửi Hàng Nhiệt 100x150mm (Sắp xếp theo Kệ A→Z)' }),
@@ -312,8 +333,14 @@ describe('ExportReceipts shared production UI', () => {
         'Đã kết xuất lô phiếu gửi hàng nhiệt 100x150mm sắp xếp theo vị trí kệ (A → Z): GHN84920188, VTP99201122.',
       ),
     ).toBeTruthy();
+    expect(view.getByText('[Kệ: BIN-A01-01 | SKU: QA-E2E-001 x 5]')).toBeTruthy();
+    expect(view.getByText('Số lần in: 1 (Bản gốc)')).toBeTruthy();
+    expect(view.getAllByText('Cảnh báo in lại').length).toBeGreaterThanOrEqual(1);
+    expect(view.getAllByTestId('barcode-1d-svg').length).toBeGreaterThanOrEqual(2);
+    expect(view.getAllByTestId('barcode-qr-svg').length).toBeGreaterThanOrEqual(2);
+    expect(view.getAllByText('Mã QR vận đơn').length).toBeGreaterThanOrEqual(2);
     expect(vi.mocked(apiClient.post)).toHaveBeenCalledWith(
-      '/api/export-receipts/batch-print-awb',
+      '/api/v1/export-receipts/batch-print-awb',
       expect.objectContaining({
         paperSize: '100x150mm',
         sortBy: 'BIN_LOCATION_ASC',

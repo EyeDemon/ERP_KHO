@@ -389,29 +389,53 @@ public sealed class PartnerDebtService(
         decimal totalAmount = 0m,
         CancellationToken ct = default)
     {
-        var eventId = $"OUTBOX-VAL-{aggregateType.ToUpperInvariant()}-{aggregateId}";
-        var exists = await context.IntegrationOutboxMessages
-            .AnyAsync(x => x.EventId == eventId, ct);
-        if (exists)
+        var tenantId = context.CurrentTenantId > 0 ? context.CurrentTenantId : 1;
+        var isImportReceipt = string.Equals(aggregateType, "ImportReceipt", StringComparison.OrdinalIgnoreCase);
+        var eventId = isImportReceipt
+            ? $"VALUATION-IMP-{tenantId}-{aggregateId}"
+            : $"OUTBOX-VAL-{tenantId}-{aggregateType.ToUpperInvariant()}-{aggregateId}";
+        var legacyImportKey = $"VALUATION-IMP-{aggregateId}";
+        var legacyOutboxKey = $"OUTBOX-VAL-{aggregateType.ToUpperInvariant()}-{aggregateId}";
+
+        var existing = context.IntegrationOutboxMessages.Local
+            .FirstOrDefault(x => x.TenantId == tenantId &&
+                (x.EventId == eventId || x.EventId == legacyImportKey || x.EventId == legacyOutboxKey))
+            ?? await context.IntegrationOutboxMessages
+                .FirstOrDefaultAsync(x => x.TenantId == tenantId &&
+                    (x.EventId == eventId || x.EventId == legacyImportKey || x.EventId == legacyOutboxKey), ct);
+
+        var payloadJson = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            receiptId = isImportReceipt ? aggregateId : (int?)null,
+            aggregateType,
+            aggregateId,
+            code = referenceCode,
+            referenceCode,
+            warehouseId,
+            totalAmount,
+            targetSystem = "ACCOUNTING_ERP_GL",
+            occurredAtUtc = DateTime.UtcNow
+        });
+
+        if (existing is not null)
+        {
+            existing.EventId = eventId;
+            if (totalAmount > 0m)
+            {
+                existing.PayloadJson = payloadJson;
+            }
             return;
+        }
 
         context.IntegrationOutboxMessages.Add(new IntegrationOutboxMessage
         {
+            TenantId = tenantId,
             EventId = eventId,
             EventType = "InventoryValuationPosted",
             AggregateType = aggregateType,
             AggregateId = aggregateId,
-            PayloadJson = System.Text.Json.JsonSerializer.Serialize(new
-            {
-                aggregateType,
-                aggregateId,
-                referenceCode,
-                warehouseId,
-                totalAmount,
-                targetSystem = "ACCOUNTING_ERP_GL",
-                occurredAtUtc = DateTime.UtcNow
-            }),
-            Status = "Pending",
+            PayloadJson = payloadJson,
+            Status = "PENDING",
             CreatedAt = DateTime.UtcNow
         });
         await context.SaveChangesAsync(ct);
@@ -422,28 +446,89 @@ public sealed class PartnerDebtService(
         int actorUserId,
         CancellationToken ct = default)
     {
-        await EnqueueValuationOutboxEventAsync("ImportReceipt", receipt.Id, receipt.Code, receipt.WarehouseId, 0m, ct);
-        if (!receipt.SupplierId.HasValue || receipt.Details.Count == 0)
-            return null;
-
         decimal subTotal = 0m;
         decimal taxAmount = 0m;
+        var outboxLines = new List<object>();
         foreach (var line in receipt.Details)
         {
             var factor = line.ConversionFactor > 0 ? line.ConversionFactor : 1m;
             var acceptedQty = line.AcceptedQuantity > 0
                 ? line.AcceptedQuantity
                 : (line.BaseAcceptedQuantity > 0 ? line.BaseAcceptedQuantity / factor : 0m);
-            if (acceptedQty <= 0 || line.UnitPrice <= 0)
-                continue;
-
-            var lineSub = decimal.Round(acceptedQty * line.UnitPrice, 2, MidpointRounding.AwayFromZero);
-            var lineTax = decimal.Round(lineSub * (line.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
+            var lineSub = acceptedQty > 0 && line.UnitPrice > 0
+                ? decimal.Round(acceptedQty * line.UnitPrice, 2, MidpointRounding.AwayFromZero)
+                : 0m;
+            var lineTax = lineSub > 0 && line.TaxPercent > 0
+                ? decimal.Round(lineSub * (line.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero)
+                : 0m;
             subTotal += lineSub;
             taxAmount += lineTax;
+            outboxLines.Add(new
+            {
+                detailId = line.Id,
+                productId = line.ProductId,
+                acceptedQuantity = acceptedQty,
+                baseAcceptedQuantity = line.BaseAcceptedQuantity,
+                unitPrice = line.UnitPrice,
+                taxPercent = line.TaxPercent,
+                lineSubTotal = lineSub,
+                lineTaxAmount = lineTax,
+                lineTotal = lineSub + lineTax
+            });
         }
 
         var totalAmount = subTotal + taxAmount;
+        var tenantId = receipt.TenantId > 0 ? receipt.TenantId : (context.CurrentTenantId > 0 ? context.CurrentTenantId : 1);
+        var idempotencyKey = $"VALUATION-IMP-{tenantId}-{receipt.Id}";
+        var legacyKey1 = $"VALUATION-IMP-{receipt.Id}";
+        var legacyKey2 = $"OUTBOX-VAL-IMPORTRECEIPT-{receipt.Id}";
+        var payloadJson = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            receiptId = receipt.Id,
+            aggregateType = "ImportReceipt",
+            aggregateId = receipt.Id,
+            code = receipt.Code,
+            referenceCode = receipt.Code,
+            warehouseId = receipt.WarehouseId,
+            subTotalAmount = subTotal,
+            taxAmount,
+            totalAmount,
+            lines = outboxLines,
+            targetSystem = "ACCOUNTING_ERP_GL",
+            occurredAtUtc = DateTime.UtcNow
+        });
+
+        var existingOutbox = context.IntegrationOutboxMessages.Local
+            .FirstOrDefault(x => x.TenantId == tenantId &&
+                (x.EventId == idempotencyKey || x.EventId == legacyKey1 || x.EventId == legacyKey2))
+            ?? await context.IntegrationOutboxMessages
+                .FirstOrDefaultAsync(x => x.TenantId == tenantId &&
+                    (x.EventId == idempotencyKey || x.EventId == legacyKey1 || x.EventId == legacyKey2), ct);
+
+        if (existingOutbox is null)
+        {
+            context.IntegrationOutboxMessages.Add(new IntegrationOutboxMessage
+            {
+                TenantId = tenantId,
+                EventId = idempotencyKey,
+                EventType = "InventoryValuationPosted",
+                AggregateType = "ImportReceipt",
+                AggregateId = receipt.Id,
+                PayloadJson = payloadJson,
+                Status = "PENDING",
+                CreatedAt = DateTime.UtcNow
+            });
+            await context.SaveChangesAsync(ct);
+        }
+        else
+        {
+            existingOutbox.EventId = idempotencyKey;
+            existingOutbox.PayloadJson = payloadJson;
+            await context.SaveChangesAsync(ct);
+        }
+
+        if (!receipt.SupplierId.HasValue || receipt.Details.Count == 0)
+            return null;
         if (totalAmount <= 0m)
             return null;
 

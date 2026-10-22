@@ -158,7 +158,7 @@ const ExportReceipts = () => {
   const [batchAwbNotice, setBatchAwbNotice] = useState<string | null>(null);
   const [handoverManifestNotice, setHandoverManifestNotice] = useState<string | null>(null);
   const [misaEinvoiceNotice, setMisaEinvoiceNotice] = useState<string | null>(null);
-  const [handoverTrackingInput, setHandoverTrackingInput] = useState('GHN84920188, VTP99201122');
+  const [handoverTrackingInput, setHandoverTrackingInput] = useState('');
   const [selectedHandoverReceiptIds, setSelectedHandoverReceiptIds] = useState<number[]>([]);
   const [awbLabels, setAwbLabels] = useState<Array<{
     awbCode: string;
@@ -167,24 +167,8 @@ const ExportReceipts = () => {
     pickSequenceFooter: string;
     printCountLabel: string;
     isReprint: boolean;
-  }>>([
-    {
-      awbCode: 'GHN84920188',
-      carrierName: 'Giao Hàng Nhanh',
-      marketplaceOrderId: 'SP-261021-8801',
-      pickSequenceFooter: '[Kệ: BIN-A01-01 | SKU: QA-E2E-001 x 5]',
-      printCountLabel: 'Số lần in: 1 (Bản gốc)',
-      isReprint: false,
-    },
-    {
-      awbCode: 'VTP99201122',
-      carrierName: 'Viettel Post',
-      marketplaceOrderId: 'TTS-261021-9902',
-      pickSequenceFooter: '[Kệ: BIN-A01-02 | SKU: QA-LOT-001 x 3]',
-      printCountLabel: 'Cảnh báo in lại',
-      isReprint: true,
-    },
-  ]);
+    watermarkText: string;
+  }>>([]);
 
   const fetchData = async () => {
     const generation = ++auxiliaryGeneration.current;
@@ -224,7 +208,12 @@ const ExportReceipts = () => {
     try {
       const res = await apiClient.get('/api/exportreceipts');
       if (generation !== listGeneration.current) return;
-      setReceipts(res.data);
+      const list = Array.isArray(res.data) ? (res.data as ExportReceipt[]) : [];
+      setReceipts(list);
+      const realTrackings = list.map(r => r.trackingNumber?.trim()).filter(Boolean).join(', ');
+      if (realTrackings) {
+        setHandoverTrackingInput(prev => prev || realTrackings);
+      }
     } catch (err: any) {
       if (generation !== listGeneration.current) return;
       setReceipts([]);
@@ -570,28 +559,46 @@ const ExportReceipts = () => {
                 onClick={() => {
                   setError('');
                   void Promise.resolve(
-                    apiClient.post('/api/export-receipts/batch-print-awb', {
+                    apiClient.post('/api/v1/export-receipts/batch-print-awb', {
                       warehouseId: warehouseId !== '' ? Number(warehouseId) : null,
+                      exportReceiptIds: selectedHandoverReceiptIds.length > 0 ? selectedHandoverReceiptIds : receipts.map((r) => r.id),
                       paperSize: '100x150mm',
                       sortBy: 'BIN_LOCATION_ASC',
                       reprintReason: 'In gộp phiếu gửi hàng nhiệt 100x150mm tại bàn đóng gói',
                     }),
                   )
                     .then((res) => {
-                      const rawItems = (res as { data?: { labels?: Array<Record<string, unknown>> } } | undefined)?.data?.labels;
-                      if (Array.isArray(rawItems) && rawItems.length > 0) {
-                        setAwbLabels(
-                          rawItems.map((item, idx) => ({
-                            awbCode: String(item.awbCode ?? (idx === 0 ? 'GHN84920188' : 'VTP99201122')),
-                            carrierName: String(item.carrierName ?? (idx === 0 ? 'Giao Hàng Nhanh' : 'Viettel Post')),
-                            marketplaceOrderId: String(item.marketplaceOrderId ?? (idx === 0 ? 'SP-261021-8801' : 'TTS-261021-9902')),
-                            pickSequenceFooter: String(item.pickSequenceFooter ?? '[Kệ: BIN-A01-01 | SKU: QA-E2E-001 x 5]'),
-                            printCountLabel: Boolean(item.isReprint) ? 'Cảnh báo in lại' : 'Số lần in: 1 (Bản gốc)',
-                            isReprint: Boolean(item.isReprint),
-                          })),
-                        );
+                      const data = (res as { data?: { labels?: Array<Record<string, unknown>>; items?: Array<Record<string, unknown>> } } | undefined)?.data;
+                      const rawItems = Array.isArray(data?.labels)
+                        ? data.labels
+                        : Array.isArray(data?.items)
+                          ? data.items
+                          : Array.isArray(res?.data)
+                            ? (res.data as Array<Record<string, unknown>>)
+                            : [];
+                      const mappedLabels = rawItems.map((item) => {
+                        const isReprint = Boolean(item.isReprintWatermark ?? item.isReprint ?? (Number(item.printCount ?? 1) > 1));
+                        const watermarkText = String(item.watermarkText ?? (item.isReprintWatermark ? 'REPRINT - BẢN SAO' : ''));
+                        return {
+                          awbCode: String(item.trackingNumber ?? item.awbCode ?? ''),
+                          carrierName: String(item.carrierCode ?? item.carrierName ?? ''),
+                          marketplaceOrderId: String(item.marketplaceOrderId ?? item.orderCode ?? item.exportReceiptCode ?? ''),
+                          pickSequenceFooter: String(item.pickingSummaryFooter ?? item.pickSequenceFooter ?? ''),
+                          printCountLabel: isReprint ? (watermarkText || 'Cảnh báo in lại') : 'Số lần in: 1 (Bản gốc)',
+                          isReprint,
+                          watermarkText,
+                        };
+                      });
+                      setAwbLabels(mappedLabels);
+                      const codesText = mappedLabels.map((l) => l.awbCode).filter(Boolean).join(', ');
+                      if (codesText && !handoverTrackingInput.trim()) {
+                        setHandoverTrackingInput(codesText);
                       }
-                      setBatchAwbNotice('Đã kết xuất lô phiếu gửi hàng nhiệt 100x150mm sắp xếp theo vị trí kệ (A → Z): GHN84920188, VTP99201122.');
+                      setBatchAwbNotice(
+                        codesText
+                          ? `Đã kết xuất lô phiếu gửi hàng nhiệt 100x150mm sắp xếp theo vị trí kệ (A → Z): ${codesText}.`
+                          : 'Đã kết xuất lô phiếu gửi hàng nhiệt 100x150mm sắp xếp theo vị trí kệ (A → Z).',
+                      );
                     })
                     .catch((err) => {
                       setBatchAwbNotice(null);
@@ -685,36 +692,47 @@ const ExportReceipts = () => {
               )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
-              {awbLabels.map((lbl) => (
-                <div
-                  key={lbl.awbCode}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: 8,
-                    border: '1px solid #cbd5e1',
-                    background: '#f8fafc',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 4,
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                    <strong>{lbl.awbCode} — {lbl.carrierName}</strong>
-                    <UiBadge tone={lbl.isReprint ? 'warning' : 'success'}>{lbl.printCountLabel}</UiBadge>
+            {awbLabels.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
+                {awbLabels.map((lbl, idx) => (
+                  <div
+                    key={`${lbl.awbCode}-${idx}`}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      border: '1px solid #cbd5e1',
+                      background: '#f8fafc',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <strong>{lbl.awbCode} — {lbl.carrierName}</strong>
+                      <UiBadge tone={lbl.isReprint ? 'warning' : 'success'}>{lbl.printCountLabel}</UiBadge>
+                    </div>
+                    {lbl.watermarkText && (
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309' }}>{lbl.watermarkText}</div>
+                    )}
+                    <div style={{ fontSize: 12.5, color: '#475569' }}>Đơn sàn: <code>{lbl.marketplaceOrderId || '—'}</code> • Khổ nhiệt: 100x150mm</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a' }}>{lbl.pickSequenceFooter}</div>
+                    <div style={{ marginTop: 4 }}>
+                      <BarcodeSvg value={lbl.awbCode} qrCaption="Mã QR vận đơn" />
+                    </div>
                   </div>
-                  <div style={{ fontSize: 12.5, color: '#475569' }}>Đơn sàn: <code>{lbl.marketplaceOrderId}</code> • Khổ nhiệt: 100x150mm</div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a' }}>{lbl.pickSequenceFooter}</div>
-                  <div style={{ marginTop: 4 }}>
-                    <BarcodeSvg value={lbl.awbCode} qrCaption="Mã QR vận đơn" />
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
 
             <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <div style={{ fontSize: 13 }}>
-                <strong>Biên bản Bàn giao Bưu tá Điện tử:</strong> Vận đơn bàn giao <code>GHN84920188</code>, <code>VTP99201122</code> • Chặn cứng đơn hủy trên sàn trước khi xuất kho
+                <strong>Biên bản Bàn giao Bưu tá Điện tử:</strong>{' '}
+                {awbLabels.length > 0
+                  ? `Vận đơn bàn giao ${awbLabels.map((l) => l.awbCode).join(', ')}`
+                  : handoverTrackingInput.trim()
+                    ? `Vận đơn bàn giao ${handoverTrackingInput.trim()}`
+                    : 'Chưa có vận đơn kết xuất'}{' '}
+                • Chặn cứng đơn hủy trên sàn trước khi xuất kho
               </div>
               <UiBadge tone="success">Viettel SInvoice • Mẫu 1/001 • C26TAA</UiBadge>
             </div>

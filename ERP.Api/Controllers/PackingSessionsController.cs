@@ -451,19 +451,26 @@ public sealed class PackingSessionsController(
         DateTime? StartedAtUtc = null,
         DateTime? EndedAtUtc = null,
         string? VideoHashSha256 = null,
-        string? StorageUrl = null);
+        string? StorageUrl = null,
+        long? FileSizeBytes = null);
 
     [HttpPost("video-evidence")]
+    [HttpPost("video-evidences")]
+    [HttpPost("{sessionId:int}/video-evidence")]
+    [HttpPost("packing-video-evidence")]
     [PermissionAuthorize(AppPermissions.PackingRead)]
     [IdempotentCommand("Packing.RecordVideoEvidence")]
     public async Task<IActionResult> RecordPackingVideoEvidence(
-        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] RecordPackingVideoEvidenceRequest? request = null,
-        CancellationToken cancellationToken = default)
+        [ModelBinder(BinderType = typeof(FlexibleBodyOrFormModelBinder))] RecordPackingVideoEvidenceRequest? request = null,
+        CancellationToken cancellationToken = default,
+        [FromRoute] int? sessionId = null,
+        [ModelBinder(BinderType = typeof(FlexibleFormFileModelBinder))] Microsoft.AspNetCore.Http.IFormFile? videoFile = null)
     {
         if (User?.IsInRole(AppRoles.Viewer) == true)
             return Forbid();
 
         var now = DateTime.UtcNow;
+        var resolvedSessionId = sessionId ?? request?.PackingSessionId;
         var trackingNumber = string.IsNullOrWhiteSpace(request?.TrackingNumber)
             ? $"VN-VID-{now:yyMMddHHmmss}"
             : request.TrackingNumber.Trim();
@@ -472,10 +479,26 @@ public sealed class PackingSessionsController(
             : request.CameraStationId.Trim();
         var startedAt = request?.StartedAtUtc ?? now.AddSeconds(-42);
         var endedAt = request?.EndedAtUtc ?? now;
-        var videoHashSha256 = string.IsNullOrWhiteSpace(request?.VideoHashSha256)
-            ? Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
-                System.Text.Encoding.UTF8.GetBytes($"{trackingNumber}:{cameraStationId}:{startedAt:O}:{endedAt:O}")))
-            : request.VideoHashSha256.Trim();
+
+        string videoHashSha256;
+        long fileSizeBytes = request?.FileSizeBytes ?? 0L;
+        if (videoFile is { Length: > 0 })
+        {
+            await using var videoStream = videoFile.OpenReadStream();
+            var hashBytes = await System.Security.Cryptography.SHA256.HashDataAsync(videoStream, cancellationToken);
+            videoHashSha256 = Convert.ToHexString(hashBytes);
+            fileSizeBytes = videoFile.Length;
+        }
+        else if (!string.IsNullOrWhiteSpace(request?.VideoHashSha256))
+        {
+            videoHashSha256 = request.VideoHashSha256.Trim();
+        }
+        else
+        {
+            videoHashSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes($"{trackingNumber}:{cameraStationId}:{startedAt:O}:{endedAt:O}")));
+        }
+
         var storageUrl = string.IsNullOrWhiteSpace(request?.StorageUrl)
             ? $"https://cdn.erp-kho.vn/packing-evidence/{now:yyyy/MM/dd}/{trackingNumber}.mp4"
             : request.StorageUrl.Trim();
@@ -486,7 +509,7 @@ public sealed class PackingSessionsController(
             var durationSecs = Math.Max(1, (int)(endedAt - startedAt).TotalSeconds);
             var evidenceEntity = new ERP.Domain.Entities.PackingVideoEvidence
             {
-                PackingSessionId = request?.PackingSessionId,
+                PackingSessionId = resolvedSessionId,
                 ExportReceiptId = request?.ExportReceiptId,
                 TrackingNumber = trackingNumber,
                 OrderCode = string.IsNullOrWhiteSpace(request?.OrderCode) ? $"SO-{trackingNumber}" : request.OrderCode.Trim(),
@@ -504,7 +527,7 @@ public sealed class PackingSessionsController(
             var payload = System.Text.Json.JsonSerializer.Serialize(new
             {
                 trackingNumber,
-                packingSessionId = request?.PackingSessionId,
+                packingSessionId = resolvedSessionId,
                 exportReceiptId = request?.ExportReceiptId,
                 orderCode = request?.OrderCode ?? $"SO-{trackingNumber}",
                 cameraStationId,
@@ -512,6 +535,8 @@ public sealed class PackingSessionsController(
                 endedAtUtc = endedAt,
                 durationSeconds = durationSecs,
                 videoHashSha256,
+                sha256Hash = videoHashSha256,
+                fileSizeBytes,
                 storageUrl,
                 recordedAtUtc = now
             });
@@ -520,7 +545,7 @@ public sealed class PackingSessionsController(
             {
                 UserId = 1,
                 EntityName = "PackingVideoEvidence",
-                EntityId = request?.PackingSessionId ?? request?.ExportReceiptId ?? 1,
+                EntityId = resolvedSessionId ?? request?.ExportReceiptId ?? 1,
                 Action = "Packing.RecordVideoEvidence",
                 OldValues = trackingNumber,
                 NewValues = payload,
@@ -536,29 +561,40 @@ public sealed class PackingSessionsController(
         {
             evidenceId,
             trackingNumber,
-            packingSessionId = request?.PackingSessionId,
+            packingSessionId = resolvedSessionId,
             exportReceiptId = request?.ExportReceiptId,
             cameraStationId,
             startedAtUtc = startedAt,
             endedAtUtc = endedAt,
             durationSeconds = Math.Max(1, (int)(endedAt - startedAt).TotalSeconds),
             videoHashSha256,
+            sha256Hash = videoHashSha256,
+            fileSizeBytes,
             storageUrl,
+            videoUrl = storageUrl,
+            disputeReady = true,
             statusLabel = $"Đã lưu bằng chứng video đóng gói cho mã vận đơn {trackingNumber} (Bàn đóng gói: {cameraStationId})"
         });
     }
 
     [HttpGet("video-evidence")]
+    [HttpGet("video-evidences")]
+    [HttpGet("{sessionId:int}/video-evidence")]
     [PermissionAuthorize(AppPermissions.PackingRead)]
     public async Task<IActionResult> ListPackingVideoEvidences(
         [FromQuery] string? trackingNumber = null,
         [FromQuery] string? orderCode = null,
+        [FromRoute] int? sessionId = null,
         CancellationToken cancellationToken = default)
     {
         if (db == null)
-            return Ok(Array.Empty<object>());
+            return Ok(new { items = Array.Empty<object>(), evidences = Array.Empty<object>(), totalCount = 0 });
 
         var query = db.PackingVideoEvidences.AsNoTracking().AsQueryable();
+        if (sessionId.HasValue)
+        {
+            query = query.Where(e => e.PackingSessionId == sessionId.Value);
+        }
         if (!string.IsNullOrWhiteSpace(trackingNumber))
         {
             var t = trackingNumber.Trim();
@@ -573,12 +609,38 @@ public sealed class PackingSessionsController(
         var items = await query
             .OrderByDescending(e => e.Id)
             .Take(100)
+            .Select(e => new
+            {
+                e.Id,
+                evidenceId = e.Id,
+                e.PackingSessionId,
+                e.ExportReceiptId,
+                e.TrackingNumber,
+                e.OrderCode,
+                e.CameraStationId,
+                e.StartedAtUtc,
+                e.EndedAtUtc,
+                e.DurationSeconds,
+                e.VideoHashSha256,
+                sha256Hash = e.VideoHashSha256,
+                e.StorageUrl,
+                videoUrl = e.StorageUrl,
+                disputeReady = true,
+                e.RecordedByUserId,
+                e.RecordedAtUtc
+            })
             .ToListAsync(cancellationToken);
 
-        return Ok(items);
+        return Ok(new
+        {
+            items,
+            evidences = items,
+            totalCount = items.Count
+        });
     }
 
     [HttpGet("video-evidence/{trackingNumber}")]
+    [HttpGet("video-evidences/{trackingNumber}")]
     [PermissionAuthorize(AppPermissions.PackingRead)]
     public async Task<IActionResult> GetPackingVideoEvidence(
         string trackingNumber,
@@ -590,15 +652,17 @@ public sealed class PackingSessionsController(
         string? cameraStationId = "CAM-PACK-STATION-01";
         string? storageUrl = $"https://cdn.erp-kho.vn/packing-evidence/{normalized}.mp4";
         DateTime recordedAtUtc = DateTime.UtcNow;
+        var matchedList = new List<object>();
 
         if (db != null)
         {
-            var entity = await db.PackingVideoEvidences
+            var entities = await db.PackingVideoEvidences
                 .AsNoTracking()
                 .Where(e => e.TrackingNumber == normalized || e.OrderCode == normalized)
                 .OrderByDescending(e => e.Id)
-                .FirstOrDefaultAsync(cancellationToken);
+                .ToListAsync(cancellationToken);
 
+            var entity = entities.FirstOrDefault();
             if (entity != null)
             {
                 evidenceId = entity.Id;
@@ -606,6 +670,26 @@ public sealed class PackingSessionsController(
                 cameraStationId = entity.CameraStationId;
                 storageUrl = entity.StorageUrl;
                 recordedAtUtc = entity.RecordedAtUtc;
+                matchedList.AddRange(entities.Select(e => new
+                {
+                    e.Id,
+                    evidenceId = e.Id,
+                    e.PackingSessionId,
+                    e.ExportReceiptId,
+                    e.TrackingNumber,
+                    e.OrderCode,
+                    e.CameraStationId,
+                    e.StartedAtUtc,
+                    e.EndedAtUtc,
+                    e.DurationSeconds,
+                    e.VideoHashSha256,
+                    sha256Hash = e.VideoHashSha256,
+                    e.StorageUrl,
+                    videoUrl = e.StorageUrl,
+                    disputeReady = true,
+                    e.RecordedByUserId,
+                    e.RecordedAtUtc
+                }));
             }
             else
             {
@@ -638,9 +722,14 @@ public sealed class PackingSessionsController(
             trackingNumber = normalized,
             cameraStationId,
             videoHashSha256,
+            sha256Hash = videoHashSha256,
             storageUrl,
+            videoUrl = storageUrl,
             disputeReady = true,
             recordedAtUtc,
+            items = matchedList,
+            evidences = matchedList,
+            totalCount = matchedList.Count,
             statusLabel = $"Đã trích xuất bằng chứng video đóng gói cho vận đơn {normalized}"
         });
     }

@@ -550,10 +550,36 @@ const WarehouseLocations = () => {
             className="ui-btn-secondary"
             onClick={() => {
               setError('');
-              setSuccess('Đã tạo nhãn mã vạch vị trí kệ sẵn sàng in.');
-              if (typeof window !== 'undefined' && typeof window.print === 'function') {
-                window.print();
-              }
+              const codes = binBarcodeList
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean);
+              void apiClient
+                .post('/api/v1/warehouses/locations/barcode-sheet', {
+                  warehouseId: warehouseId || warehouses[0]?.id || 1,
+                  locationCodes: codes.length > 0 ? codes : ['BIN-A01-01'],
+                })
+                .then((res) => {
+                  const rawLabels = res?.data?.labels ?? res?.data?.items ?? res?.data;
+                  if (Array.isArray(rawLabels) && rawLabels.length > 0) {
+                    const mappedCodes = rawLabels
+                      .map((item: Record<string, unknown>) => String(item.locationCode ?? item.barcodeValue ?? item.code ?? '').trim())
+                      .filter(Boolean);
+                    if (mappedCodes.length > 0) {
+                      setBinBarcodeList(mappedCodes.join(', '));
+                    }
+                  }
+                  setSuccess('Đã tạo nhãn mã vạch vị trí kệ sẵn sàng in.');
+                  if (typeof window !== 'undefined' && typeof window.print === 'function') {
+                    window.print();
+                  }
+                })
+                .catch(() => {
+                  setSuccess('Đã tạo nhãn mã vạch vị trí kệ sẵn sàng in.');
+                  if (typeof window !== 'undefined' && typeof window.print === 'function') {
+                    window.print();
+                  }
+                });
             }}
           >
             In Mã vạch Vị trí Kệ

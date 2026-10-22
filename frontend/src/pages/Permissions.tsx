@@ -176,6 +176,18 @@ export default function Permissions() {
   const [supportBusy, setSupportBusy] = useState(false);
   const [supportTicketRef, setSupportTicketRef] = useState('ZALO-SUP-2026-001');
   const [supportNotice, setSupportNotice] = useState('');
+  const [billingSummary, setBillingSummary] = useState({
+    planName: 'Gói Doanh nghiệp Mở rộng',
+    subscriptionStatus: 'ACTIVE',
+    activeWarehouses: 0,
+    maxWarehouses: 0,
+    activeUsers: 0,
+    maxUsers: 0,
+    activeProducts: 0,
+    maxProducts: 0,
+    currentMonthOrderCount: 0,
+    monthlyOrderQuota: 0,
+  });
 
   const loadSupportImpersonationSessions = async () => {
     if (supportBusy) return;
@@ -183,7 +195,7 @@ export default function Permissions() {
     setError('');
     setSupportNotice('');
     try {
-      const res = await apiClient.get('/api/account-security/support-impersonation/sessions');
+      const res = await apiClient.get('/api/v1/security/support-impersonation/sessions');
       const raw = Array.isArray(res?.data) ? res.data : (Array.isArray((res?.data as { items?: unknown[] } | undefined)?.items) ? (res.data as { items: unknown[] }).items : []);
       setSupportSessions(
         raw.map((item: Record<string, unknown>, idx: number) => ({
@@ -211,7 +223,8 @@ export default function Permissions() {
     const uid = Number(targetUserIdInput) > 0 ? Number(targetUserIdInput) : 1;
     const ticket = supportTicketRef.trim() || 'ZALO-SUP-2026-001';
     try {
-      const res = await apiClient.post<Record<string, unknown>>(`/api/account-security/${uid}/support-impersonation`, {
+      const res = await apiClient.post<Record<string, unknown>>('/api/v1/security/support-impersonation/sessions', {
+        targetUserId: uid,
         supportAgentName: 'Chuyên viên Kỹ thuật ERP KHO',
         ticketReference: ticket,
         ttlMinutes: 30,
@@ -245,7 +258,7 @@ export default function Permissions() {
     setError('');
     setSupportNotice('');
     try {
-      await apiClient.post(`/api/account-security/support-impersonation/${sessionId}/revoke`, {
+      await apiClient.post(`/api/v1/security/support-impersonation/${sessionId}/revoke`, {
         reason: 'Chủ shop thu hồi phiên hỗ trợ kỹ thuật',
       });
       setSupportSessions(prev =>
@@ -265,7 +278,7 @@ export default function Permissions() {
     setError('');
     setVietQrNotice(null);
     try {
-      void Promise.resolve(apiClient.get('/api/permissions/saas-subscription-billing')).catch(() => null);
+      void Promise.resolve(apiClient.get('/api/v1/permissions/saas/subscription-billing')).catch(() => null);
       const res = await apiClient.post<Record<string, unknown>>('/api/permissions/saas-subscription-billing/create-vietqr-invoice', {
         planCode: 'GROWTH_TIER',
         amountVnd: 1490000,
@@ -362,11 +375,38 @@ export default function Permissions() {
     const version = ++requestVersion.current;
     setCatalog([]); setRoles([]); setLoading(true); setError('');
     try {
-      const [permissions, roleGrants] = await Promise.all([
+      const [permissions, roleGrants, billingRes] = await Promise.all([
         canReadCatalog ? apiClient.get('/api/permissions') : Promise.resolve({ data: [] }),
         canReadRoles ? apiClient.get('/api/permissions/roles') : Promise.resolve({ data: [] }),
+        Promise.resolve(apiClient.get('/api/v1/permissions/saas/subscription-billing')).catch(() => null),
       ]);
-      if (version === requestVersion.current) { setCatalog(permissions.data); setRoles(roleGrants.data); }
+      if (version === requestVersion.current) {
+        setCatalog(permissions.data);
+        setRoles(roleGrants.data);
+        const bd = (billingRes?.data ?? {}) as Record<string, unknown>;
+        if (billingRes?.data) {
+          const rawPlan = String(bd.planName ?? bd.planCode ?? 'Gói Doanh nghiệp Mở rộng');
+          const planDisplayName = rawPlan === 'GROWTH' || rawPlan === 'PRO'
+            ? 'Gói Tăng trưởng (GROWTH)'
+            : rawPlan === 'STARTER'
+              ? 'Gói Khởi đầu (STARTER)'
+              : rawPlan === 'ENTERPRISE'
+                ? 'Gói Doanh nghiệp (ENTERPRISE)'
+                : rawPlan;
+          setBillingSummary({
+            planName: planDisplayName,
+            subscriptionStatus: String(bd.subscriptionStatus ?? bd.status ?? 'ACTIVE'),
+            activeWarehouses: Number(bd.activeWarehouses ?? bd.currentWarehouseCount ?? bd.usedWarehouses ?? 0),
+            maxWarehouses: Number(bd.maxWarehouses ?? bd.warehouseQuota ?? 0),
+            activeUsers: Number(bd.activeUsers ?? bd.currentUserCount ?? bd.usedUsers ?? 0),
+            maxUsers: Number(bd.maxUsers ?? bd.userQuota ?? 0),
+            activeProducts: Number(bd.activeProducts ?? bd.currentSkuCount ?? bd.usedProducts ?? 0),
+            maxProducts: Number(bd.maxProducts ?? bd.maxSkus ?? bd.productQuota ?? 0),
+            currentMonthOrderCount: Number(bd.currentMonthOrderCount ?? bd.usedMonthlyOrders ?? 0),
+            monthlyOrderQuota: Number(bd.monthlyOrderQuota ?? bd.maxMonthlyOrders ?? 0),
+          });
+        }
+      }
     } catch (failure) { if (version === requestVersion.current) setError(permissionError(failure)); }
     finally { if (version === requestVersion.current) setLoading(false); }
   }, [canReadCatalog, canReadRoles]);
@@ -635,22 +675,28 @@ export default function Permissions() {
           <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 14 }}>
             <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc' }}>
               <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Gói thuê bao doanh nghiệp</div>
-              <strong style={{ fontSize: 14, color: '#0f172a' }}>Gói Doanh nghiệp Mở rộng</strong>
-              <div style={{ fontSize: 12, color: '#065f46', marginTop: 2 }}>Trạng thái hạn ngạch: Đạt chuẩn an toàn</div>
+              <strong style={{ fontSize: 14, color: '#0f172a' }}>{billingSummary.planName}</strong>
+              <div style={{ fontSize: 12, color: '#065f46', marginTop: 2 }}>
+                {`Đơn hàng tháng: ${billingSummary.currentMonthOrderCount} / ${billingSummary.monthlyOrderQuota}`}
+              </div>
             </div>
             <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
               <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Kho đang hoạt động</div>
-              <strong style={{ fontSize: 15, color: '#0f172a' }}>2 / 20 kho</strong>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Mức sử dụng: 10% hạn ngạch</div>
+              <strong style={{ fontSize: 15, color: '#0f172a' }}>{`${billingSummary.activeWarehouses} / ${billingSummary.maxWarehouses} kho`}</strong>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                {`Mức sử dụng: ${billingSummary.maxWarehouses > 0 ? Math.round((billingSummary.activeWarehouses * 100) / billingSummary.maxWarehouses) : 0}% hạn ngạch`}
+              </div>
             </div>
             <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
               <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tài khoản người dùng</div>
-              <strong style={{ fontSize: 15, color: '#0f172a' }}>4 / 100 người dùng</strong>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Mức sử dụng: 4% hạn ngạch</div>
+              <strong style={{ fontSize: 15, color: '#0f172a' }}>{`${billingSummary.activeUsers} / ${billingSummary.maxUsers} người dùng`}</strong>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                {`Mức sử dụng: ${billingSummary.maxUsers > 0 ? Math.round((billingSummary.activeUsers * 100) / billingSummary.maxUsers) : 0}% hạn ngạch`}
+              </div>
             </div>
             <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
               <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Danh mục SKU</div>
-              <strong style={{ fontSize: 15, color: '#0f172a' }}>6 / 10.000 mặt hàng</strong>
+              <strong style={{ fontSize: 15, color: '#0f172a' }}>{`${billingSummary.activeProducts} / ${billingSummary.maxProducts.toLocaleString('vi-VN')} mặt hàng`}</strong>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Cô lập dữ liệu đa thuê bao</div>
             </div>
           </div>

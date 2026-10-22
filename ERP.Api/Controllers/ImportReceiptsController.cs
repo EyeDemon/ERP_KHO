@@ -486,7 +486,11 @@ namespace ERP.Api.Controllers
             string? ProductCode = null,
             string? LocationCode = null,
             string? ReasonCode = null,
-            string? Note = null);
+            string? Note = null,
+            int? CustomerReturnId = null,
+            string? ReturnCode = null,
+            string? TrackingNumber = null,
+            string? Status = null);
 
         [HttpPost("execute-rtv-refurbish")]
         [IdempotentCommand("ImportReceipt.ExecuteRtvRefurbish")]
@@ -763,35 +767,111 @@ namespace ERP.Api.Controllers
                     query = query.Where(s => accessibleIds.Contains(s.WarehouseId));
                 nonAvailableBucketsCount = await query.CountAsync(cancellationToken);
 
-                var dispReturn = new ERP.Domain.Entities.CustomerReturn
+                var isRtv = rawAction.StartsWith("RTV", StringComparison.Ordinal) && !rawAction.Contains("REFURBISH", StringComparison.Ordinal);
+                var isScrap = rawAction.StartsWith("SCRAP", StringComparison.Ordinal);
+                var resolvedReturnStatus = !string.IsNullOrWhiteSpace(request?.Status)
+                    ? request.Status.Trim().ToUpperInvariant()
+                    : (isRtv || isScrap ? "QC_FAILED" : "COMPLETED");
+
+                ERP.Domain.Entities.CustomerReturn? dispReturn = null;
+                if (request?.CustomerReturnId.HasValue == true)
                 {
-                    ReturnCode = dispositionCode,
-                    WarehouseId = warehouseId ?? accessibleIds?.FirstOrDefault() ?? 1,
-                    ReturnReason = string.IsNullOrWhiteSpace(request?.ReasonCode) ? rawAction : request.ReasonCode.Trim(),
-                    Status = "COMPLETED",
-                    CreatedBy = actorUserId ?? 1,
-                    CreatedAtUtc = now,
-                    CompletedAtUtc = now
-                };
-                _db.CustomerReturns.Add(dispReturn);
+                    dispReturn = await _db.CustomerReturns
+                        .Include(r => r.Lines)
+                        .FirstOrDefaultAsync(r => r.Id == request.CustomerReturnId.Value, cancellationToken);
+                }
+                if (dispReturn == null && !string.IsNullOrWhiteSpace(request?.ReturnCode))
+                {
+                    var rc = request.ReturnCode.Trim();
+                    dispReturn = await _db.CustomerReturns
+                        .Include(r => r.Lines)
+                        .FirstOrDefaultAsync(r => r.ReturnCode == rc, cancellationToken);
+                }
+                if (dispReturn == null && !string.IsNullOrWhiteSpace(request?.TrackingNumber))
+                {
+                    var tn = request.TrackingNumber.Trim();
+                    dispReturn = await _db.CustomerReturns
+                        .Include(r => r.Lines)
+                        .FirstOrDefaultAsync(r => r.TrackingNumber == tn, cancellationToken);
+                }
+                if (dispReturn == null)
+                {
+                    var openQuery = _db.CustomerReturns
+                        .Include(r => r.Lines)
+                        .Where(r => r.Status != "COMPLETED" && r.Status != "REFUNDED");
+                    if (warehouseId.HasValue)
+                        openQuery = openQuery.Where(r => r.WarehouseId == warehouseId.Value);
+                    if (resolvedProductId.HasValue)
+                        openQuery = openQuery.Where(r => r.Lines.Any(l => l.ProductId == resolvedProductId.Value) || !r.Lines.Any());
+                    dispReturn = await openQuery.OrderByDescending(r => r.Id).FirstOrDefaultAsync(cancellationToken);
+                }
+
+                var mutatedQty = request?.Quantity > 0m ? request.Quantity : 1m;
+                var lineCondition = isRtv || isScrap ? "DEFECTIVE" : "DAMAGED_BOX";
+                var lineDisposition = isRtv ? "RTV_VENDOR" : (isScrap ? "SCRAP_DISPOSAL" : "REFURBISH_REPACK");
+
+                if (dispReturn == null)
+                {
+                    dispReturn = new ERP.Domain.Entities.CustomerReturn
+                    {
+                        ReturnCode = dispositionCode,
+                        WarehouseId = warehouseId ?? accessibleIds?.FirstOrDefault() ?? 1,
+                        ReturnReason = string.IsNullOrWhiteSpace(request?.ReasonCode) ? rawAction : request.ReasonCode.Trim(),
+                        Status = resolvedReturnStatus,
+                        CreatedBy = actorUserId ?? 1,
+                        CreatedAtUtc = now,
+                        CompletedAtUtc = now
+                    };
+                    _db.CustomerReturns.Add(dispReturn);
+                    await _db.SaveChangesAsync(cancellationToken);
+
+                    if (resolvedProductId.HasValue)
+                    {
+                        _db.CustomerReturnLines.Add(new ERP.Domain.Entities.CustomerReturnLine
+                        {
+                            CustomerReturnId = dispReturn.Id,
+                            ProductId = resolvedProductId.Value,
+                            TargetLocationId = resolvedLocationId,
+                            Quantity = mutatedQty,
+                            Condition = lineCondition,
+                            Disposition = lineDisposition
+                        });
+                    }
+                }
+                else
+                {
+                    dispReturn.Status = resolvedReturnStatus;
+                    dispReturn.CompletedAtUtc = now;
+                    if (!string.IsNullOrWhiteSpace(request?.ReasonCode))
+                        dispReturn.ReturnReason = request.ReasonCode.Trim();
+
+                    var existingLine = resolvedProductId.HasValue
+                        ? dispReturn.Lines.FirstOrDefault(l => l.ProductId == resolvedProductId.Value) ?? dispReturn.Lines.FirstOrDefault()
+                        : dispReturn.Lines.FirstOrDefault();
+
+                    if (existingLine != null)
+                    {
+                        existingLine.Condition = lineCondition;
+                        existingLine.Disposition = lineDisposition;
+                        if (resolvedLocationId.HasValue)
+                            existingLine.TargetLocationId = resolvedLocationId.Value;
+                    }
+                    else if (resolvedProductId.HasValue)
+                    {
+                        _db.CustomerReturnLines.Add(new ERP.Domain.Entities.CustomerReturnLine
+                        {
+                            CustomerReturnId = dispReturn.Id,
+                            ProductId = resolvedProductId.Value,
+                            TargetLocationId = resolvedLocationId,
+                            Quantity = mutatedQty,
+                            Condition = lineCondition,
+                            Disposition = lineDisposition
+                        });
+                    }
+                }
+
                 await _db.SaveChangesAsync(cancellationToken);
                 dispositionReturnId = dispReturn.Id;
-
-                if (resolvedProductId.HasValue)
-                {
-                    var mutatedQty = request?.Quantity > 0m ? request.Quantity : 1m;
-                    var isRtv = rawAction.StartsWith("RTV", StringComparison.Ordinal) && !rawAction.Contains("REFURBISH", StringComparison.Ordinal);
-                    var isScrap = rawAction.StartsWith("SCRAP", StringComparison.Ordinal);
-                    _db.CustomerReturnLines.Add(new ERP.Domain.Entities.CustomerReturnLine
-                    {
-                        CustomerReturnId = dispReturn.Id,
-                        ProductId = resolvedProductId.Value,
-                        TargetLocationId = resolvedLocationId,
-                        Quantity = mutatedQty,
-                        Condition = isRtv || isScrap ? "DEFECTIVE" : "DAMAGED_BOX",
-                        Disposition = isRtv ? "RTV_VENDOR" : (isScrap ? "SCRAP_DISPOSAL" : "REFURBISH_REPACK")
-                    });
-                }
 
                 _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
                 {

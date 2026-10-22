@@ -13,6 +13,8 @@ namespace ERP.Api.Controllers;
 [Authorize]
 [ApiController]
 [Route("api/inventory")]
+[Route("api/v1/inventory")]
+[Route("api/v1/inventory-reversal-traceability")]
 public sealed class InventoryReversalTraceabilityController(
     IInventoryReversalService reversalService,
     IInventoryTraceabilityQueryService traceabilityService,

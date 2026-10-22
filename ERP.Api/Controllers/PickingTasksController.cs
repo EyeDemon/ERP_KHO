@@ -25,6 +25,7 @@ public sealed record WaveGroupDto(
 
 [ApiController]
 [Route("api/picking-tasks")]
+[Route("api/v1/picking-tasks")]
 [Authorize]
 public sealed class PickingTasksController(
     IPickingService service,

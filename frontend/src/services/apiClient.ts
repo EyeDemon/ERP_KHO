@@ -166,6 +166,16 @@ apiClient.interceptors.response.use(
     return response;
   },
   async (error: AxiosError) => {
+    const errData = (error.response?.data ?? {}) as Record<string, unknown>;
+    const code = String(errData.code ?? errData.errorCode ?? error.response?.status ?? 'ERR_NETWORK');
+    const headers = (error.response?.headers ?? {}) as Record<string, unknown>;
+    const correlationId = String(headers['x-correlation-id'] ?? errData.correlationId ?? errData.traceId ?? '');
+    try {
+      window.localStorage?.setItem('lastErrorCode', code);
+      window.localStorage?.setItem('lastCorrelationId', correlationId);
+    } catch {
+      // ignore storage errors in restricted environments
+    }
     const config = error.config as RetryConfig | undefined;
     const requestUrl = config?.url;
     const lowerUrl = requestUrl?.toLowerCase() ?? '';

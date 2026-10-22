@@ -321,7 +321,7 @@ public sealed class PutawayService(
 
     public async Task<PutawayTaskDto> GetAsync(int id, CancellationToken token = default)
     {
-        var task = await Query().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, token) ?? throw new NotFoundException("Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.");
+        var task = await LoadTaskWithFallbackAsync(id, asNoTracking: true, token) ?? throw new NotFoundException("Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.");
         await warehouses.EnsureWarehouseAccessAsync(task.WarehouseId, token); return await MapAsync(task, token);
     }
 
@@ -453,18 +453,25 @@ public sealed class PutawayService(
                     $"SELECT 1 FROM dbo.PutawayTasks WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE TenantId = {tenantId} AND Id = {id}; SELECT 1 FROM dbo.PutawayTaskItems WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE TenantId = {tenantId} AND PutawayTaskId = {id};",
                     token);
             }
-            var task=await Load(id,token); if(task.Status is not PutawayTaskStatus.Assigned and not PutawayTaskStatus.InProgress) throw Conflict("Nhiệm vụ không ở trạng thái có thể cất hàng."); EnsureActor(task);
+            var task=await Load(id,token);
+            var isPutback = IsPutbackTask(task);
+            if(task.Status is not PutawayTaskStatus.Assigned and not PutawayTaskStatus.InProgress && !(isPutback && task.Status == PutawayTaskStatus.Open))
+                throw Conflict("Nhiệm vụ không ở trạng thái có thể cất hàng.");
+            EnsureActor(task);
             if (task.Status == PutawayTaskStatus.InProgress)
             {
-                try { _ = Convert.FromBase64String(dto.RowVersion); }
-                catch { throw new BusinessRuleException("Phiên bản dữ liệu không hợp lệ."); }
+                if (!string.IsNullOrWhiteSpace(dto.RowVersion))
+                {
+                    try { _ = Convert.FromBase64String(dto.RowVersion); }
+                    catch { throw new BusinessRuleException("Phiên bản dữ liệu không hợp lệ."); }
+                }
                 context.Entry(task).Property(x => x.RowVersion).OriginalValue = task.RowVersion;
             }
-            else
+            else if (task.RowVersion.Length > 0 && !string.IsNullOrWhiteSpace(dto.RowVersion))
             {
                 ApplyVersion(task.RowVersion,dto.RowVersion,context.Entry(task).Property(x=>x.RowVersion));
             }
-            var item=task.Items.SingleOrDefault(x=>x.Id==dto.ItemId)??throw new NotFoundException("Không tìm thấy dòng hàng.");
+            var item=(dto.ItemId > 0 ? task.Items.SingleOrDefault(x=>x.Id==dto.ItemId) : task.Items.FirstOrDefault())??throw new NotFoundException("Không tìm thấy dòng hàng.");
             await context.AcquireInventoryAllocationLocksAsync([(task.WarehouseId, item.ProductId)], token);
             WarehouseLocation? destination;
             if (dto.DestinationLocationId > 0)
@@ -487,7 +494,7 @@ public sealed class PutawayService(
                 throw new NotFoundException("Không tìm thấy vị trí đích.");
             }
             if(destination.WarehouseId!=task.WarehouseId) throw new NotFoundException("Không tìm thấy vị trí đích.");
-            if(!destination.IsActive||destination.IsBlocked||destination.LocationType!=RequiredType(item.InventoryStatus)||(item.InventoryStatus==InventoryStatus.Available&&!destination.IsPickable)) throw new BusinessRuleException("Vị trí đích không phù hợp với hàng hóa này.");
+            if(!destination.IsActive||destination.IsBlocked||destination.LocationType!=RequiredType(item.InventoryStatus)||(item.InventoryStatus==InventoryStatus.Available&&!destination.IsPickable&&destination.LocationType!=WarehouseLocationType.Storage)) throw new BusinessRuleException("Vị trí đích không phù hợp với hàng hóa này.");
             var baseQty=ToBase(dto.Quantity,dto.UnitCode,item); if(baseQty>item.RemainingBaseQuantity) throw new BusinessRuleException("Số lượng cất vượt quá số lượng còn lại.");
             var product=await ProductForCapacity(item.ProductId,token)??throw new NotFoundException("Không tìm thấy sản phẩm.");
             if (!string.IsNullOrWhiteSpace(dto.ProductBarcode))
@@ -509,12 +516,12 @@ public sealed class PutawayService(
                             x.WarehouseId == task.WarehouseId &&
                             x.Status == item.InventoryStatus &&
                             x.LocationId == item.SourceLocationId &&
-                            x.Quantity > x.ReservedQuantity)
+                            (isPutback ? x.Quantity > 0 : x.Quantity > x.ReservedQuantity))
                 .OrderBy(x => x.LotId)
                 .ThenBy(x => x.SerialId)
                 .ThenBy(x => x.Id)
                 .ToListAsync(token);
-            if (item.ReceiptLineId > 0)
+            if (!isPutback && item.ReceiptLineId > 0)
             {
                 var lineIdentities = await context.ImportReceiptInventoryIdentities.AsNoTracking()
                     .Where(x => x.ImportReceiptDetailId == item.ReceiptLineId)
@@ -566,15 +573,17 @@ public sealed class PutawayService(
                     }
                 }
             }
-            if (sourceBuckets.Count == 0 || sourceBuckets.Sum(x => x.Quantity - x.ReservedQuantity) < baseQty)
+            if (sourceBuckets.Count == 0 || sourceBuckets.Sum(x => isPutback ? x.Quantity : x.Quantity - x.ReservedQuantity) < baseQty)
                 throw Conflict("Tồn tại vị trí nguồn đã thay đổi. Vui lòng tải lại.");
             var nowUtc = DateTime.UtcNow;
             var remainingToMove = baseQty;
-            var enteredUnitCode = dto.UnitCode.Trim().ToUpperInvariant();
+            var enteredUnitCode = string.IsNullOrWhiteSpace(dto.UnitCode) ? "THÙNG" : dto.UnitCode.Trim().ToUpperInvariant();
             foreach (var sourceBucket in sourceBuckets)
             {
                 if (remainingToMove <= 0) break;
-                var availableInBucket = sourceBucket.Quantity - sourceBucket.ReservedQuantity;
+                var availableInBucket = isPutback
+                    ? sourceBucket.Quantity
+                    : sourceBucket.Quantity - sourceBucket.ReservedQuantity;
                 if (availableInBucket <= 0) continue;
                 var chunk = Math.Min(remainingToMove, availableInBucket);
 
@@ -601,6 +610,21 @@ public sealed class PutawayService(
                 }
 
                 sourceBucket.Quantity -= chunk;
+                var reservedMoved = 0m;
+                var allocatedMoved = 0m;
+                if (isPutback)
+                {
+                    if (sourceBucket.ReservedQuantity > sourceBucket.Quantity)
+                    {
+                        reservedMoved = sourceBucket.ReservedQuantity - sourceBucket.Quantity;
+                        sourceBucket.ReservedQuantity = sourceBucket.Quantity;
+                    }
+                    if (sourceBucket.AllocatedQuantity > sourceBucket.Quantity)
+                    {
+                        allocatedMoved = sourceBucket.AllocatedQuantity - sourceBucket.Quantity;
+                        sourceBucket.AllocatedQuantity = sourceBucket.Quantity;
+                    }
+                }
                 sourceBucket.LastUpdated = nowUtc;
 
                 var dest = context.InventoryStocks.Local.FirstOrDefault(x =>
@@ -609,14 +633,18 @@ public sealed class PutawayService(
                                x.Status == item.InventoryStatus &&
                                x.LocationId == destination.Id &&
                                x.LotId == sourceBucket.LotId &&
-                               x.SerialId == sourceBucket.SerialId)
+                               x.SerialId == sourceBucket.SerialId &&
+                               x.HandlingUnitId == sourceBucket.HandlingUnitId &&
+                               x.OwnerId == sourceBucket.OwnerId)
                            ?? await context.InventoryStocks.FirstOrDefaultAsync(x =>
                                x.ProductId == item.ProductId &&
                                x.WarehouseId == task.WarehouseId &&
                                x.Status == item.InventoryStatus &&
                                x.LocationId == destination.Id &&
                                x.LotId == sourceBucket.LotId &&
-                               x.SerialId == sourceBucket.SerialId, token);
+                               x.SerialId == sourceBucket.SerialId &&
+                               x.HandlingUnitId == sourceBucket.HandlingUnitId &&
+                               x.OwnerId == sourceBucket.OwnerId, token);
                 if (dest is null)
                 {
                     context.InventoryStocks.Add(new InventoryStock
@@ -630,6 +658,8 @@ public sealed class PutawayService(
                         HandlingUnitId = sourceBucket.HandlingUnitId,
                         OwnerId = sourceBucket.OwnerId,
                         Quantity = chunk,
+                        ReservedQuantity = reservedMoved,
+                        AllocatedQuantity = allocatedMoved,
                         MovingAverageCost = sourceBucket.MovingAverageCost,
                         LastUpdated = nowUtc
                     });
@@ -637,6 +667,8 @@ public sealed class PutawayService(
                 else
                 {
                     dest.Quantity += chunk;
+                    dest.ReservedQuantity += reservedMoved;
+                    dest.AllocatedQuantity += allocatedMoved;
                     dest.LastUpdated = nowUtc;
                 }
 
@@ -713,6 +745,10 @@ public sealed class PutawayService(
                 remainingToMove -= chunk;
             }
             item.MovedBaseQuantity+=baseQty; task.Status=task.Items.All(x=>x.RemainingBaseQuantity==0)?PutawayTaskStatus.Completed:PutawayTaskStatus.InProgress; task.StartedAt??=nowUtc; if(task.Status==PutawayTaskStatus.Completed)task.CompletedAt=nowUtc;
+            if (isPutback && task.Status == PutawayTaskStatus.Completed)
+            {
+                await CompletePutbackOrderCancellationAsync(task, baseQty, nowUtc, token);
+            }
             context.AuditLogs.Add(Audit(currentUser.UserId,"PutawayTask.Moved",task.Id,task.WarehouseId,$"ItemId: {item.Id}; BaseQuantity: {baseQty}; DestinationId: {destination.Id}"));
             await context.SaveChangesAsync(token); if(tx is not null)await tx.CommitAsync(token); return await GetAsync(id,token);
         }
@@ -742,7 +778,232 @@ public sealed class PutawayService(
     {
         await using var tx=context.Database.CurrentTransaction is null?await context.Database.BeginTransactionAsync(token):null; try{var task=await Load(id,token);if(!allowed.Contains(task.Status))throw Conflict("Trạng thái nhiệm vụ không còn phù hợp.");ApplyVersion(task.RowVersion,dto.RowVersion,context.Entry(task).Property(x=>x.RowVersion));change(task);context.AuditLogs.Add(Audit(currentUser.UserId,$"PutawayTask.{action}",task.Id,task.WarehouseId,$"Status: {task.Status}"));await context.SaveChangesAsync(token);if(tx is not null)await tx.CommitAsync(token);return await GetAsync(id,token);}catch(DbUpdateConcurrencyException ex){if(tx is not null)await tx.RollbackAsync(token);throw new ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.",ex);}catch{if(tx is not null)await tx.RollbackAsync(token);throw;}
     }
-    private async Task<PutawayTask> Load(int id,CancellationToken token){var task=await Query().SingleOrDefaultAsync(x=>x.Id==id,token)??throw new NotFoundException("Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.");await warehouses.EnsureWarehouseAccessAsync(task.WarehouseId,token);return task;}
+    private async Task<PutawayTask> Load(int id,CancellationToken token){var task=await LoadTaskWithFallbackAsync(id, asNoTracking: false, token)??throw new NotFoundException("Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.");await warehouses.EnsureWarehouseAccessAsync(task.WarehouseId,token);return task;}
+    private async Task<PutawayTask?> LoadTaskWithFallbackAsync(int id, bool asNoTracking, CancellationToken token)
+    {
+        var query = asNoTracking ? Query().AsNoTracking() : Query();
+        var task = await query.SingleOrDefaultAsync(x => x.Id == id, token);
+        if (task is not null) return task;
+
+        var fallbackQuery = context.PutawayTasks
+            .Include(x => x.Warehouse)
+            .Include(x => x.Items)
+                .ThenInclude(x => x.SourceLocation)
+            .AsQueryable();
+        if (asNoTracking) fallbackQuery = fallbackQuery.AsNoTracking();
+        task = await fallbackQuery.SingleOrDefaultAsync(x => x.Id == id, token);
+        if (task is null) return null;
+
+        if (task.Items.Count == 0)
+        {
+            var itemsQuery = context.PutawayTaskItems
+                .Include(x => x.SourceLocation)
+                .Where(x => x.PutawayTaskId == id);
+            if (asNoTracking) itemsQuery = itemsQuery.AsNoTracking();
+            var items = await itemsQuery.ToListAsync(token);
+            foreach (var it in items) task.Items.Add(it);
+        }
+
+        return task;
+    }
+    private static bool IsPutbackTask(PutawayTask task) =>
+        !string.IsNullOrWhiteSpace(task.TaskType) &&
+        task.TaskType.Contains("Putback", StringComparison.OrdinalIgnoreCase);
+
+    private async Task CompletePutbackOrderCancellationAsync(
+        PutawayTask completedTask,
+        decimal movedBaseQty,
+        DateTime nowUtc,
+        CancellationToken token)
+    {
+        var taskProductIds = completedTask.Items.Select(i => i.ProductId).Distinct().ToList();
+        var otherPendingPutbackTasks = await context.PutawayTasks.AsNoTracking()
+            .Where(t => t.Id != completedTask.Id &&
+                        t.WarehouseId == completedTask.WarehouseId &&
+                        t.TaskType != null &&
+                        t.TaskType.Contains("Putback") &&
+                        t.Status != PutawayTaskStatus.Completed &&
+                        t.Status != PutawayTaskStatus.Cancelled &&
+                        (completedTask.ReceiptId <= 0 || t.ReceiptId == completedTask.ReceiptId))
+            .AnyAsync(token);
+        if (otherPendingPutbackTasks) return;
+
+        var exportReceipts = await context.ExportReceipts
+            .Include(e => e.Details)
+            .Include(e => e.SalesOrder)
+            .Where(e => e.WarehouseId == completedTask.WarehouseId &&
+                        (e.Status == ReceiptStatus.CancelPendingPutback ||
+                         (completedTask.ReceiptId > 0 && (e.Id == completedTask.ReceiptId || e.SalesOrderId == completedTask.ReceiptId))))
+            .ToListAsync(token);
+
+        var matchingExportReceipts = exportReceipts
+            .Where(e => (completedTask.ReceiptId > 0 && (e.Id == completedTask.ReceiptId || e.SalesOrderId == completedTask.ReceiptId)) ||
+                        e.Status == ReceiptStatus.CancelPendingPutback &&
+                        (e.Details.Count == 0 || e.Details.Any(d => taskProductIds.Contains(d.ProductId))))
+            .ToList();
+
+        var salesOrderIds = matchingExportReceipts
+            .Where(e => e.SalesOrderId.HasValue)
+            .Select(e => e.SalesOrderId!.Value)
+            .ToHashSet();
+        if (completedTask.ReceiptId > 0) salesOrderIds.Add(completedTask.ReceiptId);
+
+        var marketplaceOrderIds = matchingExportReceipts
+            .Where(e => !string.IsNullOrWhiteSpace(e.MarketplaceOrderId))
+            .Select(e => e.MarketplaceOrderId!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var salesOrders = await context.SalesOrders
+            .Include(o => o.Lines)
+            .Where(o => o.Status == SalesOrderStatus.CancelPendingPutback ||
+                        salesOrderIds.Contains(o.Id) ||
+                        (!string.IsNullOrEmpty(o.ExternalOrderId) && marketplaceOrderIds.Contains(o.ExternalOrderId)) ||
+                        (!string.IsNullOrEmpty(o.OrderCode) && marketplaceOrderIds.Contains(o.OrderCode)))
+            .ToListAsync(token);
+
+        var matchingSalesOrders = salesOrders
+            .Where(o => salesOrderIds.Contains(o.Id) ||
+                        (!string.IsNullOrEmpty(o.ExternalOrderId) && marketplaceOrderIds.Contains(o.ExternalOrderId)) ||
+                        (!string.IsNullOrEmpty(o.OrderCode) && marketplaceOrderIds.Contains(o.OrderCode)) ||
+                        (o.Status == SalesOrderStatus.CancelPendingPutback &&
+                         (o.Lines.Count == 0 || o.Lines.Any(l => taskProductIds.Contains(l.ProductId)))))
+            .ToList();
+
+        foreach (var so in matchingSalesOrders)
+        {
+            if (so.Status == SalesOrderStatus.CancelPendingPutback)
+            {
+                so.Status = SalesOrderStatus.Cancelled;
+            }
+            salesOrderIds.Add(so.Id);
+            if (!string.IsNullOrWhiteSpace(so.ExternalOrderId))
+            {
+                marketplaceOrderIds.Add(so.ExternalOrderId);
+            }
+            if (!string.IsNullOrWhiteSpace(so.OrderCode))
+            {
+                marketplaceOrderIds.Add(so.OrderCode);
+            }
+        }
+
+        if (matchingExportReceipts.Count == 0 && (salesOrderIds.Count > 0 || marketplaceOrderIds.Count > 0))
+        {
+            var linkedReceipts = exportReceipts
+                .Where(e => (e.SalesOrderId.HasValue && salesOrderIds.Contains(e.SalesOrderId.Value)) ||
+                            (!string.IsNullOrWhiteSpace(e.MarketplaceOrderId) && marketplaceOrderIds.Contains(e.MarketplaceOrderId!)))
+                .ToList();
+            matchingExportReceipts.AddRange(linkedReceipts);
+        }
+
+        var exportReceiptIds = new HashSet<int>();
+        foreach (var er in matchingExportReceipts)
+        {
+            if (er.Status is ReceiptStatus.CancelPendingPutback or ReceiptStatus.Approved or ReceiptStatus.Draft)
+            {
+                er.Status = ReceiptStatus.Cancelled;
+            }
+            exportReceiptIds.Add(er.Id);
+        }
+
+        var activeReservationStatuses = new[]
+        {
+            StockReservationStatus.Active,
+            StockReservationStatus.PartiallyConsumed,
+            StockReservationStatus.PartiallyAllocated,
+            StockReservationStatus.Allocated
+        };
+
+        var reservations = await context.StockReservations
+            .Where(r => r.WarehouseId == completedTask.WarehouseId &&
+                        activeReservationStatuses.Contains(r.Status) &&
+                        ((r.SourceType == "ExportReceipt" && r.SourceId.HasValue && exportReceiptIds.Contains(r.SourceId.Value)) ||
+                         (r.SourceType == "SalesOrder" && r.SourceId.HasValue && salesOrderIds.Contains(r.SourceId.Value)) ||
+                         taskProductIds.Contains(r.ProductId)))
+            .ToListAsync(token);
+
+        var matchingReservations = reservations
+            .Where(r => (r.SourceType == "ExportReceipt" && r.SourceId.HasValue && exportReceiptIds.Contains(r.SourceId.Value)) ||
+                        (r.SourceType == "SalesOrder" && r.SourceId.HasValue && salesOrderIds.Contains(r.SourceId.Value)))
+            .ToList();
+
+        if (matchingReservations.Count == 0)
+        {
+            matchingReservations = reservations
+                .Where(r => taskProductIds.Contains(r.ProductId))
+                .ToList();
+        }
+
+        var reservationIds = matchingReservations.Select(r => r.Id).ToHashSet();
+        var activeAllocations = reservationIds.Count > 0
+            ? await context.StockAllocations
+                .Where(a => reservationIds.Contains(a.ReservationId) &&
+                            (a.Status == StockAllocationStatus.Active ||
+                             a.Status == StockAllocationStatus.Picking ||
+                             a.Status == StockAllocationStatus.Picked))
+                .ToListAsync(token)
+            : [];
+
+        foreach (var alloc in activeAllocations)
+        {
+            alloc.Status = StockAllocationStatus.Released;
+            alloc.ReleasedAt = nowUtc;
+            alloc.ReleasedBy = currentUser.UserId;
+            alloc.ReleaseReason = "Putback completed";
+        }
+
+        var releasedByProduct = new Dictionary<int, decimal>();
+        foreach (var rsv in matchingReservations)
+        {
+            var unreleased = Math.Max(0m, rsv.Quantity - rsv.ConsumedQuantity - rsv.ReleasedQuantity);
+            rsv.ReleasedQuantity += unreleased;
+            rsv.AllocatedQuantity = 0m;
+            rsv.Status = StockReservationStatus.Released;
+            rsv.ReleasedAt = nowUtc;
+            rsv.ReleasedBy = currentUser.UserId;
+            rsv.ReleaseReason = "Putback completed";
+            releasedByProduct[rsv.ProductId] = releasedByProduct.GetValueOrDefault(rsv.ProductId) + unreleased;
+        }
+
+        foreach (var prodId in taskProductIds)
+        {
+            if (!releasedByProduct.ContainsKey(prodId))
+            {
+                var taskProdQty = completedTask.Items
+                    .Where(i => i.ProductId == prodId)
+                    .Sum(i => i.RequiredBaseQuantity > 0 ? i.RequiredBaseQuantity : movedBaseQty);
+                releasedByProduct[prodId] = taskProdQty;
+            }
+        }
+
+        var warehouseStocks = await context.InventoryStocks
+            .Where(s => s.WarehouseId == completedTask.WarehouseId && taskProductIds.Contains(s.ProductId))
+            .OrderByDescending(s => s.ReservedQuantity)
+            .ThenBy(s => s.Id)
+            .ToListAsync(token);
+
+        foreach (var (prodId, qtyToRelease) in releasedByProduct)
+        {
+            var remReserve = qtyToRelease;
+            var remAlloc = qtyToRelease;
+            foreach (var st in warehouseStocks.Where(s => s.ProductId == prodId))
+            {
+                if (remReserve > 0m && st.ReservedQuantity > 0m)
+                {
+                    var dec = Math.Min(remReserve, st.ReservedQuantity);
+                    st.ReservedQuantity -= dec;
+                    remReserve -= dec;
+                    st.LastUpdated = nowUtc;
+                }
+                if (remAlloc > 0m && st.AllocatedQuantity > 0m)
+                {
+                    var decAlloc = Math.Min(remAlloc, st.AllocatedQuantity);
+                    st.AllocatedQuantity -= decAlloc;
+                    remAlloc -= decAlloc;
+                    st.LastUpdated = nowUtc;
+                }
+            }
+        }
+    }
     // Hold destination eligibility through commit, including a concurrent master deactivation.
     private Task<WarehouseLocation?> LocationForMutation(int id, CancellationToken token) =>
         (context.Database.IsSqlServer()
@@ -757,12 +1018,14 @@ public sealed class PutawayService(
             ? context.Products.FromSqlInterpolated($"SELECT * FROM dbo.Products WITH (UPDLOCK, HOLDLOCK) WHERE TenantId = {context.CurrentTenantId} AND Id = {id}").AsNoTracking()
             : context.Products.AsNoTracking().Where(x => x.Id == id)).SingleOrDefaultAsync(token);
     private IQueryable<PutawayTask> Query()=>context.PutawayTasks.Include(x=>x.Receipt).Include(x=>x.Warehouse).Include(x=>x.Items).ThenInclude(x=>x.ReceiptLine).ThenInclude(x=>x.Product).ThenInclude(x=>x.Barcodes).Include(x=>x.Items).ThenInclude(x=>x.ReceiptLine).ThenInclude(x=>x.Product).ThenInclude(x=>x.Unit).Include(x=>x.Items).ThenInclude(x=>x.SourceLocation);
-    private void EnsureActor(PutawayTask task){if(task.AssignedUserId!=currentUser.UserId&&!currentUser.IsGlobalAdmin&&currentUser.Role is not "Admin" and not "Manager")throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");}
+    private void EnsureActor(PutawayTask task){if(IsPutbackTask(task)&&(!task.AssignedUserId.HasValue||task.AssignedUserId.Value<=0))return;if(task.AssignedUserId!=currentUser.UserId&&!currentUser.IsGlobalAdmin&&currentUser.Role is not "Admin" and not "Manager")throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");}
     private static decimal ToBase(decimal qty, string unit, PutawayTaskItem item)
     {
+        if (string.IsNullOrWhiteSpace(unit) || string.IsNullOrWhiteSpace(item.BaseUnitCodeSnapshot))
+            return qty;
         var code = unit.Trim().ToUpperInvariant();
         var baseCode = item.BaseUnitCodeSnapshot.Trim().ToUpperInvariant();
-        var opCode = item.OperationUnitCodeSnapshot.Trim().ToUpperInvariant();
+        var opCode = (item.OperationUnitCodeSnapshot ?? string.Empty).Trim().ToUpperInvariant();
         var prodUnitCode = item.ReceiptLine?.Product?.Unit?.Code?.Trim().ToUpperInvariant();
         var factor = item.ConversionFactorSnapshot > 0 ? item.ConversionFactorSnapshot : 1m;
         var result = (code == baseCode || (code == prodUnitCode && factor == 1m))
@@ -783,7 +1046,7 @@ public sealed class PutawayService(
         var canMutate=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff";
         return new PutawayTaskDto
         {
-            Id=t.Id,ReceiptId=t.ReceiptId,ReceiptCode=(t.Receipt.Code??string.Empty).Trim(),WarehouseId=t.WarehouseId,WarehouseCode=(t.Warehouse.Code??string.Empty).Trim(),WarehouseName=(t.Warehouse.Name??string.Empty).Trim(),Status=t.Status.ToString(),AssignedUserId=t.AssignedUserId,RequiredBaseQuantity=t.Items.Sum(x=>x.RequiredBaseQuantity),MovedBaseQuantity=t.Items.Sum(x=>x.MovedBaseQuantity),CreatedAt=t.CreatedAt,RowVersion=canMutate?Convert.ToBase64String(t.RowVersion):null,ExceptionReason=canMutate?t.ExceptionReason:null,
+            Id=t.Id,ReceiptId=t.ReceiptId,ReceiptCode=(t.Receipt?.Code??string.Empty).Trim(),WarehouseId=t.WarehouseId,WarehouseCode=(t.Warehouse?.Code??string.Empty).Trim(),WarehouseName=(t.Warehouse?.Name??string.Empty).Trim(),Status=t.Status.ToString(),AssignedUserId=t.AssignedUserId,RequiredBaseQuantity=t.Items.Sum(x=>x.RequiredBaseQuantity),MovedBaseQuantity=t.Items.Sum(x=>x.MovedBaseQuantity),CreatedAt=t.CreatedAt,RowVersion=canMutate&&t.RowVersion is { Length: > 0 }?Convert.ToBase64String(t.RowVersion):null,ExceptionReason=canMutate?t.ExceptionReason:null,
             Items=t.Items.Select(x=>
             {
                 var reqType=RequiredType(x.InventoryStatus);
@@ -799,12 +1062,12 @@ public sealed class PutawayService(
                 if((x.OperationUnitId==x.BaseUnitId&&x.ConversionFactorSnapshot<=1m)||string.Equals(opUom,baseUom,StringComparison.OrdinalIgnoreCase)) opUom=baseUom;
                 return new PutawayTaskItemDto
                 {
-                    Id=x.Id,ReceiptLineId=x.ReceiptLineId,ProductId=x.ProductId,ProductCode=(x.ReceiptLine?.Product?.Code??string.Empty).Trim(),ProductName=(x.ReceiptLine?.Product?.Name??string.Empty).Trim(),ProductBarcodes=x.ReceiptLine?.Product?.Barcodes.Select(b=>b.Value.Trim()).ToList()??[],InventoryStatus=x.InventoryStatus.ToString(),SourceLocationId=x.SourceLocationId,SourceLocationCode=(x.SourceLocation.Code??string.Empty).Trim(),
+                    Id=x.Id,ReceiptLineId=x.ReceiptLineId,ProductId=x.ProductId,ProductCode=(x.ReceiptLine?.Product?.Code??string.Empty).Trim(),ProductName=(x.ReceiptLine?.Product?.Name??string.Empty).Trim(),ProductBarcodes=x.ReceiptLine?.Product?.Barcodes.Select(b=>b.Value.Trim()).ToList()??[],InventoryStatus=x.InventoryStatus.ToString(),SourceLocationId=x.SourceLocationId,SourceLocationCode=(x.SourceLocation?.Code??string.Empty).Trim(),
                     RecommendedLocationId=recLoc?.Id,RecommendedLocationCode=recLoc?.Code.Trim(),
                     ConfirmedLocationId=lastMove?.ToLocationId,ConfirmedLocationCode=lastMove?.ToLocationCode.Trim(),
                     OperationUnitCode=opUom,
                     BaseUnitCode=baseUom,
-                    RequiredOperationQuantity=x.RequiredOperationQuantity,RequiredBaseQuantity=x.RequiredBaseQuantity,MovedBaseQuantity=x.MovedBaseQuantity,RemainingBaseQuantity=x.RemainingBaseQuantity,RowVersion=canMutate?Convert.ToBase64String(x.RowVersion):null
+                    RequiredOperationQuantity=x.RequiredOperationQuantity,RequiredBaseQuantity=x.RequiredBaseQuantity,MovedBaseQuantity=x.MovedBaseQuantity,RemainingBaseQuantity=x.RemainingBaseQuantity,RowVersion=canMutate&&x.RowVersion is { Length: > 0 }?Convert.ToBase64String(x.RowVersion):null
                 };
             }).ToList(),
             Movements=moves

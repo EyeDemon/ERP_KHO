@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
-[ApiController,Route("api/purchase-orders"),Authorize]
+[ApiController, Route("api/purchase-orders"), Route("api/v1/purchase-orders"), Authorize]
 public sealed class PurchaseOrdersController(
     IInboundPlanningService service,
     ErpKhoDbContext db = null!,

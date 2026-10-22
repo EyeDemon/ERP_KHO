@@ -153,20 +153,30 @@ describe('Products category and barcode UI (mocked API)', () => {
     fireEvent.click(view.getByRole('button', { name: 'Lưu định mức Combo / Kit' }));
     await waitFor(() =>
       expect(apiClient.post).toHaveBeenCalledWith(
-        '/api/Products/1/bundle-components',
+        '/api/v1/products/1/bundle-components',
         expect.objectContaining({ parentProductId: 1, quantity: 3 }),
       ),
     );
     expect(await view.findByRole('table', { name: 'Danh sách thành phần Combo / Kit' })).toBeTruthy();
 
+    fireEvent.click(view.getByRole('button', { name: 'Tải cấu phần Combo / Kit' }));
+    await waitFor(() =>
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/products/1/bundle-components'),
+    );
+
     fireEvent.change(view.getByLabelText('Giá trị đơn hàng tối thiểu (VNĐ)'), { target: { value: '600000' } });
     fireEvent.click(view.getByRole('button', { name: 'Lưu quy tắc Quà tặng 0đ' }));
     await waitFor(() =>
       expect(apiClient.post).toHaveBeenCalledWith(
-        '/api/sales-orders/promotion-gift-rules',
+        '/api/v1/sales-orders/promotion-gift-rules',
         expect.objectContaining({ minOrderValue: 600000, unitPrice: 0 }),
       ),
     );
     expect(await view.findByRole('table', { name: 'Danh sách quy tắc quà tặng 0đ' })).toBeTruthy();
+
+    fireEvent.click(view.getByRole('button', { name: 'Tải danh sách Quy tắc Quà tặng 0đ' }));
+    await waitFor(() =>
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/sales-orders/promotion-gift-rules'),
+    );
   });
 });

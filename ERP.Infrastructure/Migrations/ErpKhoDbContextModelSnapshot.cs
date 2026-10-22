@@ -215,6 +215,9 @@ namespace ERP.Infrastructure.Migrations
                         .HasColumnType("nchar(64)")
                         .IsFixedLength();
 
+                    b.Property<int?>("ImpersonatedBySupportUserId")
+                        .HasColumnType("int");
+
                     b.Property<string>("IpAddress")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
@@ -435,6 +438,264 @@ namespace ERP.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_BusinessPartners_Role", "[IsSupplier] = 1 OR [IsCustomer] = 1");
                         });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.CarrierLocationMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AdministrativeUnitId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CarrierCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("CarrierDistrictId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("CarrierProvinceId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("CarrierWardCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("RouteCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("SortingHubCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdministrativeUnitId");
+
+                    b.HasIndex("TenantId", "AdministrativeUnitId", "CarrierCode")
+                        .IsUnique()
+                        .HasDatabaseName("UX_CarrierLocationMappings_TenantId_AdminUnit_Carrier");
+
+                    b.ToTable("CarrierLocationMappings", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ChannelSkuMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ChannelItemId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("ChannelSkuCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ChannelVariationId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<decimal>("ConversionFactor")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)")
+                        .HasDefaultValue(1m);
+
+                    b.Property<int>("InternalProductId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("LastPushedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("LastPushedQty")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<int>("ShopId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InternalProductId");
+
+                    b.HasIndex("ShopId");
+
+                    b.HasIndex("TenantId", "ShopId", "ChannelSkuCode")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ChannelSkuMappings_TenantId_ShopId_ChannelSkuCode");
+
+                    b.ToTable("ChannelSkuMappings", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.CustomerReturn", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ExportReceiptId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("OrderNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("ReturnCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("ReturnReason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("SalesOrderId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<string>("TrackingNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExportReceiptId");
+
+                    b.HasIndex("SalesOrderId");
+
+                    b.HasIndex("WarehouseId");
+
+                    b.HasIndex("TenantId", "ReturnCode")
+                        .IsUnique()
+                        .HasDatabaseName("UX_CustomerReturns_TenantId_ReturnCode");
+
+                    b.ToTable("CustomerReturns", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.CustomerReturnLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Condition")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("CustomerReturnId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Disposition")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int?>("PackagingProductId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("PackagingQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int?>("QuarantineLocationId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("TargetLocationId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<decimal>("UnitCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerReturnId");
+
+                    b.HasIndex("PackagingProductId");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("QuarantineLocationId");
+
+                    b.HasIndex("TargetLocationId");
+
+                    b.ToTable("CustomerReturnLines", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.Dock", b =>
@@ -710,6 +971,26 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int?>("ApprovedBy")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("AwbFirstPrintedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("AwbLabelUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("AwbPrintCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("BuyerTaxCode")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("CarrierCode")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -741,6 +1022,25 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int?>("DispatchedBy")
                         .HasColumnType("int");
 
+                    b.Property<string>("EInvoiceNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("EInvoiceProvider")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("EInvoiceStatus")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("MarketplaceOrderId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime?>("MarketplaceShipByUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -765,6 +1065,10 @@ namespace ERP.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
                         .HasDefaultValue(1);
+
+                    b.Property<string>("TrackingNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<int>("WarehouseId")
                         .HasColumnType("int");
@@ -817,9 +1121,15 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int>("ExportReceiptId")
                         .HasColumnType("int");
 
+                    b.Property<bool>("IsFreeGift")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("ParentBundleProductId")
+                        .HasColumnType("int");
 
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
@@ -994,6 +1304,122 @@ namespace ERP.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_HandlingUnitContents_Quantity", "[Quantity] > 0");
                         });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.HandoverManifest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CarrierCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("DriverName")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("DriverPhone")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("ManifestCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime?>("SealedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("SealedBy")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<int>("TotalPackages")
+                        .HasColumnType("int");
+
+                    b.Property<string>("VehiclePlate")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WarehouseId");
+
+                    b.HasIndex("TenantId", "ManifestCode")
+                        .IsUnique()
+                        .HasDatabaseName("UX_HandoverManifests_TenantId_ManifestCode");
+
+                    b.ToTable("HandoverManifests", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.HandoverManifestLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ExportReceiptId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ManifestId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("MarketplaceOrderId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("ScannedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ScannedBy")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<string>("TrackingNumber")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExportReceiptId");
+
+                    b.HasIndex("ManifestId");
+
+                    b.HasIndex("TenantId", "TrackingNumber")
+                        .IsUnique()
+                        .HasDatabaseName("UX_HandoverManifestLines_TenantId_TrackingNumber");
+
+                    b.ToTable("HandoverManifestLines", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.IdempotencyRecord", b =>
@@ -1422,6 +1848,129 @@ namespace ERP.Infrastructure.Migrations
 
                             t.HasCheckConstraint("CK_ImportReceiptInventoryIdentities_SerialQuantity", "[SerialNumber] IS NULL OR [BaseQuantity] = 1");
                         });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.IntegrationInboxMessage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ExternalMessageId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ProcessedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("SourceSystem")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "SourceSystem", "ExternalMessageId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_IntegrationInboxMessages_TenantId_SourceSystem_ExternalMessageId");
+
+                    b.ToTable("IntegrationInboxMessages", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.IntegrationOutboxMessage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AggregateId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("AggregateType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EventId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("NextRetryAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "EventId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_IntegrationOutboxMessages_TenantId_EventId");
+
+                    b.HasIndex("TenantId", "Status", "NextRetryAt");
+
+                    b.ToTable("IntegrationOutboxMessages", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.InventoryLocationMovement", b =>
@@ -1853,6 +2402,15 @@ namespace ERP.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<decimal>("AllocatedQuantity")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<int>("CanonicalHandlingUnitId")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("int")
+                        .HasComputedColumnSql("COALESCE([HandlingUnitId], 0)", true);
+
                     b.Property<int>("CanonicalLocationId")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("int")
@@ -1863,10 +2421,23 @@ namespace ERP.Infrastructure.Migrations
                         .HasColumnType("int")
                         .HasComputedColumnSql("COALESCE([LotId], 0)", true);
 
+                    b.Property<int>("CanonicalOwnerId")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("int")
+                        .HasComputedColumnSql("COALESCE([OwnerId], 0)", true);
+
                     b.Property<int>("CanonicalSerialId")
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("int")
                         .HasComputedColumnSql("COALESCE([SerialId], 0)", true);
+
+                    b.Property<byte[]>("GrainHash")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varbinary(32)");
+
+                    b.Property<int?>("HandlingUnitId")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("LastUpdated")
                         .HasColumnType("datetime2");
@@ -1874,7 +2445,18 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int>("LocationId")
                         .HasColumnType("int");
 
+                    b.Property<decimal>("LockedQuantity")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
                     b.Property<int?>("LotId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("MovingAverageCost")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<int?>("OwnerId")
                         .HasColumnType("int");
 
                     b.Property<int>("ProductId")
@@ -1882,12 +2464,12 @@ namespace ERP.Infrastructure.Migrations
 
                     b.Property<decimal>("Quantity")
                         .IsConcurrencyToken()
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
 
                     b.Property<decimal>("ReservedQuantity")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
@@ -1923,13 +2505,17 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("WarehouseId");
 
-                    b.HasIndex("TenantId", "ProductId", "WarehouseId", "Status", "CanonicalLocationId", "CanonicalLotId", "CanonicalSerialId")
+                    b.HasIndex("TenantId", "GrainHash")
+                        .IsUnique()
+                        .HasDatabaseName("IX_InventoryStocks_Tenant_GrainHash");
+
+                    b.HasIndex("TenantId", "ProductId", "WarehouseId", "Status", "CanonicalLocationId", "CanonicalLotId", "CanonicalSerialId", "CanonicalHandlingUnitId", "CanonicalOwnerId")
                         .IsUnique()
                         .HasDatabaseName("IX_InventoryStocks_CanonicalBucket");
 
                     b.ToTable("InventoryStocks", null, t =>
                         {
-                            t.HasCheckConstraint("CK_InventoryStocks_Reservation", "[ReservedQuantity] >= 0 AND [Quantity] >= [ReservedQuantity]");
+                            t.HasCheckConstraint("CK_InventoryStocks_Reservation", "[ReservedQuantity] >= 0 AND [AllocatedQuantity] >= 0 AND [LockedQuantity] >= 0 AND [Quantity] >= [ReservedQuantity] AND [Quantity] >= [AllocatedQuantity] + [LockedQuantity]");
                         });
                 });
 
@@ -1953,6 +2539,9 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int?>("FromLocationId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("HandlingUnitId")
+                        .HasColumnType("int");
+
                     b.Property<int>("InventoryStatus")
                         .HasColumnType("int");
 
@@ -1966,12 +2555,15 @@ namespace ERP.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<int?>("OwnerId")
+                        .HasColumnType("int");
+
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
 
                     b.Property<decimal>("Quantity")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
 
                     b.Property<string>("ReasonCode")
                         .HasMaxLength(40)
@@ -1990,6 +2582,9 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int?>("SerialId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("SourceDocumentLineId")
+                        .HasColumnType("int");
+
                     b.Property<int>("TenantId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
@@ -2006,6 +2601,10 @@ namespace ERP.Infrastructure.Migrations
 
                     b.Property<int>("TransactionType")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("UnitCost")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
 
                     b.Property<int>("WarehouseId")
                         .HasColumnType("int");
@@ -2056,6 +2655,90 @@ namespace ERP.Infrastructure.Migrations
                         .HasFilter("[ReferenceType] = 'Shipment'");
 
                     b.ToTable("InventoryTransactions", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.MarketplaceShop", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ChannelCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DefaultWarehouseId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("EncryptedAccessToken")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("EncryptedRefreshToken")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsPrimaryShop")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("LowStockThreshold")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)")
+                        .HasDefaultValue(5m);
+
+                    b.Property<decimal>("ReserveRatioPct")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(100m);
+
+                    b.Property<decimal>("SafetyBufferQty")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<string>("ShopCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("ShopName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<DateTime?>("TokenExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("WebhookSecret")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DefaultWarehouseId");
+
+                    b.HasIndex("TenantId", "ChannelCode", "ShopCode")
+                        .IsUnique()
+                        .HasDatabaseName("UX_MarketplaceShops_TenantId_ChannelCode_ShopCode");
+
+                    b.ToTable("MarketplaceShops", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.PackingSession", b =>
@@ -2119,6 +2802,77 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("WarehouseId", "Status", "CreatedAt");
 
                     b.ToTable("PackingSessions", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PackingVideoEvidence", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CameraStationId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("DurationSeconds")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("EndedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ExportReceiptId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("OrderCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int?>("PackingSessionId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("RecordedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("StorageUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<string>("TrackingNumber")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("VideoHashSha256")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExportReceiptId");
+
+                    b.HasIndex("PackingSessionId");
+
+                    b.HasIndex("TenantId", "TrackingNumber")
+                        .HasDatabaseName("IX_PackingVideoEvidences_TenantId_TrackingNumber");
+
+                    b.ToTable("PackingVideoEvidences", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.PartnerDebtInvoice", b =>
@@ -2517,6 +3271,10 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
+                    b.Property<decimal>("MovingAverageCost")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -2613,6 +3371,48 @@ namespace ERP.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.ProductBundleComponent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ComponentProductId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("ComponentQuantity")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("ParentProductId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ComponentProductId");
+
+                    b.HasIndex("ParentProductId");
+
+                    b.HasIndex("TenantId", "ParentProductId", "ComponentProductId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ProductBundleComponents_TenantId_Parent_Component");
+
+                    b.ToTable("ProductBundleComponents", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.ProductCategory", b =>
                 {
                     b.Property<int>("Id")
@@ -2698,6 +3498,78 @@ namespace ERP.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("CK_ProductUoms_ConversionFactor", "[ConversionFactor] > 0");
                         });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PromotionGiftRule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("AutoSkipWhenOutOfStock")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("GiftProductId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("GiftQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("GiftUnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("MinOrderAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("MinTriggerQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("RuleCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("RuleName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<int?>("TriggerProductId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GiftProductId");
+
+                    b.HasIndex("TriggerProductId");
+
+                    b.HasIndex("WarehouseId");
+
+                    b.HasIndex("TenantId", "RuleCode")
+                        .IsUnique()
+                        .HasDatabaseName("UX_PromotionGiftRules_TenantId_RuleCode");
+
+                    b.ToTable("PromotionGiftRules", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.PurchaseOrder", b =>
@@ -2931,6 +3803,10 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
+                    b.Property<string>("TaskType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("TenantId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
@@ -2968,8 +3844,8 @@ namespace ERP.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<decimal>("ConversionFactorSnapshot")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
+                        .HasPrecision(18, 8)
+                        .HasColumnType("decimal(18,8)");
 
                     b.Property<int>("ConversionVersionSnapshot")
                         .HasColumnType("int");
@@ -3732,6 +4608,105 @@ namespace ERP.Infrastructure.Migrations
                     b.ToTable("RolePermissions", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.SaasBillingInvoice", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AmountVnd")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("InvoiceCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime?>("PaidAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PaymentProvider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("PlanCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("QrPayload")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "InvoiceCode")
+                        .IsUnique()
+                        .HasDatabaseName("UX_SaasBillingInvoices_TenantId_InvoiceCode");
+
+                    b.ToTable("SaasBillingInvoices", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.SaasPlan", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("MaxUsers")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MaxWarehouses")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MonthlyOrderQuota")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("MonthlyPriceVnd")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<string>("PlanCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("PlanName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlanCode")
+                        .IsUnique()
+                        .HasDatabaseName("UX_SaasPlans_PlanCode");
+
+                    b.ToTable("SaasPlans", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.SalesOrder", b =>
                 {
                     b.Property<int>("Id")
@@ -3842,9 +4817,15 @@ namespace ERP.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<bool>("IsFreeGift")
+                        .HasColumnType("bit");
+
                     b.Property<decimal>("OrderedQuantity")
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
+
+                    b.Property<int?>("ParentBundleProductId")
+                        .HasColumnType("int");
 
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
@@ -4010,6 +4991,91 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("WarehouseId", "Status", "CreatedAt");
 
                     b.ToTable("Shipments", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ShipmentFinancialLedger", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("ActualCodCollected")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal>("ActualShippingFee")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<string>("CarrierCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("EstimatedShippingFee")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal>("ExpectedCodAmount")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<int?>("ExportReceiptId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("FeeOverchargeVariance")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal>("NetPayoutAmount")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal>("PlatformCommissionFee")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<string>("ReconciliationStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<decimal>("ReturnFee")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<DateTime?>("SettledAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ShipmentId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<string>("TrackingNumber")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExportReceiptId");
+
+                    b.HasIndex("ShipmentId");
+
+                    b.HasIndex("TenantId", "TrackingNumber")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ShipmentFinancialLedgers_TenantId_TrackingNumber");
+
+                    b.ToTable("ShipmentFinancialLedgers", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.ShipmentHandlingUnit", b =>
@@ -4276,6 +5342,9 @@ namespace ERP.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<int?>("HandlingUnitId")
+                        .HasColumnType("int");
+
                     b.Property<int>("InventoryStatus")
                         .HasColumnType("int");
 
@@ -4285,12 +5354,15 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int?>("LotId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("OwnerId")
+                        .HasColumnType("int");
+
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
 
                     b.Property<decimal>("Quantity")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
 
                     b.Property<string>("ReleaseReason")
                         .HasMaxLength(500)
@@ -4372,19 +5444,30 @@ namespace ERP.Infrastructure.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<decimal>("AllocatedQuantity")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
 
                     b.Property<int>("AllocationVersion")
                         .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.Property<string>("BaseUomCodeSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("BaseUomDecimalPlacesSnapshot")
+                        .HasColumnType("int");
+
+                    b.Property<int>("BaseUomIdSnapshot")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("ConsumedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<decimal>("ConsumedQuantity")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
@@ -4399,8 +5482,8 @@ namespace ERP.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<decimal>("Quantity")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
 
                     b.Property<string>("ReleaseReason")
                         .HasMaxLength(500)
@@ -4413,8 +5496,8 @@ namespace ERP.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<decimal>("ReleasedQuantity")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
 
                     b.Property<string>("ReservationCode")
                         .IsRequired()
@@ -4708,6 +5791,106 @@ namespace ERP.Infrastructure.Migrations
                     b.ToTable("Stocktakes", (string)null);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.StocktakeAdjustmentProposal", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ApprovedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ApprovedBy")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("CountedQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedBy")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("DeltaQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<bool>("IsAutoApproved")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ProposalCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("ReasonCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int?>("StocktakeId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("SystemQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<decimal>("UnitCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("VariancePct")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("VarianceValue")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LocationId");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("StocktakeId");
+
+                    b.HasIndex("WarehouseId");
+
+                    b.HasIndex("TenantId", "ProposalCode")
+                        .IsUnique()
+                        .HasDatabaseName("UX_StocktakeAdjustmentProposals_TenantId_ProposalCode");
+
+                    b.ToTable("StocktakeAdjustmentProposals", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.StocktakeDetail", b =>
                 {
                     b.Property<int>("Id")
@@ -4757,6 +5940,122 @@ namespace ERP.Infrastructure.Migrations
                         .HasFilter("[LocationId] IS NOT NULL");
 
                     b.ToTable("StocktakeDetails", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.SupportImpersonationSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("GrantedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("GrantedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("ReadOnlyScope")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("SessionCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("SupportAgentUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SupportTicketCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "SessionCode")
+                        .IsUnique()
+                        .HasDatabaseName("UX_SupportImpersonationSessions_TenantId_SessionCode");
+
+                    b.ToTable("SupportImpersonationSessions", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.TenantSubscription", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CurrentMonthOrderCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CurrentPeriodEndUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CurrentPeriodStartUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("MaxUsers")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MaxWarehouses")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MonthlyOrderQuota")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PlanCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<DateTime?>("TrialEndsAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_TenantSubscriptions_TenantId");
+
+                    b.ToTable("TenantSubscriptions", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.Unit", b =>
@@ -4978,6 +6277,69 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("WarehouseId");
 
                     b.ToTable("UserWarehouses", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.VnAdministrativeUnit", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DistrictCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("DistrictName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Keywords")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ProvinceCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("ProvinceName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<string>("WardCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("WardName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "ProvinceCode", "DistrictCode", "WardCode")
+                        .IsUnique()
+                        .HasDatabaseName("UX_VnAdministrativeUnits_TenantId_Codes");
+
+                    b.ToTable("VnAdministrativeUnits", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.Warehouse", b =>
@@ -5470,6 +6832,87 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Warehouse");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.CarrierLocationMapping", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.VnAdministrativeUnit", "AdministrativeUnit")
+                        .WithMany("CarrierMappings")
+                        .HasForeignKey("AdministrativeUnitId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AdministrativeUnit");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ChannelSkuMapping", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Product", "InternalProduct")
+                        .WithMany()
+                        .HasForeignKey("InternalProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.MarketplaceShop", "Shop")
+                        .WithMany("SkuMappings")
+                        .HasForeignKey("ShopId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("InternalProduct");
+
+                    b.Navigation("Shop");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.CustomerReturn", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.ExportReceipt", null)
+                        .WithMany()
+                        .HasForeignKey("ExportReceiptId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ERP.Domain.Entities.SalesOrder", null)
+                        .WithMany()
+                        .HasForeignKey("SalesOrderId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.CustomerReturnLine", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.CustomerReturn", "CustomerReturn")
+                        .WithMany("Lines")
+                        .HasForeignKey("CustomerReturnId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Product", null)
+                        .WithMany()
+                        .HasForeignKey("PackagingProductId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ERP.Domain.Entities.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", null)
+                        .WithMany()
+                        .HasForeignKey("QuarantineLocationId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", null)
+                        .WithMany()
+                        .HasForeignKey("TargetLocationId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("CustomerReturn");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.Dock", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
@@ -5566,6 +7009,16 @@ namespace ERP.Infrastructure.Migrations
                         .HasForeignKey("DispatchedBy")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("ERP.Domain.Entities.SalesOrder", "SalesOrder")
+                        .WithMany()
+                        .HasForeignKey("SalesOrderId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ERP.Domain.Entities.Shipment", "Shipment")
+                        .WithMany()
+                        .HasForeignKey("ShipmentId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
                         .WithMany("ExportReceipts")
                         .HasForeignKey("WarehouseId")
@@ -5579,6 +7032,10 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Customer");
 
                     b.Navigation("DispatchedByUser");
+
+                    b.Navigation("SalesOrder");
+
+                    b.Navigation("Shipment");
 
                     b.Navigation("Warehouse");
                 });
@@ -5669,6 +7126,36 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("PickingTaskLine");
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.HandoverManifest", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Warehouse");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.HandoverManifestLine", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.ExportReceipt", "ExportReceipt")
+                        .WithMany()
+                        .HasForeignKey("ExportReceiptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.HandoverManifest", "Manifest")
+                        .WithMany("Lines")
+                        .HasForeignKey("ManifestId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ExportReceipt");
+
+                    b.Navigation("Manifest");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.IdempotencyRecord", b =>
@@ -6069,6 +7556,17 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Warehouse");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.MarketplaceShop", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "DefaultWarehouse")
+                        .WithMany()
+                        .HasForeignKey("DefaultWarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("DefaultWarehouse");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.PackingSession", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.User", "CreatedByUser")
@@ -6094,6 +7592,19 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("PickingTask");
 
                     b.Navigation("Warehouse");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PackingVideoEvidence", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.ExportReceipt", null)
+                        .WithMany()
+                        .HasForeignKey("ExportReceiptId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ERP.Domain.Entities.PackingSession", null)
+                        .WithMany()
+                        .HasForeignKey("PackingSessionId")
+                        .OnDelete(DeleteBehavior.NoAction);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.PartnerDebtInvoice", b =>
@@ -6232,6 +7743,25 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.ProductBundleComponent", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Product", "ComponentProduct")
+                        .WithMany()
+                        .HasForeignKey("ComponentProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Product", "ParentProduct")
+                        .WithMany()
+                        .HasForeignKey("ParentProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ComponentProduct");
+
+                    b.Navigation("ParentProduct");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.ProductUom", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.Product", "Product")
@@ -6249,6 +7779,25 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Product");
 
                     b.Navigation("Unit");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PromotionGiftRule", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Product", null)
+                        .WithMany()
+                        .HasForeignKey("GiftProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Product", null)
+                        .WithMany()
+                        .HasForeignKey("TriggerProductId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.NoAction);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.PurchaseOrder", b =>
@@ -6591,6 +8140,23 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Warehouse");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.ShipmentFinancialLedger", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.ExportReceipt", "ExportReceipt")
+                        .WithMany()
+                        .HasForeignKey("ExportReceiptId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ERP.Domain.Entities.Shipment", "Shipment")
+                        .WithMany()
+                        .HasForeignKey("ShipmentId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("ExportReceipt");
+
+                    b.Navigation("Shipment");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.ShipmentHandlingUnit", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.HandlingUnit", "HandlingUnit")
@@ -6880,6 +8446,31 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Warehouse");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.StocktakeAdjustmentProposal", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", null)
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ERP.Domain.Entities.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.Stocktake", null)
+                        .WithMany()
+                        .HasForeignKey("StocktakeId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.StocktakeDetail", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.WarehouseLocation", "Location")
@@ -7031,6 +8622,11 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("ImportReceipts");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.CustomerReturn", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.DockAppointment", b =>
                 {
                     b.Navigation("Events");
@@ -7046,6 +8642,11 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Children");
 
                     b.Navigation("Contents");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.HandoverManifest", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.ImportReceipt", b =>
@@ -7065,6 +8666,11 @@ namespace ERP.Infrastructure.Migrations
             modelBuilder.Entity("ERP.Domain.Entities.InventoryLot", b =>
                 {
                     b.Navigation("Serials");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.MarketplaceShop", b =>
+                {
+                    b.Navigation("SkuMappings");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.PackingSession", b =>
@@ -7196,6 +8802,11 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Sessions");
 
                     b.Navigation("WarehouseAccesses");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.VnAdministrativeUnit", b =>
+                {
+                    b.Navigation("CarrierMappings");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.Warehouse", b =>

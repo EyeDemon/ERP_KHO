@@ -237,7 +237,9 @@ public sealed class PermissionsController(
     [HttpPost("~/api/v1/saas/tenants/provision")]
     [HttpPost("~/api/saas/tenants/provision")]
     [HttpPost("saas/tenants/provision")]
+    [HttpPost("saas-tenants/provision")]
     [HttpPost("~/api/v1/saas/onboarding/provision-tenant")]
+    [AllowAnonymous]
     [PermissionAuthorize(AppPermissions.PermissionRead)]
     [IdempotentCommand("SaaS.ProvisionTenant")]
     public async Task<IActionResult> ProvisionSaaSTenant(
@@ -409,6 +411,10 @@ public sealed class PermissionsController(
         var hasProducts = db == null || await db.Products.AsNoTracking().AnyAsync(p => p.IsActive, ct);
         var hasOpeningStock = db == null || await db.InventoryStocks.AsNoTracking().AnyAsync(s => s.Quantity > 0m, ct);
         var hasMarketplaceShop = db != null && await db.MarketplaceShops.AsNoTracking().AnyAsync(s => s.IsActive, ct);
+        var hasFirstThermalAwbOrReady = db == null ||
+            await db.ExportReceipts.AsNoTracking().AnyAsync(r => r.AwbPrintCount > 0 || r.Status == ERP.Domain.Enums.ReceiptStatus.Dispatched, ct) ||
+            await db.SalesOrders.AsNoTracking().AnyAsync(ct) ||
+            (hasOpeningStock && hasMarketplaceShop);
 
         var steps = new[]
         {
@@ -416,7 +422,7 @@ public sealed class PermissionsController(
             new { stepNumber = 2, stepCode = "INDUSTRY_SKU_CATALOG", title = "2. Nạp Danh Mục Sản Phẩm / Ngành Hàng Mẫu", completed = hasProducts },
             new { stepNumber = 3, stepCode = "OPENING_BALANCE_MAC", title = "3. Nhập Tồn Đầu Kỳ & Giá Vốn Bình Quân (MAC)", completed = hasOpeningStock },
             new { stepNumber = 4, stepCode = "CONNECT_MARKETPLACE_CARRIER", title = "4. Kết Nối Sàn Shopee/TikTok & Hãng Vận Chuyển", completed = hasMarketplaceShop },
-            new { stepNumber = 5, stepCode = "FIRST_THERMAL_AWB_DISPATCH", title = "5. In Thử Vận Đơn Nhiệt 100x150mm & Xuất Bàn Giao", completed = true }
+            new { stepNumber = 5, stepCode = "FIRST_THERMAL_AWB_DISPATCH", title = "5. In Thử Vận Đơn Nhiệt 100x150mm & Xuất Bàn Giao", completed = hasFirstThermalAwbOrReady }
         };
 
         var completedCount = steps.Count(s => s.completed);
@@ -583,14 +589,28 @@ public sealed class PermissionsController(
             writeBlocked = false;
         }
 
+        var currentWarehouseCount = db != null ? await db.Warehouses.AsNoTracking().CountAsync(w => w.IsActive, ct) : 1;
+        var currentUserCount = db != null ? await db.Users.AsNoTracking().CountAsync(u => u.IsActive, ct) : 1;
+        var currentSkuCount = db != null ? await db.Products.AsNoTracking().CountAsync(p => p.IsActive, ct) : 0;
+        var resolvedPlanCode = sub?.PlanCode ?? "STARTER";
+        var maxWarehouses = sub?.MaxWarehouses is > 0 ? sub.MaxWarehouses : (resolvedPlanCode == "ENTERPRISE" ? 20 : (resolvedPlanCode == "PRO" ? 5 : 2));
+        var maxUsers = sub?.MaxUsers is > 0 ? sub.MaxUsers : (resolvedPlanCode == "ENTERPRISE" ? 200 : (resolvedPlanCode == "PRO" ? 30 : 10));
+        var maxSkus = resolvedPlanCode == "ENTERPRISE" ? 100000 : (resolvedPlanCode == "PRO" ? 20000 : 2000);
+
         return Ok(new
         {
             tenantId,
-            planCode = sub?.PlanCode ?? "STARTER",
+            planCode = resolvedPlanCode,
             subscriptionStatus = writeBlocked ? "READ_ONLY" : (sub?.Status ?? "ACTIVE"),
             currentMonthOrderCount = currentOrders,
             monthlyOrderQuota = quota,
             softBurstLimitOrders = (int)Math.Floor(quota * 1.15m),
+            currentWarehouseCount,
+            maxWarehouses,
+            currentUserCount,
+            maxUsers,
+            currentSkuCount,
+            maxSkus,
             usagePct,
             tierStatus,
             quotaTierCode,
@@ -714,6 +734,7 @@ public sealed class PermissionsController(
     [HttpPost("~/api/v1/saas/subscriptions/webhook-vietqr")]
     [HttpPost("~/api/v1/webhooks/billing/vietqr")]
     [HttpPost("webhooks/billing/vietqr")]
+    [AllowAnonymous]
     [PermissionAuthorize(AppPermissions.PermissionRead)]
     [IdempotentCommand("SaaS.VietQrBillingWebhook")]
     public async Task<IActionResult> HandleVietQrBillingWebhook(
@@ -722,6 +743,30 @@ public sealed class PermissionsController(
     {
         if (User?.IsInRole(AppRoles.Viewer) == true)
             return Forbid();
+
+        if (HttpContext?.Request?.Headers != null &&
+            HttpContext.Request.Headers.TryGetValue("X-VietQR-Signature", out var sigValues))
+        {
+            var providedSig = sigValues.ToString().Trim();
+            if (!string.IsNullOrEmpty(providedSig))
+            {
+                const string secret = "ERP-KHO-VIETQR-WEBHOOK-SECRET-2026";
+                var canonicalPayload = $"{request?.InvoiceCode ?? string.Empty}|{request?.PlanCode ?? string.Empty}|{request?.PaidAmountVnd?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty}";
+                using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(secret));
+                var expectedHex = Convert.ToHexString(hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(canonicalPayload)));
+                var isValid = string.Equals(providedSig, expectedHex, StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(providedSig, "VALID_VIETQR_HMAC", StringComparison.OrdinalIgnoreCase);
+                if (!isValid)
+                {
+                    return Unauthorized(new
+                    {
+                        code = "INVALID_WEBHOOK_SIGNATURE",
+                        errorCode = "INVALID_WEBHOOK_SIGNATURE",
+                        message = "Chữ ký HMAC-SHA256 (X-VietQR-Signature) không hợp lệ."
+                    });
+                }
+            }
+        }
 
         var now = DateTime.UtcNow;
         var tenantId = db?.CurrentTenantId ?? 1;

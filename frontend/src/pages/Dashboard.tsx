@@ -243,13 +243,14 @@ const Dashboard = () => {
   const [provisionTenantCode, setProvisionTenantCode] = useState('TENANT-SME-2026');
   const [provisionWarehouseName, setProvisionWarehouseName] = useState('Kho Trung tâm SME WH01');
   const [ownerFinance, setOwnerFinance] = useState({
-    netRevenue: 148500 * 1000,
-    cogsAmount: 92400 * 1000,
-    grossProfit: 41250 * 1000,
-    grossMarginPct: 27.8,
-    pendingCodAmount: 36800 * 1000,
-    receivedCodAmount: 111700 * 1000,
-    codWarningCount: 3,
+    netRevenue: 0,
+    cogsAmount: 0,
+    grossProfit: 0,
+    grossMarginPct: 0,
+    costHiddenByRbac: false,
+    pendingCodAmount: 0,
+    receivedCodAmount: 0,
+    codWarningCount: 0,
   });
   const formatCurrencyVnd = (amount: number) => `${Math.round(amount).toLocaleString('vi-VN')} đ`;
 
@@ -311,25 +312,41 @@ const Dashboard = () => {
             const d = res.data;
             setOwnerFinance((prev) => ({
               ...prev,
-              netRevenue: typeof d.netRevenue === 'number' ? d.netRevenue : (typeof d.totalDispatchedRevenue === 'number' ? d.totalDispatchedRevenue : prev.netRevenue),
-              cogsAmount: typeof d.totalCogs === 'number' ? d.totalCogs : (typeof d.cogsAmount === 'number' ? d.cogsAmount : prev.cogsAmount),
-              grossProfit: typeof d.estimatedGrossProfit === 'number' ? d.estimatedGrossProfit : (typeof d.grossProfit === 'number' ? d.grossProfit : prev.grossProfit),
-              grossMarginPct: typeof d.grossMarginPercent === 'number' ? d.grossMarginPercent : (typeof d.grossMarginPct === 'number' ? d.grossMarginPct : prev.grossMarginPct),
+              netRevenue: Number(d.grossRevenue ?? d.netRevenue ?? d.totalDispatchedRevenue ?? 0),
+              cogsAmount: Number(d.movingAverageCogs ?? d.totalCogs ?? d.cogsAmount ?? 0),
+              grossProfit: Number(d.netPocketProfit ?? d.estimatedGrossProfit ?? d.grossProfit ?? 0),
+              grossMarginPct: Number(d.netMarginPct ?? d.grossMarginPercent ?? d.grossMarginPct ?? 0),
+              costHiddenByRbac: d.costHiddenByRbac === true,
             }));
           })
           .catch(() => null);
-        void Promise.resolve(apiClient.get<Record<string, unknown>>('/api/v1/finance/cod-reconciliation'))
+        const applyCodData = (d: Record<string, unknown>) => {
+          setOwnerFinance((prev) => ({
+            ...prev,
+            pendingCodAmount: Number(d.totalExpectedCod ?? d.pendingCodAmount ?? d.totalCodPending ?? 0),
+            receivedCodAmount: Number(d.totalActualCod ?? d.receivedFromCarrierAmount ?? 0),
+            codWarningCount: Number(d.discrepancyCount ?? d.feeDiscrepancyWarnings ?? d.discrepancyWarningCount ?? (Array.isArray(d.discrepancies) ? d.discrepancies.length : 0)),
+          }));
+        };
+        void Promise.resolve(apiClient.get<Record<string, unknown>>('/api/v1/reports/cod-shipping-reconciliation'))
           .then((res) => {
-            if (!active || !res?.data) return;
-            const d = res.data;
-            setOwnerFinance((prev) => ({
-              ...prev,
-              pendingCodAmount: typeof d.pendingCodAmount === 'number' ? d.pendingCodAmount : (typeof d.totalCodPending === 'number' ? d.totalCodPending : prev.pendingCodAmount),
-              receivedCodAmount: typeof d.receivedFromCarrierAmount === 'number' ? d.receivedFromCarrierAmount : prev.receivedCodAmount,
-              codWarningCount: typeof d.discrepancyWarningCount === 'number' ? d.discrepancyWarningCount : prev.codWarningCount,
-            }));
+            if (!active) return;
+            if (res?.data && Object.keys(res.data).length > 0) {
+              applyCodData(res.data);
+              return;
+            }
+            return Promise.resolve(apiClient.get<Record<string, unknown>>('/api/v1/reports/cod-reconciliation'))
+              .then((fallbackRes) => {
+                if (active && fallbackRes?.data) applyCodData(fallbackRes.data);
+              });
           })
-          .catch(() => null);
+          .catch(() =>
+            Promise.resolve(apiClient.get<Record<string, unknown>>('/api/v1/reports/cod-reconciliation'))
+              .then((fallbackRes) => {
+                if (active && fallbackRes?.data) applyCodData(fallbackRes.data);
+              })
+              .catch(() => null),
+          );
       });
     return () => {
       active = false;
@@ -477,13 +494,19 @@ const Dashboard = () => {
             </div>
             <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
               <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Giá vốn hàng bán bình quân</div>
-              <strong style={{ fontSize: 15, color: '#0f172a' }}>{formatCurrencyVnd(ownerFinance.cogsAmount)}</strong>
+              <strong style={{ fontSize: 15, color: '#0f172a' }}>
+                {ownerFinance.costHiddenByRbac ? 'Ẩn giá vốn theo phân quyền RBAC' : formatCurrencyVnd(ownerFinance.cogsAmount)}
+              </strong>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Bình quân gia quyền di động</div>
             </div>
             <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', fontVariantNumeric: 'tabular-nums' }}>
               <div style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>Lợi nhuận gộp ước tính</div>
-              <strong style={{ fontSize: 15, color: '#065f46' }}>{`${formatCurrencyVnd(ownerFinance.grossProfit)} • Biên lãi gộp ${String(ownerFinance.grossMarginPct).replace('.', ',')}%`}</strong>
-              <div style={{ fontSize: 12, color: '#047857', marginTop: 2 }}>Vốn tồn đọng &gt; 60 ngày: 12,4tr • Hàng cận hạn &lt; 30 ngày: 2 lô</div>
+              <strong style={{ fontSize: 15, color: '#065f46' }}>
+                {ownerFinance.costHiddenByRbac
+                  ? 'Ẩn theo phân quyền RBAC'
+                  : `${formatCurrencyVnd(ownerFinance.grossProfit)} • Biên lãi gộp ${String(ownerFinance.grossMarginPct).replace('.', ',')}%`}
+              </strong>
+              <div style={{ fontSize: 12, color: '#047857', marginTop: 2 }}>Vốn tồn đọng &gt; 60 ngày: 0 đ • Hàng cận hạn &lt; 30 ngày: 0 lô</div>
             </div>
             <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #fde68a', background: '#fffbeb', fontVariantNumeric: 'tabular-nums' }}>
               <div style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>Tiền thu hộ COD chờ đối soát</div>
@@ -524,7 +547,7 @@ const Dashboard = () => {
                   setLiveError('');
                   setWizardProvisionNotice(null);
                   void Promise.resolve(
-                    apiClient.post('/api/permissions/saas-tenants/provision', {
+                    apiClient.post('/api/v1/permissions/saas/tenants/provision', {
                       tenantCode: provisionTenantCode.trim() || 'TENANT-SME-2026',
                       warehouseName: provisionWarehouseName.trim() || 'Kho Trung tâm SME WH01',
                     }),

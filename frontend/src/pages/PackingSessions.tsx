@@ -92,6 +92,7 @@ export default function PackingSessions(){
     try{setSelected((await apiClient.get(`/api/packing-sessions/${id}`)).data)}
     catch(e){setSelected(null);setError(errorMessage(e))}
   };
+  const [selectedVideoFile,setSelectedVideoFile]=useState<File|null>(null);
   const [videoAwbCode,setVideoAwbCode]=useState<string>('SPXVN058291042');
   const [videoDurationSec,setVideoDurationSec]=useState<string>('48');
   const [videoSizeMb,setVideoSizeMb]=useState<string>('14.6');
@@ -201,23 +202,43 @@ export default function PackingSessions(){
     setVideoNotice('');
     const targetSessionId=selected?.id??sessions[0]?.id??1;
     const targetSessionCode=selected?.sessionCode??sessions[0]?.sessionCode??`PACK-${targetSessionId}`;
+    const resolvedAwb=videoAwbCode.trim()||'SPXVN058291042';
+    const resolvedDuration=Math.max(1,Number(videoDurationSec)||45);
+    const resolvedSizeMb=Math.max(0.1,Number(videoSizeMb)||12.5);
+    const resolvedSha256=videoSha256.trim()||'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
     try{
-      const res=await apiClient.post(`/api/packing-sessions/${targetSessionId}/video-evidence`,{
-        awbCode:videoAwbCode.trim()||'SPXVN058291042',
-        durationSeconds:Math.max(1,Number(videoDurationSec)||45),
-        fileSizeMb:Math.max(0.1,Number(videoSizeMb)||12.5),
-        sha256Hash:videoSha256.trim()||'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-        cameraStation:'CAM-PACK-01',
-      });
+      let res;
+      if(selectedVideoFile){
+        const formData=new FormData();
+        formData.append('videoFile',selectedVideoFile);
+        formData.append('sessionId',String(targetSessionId));
+        formData.append('awbCode',resolvedAwb);
+        formData.append('durationSeconds',String(resolvedDuration));
+        formData.append('fileSizeMb',String(resolvedSizeMb));
+        formData.append('sha256Hash',resolvedSha256);
+        formData.append('cameraStation','CAM-PACK-01');
+        res=await apiClient.post('/api/v1/packing-sessions/video-evidence',formData,{
+          headers:{'Content-Type':'multipart/form-data'},
+        });
+      }else{
+        res=await apiClient.post('/api/v1/packing-sessions/video-evidence',{
+          sessionId:targetSessionId,
+          awbCode:resolvedAwb,
+          durationSeconds:resolvedDuration,
+          fileSizeMb:resolvedSizeMb,
+          sha256Hash:resolvedSha256,
+          cameraStation:'CAM-PACK-01',
+        });
+      }
       const d=(res?.data??{}) as Record<string,unknown>;
       const created={
         id:Number(d.id??Date.now()),
         sessionId:Number(d.sessionId??targetSessionId),
         sessionCode:String(d.sessionCode??targetSessionCode),
-        awbCode:String(d.awbCode??videoAwbCode.trim()),
-        durationSeconds:Number(d.durationSeconds??(Number(videoDurationSec)||45)),
-        fileSizeMb:Number(d.fileSizeMb??(Number(videoSizeMb)||12.5)),
-        sha256Hash:String(d.sha256Hash??videoSha256.trim()),
+        awbCode:String(d.awbCode??resolvedAwb),
+        durationSeconds:Number(d.durationSeconds??resolvedDuration),
+        fileSizeMb:Number(d.fileSizeMb??resolvedSizeMb),
+        sha256Hash:String(d.sha256Hash??resolvedSha256),
         recordedAt:String(d.recordedAt??new Date().toISOString()),
         cameraStation:String(d.cameraStation??'CAM-PACK-01'),
       };
@@ -233,10 +254,11 @@ export default function PackingSessions(){
     setError('');
     setVideoNotice('');
     try{
-      const res=await apiClient.get('/api/packing-sessions/video-evidences',{
+      const res=await apiClient.get('/api/v1/packing-sessions/video-evidence',{
         params:videoSearchAwb.trim()?{awbCode:videoSearchAwb.trim()}:undefined,
       });
-      const items=Array.isArray(res?.data)?res.data:(Array.isArray(res?.data?.items)?res.data.items:[]);
+      const rawList=res?.data?.items??res?.data?.evidences??res?.data;
+      const items=Array.isArray(rawList)?rawList:[];
       setVideoEvidences(items.map((item:Record<string,unknown>,idx:number)=>({
         id:Number(item.id??idx+1),
         sessionId:Number(item.sessionId??item.packingSessionId??1),
@@ -585,6 +607,20 @@ export default function PackingSessions(){
           <form onSubmit={recordPackingVideoEvidence} className="ui-inline-wrap" style={{alignItems:'end'}}>
             <label style={{display:'flex',flexDirection:'column',gap:6}}>Mã vận đơn (AWB)
               <input aria-label="Mã vận đơn AWB quay video" value={videoAwbCode} onChange={e=>setVideoAwbCode(e.target.value)} placeholder="VD: SPXVN058291042"/>
+            </label>
+            <label style={{display:'flex',flexDirection:'column',gap:6}}>Tệp Video bằng chứng (.mp4/.webm)
+              <input
+                aria-label="Tệp video đóng gói"
+                type="file"
+                accept="video/*"
+                onChange={e=>{
+                  const file=e.target.files?.[0]??null;
+                  setSelectedVideoFile(file);
+                  if(file&&file.size>0){
+                    setVideoSizeMb(String(Math.max(0.1,Math.round((file.size/(1024*1024))*10)/10)));
+                  }
+                }}
+              />
             </label>
             <label style={{display:'flex',flexDirection:'column',gap:6}}>Thời lượng (giây)
               <input aria-label="Thời lượng video (giây)" type="number" min="1" value={videoDurationSec} onChange={e=>setVideoDurationSec(e.target.value)}/>

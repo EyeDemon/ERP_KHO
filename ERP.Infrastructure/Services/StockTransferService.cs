@@ -571,8 +571,8 @@ ON target.TenantId = source.TenantId AND target.ProductId = source.ProductId AND
 WHEN MATCHED THEN
     UPDATE SET Quantity = target.Quantity + source.Quantity, LastUpdated = source.LastUpdated
 WHEN NOT MATCHED THEN
-    INSERT (TenantId, ProductId, WarehouseId, LocationId, Status, Quantity, ReservedQuantity, LastUpdated)
-    VALUES (source.TenantId, source.ProductId, source.WarehouseId, source.LocationId, source.Status, source.Quantity, 0, source.LastUpdated);", cancellationToken);
+    INSERT (TenantId, WarehouseId, ProductId, LocationId, LotId, SerialId, HandlingUnitId, Status, Quantity, ReservedQuantity, AllocatedQuantity, LockedQuantity, LastUpdated, GrainHash)
+    VALUES (source.TenantId, source.WarehouseId, source.ProductId, source.LocationId, NULL, NULL, NULL, source.Status, source.Quantity, 0, 0, 0, source.LastUpdated, CAST(HASHBYTES('SHA2_256', CONVERT(varchar(256), CONCAT(source.TenantId, '|', source.WarehouseId, '|', source.ProductId, '|', source.Status, '|', ISNULL(source.LocationId, -1), '|-1|-1|-1|-1'))) AS varbinary(32)));", cancellationToken);
         return locationId;
     }
 

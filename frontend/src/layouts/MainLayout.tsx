@@ -234,11 +234,13 @@ const MainLayout = () => {
               type="button"
               data-testid="btn-copy-zalo-diagnostics"
               onClick={() => {
-                const payload = `TenantId=${localStorage.getItem('tenantCode') || 'MẶC ĐỊNH'} | WarehouseId=${localStorage.getItem('activeWarehouseId') || 'WH01'} | UserId=${localStorage.getItem('userId') || '1'} | Route=${pathname} | LastErrorCode=${localStorage.getItem('lastErrorCode') || 'NONE'} | CorrelationId=${localStorage.getItem('lastCorrelationId') || 'CORR-2026-WMS'}`;
+                const lastErrorCode = localStorage.getItem('lastErrorCode') || 'NONE';
+                const lastCorrelationId = localStorage.getItem('lastCorrelationId') || 'CORR-2026-WMS';
+                const payload = `TenantId=${localStorage.getItem('tenantCode') || 'MẶC ĐỊNH'} | WarehouseId=${localStorage.getItem('activeWarehouseId') || 'WH01'} | UserId=${localStorage.getItem('userId') || '1'} | Route=${pathname} | LastErrorCode=${lastErrorCode} | CorrelationId=${lastCorrelationId}`;
                 if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
                   void Promise.resolve(navigator.clipboard.writeText(payload)).catch(() => {});
                 }
-                setDiagCopiedNotice('Đã sao chép chẩn đoán lỗi 1-Click gửi Zalo (TenantId + WarehouseId + UserId + Route + LastErrorCode + CorrelationId).');
+                setDiagCopiedNotice(`Đã sao chép chẩn đoán lỗi 1-Click gửi Zalo (TenantId + WarehouseId + UserId + Route + LastErrorCode + CorrelationId) [${lastErrorCode} | ${lastCorrelationId}].`);
               }}
               style={{ fontSize: 12, padding: '4px 10px', whiteSpace: 'nowrap' }}
             >

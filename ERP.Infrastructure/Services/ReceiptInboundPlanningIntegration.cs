@@ -216,21 +216,84 @@ public sealed class ReceiptInboundPlanningIntegration(ErpKhoDbContext context) :
 
     public async Task ApplyPostedStateAsync(ImportReceipt receipt, int actorUserId, CancellationToken token = default)
     {
-        var outboxKey = $"VALUATION-IMP-{receipt.Id}";
-        if (!context.IntegrationOutboxMessages.Local.Any(x => x.EventId == outboxKey) &&
-            !await context.IntegrationOutboxMessages.AnyAsync(x => x.EventId == outboxKey, token))
+        var tenantId = receipt.TenantId > 0 ? receipt.TenantId : (context.CurrentTenantId > 0 ? context.CurrentTenantId : 1);
+        var outboxKey = $"VALUATION-IMP-{tenantId}-{receipt.Id}";
+        var legacyKey1 = $"VALUATION-IMP-{receipt.Id}";
+        var legacyKey2 = $"OUTBOX-VAL-IMPORTRECEIPT-{receipt.Id}";
+
+        decimal subTotal = 0m;
+        decimal taxAmount = 0m;
+        var outboxLines = new List<object>();
+        foreach (var line in receipt.Details)
+        {
+            var factor = line.ConversionFactor > 0 ? line.ConversionFactor : 1m;
+            var acceptedQty = line.AcceptedQuantity > 0
+                ? line.AcceptedQuantity
+                : (line.BaseAcceptedQuantity > 0 ? line.BaseAcceptedQuantity / factor : 0m);
+            var lineSub = acceptedQty > 0 && line.UnitPrice > 0
+                ? decimal.Round(acceptedQty * line.UnitPrice, 2, MidpointRounding.AwayFromZero)
+                : 0m;
+            var lineTax = lineSub > 0 && line.TaxPercent > 0
+                ? decimal.Round(lineSub * (line.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero)
+                : 0m;
+            subTotal += lineSub;
+            taxAmount += lineTax;
+            outboxLines.Add(new
+            {
+                detailId = line.Id,
+                productId = line.ProductId,
+                acceptedQuantity = acceptedQty,
+                baseAcceptedQuantity = line.BaseAcceptedQuantity,
+                unitPrice = line.UnitPrice,
+                taxPercent = line.TaxPercent,
+                lineSubTotal = lineSub,
+                lineTaxAmount = lineTax,
+                lineTotal = lineSub + lineTax
+            });
+        }
+
+        var totalAmount = subTotal + taxAmount;
+        var payloadJson = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            receiptId = receipt.Id,
+            aggregateType = "ImportReceipt",
+            aggregateId = receipt.Id,
+            code = receipt.Code,
+            referenceCode = receipt.Code,
+            warehouseId = receipt.WarehouseId,
+            subTotalAmount = subTotal,
+            taxAmount,
+            totalAmount,
+            lines = outboxLines,
+            targetSystem = "ACCOUNTING_ERP_GL",
+            occurredAtUtc = DateTime.UtcNow
+        });
+
+        var existingOutbox = context.IntegrationOutboxMessages.Local
+            .FirstOrDefault(x => x.TenantId == tenantId &&
+                (x.EventId == outboxKey || x.EventId == legacyKey1 || x.EventId == legacyKey2))
+            ?? await context.IntegrationOutboxMessages
+                .FirstOrDefaultAsync(x => x.TenantId == tenantId &&
+                    (x.EventId == outboxKey || x.EventId == legacyKey1 || x.EventId == legacyKey2), token);
+
+        if (existingOutbox is null)
         {
             context.IntegrationOutboxMessages.Add(new IntegrationOutboxMessage
             {
-                TenantId = receipt.TenantId > 0 ? receipt.TenantId : 1,
+                TenantId = tenantId,
                 EventId = outboxKey,
                 EventType = "InventoryValuationPosted",
                 AggregateType = "ImportReceipt",
                 AggregateId = receipt.Id,
-                PayloadJson = $"{{\"receiptId\":{receipt.Id},\"code\":\"{receipt.Code}\",\"warehouseId\":{receipt.WarehouseId}}}",
-                Status = "Pending",
+                PayloadJson = payloadJson,
+                Status = "PENDING",
                 CreatedAt = DateTime.UtcNow
             });
+        }
+        else
+        {
+            existingOutbox.EventId = outboxKey;
+            existingOutbox.PayloadJson = payloadJson;
         }
 
         if (receipt.AsnId.HasValue)

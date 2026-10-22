@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
-[ApiController,Route("api/asns"),Authorize]
+[ApiController, Route("api/asns"), Route("api/v1/asns"), Authorize]
 public sealed class AsnsController(
     IInboundPlanningService service,
     ErpKhoDbContext db = null!,

@@ -13,6 +13,7 @@ namespace ERP.Api.Controllers;
 
 [ApiController]
 [Route("api/stock-transfers")]
+[Route("api/v1/stock-transfers")]
 [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Manager},{AppRoles.WarehouseStaff},{AppRoles.Viewer}")]
 public sealed class StockTransfersController(
     IStockTransferService service,

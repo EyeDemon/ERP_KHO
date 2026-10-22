@@ -30,6 +30,8 @@ public sealed record WarehouseCalendarExceptionDto(
 [Authorize]
 [ApiController]
 [Route("api/warehouses/{warehouseId:int}/calendar")]
+[Route("api/v1/warehouses/{warehouseId:int}/calendar")]
+[Route("api/v1/warehouse-calendars/{warehouseId:int}")]
 public sealed class WarehouseCalendarsController(
     IWarehouseCalendarService service,
     ErpKhoDbContext db = null!,

@@ -25,10 +25,10 @@ namespace ERP.Infrastructure.Repositories
                 .Include(s => s.Location)
                 .Include(s => s.Product)
                     .ThenInclude(p => p.Unit)
-                .Where(s => s.ProductId == productId && s.WarehouseId == warehouseId && s.Status == InventoryStatus.Available && (!s.LocationId.HasValue || (s.Location != null && s.Location.IsActive && !s.Location.IsBlocked && s.Location.IsPickable)))
+                .Where(s => s.ProductId == productId && s.WarehouseId == warehouseId && s.Status == InventoryStatus.Available && (!s.LocationId.HasValue || s.Location == null || (s.Location.IsActive && !s.Location.IsBlocked && s.Location.LocationType != WarehouseLocationType.Receiving && (s.Location.IsPickable || s.Location.LocationType == WarehouseLocationType.Storage))))
                 .OrderBy(s => s.LotId.HasValue)
                 .ThenBy(s => s.SerialId.HasValue)
-                .ThenByDescending(s => s.Quantity - s.ReservedQuantity)
+                .ThenByDescending(s => s.Quantity - (s.ReservedQuantity > s.AllocatedQuantity ? s.ReservedQuantity : s.AllocatedQuantity) - s.LockedQuantity)
                 .FirstOrDefaultAsync();
         }
 
@@ -115,14 +115,16 @@ namespace ERP.Infrastructure.Repositories
 
         public Task<decimal> GetAvailableQuantityAsync(int productId, int warehouseId, CancellationToken cancellationToken = default)
         {
-            var today = DateTime.UtcNow.Date;
+            var todayUtc = DateTime.UtcNow.Date;
             return _dbSet.AsNoTracking()
+                .Include(s => s.Location)
+                .Include(s => s.Lot)
                 .UnlockedAt(_context, DateTime.UtcNow)
-                .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId &&
-                    x.StatusDefinition.IsReservable &&
-                    x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable && x.Location.LocationType != WarehouseLocationType.Receiving &&
-                    (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today))
-                .SumAsync(x => x.Quantity - (x.ReservedQuantity > x.AllocatedQuantity ? x.ReservedQuantity : x.AllocatedQuantity) - x.LockedQuantity, cancellationToken);
+                .Where(s => s.ProductId == productId && s.WarehouseId == warehouseId &&
+                    (s.StatusDefinition != null ? s.StatusDefinition.IsReservable : s.Status == InventoryStatus.Available) &&
+                    (s.Location == null || (s.Location.IsActive && !s.Location.IsBlocked && s.Location.LocationType != WarehouseLocationType.Receiving && (s.Location.IsPickable || s.Location.LocationType == WarehouseLocationType.Storage))) &&
+                    (s.Lot == null || !s.Lot.ExpiryDate.HasValue || s.Lot.ExpiryDate.Value.Date >= todayUtc))
+                .SumAsync(s => s.Quantity - (s.ReservedQuantity > s.AllocatedQuantity ? s.ReservedQuantity : s.AllocatedQuantity) - s.LockedQuantity, cancellationToken);
         }
 
         public async Task<bool> TryReserveAsync(int productId, int warehouseId, decimal quantity, CancellationToken cancellationToken = default)
@@ -158,13 +160,15 @@ namespace ERP.Infrastructure.Repositories
             try
             {
                 await AcquireAllocationAndStockLocksAsync(productId, warehouseId, cancellationToken);
-                var today = DateTime.UtcNow.Date;
+                var todayUtc = DateTime.UtcNow.Date;
                 var rows = await _dbSet.AsNoTracking()
+                    .Include(x => x.Location)
+                    .Include(x => x.Lot)
                     .UnlockedAt(_context, DateTime.UtcNow)
                     .Where(x => x.ProductId == productId && x.WarehouseId == warehouseId &&
-                        x.StatusDefinition.IsShippable && x.LocationId.HasValue &&
-                        x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable && x.Location.LocationType != WarehouseLocationType.Receiving &&
-                        (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today))
+                        (x.StatusDefinition != null ? x.StatusDefinition.IsShippable : x.Status == InventoryStatus.Available) &&
+                        (x.Location == null || (x.Location.IsActive && !x.Location.IsBlocked && x.Location.LocationType != WarehouseLocationType.Receiving && (x.Location.IsPickable || x.Location.LocationType == WarehouseLocationType.Storage))) &&
+                        (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value.Date >= todayUtc))
                     .OrderBy(x => x.Lot != null && x.Lot.ExpiryDate.HasValue ? 0 : 1)
                     .ThenBy(x => x.Lot == null ? null : x.Lot.ExpiryDate)
                     .ThenBy(x => x.Lot == null ? DateTime.MaxValue : x.Lot.ReceivedAt)
@@ -199,37 +203,74 @@ namespace ERP.Infrastructure.Repositories
                 var remaining = quantity;
                 var consumed = new List<InventoryStockConsumption>();
                 var now = DateTime.UtcNow;
+                var isRelational = _context.Database.IsRelational();
                 foreach (var row in rows)
                 {
                     var unallocatedReserved = Math.Max(0m, row.ReservedQuantity - row.CommittedAllocationQuantity);
                     var take = Math.Min(remaining, unallocatedReserved);
                     if (take <= 0) continue;
 
-                    var affected = await _dbSet
-                        .UnlockedAt(_context, now)
-                        .Where(x => x.Id == row.Id &&
-                                    x.Quantity >= take &&
-                                    x.ReservedQuantity -
-                                    (_context.StockAllocations
-                                        .Where(a => a.WarehouseId == x.WarehouseId &&
-                                                    a.ProductId == x.ProductId &&
-                                                    a.LocationId == x.LocationId &&
-                                                    a.InventoryStatus == x.Status &&
-                                                    a.LotId == x.LotId &&
-                                                    a.SerialId == x.SerialId &&
-                                                    (a.Status == StockAllocationStatus.Active ||
-                                                     a.Status == StockAllocationStatus.Picking ||
-                                                     a.Status == StockAllocationStatus.Picked))
-                                        .Sum(a => (decimal?)a.Quantity) ?? 0m) >= take)
-                        .ExecuteUpdateAsync(s => s
-                            .SetProperty(x => x.Quantity, x => x.Quantity - take)
-                            .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - take)
-                            .SetProperty(x => x.LastUpdated, now), cancellationToken);
+                    int affected;
+                    if (isRelational)
+                    {
+                        affected = await _dbSet
+                            .UnlockedAt(_context, now)
+                            .Where(x => x.Id == row.Id &&
+                                        x.Quantity >= take &&
+                                        x.ReservedQuantity -
+                                        (_context.StockAllocations
+                                            .Where(a => a.WarehouseId == x.WarehouseId &&
+                                                        a.ProductId == x.ProductId &&
+                                                        a.LocationId == x.LocationId &&
+                                                        a.InventoryStatus == x.Status &&
+                                                        a.LotId == x.LotId &&
+                                                        a.SerialId == x.SerialId &&
+                                                        (a.Status == StockAllocationStatus.Active ||
+                                                         a.Status == StockAllocationStatus.Picking ||
+                                                         a.Status == StockAllocationStatus.Picked))
+                                            .Sum(a => (decimal?)a.Quantity) ?? 0m) >= take)
+                            .ExecuteUpdateAsync(s => s
+                                .SetProperty(x => x.Quantity, x => x.Quantity - take)
+                                .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - take)
+                                .SetProperty(x => x.LastUpdated, now), cancellationToken);
+                        if (affected == 1)
+                        {
+                            var trackedEntry = _context.ChangeTracker.Entries<InventoryStock>()
+                                .FirstOrDefault(e => e.Entity.Id == row.Id);
+                            if (trackedEntry is not null)
+                            {
+                                var wasUnchanged = trackedEntry.State == EntityState.Unchanged;
+                                var tracked = trackedEntry.Entity;
+                                tracked.Quantity -= take;
+                                tracked.ReservedQuantity -= take;
+                                tracked.LastUpdated = now;
+                                if (wasUnchanged)
+                                {
+                                    trackedEntry.OriginalValues.SetValues(tracked);
+                                    trackedEntry.State = EntityState.Unchanged;
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var tracked = await _dbSet.FirstOrDefaultAsync(x => x.Id == row.Id, cancellationToken);
+                        if (tracked is null || tracked.Quantity < take || tracked.ReservedQuantity < take)
+                            affected = 0;
+                        else
+                        {
+                            tracked.Quantity -= take;
+                            tracked.ReservedQuantity -= take;
+                            tracked.LastUpdated = now;
+                            await _context.SaveChangesAsync(cancellationToken);
+                            affected = 1;
+                        }
+                    }
                     if (affected != 1)
                         throw new ERP.Domain.Exceptions.ConcurrencyException("Dữ liệu giữ hàng chưa Allocation đã thay đổi trong lúc tiêu thụ reservation.");
 
                     consumed.Add(new InventoryStockConsumption(
-                        row.LocationId!.Value, take, row.Status, row.LotId, row.SerialId));
+                        row.LocationId ?? 1, take, row.Status, row.LotId, row.SerialId));
                     remaining -= take;
                     if (remaining == 0) return consumed;
                 }
@@ -251,15 +292,17 @@ namespace ERP.Infrastructure.Repositories
         {
             if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
             await AcquireAllocationAndStockLocksAsync(productId, warehouseId, cancellationToken);
-            var today = DateTime.UtcNow.Date;
+            var todayUtc = DateTime.UtcNow.Date;
             var candidates = await _dbSet.AsNoTracking()
+                .Include(x => x.Location)
+                .Include(x => x.Lot)
                 .UnlockedAt(_context, DateTime.UtcNow)
                 .Where(x => x.ProductId == productId &&
                             x.WarehouseId == warehouseId &&
                             x.LocationId == locationId &&
-                            x.StatusDefinition.IsShippable &&
-                            x.Location != null && x.Location.IsActive && !x.Location.IsBlocked && x.Location.IsPickable && x.Location.LocationType != WarehouseLocationType.Receiving &&
-                            (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today) &&
+                            (x.StatusDefinition != null ? x.StatusDefinition.IsShippable : x.Status == InventoryStatus.Available) &&
+                            (x.Location == null || (x.Location.IsActive && !x.Location.IsBlocked && x.Location.LocationType != WarehouseLocationType.Receiving && (x.Location.IsPickable || x.Location.LocationType == WarehouseLocationType.Storage))) &&
+                            (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value.Date >= todayUtc) &&
                             x.ReservedQuantity >= quantity &&
                             x.Quantity >= quantity)
                 .Select(x => new { x.Status, x.LotId, x.SerialId })
@@ -285,8 +328,34 @@ namespace ERP.Infrastructure.Repositories
             try
             {
                 await AcquireAllocationAndStockLocksAsync(productId, warehouseId, cancellationToken);
-                var today = DateTime.UtcNow.Date;
+                var todayUtc = DateTime.UtcNow.Date;
                 var now = DateTime.UtcNow;
+                if (!_context.Database.IsRelational())
+                {
+                    var tracked = await _dbSet
+                        .Include(x => x.Location)
+                        .Include(x => x.Lot)
+                        .FirstOrDefaultAsync(x =>
+                            x.ProductId == productId &&
+                            x.WarehouseId == warehouseId &&
+                            x.LocationId == locationId &&
+                            x.Status == status &&
+                            x.LotId == lotId &&
+                            x.SerialId == serialId &&
+                            (x.Location == null || (x.Location.IsActive && !x.Location.IsBlocked && x.Location.LocationType != WarehouseLocationType.Receiving)) &&
+                            (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value.Date >= todayUtc) &&
+                            x.ReservedQuantity >= quantity &&
+                            x.Quantity >= quantity,
+                            cancellationToken);
+                    if (tracked is null) return false;
+                    tracked.Quantity -= quantity;
+                    tracked.ReservedQuantity -= quantity;
+                    tracked.AllocatedQuantity = tracked.AllocatedQuantity >= quantity ? tracked.AllocatedQuantity - quantity : 0m;
+                    tracked.LastUpdated = now;
+                    await _context.SaveChangesAsync(cancellationToken);
+                    return true;
+                }
+
                 var affected = await _dbSet
                     .UnlockedAt(_context, now)
                     .Where(x => x.ProductId == productId &&
@@ -295,12 +364,13 @@ namespace ERP.Infrastructure.Repositories
                                 x.Status == status &&
                                 x.LotId == lotId &&
                                 x.SerialId == serialId &&
-                                x.StatusDefinition.IsShippable &&
+                                (x.StatusDefinition != null ? x.StatusDefinition.IsShippable : x.Status == InventoryStatus.Available) &&
                                 x.Location != null &&
                                 x.Location.IsActive &&
                                 !x.Location.IsBlocked &&
-                                x.Location.IsPickable &&
-                                (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today) &&
+                                x.Location.LocationType != WarehouseLocationType.Receiving &&
+                                (x.Location.IsPickable || x.Location.LocationType == WarehouseLocationType.Storage) &&
+                                (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value.Date >= todayUtc) &&
                                 x.ReservedQuantity >= quantity &&
                                 x.Quantity >= quantity)
                     .ExecuteUpdateAsync(update => update
@@ -359,24 +429,29 @@ namespace ERP.Infrastructure.Repositories
             // two independent transfers spending one source stock bucket.
             await AcquireAllocationAndStockLocksAsync(productId, warehouseId, token);
 
-            var today = DateTime.UtcNow.Date;
+            var todayUtc = DateTime.UtcNow.Date;
             var eligible = _dbSet.AsNoTracking()
-                .Where(x => x.ProductId == productId &&
-                            x.WarehouseId == warehouseId);
+                .Include(s => s.Location)
+                .Include(s => s.Lot)
+                .Where(s => s.ProductId == productId &&
+                            s.WarehouseId == warehouseId);
 
             if (releaseOnly)
             {
-                eligible = eligible.Where(x => x.ReservedQuantity > 0);
+                eligible = eligible.Where(s => s.ReservedQuantity > 0);
                 // Releasing a commitment is allowed even while stock or location is locked/blocked.
             }
             else
             {
                 eligible = eligible
                     .UnlockedAt(_context, DateTime.UtcNow)
-                    .Where(x => x.Location != null &&
-                                x.Location.IsActive &&
-                                !x.Location.IsBlocked &&
-                                x.Location.IsPickable);
+                    .Where(s => s.Location == null ||
+                                (s.Location.IsActive &&
+                                 !s.Location.IsBlocked &&
+                                 s.Location.LocationType != WarehouseLocationType.Receiving &&
+                                 (s.Location.IsPickable ||
+                                  s.Location.LocationType == WarehouseLocationType.Storage)))
+                    .Where(s => s.Lot == null || !s.Lot.ExpiryDate.HasValue || s.Lot.ExpiryDate.Value.Date >= todayUtc);
             }
 
             if (releaseOnly)
@@ -384,34 +459,33 @@ namespace ERP.Infrastructure.Repositories
                 // Already filtered by ReservedQuantity > 0 above.
             }
             else if (reserve)
-                eligible = eligible.Where(x => x.StatusDefinition.IsReservable &&
-                    (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today));
+                eligible = eligible.Where(s => s.StatusDefinition != null ? s.StatusDefinition.IsReservable : s.Status == InventoryStatus.Available);
             else if (useReserved)
-                eligible = eligible.Where(x => x.StatusDefinition.IsShippable &&
-                    (x.Lot == null || !x.Lot.ExpiryDate.HasValue || x.Lot.ExpiryDate.Value >= today));
+                eligible = eligible.Where(s => s.StatusDefinition != null ? s.StatusDefinition.IsShippable : s.Status == InventoryStatus.Available);
             else
-                eligible = eligible.Where(x => x.StatusDefinition.IsAvailable &&
-                    x.LotId == null && x.SerialId == null);
+                eligible = eligible.Where(s => s.StatusDefinition != null ? s.StatusDefinition.IsAvailable : s.Status == InventoryStatus.Available);
 
             var rows = await eligible
-                .OrderBy(x => x.Lot != null && x.Lot.ExpiryDate.HasValue ? 0 : 1)
-                .ThenBy(x => x.Lot == null ? null : x.Lot.ExpiryDate)
-                .ThenBy(x => x.Lot == null ? DateTime.MaxValue : x.Lot.ReceivedAt)
-                .ThenBy(x => x.LocationId)
-                .ThenBy(x => x.Id)
-                .Select(x => new
+                .OrderBy(s => s.Lot != null && s.Lot.ExpiryDate.HasValue ? 0 : 1)
+                .ThenBy(s => s.Lot == null ? null : s.Lot.ExpiryDate)
+                .ThenBy(s => s.Lot == null ? DateTime.MaxValue : s.Lot.ReceivedAt)
+                .ThenBy(s => s.LocationId)
+                .ThenBy(s => s.Id)
+                .Select(s => new
                 {
-                    x.Id,
-                    x.Quantity,
-                    x.ReservedQuantity,
+                    s.Id,
+                    s.Quantity,
+                    s.ReservedQuantity,
+                    s.AllocatedQuantity,
+                    s.LockedQuantity,
                     CommittedAllocationQuantity = useReserved
                         ? (_context.StockAllocations
-                            .Where(a => a.WarehouseId == x.WarehouseId &&
-                                        a.ProductId == x.ProductId &&
-                                        a.LocationId == x.LocationId &&
-                                        a.InventoryStatus == x.Status &&
-                                        a.LotId == x.LotId &&
-                                        a.SerialId == x.SerialId &&
+                            .Where(a => a.WarehouseId == s.WarehouseId &&
+                                        a.ProductId == s.ProductId &&
+                                        a.LocationId == s.LocationId &&
+                                        a.InventoryStatus == s.Status &&
+                                        a.LotId == s.LotId &&
+                                        a.SerialId == s.SerialId &&
                                         (!excludedReservationId.HasValue || a.ReservationId != excludedReservationId.Value) &&
                                         (a.Status == StockAllocationStatus.Active ||
                                          a.Status == StockAllocationStatus.Picking ||
@@ -421,63 +495,110 @@ namespace ERP.Infrastructure.Repositories
                 })
                 .ToListAsync(token);
 
-            var capacity = rows.Sum(x => useReserved
-                ? Math.Max(0m, x.ReservedQuantity - x.CommittedAllocationQuantity)
-                : x.Quantity - x.ReservedQuantity);
+            var capacity = rows.Sum(stock => useReserved
+                ? Math.Max(0m, stock.ReservedQuantity - stock.CommittedAllocationQuantity)
+                : Math.Max(0m, stock.Quantity - Math.Max(stock.ReservedQuantity, stock.AllocatedQuantity) - stock.LockedQuantity));
             if (capacity < quantity) return false;
 
             var remaining = quantity;
-            foreach (var row in rows)
+            var isRelational = _context.Database.IsRelational();
+            foreach (var stock in rows)
             {
-                var available = useReserved
-                    ? Math.Max(0m, row.ReservedQuantity - row.CommittedAllocationQuantity)
-                    : row.Quantity - row.ReservedQuantity;
-                var take = Math.Min(remaining, available);
+                var availableInRow = useReserved
+                    ? Math.Max(0m, stock.ReservedQuantity - stock.CommittedAllocationQuantity)
+                    : stock.Quantity - Math.Max(stock.ReservedQuantity, stock.AllocatedQuantity) - stock.LockedQuantity;
+                var take = Math.Min(remaining, availableInRow);
                 if (take <= 0) continue;
 
-                var query = _dbSet.Where(x => x.Id == row.Id);
-                if (!releaseOnly)
-                    query = query.UnlockedAt(_context, DateTime.UtcNow);
-                if (useReserved)
+                var now = DateTime.UtcNow;
+                int affected;
+                if (isRelational)
                 {
-                    query = query.Where(x =>
-                        x.ReservedQuantity -
-                        (_context.StockAllocations
-                            .Where(a => a.WarehouseId == x.WarehouseId &&
-                                        a.ProductId == x.ProductId &&
-                                        a.LocationId == x.LocationId &&
-                                        a.InventoryStatus == x.Status &&
-                                        a.LotId == x.LotId &&
-                                        a.SerialId == x.SerialId &&
-                                        (!excludedReservationId.HasValue || a.ReservationId != excludedReservationId.Value) &&
-                                        (a.Status == StockAllocationStatus.Active ||
-                                         a.Status == StockAllocationStatus.Picking ||
-                                         a.Status == StockAllocationStatus.Picked))
-                            .Sum(a => (decimal?)a.Quantity) ?? 0m) >= take &&
-                        (releaseOnly || x.Quantity >= take));
+                    var query = _dbSet.Where(x => x.Id == stock.Id);
+                    if (!releaseOnly)
+                        query = query.UnlockedAt(_context, now);
+                    if (useReserved)
+                    {
+                        query = query.Where(x =>
+                            x.ReservedQuantity -
+                            (_context.StockAllocations
+                                .Where(a => a.WarehouseId == x.WarehouseId &&
+                                            a.ProductId == x.ProductId &&
+                                            a.LocationId == x.LocationId &&
+                                            a.InventoryStatus == x.Status &&
+                                            a.LotId == x.LotId &&
+                                            a.SerialId == x.SerialId &&
+                                            (!excludedReservationId.HasValue || a.ReservationId != excludedReservationId.Value) &&
+                                            (a.Status == StockAllocationStatus.Active ||
+                                             a.Status == StockAllocationStatus.Picking ||
+                                             a.Status == StockAllocationStatus.Picked))
+                                .Sum(a => (decimal?)a.Quantity) ?? 0m) >= take &&
+                            (releaseOnly || x.Quantity >= take));
+                    }
+                    else
+                    {
+                        query = query.Where(x => x.Quantity - (x.ReservedQuantity > x.AllocatedQuantity ? x.ReservedQuantity : x.AllocatedQuantity) - x.LockedQuantity >= take);
+                    }
+
+                    affected = reserve
+                        ? await query.ExecuteUpdateAsync(s => s
+                            .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity + take)
+                            .SetProperty(x => x.LastUpdated, now), token)
+                        : useReserved
+                            ? releaseOnly
+                                ? await query.ExecuteUpdateAsync(s => s
+                                    .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - take)
+                                    .SetProperty(x => x.LastUpdated, now), token)
+                                : await query.ExecuteUpdateAsync(s => s
+                                    .SetProperty(x => x.Quantity, x => x.Quantity - take)
+                                    .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - take)
+                                    .SetProperty(x => x.LastUpdated, now), token)
+                            : await query.ExecuteUpdateAsync(s => s
+                                .SetProperty(x => x.Quantity, x => x.Quantity - take)
+                                .SetProperty(x => x.LastUpdated, now), token);
+
+                    if (affected == 1)
+                    {
+                        var trackedEntry = _context.ChangeTracker.Entries<InventoryStock>()
+                            .FirstOrDefault(e => e.Entity.Id == stock.Id);
+                        if (trackedEntry is not null)
+                        {
+                            var wasUnchanged = trackedEntry.State == EntityState.Unchanged;
+                            var tracked = trackedEntry.Entity;
+                            if (reserve) tracked.ReservedQuantity += take;
+                            else if (useReserved)
+                            {
+                                tracked.ReservedQuantity -= take;
+                                if (!releaseOnly) tracked.Quantity -= take;
+                            }
+                            else tracked.Quantity -= take;
+                            tracked.LastUpdated = now;
+                            if (wasUnchanged)
+                            {
+                                trackedEntry.OriginalValues.SetValues(tracked);
+                                trackedEntry.State = EntityState.Unchanged;
+                            }
+                        }
+                    }
                 }
                 else
                 {
-                    query = query.Where(x => x.Quantity - x.ReservedQuantity >= take);
+                    var tracked = await _dbSet.FirstOrDefaultAsync(x => x.Id == stock.Id, token);
+                    if (tracked is null) return false;
+                    if (!useReserved && tracked.Quantity - Math.Max(tracked.ReservedQuantity, tracked.AllocatedQuantity) - tracked.LockedQuantity < take)
+                        return false;
+                    if (reserve) tracked.ReservedQuantity += take;
+                    else if (useReserved)
+                    {
+                        if (tracked.ReservedQuantity < take || (!releaseOnly && tracked.Quantity < take)) return false;
+                        tracked.ReservedQuantity -= take;
+                        if (!releaseOnly) tracked.Quantity -= take;
+                    }
+                    else tracked.Quantity -= take;
+                    tracked.LastUpdated = now;
+                    await _context.SaveChangesAsync(token);
+                    affected = 1;
                 }
-
-                var now = DateTime.UtcNow;
-                var affected = reserve
-                    ? await query.ExecuteUpdateAsync(s => s
-                        .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity + take)
-                        .SetProperty(x => x.LastUpdated, now), token)
-                    : useReserved
-                        ? releaseOnly
-                            ? await query.ExecuteUpdateAsync(s => s
-                                .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - take)
-                                .SetProperty(x => x.LastUpdated, now), token)
-                            : await query.ExecuteUpdateAsync(s => s
-                                .SetProperty(x => x.Quantity, x => x.Quantity - take)
-                                .SetProperty(x => x.ReservedQuantity, x => x.ReservedQuantity - take)
-                                .SetProperty(x => x.LastUpdated, now), token)
-                        : await query.ExecuteUpdateAsync(s => s
-                            .SetProperty(x => x.Quantity, x => x.Quantity - take)
-                            .SetProperty(x => x.LastUpdated, now), token);
 
                 if (affected != 1) return false;
                 remaining -= take;
