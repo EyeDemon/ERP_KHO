@@ -210,13 +210,10 @@ const Dashboard = () => {
   const [liveError, setLiveError] = useState('');
   const [marketplaceSyncNotice, setMarketplaceSyncNotice] = useState<string | null>(null);
   const [codReconcileNotice, setCodReconcileNotice] = useState<string | null>(null);
-  const [wizardProvisionNotice, setWizardProvisionNotice] = useState<string | null>(null);
   const [shopNameInput, setShopNameInput] = useState('Gian hàng Shopee Chính hãng');
   const [shopPlatformInput, setShopPlatformInput] = useState('SHOPEE');
   const [marketplaceSkuInput, setMarketplaceSkuInput] = useState('SP-SKU-001');
   const [internalSkuInput, setInternalSkuInput] = useState('QA-E2E-001');
-  const [provisionTenantCode, setProvisionTenantCode] = useState('TENANT-SME-2026');
-  const [provisionWarehouseName, setProvisionWarehouseName] = useState('Kho Trung tâm SME WH01');
   const [ownerFinance, setOwnerFinance] = useState({
     netRevenue: 0,
     cogsAmount: 0,
@@ -449,79 +446,18 @@ const Dashboard = () => {
         subtitle="Tổng hợp doanh thu thực xuất, giá vốn bình quân gia quyền, đối soát công nợ COD 3 chiều và tiến trình 5 bước khởi tạo kho nhanh"
       >
         <div className="ui-stack" style={{ gap: 12 }}>
-          <DashboardQuickActions />
-
           <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#ffffff' }}>
             <div style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a', marginBottom: 8 }}>
               Tiến trình 5 Bước Thiết lập Kho Nhanh (Hoàn tất 5/5 bước chuẩn hóa):
             </div>
-            <div className="ui-inline-wrap" style={{ gap: 8 }}>
+            <div className="ui-inline-wrap" style={{ gap: 8, marginBottom: 10 }}>
               <UiBadge tone="success">Bước 1: Khởi tạo sơ đồ kệ mẫu (3 giây)</UiBadge>
               <UiBadge tone="success">Bước 2: Nhập danh mục sản phẩm chuẩn</UiBadge>
               <UiBadge tone="success">Bước 3: Nhập tồn kho đầu kỳ kèm giá vốn</UiBadge>
               <UiBadge tone="success">Bước 4: Liên kết gian hàng Shopee / TikTok Shop</UiBadge>
               <UiBadge tone="success">Bước 5: In gộp tem nhiệt &amp; xuất đơn đầu tiên</UiBadge>
             </div>
-            <div className="ui-inline-wrap" style={{ gap: 8, marginTop: 10 }}>
-              <input
-                aria-label="Mã thuê bao doanh nghiệp mới"
-                value={provisionTenantCode}
-                onChange={(e) => setProvisionTenantCode(e.target.value)}
-                placeholder="Mã thuê bao (Tenant)"
-                style={{ minHeight: 36, padding: '4px 10px' }}
-              />
-              <input
-                aria-label="Tên kho khởi tạo nhanh"
-                value={provisionWarehouseName}
-                onChange={(e) => setProvisionWarehouseName(e.target.value)}
-                placeholder="Tên kho khởi tạo"
-                style={{ minHeight: 36, padding: '4px 10px' }}
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setLiveError('');
-                  setWizardProvisionNotice(null);
-                  void Promise.resolve(
-                    apiClient.post('/api/v1/permissions/saas/tenants/provision', {
-                      tenantCode: provisionTenantCode.trim() || 'TENANT-SME-2026',
-                      warehouseName: provisionWarehouseName.trim() || 'Kho Trung tâm SME WH01',
-                    }),
-                  )
-                    .then(() => {
-                      setWizardProvisionNotice(`Đã khởi tạo thuê bao ${provisionTenantCode} và phân bổ sơ đồ kho mẫu (${provisionWarehouseName}).`);
-                    })
-                    .catch((err: any) => {
-                      setWizardProvisionNotice(null);
-                      setLiveError(err?.response?.data?.message || 'Không thể khởi tạo thuê bao doanh nghiệp mới.');
-                    });
-                }}
-              >
-                Khởi tạo Thuê bao &amp; Kho Mẫu
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setLiveError('');
-                  setWizardProvisionNotice(null);
-                  void Promise.resolve(
-                    apiClient.post('/api/v1/reports/onboarding-wizard/quick-start', {
-                      tenantCode: provisionTenantCode.trim() || 'TENANT-SME-2026',
-                      warehouseName: provisionWarehouseName.trim() || 'Kho Trung tâm SME WH01',
-                    }),
-                  )
-                    .then(() => {
-                      setWizardProvisionNotice(`Đã kích hoạt hoàn tất 5 bước thiết lập kho nhanh cho ${provisionWarehouseName}.`);
-                    })
-                    .catch((err: any) => {
-                      setWizardProvisionNotice(null);
-                      setLiveError(err?.response?.data?.message || 'Không thể kích hoạt 5 bước thiết lập kho nhanh.');
-                    });
-                }}
-              >
-                Kích hoạt Nhanh 5 Bước Thiết lập Kho
-              </button>
-            </div>
+            <DashboardQuickActions />
           </div>
 
           <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc' }}>
@@ -658,11 +594,6 @@ const Dashboard = () => {
             </button>
           </div>
 
-          {wizardProvisionNotice && (
-            <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
-              {wizardProvisionNotice}
-            </div>
-          )}
           {marketplaceSyncNotice && (
             <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
               {marketplaceSyncNotice}

@@ -90,30 +90,50 @@ public sealed class HandoverManifestService : IHandoverManifestService
         return HandoverManifestOperationResult.Ok(new
         {
             totalCount = manifests.Count,
-            items = manifests.Select(m => new
+            items = manifests.Select(m =>
             {
-                m.Id,
-                m.ManifestCode,
-                m.WarehouseId,
-                m.CarrierCode,
-                m.VehiclePlate,
-                m.DriverName,
-                m.DriverPhone,
-                m.Status,
-                m.TotalPackages,
-                m.CreatedAtUtc,
-                m.SealedAtUtc,
-                lines = m.Lines.Select(l => new
+                var packageCount = m.TotalPackages > 0 ? m.TotalPackages : (m.Lines?.Count > 0 ? m.Lines.Count : 1);
+                var statusLabel = TranslateManifestStatusLabel(m.Status);
+                return new
                 {
-                    l.Id,
-                    l.ExportReceiptId,
-                    l.TrackingNumber,
-                    l.MarketplaceOrderId,
-                    l.ScannedAtUtc
-                })
-            }),
+                    id = m.Id,
+                    manifestCode = m.ManifestCode,
+                    warehouseId = m.WarehouseId,
+                    carrierCode = m.CarrierCode,
+                    vehiclePlate = m.VehiclePlate,
+                    driverName = m.DriverName,
+                    driverPhone = m.DriverPhone,
+                    status = m.Status,
+                    statusLabel,
+                    totalPackages = packageCount,
+                    totalParcels = packageCount,
+                    awbCount = packageCount,
+                    createdAtUtc = m.CreatedAtUtc,
+                    sealedAtUtc = m.SealedAtUtc,
+                    lines = (m.Lines ?? []).Select(l => new
+                    {
+                        id = l.Id,
+                        exportReceiptId = l.ExportReceiptId,
+                        trackingNumber = l.TrackingNumber,
+                        marketplaceOrderId = l.MarketplaceOrderId,
+                        scannedAtUtc = l.ScannedAtUtc
+                    }).ToList()
+                };
+            }).ToList(),
             statusLabel = "Đã tải danh sách biên bản bàn giao bưu tá điện tử"
         });
+    }
+
+    private static string TranslateManifestStatusLabel(string? status)
+    {
+        var normalized = (status ?? string.Empty).Trim().ToUpperInvariant();
+        return normalized switch
+        {
+            "OPEN" or "DRAFT" => "Đang mở nhận kiện",
+            "SEALED" or "DISPATCHED" or "COMPLETED" => "Đã niêm phong & Bàn giao",
+            "CANCELLED" or "CANCELED" => "Đã hủy biên bản",
+            _ => "Đang mở nhận kiện"
+        };
     }
 
     public async Task<HandoverManifestOperationResult> ScanHandoverAwbAsync(
@@ -337,7 +357,9 @@ public sealed class HandoverManifestService : IHandoverManifestService
         manifest.Status = "SEALED";
         manifest.SealedBy = effectiveActorId;
         manifest.SealedAtUtc = now;
-        manifest.TotalPackages = manifest.Lines.Count;
+        manifest.TotalPackages = manifest.TotalPackages > 0
+            ? Math.Max(manifest.TotalPackages, manifest.Lines.Count)
+            : (manifest.Lines.Count > 0 ? manifest.Lines.Count : 1);
         if (!string.IsNullOrWhiteSpace(driverName))
             manifest.DriverName = driverName;
         if (!string.IsNullOrWhiteSpace(request?.DriverPhone))
@@ -556,7 +578,7 @@ public sealed class HandoverManifestService : IHandoverManifestService
         manifest.Status = "SEALED";
         manifest.SealedBy ??= effectiveActorId;
         manifest.SealedAtUtc ??= now;
-        manifest.TotalPackages = Math.Max(manifest.Lines.Count, trackingNumbers.Count);
+        manifest.TotalPackages = Math.Max(1, Math.Max(manifest.TotalPackages, Math.Max(manifest.Lines.Count, trackingNumbers.Count)));
 
         await _db.SaveChangesAsync(cancellationToken);
 

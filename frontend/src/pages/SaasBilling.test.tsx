@@ -53,14 +53,14 @@ describe('SaasBilling Page', () => {
         return {
           data: {
             subscriptionStatus: 'ACTIVE',
-            message: 'Đã kích hoạt tự động gói GROWTH qua Webhook PayOS.',
+            message: 'Đã kích hoạt tự động Gói Tăng trưởng qua Webhook PayOS.',
           },
         } as never;
       }
       throw new Error(`Unexpected POST ${url}`);
     });
 
-    render(
+    const view = render(
       <MemoryRouter>
         <SaasBilling />
       </MemoryRouter>,
@@ -69,6 +69,12 @@ describe('SaasBilling Page', () => {
     expect(await screen.findByText('2 / 3 kho')).toBeTruthy();
     expect(screen.getByText('18 / 20 người dùng')).toBeTruthy();
     expect(screen.getByText('420 / 5.000 mặt hàng')).toBeTruthy();
+    expect(screen.getByText('Bảng Gói cước Thuê bao SaaS & Thanh toán Gia hạn VietQR')).toBeTruthy();
+    expect(screen.getByText('Danh mục mặt hàng')).toBeTruthy();
+    expect(view.container.textContent).not.toContain('(GROWTH)');
+    expect(view.container.textContent).not.toContain('(STARTER)');
+    expect(view.container.textContent).not.toContain('(ENTERPRISE)');
+    expect(view.container.textContent).not.toContain('(SKU)');
     expect(screen.getByTestId('saas-quota-gauge-grid').textContent).toContain('9.500 / 10.000');
 
     fireEvent.click(screen.getByTestId('btn-create-vietqr-invoice'));
@@ -95,7 +101,7 @@ describe('SaasBilling Page', () => {
         }),
       );
     });
-    expect(await screen.findByText(/Đã kích hoạt tự động gói GROWTH qua Webhook PayOS/i)).toBeTruthy();
+    expect(await screen.findByText(/Đã kích hoạt tự động Gói Tăng trưởng qua Webhook PayOS/i)).toBeTruthy();
   });
 
   it('displays server error banner honestly when SaaS billing API fails', async () => {

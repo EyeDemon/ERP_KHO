@@ -2341,3 +2341,53 @@ Thực hiện nghiêm ngặt theo **Quy tắc Điều phối 4 Bước ("Phân c
 <!-- slide -->
 ![Picking Tasks S-Shape Route & Auto-Advance Scanner Desktop — Wave 54 (`/picking-tasks`: Thanh tiến trình 3 bước kèm nút gạt `Tự động chuyển bước sau khi quét (Auto-advance)`, đợt lấy hàng `WAVE-QA-001` và nhiệm vụ `PICK-QA-001`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave54-picking-putaway-import-desktop.png)
 ````
+
+---
+
+## 55. Nghiệm thu Thực thi Phẫu thuật `Wave 55` — Đóng Kín 100% 7 Phát hiện Trực quan & Nghiệp vụ từ 8 Ảnh Chụp Gate 4 Wave 54 (`ERP_KHO v3.0 ZERO-DEFECT CLOSURE` — Baseline `commit f5e0757`)
+
+### 55.1. Ma trận Điều phối 3 Subagents & Phân vùng Độc quyền File (`Zero File Overlap`)
+
+| Chặng | Subagent | Vai trò & Nhiệm vụ Độc quyền (`[W55-01..07]`) | File Handoff | Trạng thái |
+| :--- | :--- | :--- | :--- | :---: |
+| **Đợt 1 (Backend API & QA Seed)** | [`Subagent 1A`](conversation://afc2f112-342d-4ad0-ad06-942866c3ad4e) | **Backend API & QA Seed (`[W55-01, W55-04]`):** Bổ sung danh sách định giá tồn kho chi tiết (`skuValuations` / `skuItems` / `items`) vào `GET /api/v1/reports/owner-gross-profit` trong [`ReportsController.cs`](file:///d:/ERP_KHO/ERP.Api/Controllers/ReportsController.cs#L1069-L1281) có bảo vệ RBAC `inventory.cost.read`; đảm bảo `totalPackages >= 1` và `statusLabel` Tiếng Việt trong [`HandoverManifestService.cs`](file:///d:/ERP_KHO/ERP.Infrastructure/Services/HandoverManifestService.cs#L64-L138); cập nhật idempotent [`tools/ERP.QaSeed/Program.cs`](file:///d:/ERP_KHO/tools/ERP.QaSeed/Program.cs#L3758-L3875) và thêm test `Wave55_*` vào [`Wave48To51FullClosureTests.cs`](file:///d:/ERP_KHO/ERP.Api.Tests/Wave48To51FullClosureTests.cs#L1435-L1619) | [`HANDOFF_SUBAGENT_1A.md`](file:///d:/ERP_KHO/HANDOFF_SUBAGENT_1A.md) | **HOÀN TẤT 100%** |
+| **Đợt 1 (Frontend 5 Pages v3.0 & Sidebar IA)** | [`Subagent 2A`](conversation://ab44579d-c7b7-4dfa-9647-6dac9760e23e) | **Frontend Pages & Navigation (`[W55-01, W55-03, W55-04, W55-06, W55-07]`):** Đọc `skuValuations` + fallback `/api/v1/inventory` và xóa `(COGS)`/`(MovingAverageCost)`/`SKU` trên [`CostValuation.tsx`](file:///d:/ERP_KHO/frontend/src/pages/CostValuation.tsx#L75-L296); rút gọn 6 tiêu đề cột Tiếng Việt + `tableLayout: 'fixed'` (`0px` tràn ngang) trên [`CodReconciliation.tsx`](file:///d:/ERP_KHO/frontend/src/pages/CodReconciliation.tsx#L220-L276); hiển thị `totalParcels >= 2` và `statusLabel` Tiếng Việt trên [`HandoverManifests.tsx`](file:///d:/ERP_KHO/frontend/src/pages/HandoverManifests.tsx#L63-L354); tinh gọn khối 5 bước trên [`Dashboard.tsx`](file:///d:/ERP_KHO/frontend/src/pages/Dashboard.tsx#L449-L461) và chuyển danh mục nền tảng sang nhóm `'Quản trị'` trong [`productionNavigation.ts`](file:///d:/ERP_KHO/frontend/src/config/productionNavigation.ts#L11-L61); mở rộng cột 2 Bước 1 và xóa từ tiếng Anh thừa trong [`OnboardingWizard.tsx`](file:///d:/ERP_KHO/frontend/src/pages/OnboardingWizard.tsx#L190-L221) & [`SaasBilling.tsx`](file:///d:/ERP_KHO/frontend/src/pages/SaasBilling.tsx#L188-L326) | [`HANDOFF_SUBAGENT_2A.md`](file:///d:/ERP_KHO/HANDOFF_SUBAGENT_2A.md) | **HOÀN TẤT 100%** |
+| **Đợt 1 (Frontend Picking S-Shape & Packing 2×2)** | [`Subagent 2B`](conversation://dbb94975-dff3-4f68-bc21-878ac3883b68) | **Picking & Packing UX (`[W55-02, W55-05]`):** Xóa nút Over-Engineering WCS/WES/RFID/Voice và tự động mở chi tiết `PICK-QA-001` kèm lộ trình chữ S + gợi ý kệ thay thế FEFO ngay khung nhìn đầu tiên trên [`PickingTasks.tsx`](file:///d:/ERP_KHO/frontend/src/pages/PickingTasks.tsx#L126-L475); chuyển Trạm Đóng Gói Hợp Nhất 1 Màn Hình sang lưới `2 × 2` (`repeat(2, minmax(0, 1fr))`) và truyền `qrCaption="Mã QR vận đơn"` trên [`PackingSessions.tsx`](file:///d:/ERP_KHO/frontend/src/pages/PackingSessions.tsx#L365-L751) | [`HANDOFF_SUBAGENT_2B.md`](file:///d:/ERP_KHO/HANDOFF_SUBAGENT_2B.md) | **HOÀN TẤT 100%** |
+| **Đợt 2 (5 Quality Gates)** | [`Subagent 0B`](conversation://64820743-4230-4e4e-b7a1-430d7a91a9b7), [`Subagent 2B`](conversation://dbb94975-dff3-4f68-bc21-878ac3883b68) & **`Agent Chính`** | Thực thi trọn vẹn **Gate 1 → Gate 5**: `0 Warning, 0 Error`, `509/509` `ERP.Api.Tests`, `651/651` `ERP.SqlIntegrationHarness`, `70/70` files (`391/391` tests) Vitest, và 8 ảnh chụp `gate4-wave55-*.png` (`1440x900`, `0px` tràn ngang) | [`HANDOFF_SUBAGENT_0B.md`](file:///d:/ERP_KHO/HANDOFF_SUBAGENT_0B.md), [`HANDOFF_SUBAGENT_2B.md`](file:///d:/ERP_KHO/HANDOFF_SUBAGENT_2B.md) | **HOÀN TẤT 100%** |
+
+---
+
+### 55.2. Kết quả Nghiệm thu 5 Cổng Chất lượng (`Gate 1 → Gate 5` — Wave 55 `ERP_KHO v3.0 ZERO-DEFECT CLOSURE`)
+
+1. **Gate 1 — Encoding & Release Build (`Subagent 0B — 64820743`, `task-2788`)**:
+   - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-encoding.ps1` → **`Exit Code 0`** (`0` lỗi encoding).
+   - `dotnet build ERP.slnx -c Release --no-restore` → **`0 Warning(s), 0 Error(s)`**.
+2. **Gate 2 — Full Backend API & Real SQL Server Integration Suites (`Subagent 0B — 64820743`, `task-2796`, `task-2800`, `task-2804` — Không dùng `--filter`)**:
+   - `dotnet test ERP.Api.Tests/ERP.Api.Tests.csproj -c Release --no-build` → **`509 / 509 PASS`** (`0 Failed, 0 Skipped`).
+   - `dotnet run --project tools/ERP.SqlIntegrationHarness/ERP.SqlIntegrationHarness.csproj -c Release --no-build` → **`651 / 651 PASS`** (`0 Failed, 0 Skipped`, chạy trên SQL Server thật `ERP_KHO_Integration_20261024_082926_f921c2e4`, TRX: `TestResults/SqlIntegration/f921c2e4da1e4350953eb217df63f85a/application.trx`).
+   - Post-Harness `ERP.QaSeed --apply` → **`3 / 3` SQL Server instances (`localhost`, `.\SQLEXPRESS`, `(localdb)\MSSQLLocalDB`) seeded (`Exit Code 0`)**.
+   - **Tổng cộng Gate 2**: **`509 + 651 = 1.160 / 1.160` bài kiểm thử Backend & SQL Server PASS tuyệt đối (`100%`)**.
+3. **Gate 3 — Frontend Production Build & Full Vitest (`Subagent 2B — dbb94975`)**:
+   - `npm --prefix frontend run build` → **`Exit Code 0`** (`1,711 modules transformed in 660ms`).
+   - `npm --prefix frontend test -- --run` → **`70 / 70` test files, `391 / 391` tests PASS (`0 Failed`)**.
+   - **Tổng hợp toàn hệ thống (`Gate 2 + Gate 3`)**: **`509 + 651 + 391 = 1.551 / 1.551` bài kiểm thử tự động PASS tuyệt đối (`100%`)**.
+4. **Gate 4 — Live Browser QA & Kiểm định Pixel-by-Pixel 8 Ảnh chụp (`gate4-wave55-*.png`)**:
+   - Đã kiểm chứng trực tiếp trên trình duyệt thật `1440x900` kết nối `http://localhost:5173` + `http://localhost:5260` trên cơ sở dữ liệu `ERP_KHO` (`0px` tràn ngang trên cả 8 màn hình, `0` lỗi HTTP `4xx/5xx`, 100% Tiếng Việt chuẩn kho vận):
+
+````carousel
+![Dashboard v3.0 Desktop — Wave 55 (`/`: Sidebar gọn 6 nhóm với `NHẬP KHO` & `XUẤT KHO` hiển thị ngay trên màn hình đầu tiên, khối 5 bước tinh gọn kèm 5 liên kết điều hướng nhanh, và khung Quản lý Gian hàng Sàn TMĐT hiển thị ngay trong khung nhìn)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave55-dashboard-v3-desktop.png)
+<!-- slide -->
+![Unified 1-Screen Packing Station Desktop — Wave 55 (`/packing-sessions`: Lưới `2 × 2` rộng rãi, tiêu đề 4 bước nằm gọn trên 1 dòng, placeholder `Quét mã đơn / PICK-001 / PACK-001...` và mã `SHA-256` hiển thị trọn vẹn 100%, nhãn QR `Mã QR vận đơn`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave55-packing-station-desktop.png)
+<!-- slide -->
+![Handover Manifests Desktop — Wave 55 (`/handover-manifests`: Bảng danh sách biên bản hiển thị `MAN-GHN-20261021-02` với `Số kiện AWB = 2`, `Đang mở nhận kiện` và `MAN-VTP-20261021-01` với `Số kiện AWB = 3`, `Đã niêm phong & Bàn giao`, 100% Tiếng Việt)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave55-handover-manifests-desktop.png)
+<!-- slide -->
+![3-Way COD Reconciliation Desktop — Wave 55 (`/cod-reconciliation`: Bảng 6 cột Tiếng Việt chuẩn `MÃ VẬN ĐƠN`, `ĐVVC`, `COD PHẢI THU`, `COD THỰC NHẬN`, `LỆCH PHÍ VC`, `TRẠNG THÁI` với `0px` tràn ngang và hiển thị trọn vẹn huy hiệu trạng thái)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave55-cod-reconciliation-desktop.png)
+<!-- slide -->
+![Moving Average Cost Valuation Desktop — Wave 55 (`/cost-valuation`: Bảng Định giá Tồn kho theo Giá vốn Bình quân Gia quyền • 2 mặt hàng hiển thị `QA-E2E-001` (`137`, `250.000 đ`, `34.250.000 đ`) và `QA-LOT-002` (`120`, `420.000 đ`, `50.400.000 đ`), 100% Tiếng Việt)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave55-cost-valuation-desktop.png)
+<!-- slide -->
+![5-Step Onboarding Wizard Desktop — Wave 55 (`/onboarding-wizard`: Lưới Bước 1 `1fr 1.8fr 1.2fr` hiển thị trọn vẹn `Công ty TNHH Thương mại & Kho vận SME`, 100% Tiếng Việt không còn từ tiếng Anh thừa trong ngoặc)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave55-onboarding-wizard-desktop.png)
+<!-- slide -->
+![SaaS Billing & VietQR Desktop — Wave 55 (`/saas-billing`: `Gói Tăng trưởng`, `2 / 3 kho`, `5 / 20 người dùng`, `2 / 2.000 mặt hàng`, `Gói Khởi đầu`, `Gói Doanh nghiệp`, 100% Tiếng Việt)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave55-saas-billing-desktop.png)
+<!-- slide -->
+![Picking Tasks S-Shape Route & FEFO Alternate Bin Desktop — Wave 55 (`/picking-tasks`: Nút `Tối ưu Lộ trình Đi bộ Nhặt hàng Chữ S (Dãy → Kệ → Tầng → Ô)` và thẻ `Chi tiết PICK-QA-001` kèm `🧭 Lộ trình nhặt hàng tối ưu hình chữ S (Dãy → Kệ → Tầng → Ô)` & nút `Gợi ý Kệ khác (Hết hàng kệ này)` hiển thị ngay trên màn hình)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave55-picking-putaway-import-desktop.png)
+````

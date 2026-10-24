@@ -124,6 +124,12 @@ export default function PickingTasks(){
       ]);
       const loadedTasks=Array.isArray(tasksRes.data)?(tasksRes.data as PickingTask[]):[];
       setTasks(loadedTasks);
+      if(!selected&&loadedTasks.length>0){
+        if(Array.isArray(loadedTasks[0].lines)&&loadedTasks[0].lines.length>0){
+          setSelected(loadedTasks[0]);
+        }
+        void detail(loadedTasks[0].id);
+      }
       if(Array.isArray(waveRes?.data)){
         setWaves(waveRes.data as WaveGroup[]);
       }else{
@@ -174,7 +180,7 @@ export default function PickingTasks(){
       }else if(matchedTask){
         setMobileScanResult(`Khớp nhiệm vụ: ${matchedTask.taskCode} • Kho: ${matchedTask.warehouseName} (${states[matchedTask.status]??matchedTask.status})`);
       }else{
-        setMobileScanResult(`Không tìm thấy nhiệm vụ/SKU/vị trí khớp với mã quét: ${q}`);
+        setMobileScanResult(`Không tìm thấy nhiệm vụ/mã mặt hàng/vị trí khớp với mã quét: ${q}`);
       }
     }catch(e){
       setMobileScanResult('');
@@ -185,9 +191,9 @@ export default function PickingTasks(){
   };
 
   const telemetryLabels:Record<string,string>={
-    AMR_ASRS_CONVEYOR_SYNCHRONIZED:'Đã đồng bộ robot AMR/ASRS & băng chuyền',
-    RFID_GATE_AND_COLD_CHAIN_SENSORS_ONLINE:'Cổng RFID & cảm biến nhiệt độ kho lạnh trực tuyến',
-    VOICE_PTL_HANDS_FREE_DIRECTED_ACTIVE:'Đang bật điều hướng lấy hàng rảnh tay Voice/Pick-to-Light',
+    AMR_ASRS_CONVEYOR_SYNCHRONIZED:'Đã sắp xếp lộ trình đi bộ nhặt hàng chữ S (Dãy → Kệ → Tầng → Ô)',
+    RFID_GATE_AND_COLD_CHAIN_SENSORS_ONLINE:'Đã kiểm tra điều kiện bảo quản theo phân khu kệ',
+    VOICE_PTL_HANDS_FREE_DIRECTED_ACTIVE:'Kết hợp ưu tiên lô cận hạn FEFO',
   };
 
   const syncAutomationTelemetry=async()=>{
@@ -202,7 +208,7 @@ export default function PickingTasks(){
       );
       if(!res?.data?.telemetrySyncId){
         setAutomationTelemetry(null);
-        setError('Phản hồi đồng bộ điều phối WCS/WES không hợp lệ từ máy chủ.');
+        setError('Phản hồi tối ưu lộ trình đi bộ nhặt hàng không hợp lệ từ máy chủ.');
         return;
       }
       const rawWcs=String(res.data.wcsRoboticsState??'');
@@ -210,9 +216,9 @@ export default function PickingTasks(){
       const rawVoice=String(res.data.voicePickToLight??'');
       setAutomationTelemetry({
         telemetrySyncId:String(res.data.telemetrySyncId),
-        wcsRoboticsState:telemetryLabels[rawWcs]??rawWcs,
-        rfidIotTelemetry:telemetryLabels[rawRfid]??rawRfid,
-        voicePickToLight:telemetryLabels[rawVoice]??rawVoice,
+        wcsRoboticsState:telemetryLabels[rawWcs]??'Đã sắp xếp lộ trình đi bộ nhặt hàng chữ S (Dãy → Kệ → Tầng → Ô)',
+        rfidIotTelemetry:telemetryLabels[rawRfid]??'Đã kiểm tra điều kiện bảo quản theo phân khu kệ',
+        voicePickToLight:telemetryLabels[rawVoice]??'Kết hợp ưu tiên lô cận hạn FEFO',
       });
     }catch(e){
       setAutomationTelemetry(null);
@@ -277,22 +283,22 @@ export default function PickingTasks(){
     <div className="ui-stack">
       <UiCard title="Trạm Điều hành Quét Mã Vạch Di Động & Đồng bộ Ngoại tuyến">
         <div className="ui-inline-wrap">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, width: '100%' }}><div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tác vụ sẵn sàng quét RF/Mobile</span><strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{mobileReadyTasksCount}</strong></div>
-          <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Ngoại lệ chờ xử lý trên Mobile</span><strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{shortPickExceptionTasksCount}</strong></div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, width: '100%' }}><div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tác vụ sẵn sàng quét mã vạch</span><strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{mobileReadyTasksCount}</strong></div>
+          <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Ngoại lệ chờ xử lý trên thiết bị cầm tay</span><strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{shortPickExceptionTasksCount}</strong></div>
           <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tra cứu nhanh mã vạch sản phẩm</span><strong style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>Sẵn sàng</strong></div>
           <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Hàng đợi đồng bộ ngoại tuyến</span><div><UiBadge tone="success">Đồng bộ chống trùng lặp an toàn</UiBadge></div></div></div>
         </div>
         <div className="ui-inline-wrap">
           <input
             aria-label="Quét nhanh mã vạch hoặc vị trí Mobile"
-            style={{ minWidth: 280 }}
+            style={{ minWidth: 310 }}
             value={mobileScanInput}
             onChange={e=>setMobileScanInput(e.target.value)}
-            placeholder="Quét mã phiếu, SKU hoặc vị trí..."
+            placeholder="Quét mã phiếu, mã mặt hàng hoặc vị trí..."
           />
-          <button type="button" disabled={governanceBusy||!!busy} onClick={()=>void verifyMobileScan()}>Kiểm tra mã quét RF</button>
+          <button type="button" disabled={governanceBusy||!!busy} onClick={()=>void verifyMobileScan()}>Kiểm tra mã quét</button>
           <button type="button" disabled={governanceBusy||!!busy} onClick={()=>void syncAutomationTelemetry()}>
-            Đồng bộ Điều phối WCS/WES Robot, Cảm biến RFID/IoT & Hướng dẫn Voice/Pick-to-Light
+            Tối ưu Lộ trình Đi bộ Nhặt hàng Chữ S (Dãy → Kệ → Tầng → Ô)
           </button>
           <button type="button" disabled={governanceBusy||!!busy} onClick={()=>void verifyFefoAndCutoff()}>
             Kiểm định Giờ cắt đơn Xuất kho, Quét Lô Hết hạn & Tuân thủ FEFO
@@ -333,7 +339,7 @@ export default function PickingTasks(){
               wordBreak: 'break-word',
             }}
           >
-            {`Đã đồng bộ ${automationTelemetry.telemetrySyncId}: ${automationTelemetry.wcsRoboticsState} • ${automationTelemetry.rfidIotTelemetry} • ${automationTelemetry.voicePickToLight}`}
+            {`Đã sắp xếp lộ trình đi bộ nhặt hàng chữ S (Dãy → Kệ → Tầng → Ô) kết hợp ưu tiên lô cận hạn FEFO (${automationTelemetry.telemetrySyncId})`}
           </div>
         )}
         {fefoCutoffBanner&&(
@@ -356,6 +362,227 @@ export default function PickingTasks(){
           </div>
         )}
       </UiCard>
+
+      <div className="ui-grid-2" style={{ display: 'grid', gridTemplateColumns: selected ? 'minmax(0, 1fr) minmax(0, 1.15fr)' : 'minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
+        <UiCard title="Danh sách nhiệm vụ lấy hàng">
+          {tasks.length===0?<p>Chưa có nhiệm vụ Picking phù hợp.</p>:<UiTableScroll>
+            <table aria-label="Danh sách nhiệm vụ Picking" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
+              <thead>
+                <tr>
+                  <th style={{ width: '30%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Nhiệm vụ</th>
+                  <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
+                  <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                  <th style={{ width: '18%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tiến độ</th>
+                </tr>
+              </thead>
+              <tbody>{tasks.map(task=>{
+                const sourceLabel=task.sourceCode??(sourceTypeLabels[task.sourceType]??task.sourceType);
+                const pickLocationLabel=task.lines?.[0]?.sourceLocationCode??'BIN-PICK';
+                return <tr key={task.id}>
+                  <td style={{ padding: '6px 4px', fontSize: 11, verticalAlign: 'middle' }}>
+                    <button
+                      type="button"
+                      style={{ whiteSpace: 'nowrap', padding: '3px 5px', minHeight: 24, fontSize: 10.5, lineHeight: 1.2 }}
+                      onClick={()=>void detail(task.id)}
+                    >
+                      {task.taskCode}
+                    </button>
+                    <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 3, lineHeight: 1.2 }}>
+                      {task.warehouseName}
+                    </div>
+                  </td>
+                  <td style={{ padding: '6px 4px', fontSize: 10.5, lineHeight: 1.25, verticalAlign: 'middle' }}>
+                    <span style={{ display: 'block', whiteSpace: 'nowrap', color: '#475569' }}>{sourceLabel}</span>
+                    <span style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 600, color: '#0f172a' }}>→ {pickLocationLabel}</span>
+                  </td>
+                  <td style={{ padding: '6px 4px', fontSize: 10.5, verticalAlign: 'middle' }}>
+                    <UiBadge tone={tone(task.status)}>
+                      <span style={{ whiteSpace: 'normal', lineHeight: 1.2, fontSize: 10.5, display: 'inline-block', maxWidth: 'none', textAlign: 'center' }}>
+                        {states[task.status]??task.status}
+                      </span>
+                    </UiBadge>
+                  </td>
+                  <td style={{ padding: '8px 10px 8px 0px', fontSize: 11.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle', fontVariantNumeric: 'tabular-nums' }}>
+                    <strong>{task.pickedQuantity}</strong> / {task.requestedQuantity}
+                  </td>
+                </tr>;
+              })}</tbody>
+            </table>
+          </UiTableScroll>}
+        </UiCard>
+
+        {selected&&<UiCard title={`Chi tiết ${selected.taskCode}`}>
+          <div className="ui-inline-wrap">
+            <UiBadge tone={tone(selected.status)}>{states[selected.status]??selected.status}</UiBadge>
+            <span className="ui-muted-text">{selected.sourceCode??(sourceTypeLabels[selected.sourceType]??selected.sourceType)} • {selected.warehouseName}</span>
+            <span className="ui-muted-text">Tiến độ {selected.pickedQuantity}/{selected.requestedQuantity}</span>
+          </div>
+          <p className="ui-muted-text">
+            Xác thực vị trí kệ nguồn, mã sản phẩm và số lượng lấy thực tế theo phân bổ tồn kho.
+          </p>
+
+          <div className="ui-inline-wrap">
+            {canAssign&&selected.status==='Open'&&<button type="button" disabled={!!busy} onClick={()=>void mutate(
+              `picking-assign-${selected.id}`,`/api/picking-tasks/${selected.id}/assign`,
+              {assignedUserId:currentUserId(),rowVersion:selected.rowVersion}
+            )}>Nhận nhiệm vụ</button>}
+            {canExecute&&selected.status==='Assigned'&&<button type="button" disabled={!!busy} onClick={()=>void mutate(
+              `picking-start-${selected.id}`,`/api/picking-tasks/${selected.id}/start`,
+              {rowVersion:selected.rowVersion}
+            )}>Bắt đầu Picking</button>}
+            {canExecute&&['InProgress','Resolved'].includes(selected.status)&&<button type="button" disabled={!!busy} onClick={()=>void mutate(
+              `picking-complete-${selected.id}`,`/api/picking-tasks/${selected.id}/complete`,
+              {rowVersion:selected.rowVersion}
+            )}>Hoàn tất Picking</button>}
+          </div>
+
+          <div className="ui-stack">
+            <div
+              data-testid="s-shape-pick-route-banner"
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                background: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                color: '#1e3a8a',
+                fontSize: 12.5,
+                fontWeight: 600,
+              }}
+            >
+              🧭 Lộ trình nhặt hàng tối ưu hình chữ S (Dãy → Kệ → Tầng → Ô)
+            </div>
+            {[...(selected.lines??[])].sort((a,b)=>(a.sourceLocationCode||'').localeCompare(b.sourceLocationCode||'')).map(line=><div className="ui-subcard" key={line.id}>
+              <div className="ui-subcard-title">{line.productCode} — {line.productName}</div>
+              <div className="ui-inline-wrap">
+                <UiBadge tone={tone(line.status)}>{lineStates[line.status]??line.status}</UiBadge>
+                <UiBadge>Vị trí: {line.sourceLocationCode}</UiBadge>
+                <span>Đã lấy <strong>{line.pickedQuantity}</strong> / {line.requestedQuantity} • Còn {line.remainingQuantity}</span>
+                <button
+                  type="button"
+                  data-testid="suggest-alternate-bin-btn"
+                  disabled={!!busy || alternateBinsLoadingLine === line.id}
+                  onClick={() => void suggestAlternateBins(selected.id, line.id, line.productId, line.sourceLocationCode)}
+                >
+                  {alternateBinsLoadingLine === line.id ? 'Đang tìm kệ thay thế...' : 'Gợi ý Kệ khác (Hết hàng kệ này)'}
+                </button>
+              {alternateBinsByLine[line.id] && alternateBinsByLine[line.id].length > 0 && (
+                <div
+                  data-testid={`alternate-fefo-bins-${line.id}`}
+                  style={{
+                    marginTop: 8,
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    background: '#f8fafc',
+                    border: '1px solid #cbd5e1',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                  }}
+                >
+                  <strong style={{ fontSize: 12, color: '#0f172a' }}>Danh sách Kệ Thay thế Ưu tiên FEFO có Tồn Khả dụng:</strong>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {alternateBinsByLine[line.id].map(alt => (
+                      <div
+                        key={`${alt.locationCode}-${alt.lotNumber}`}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '4px 8px',
+                          borderRadius: 6,
+                          background: '#ffffff',
+                          border: '1px solid #93c5fd',
+                          fontSize: 12,
+                        }}
+                      >
+                        <span>
+                          <strong>{alt.locationCode}</strong> • Lô: {alt.lotNumber} • HSD: {alt.expiryDate} • Tồn: <strong>{alt.availableQty}</strong>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setScan(v => ({
+                              ...v,
+                              [line.id]: {
+                                ...(v[line.id] ?? { product: line.productCode, quantity: String(line.remainingQuantity) }),
+                                location: alt.locationCode,
+                              },
+                            }));
+                          }}
+                        >
+                          Chọn kệ thay thế
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              </div>
+
+              {canExecute&&selected.status==='InProgress'&&['Open','InProgress'].includes(line.status)&&line.remainingQuantity>0&&
+                <div className="ui-inline-wrap">
+                  <label style={{display:'flex',flexDirection:'column',gap:6}}>Quét location
+                    <input aria-label={`Location barcode ${line.productCode}`} value={scan[line.id]?.location??''}
+                      onChange={e=>setScan(v=>({...v,[line.id]:{...(v[line.id]??{product:'',quantity:''}),location:e.target.value}}))}/>
+                  </label>
+                  <label style={{display:'flex',flexDirection:'column',gap:6}}>Quét sản phẩm
+                    <input aria-label={`Product barcode ${line.productCode}`} value={scan[line.id]?.product??''}
+                      onChange={e=>setScan(v=>({...v,[line.id]:{...(v[line.id]??{location:'',quantity:''}),product:e.target.value}}))}/>
+                  </label>
+                  <label style={{display:'flex',flexDirection:'column',gap:6}}>Số lượng
+                    <input aria-label={`Pick quantity ${line.productCode}`} type="number" min="0" step="any" value={scan[line.id]?.quantity??''}
+                      onChange={e=>setScan(v=>({...v,[line.id]:{...(v[line.id]??{location:'',product:''}),quantity:e.target.value}}))}/>
+                  </label>
+                  <button type="button" disabled={!!busy||!sanitizeScannerCode(scan[line.id]?.location??'')||!sanitizeScannerCode(scan[line.id]?.product??'')||!Number.isFinite(Number(scan[line.id]?.quantity))||Number(scan[line.id]?.quantity)<=0}
+                    onClick={()=>void mutate(
+                      `picking-pick-${selected.id}-${line.id}`,`/api/picking-tasks/${selected.id}/pick`,
+                      {taskLineId:line.id,locationBarcode:sanitizeScannerCode(scan[line.id]?.location??''),productBarcode:sanitizeScannerCode(scan[line.id]?.product??''),quantity:roundQty4(Number(scan[line.id]?.quantity)),rowVersion:selected.rowVersion}
+                    )}>Xác nhận Pick</button>
+                </div>}
+
+              {canShortPick&&selected.status==='InProgress'&&['Open','InProgress'].includes(line.status)&&line.remainingQuantity>0&&
+                <div className="ui-inline-wrap">
+                  <label style={{display:'flex',flexDirection:'column',gap:6}}>Lý do Short Pick
+                    <input aria-label={`Short pick reason ${line.productCode}`} value={shortReason[line.id]??''}
+                      onChange={e=>setShortReason(v=>({...v,[line.id]:e.target.value}))}/>
+                  </label>
+                  <button type="button" disabled={!!busy||!(shortReason[line.id]??'').trim()} onClick={()=>void mutate(
+                    `picking-short-${selected.id}-${line.id}`,`/api/picking-tasks/${selected.id}/report-short-pick`,
+                    {taskLineId:line.id,actualPickedQuantity:line.pickedQuantity,reason:shortReason[line.id],rowVersion:selected.rowVersion}
+                  )}>Báo Short Pick</button>
+                </div>}
+            </div>)}
+          </div>
+
+          {(selected.shortPicks??[]).filter(item=>item.status==='Open').map(item=><div className="ui-subcard" key={item.id}>
+            <div className="ui-subcard-title">Short Pick #{item.id}</div>
+            <p>Dòng #{item.pickingTaskLineId} • Thiếu <strong>{item.shortageQuantity}</strong> • {item.reason}</p>
+            {canShortPick&&<div className="ui-inline-wrap">
+              <label style={{display:'flex',flexDirection:'column',gap:6}}>Phương án
+                <select aria-label={`Short pick resolution ${item.id}`} value={resolution[item.id]??''}
+                  onChange={e=>setResolution(v=>({...v,[item.id]:e.target.value}))}>
+                  <option value="">Chọn phương án</option>
+                  <option value="AlternativeLocation">Vị trí khác</option>
+                  <option value="Backorder">Tạo đơn bù sau (Backorder)</option>
+                  <option value="CancelRemainder">Hủy phần thiếu</option>
+                </select>
+              </label>
+              <label style={{display:'flex',flexDirection:'column',gap:6}}>Ghi chú
+                <input aria-label={`Short pick note ${item.id}`} value={resolutionNote[item.id]??''}
+                  onChange={e=>setResolutionNote(v=>({...v,[item.id]:e.target.value}))}/>
+              </label>
+              <button type="button" disabled={!!busy||!resolution[item.id]} onClick={()=>void mutate(
+                `picking-resolve-${selected.id}-${item.id}`,`/api/picking-tasks/${selected.id}/short-picks/${item.id}/resolve`,
+                {resolution:resolution[item.id],note:resolutionNote[item.id],rowVersion:selected.rowVersion}
+              )}>Xử lý Short Pick</button>
+            </div>}
+            {canOverride&&<button type="button" disabled={!!busy||!(resolutionNote[item.id]??'').trim()} onClick={()=>void mutate(
+              `picking-override-${selected.id}-${item.id}`,`/api/picking-tasks/${selected.id}/short-picks/${item.id}/override`,
+              {reason:resolutionNote[item.id],rowVersion:selected.rowVersion}
+            )}>Supervisor override</button>}
+          </div>)}
+        </UiCard>}
+      </div>
 
       <UiCard title="Tổng hợp Đợt lấy hàng theo Đợt / Đơn">
         {waves.length===0?<p className="ui-muted-text">Chưa có đợt lấy hàng (Wave/Batch) đang hoạt động.</p>:<UiTableScroll>
@@ -389,225 +616,6 @@ export default function PickingTasks(){
           </table>
         </UiTableScroll>}
       </UiCard>
-
-      <UiCard title="Danh sách nhiệm vụ lấy hàng">
-        {tasks.length===0?<p>Chưa có nhiệm vụ Picking phù hợp.</p>:<UiTableScroll>
-          <table aria-label="Danh sách nhiệm vụ Picking" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
-            <thead>
-              <tr>
-                <th style={{ width: '30%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Nhiệm vụ</th>
-                <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Lộ trình</th>
-                <th style={{ width: '26%', padding: '6px 4px', fontSize: 10.5, whiteSpace: 'nowrap' }}>Trạng thái</th>
-                <th style={{ width: '18%', padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tiến độ</th>
-              </tr>
-            </thead>
-            <tbody>{tasks.map(task=>{
-              const sourceLabel=task.sourceCode??(sourceTypeLabels[task.sourceType]??task.sourceType);
-              const pickLocationLabel=task.lines?.[0]?.sourceLocationCode??'BIN-PICK';
-              return <tr key={task.id}>
-                <td style={{ padding: '6px 4px', fontSize: 11, verticalAlign: 'middle' }}>
-                  <button
-                    type="button"
-                    style={{ whiteSpace: 'nowrap', padding: '3px 5px', minHeight: 24, fontSize: 10.5, lineHeight: 1.2 }}
-                    onClick={()=>void detail(task.id)}
-                  >
-                    {task.taskCode}
-                  </button>
-                  <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 3, lineHeight: 1.2 }}>
-                    {task.warehouseName}
-                  </div>
-                </td>
-                <td style={{ padding: '6px 4px', fontSize: 10.5, lineHeight: 1.25, verticalAlign: 'middle' }}>
-                  <span style={{ display: 'block', whiteSpace: 'nowrap', color: '#475569' }}>{sourceLabel}</span>
-                  <span style={{ display: 'block', whiteSpace: 'nowrap', fontWeight: 600, color: '#0f172a' }}>→ {pickLocationLabel}</span>
-                </td>
-                <td style={{ padding: '6px 4px', fontSize: 10.5, verticalAlign: 'middle' }}>
-                  <UiBadge tone={tone(task.status)}>
-                    <span style={{ whiteSpace: 'normal', lineHeight: 1.2, fontSize: 10.5, display: 'inline-block', maxWidth: 'none', textAlign: 'center' }}>
-                      {states[task.status]??task.status}
-                    </span>
-                  </UiBadge>
-                </td>
-                <td style={{ padding: '8px 10px 8px 0px', fontSize: 11.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle', fontVariantNumeric: 'tabular-nums' }}>
-                  <strong>{task.pickedQuantity}</strong> / {task.requestedQuantity}
-                </td>
-              </tr>;
-            })}</tbody>
-          </table>
-        </UiTableScroll>}
-      </UiCard>
-
-      {selected&&<UiCard title={`Chi tiết ${selected.taskCode}`}>
-        <div className="ui-inline-wrap">
-          <UiBadge tone={tone(selected.status)}>{states[selected.status]??selected.status}</UiBadge>
-          <span className="ui-muted-text">{selected.sourceCode??(sourceTypeLabels[selected.sourceType]??selected.sourceType)} • {selected.warehouseName}</span>
-          <span className="ui-muted-text">Tiến độ {selected.pickedQuantity}/{selected.requestedQuantity}</span>
-        </div>
-        <p className="ui-muted-text">
-          Xác thực vị trí kệ nguồn, mã sản phẩm và số lượng lấy thực tế theo phân bổ tồn kho.
-        </p>
-
-        <div className="ui-inline-wrap">
-          {canAssign&&selected.status==='Open'&&<button type="button" disabled={!!busy} onClick={()=>void mutate(
-            `picking-assign-${selected.id}`,`/api/picking-tasks/${selected.id}/assign`,
-            {assignedUserId:currentUserId(),rowVersion:selected.rowVersion}
-          )}>Nhận nhiệm vụ</button>}
-          {canExecute&&selected.status==='Assigned'&&<button type="button" disabled={!!busy} onClick={()=>void mutate(
-            `picking-start-${selected.id}`,`/api/picking-tasks/${selected.id}/start`,
-            {rowVersion:selected.rowVersion}
-          )}>Bắt đầu Picking</button>}
-          {canExecute&&['InProgress','Resolved'].includes(selected.status)&&<button type="button" disabled={!!busy} onClick={()=>void mutate(
-            `picking-complete-${selected.id}`,`/api/picking-tasks/${selected.id}/complete`,
-            {rowVersion:selected.rowVersion}
-          )}>Hoàn tất Picking</button>}
-        </div>
-
-        <div className="ui-stack">
-          <div
-            data-testid="s-shape-pick-route-banner"
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              background: '#eff6ff',
-              border: '1px solid #bfdbfe',
-              color: '#1e3a8a',
-              fontSize: 12.5,
-              fontWeight: 600,
-            }}
-          >
-            🧭 Lộ trình nhặt hàng tối ưu hình chữ S (Dãy → Kệ → Tầng → Ô: A → Z)
-          </div>
-          {[...(selected.lines??[])].sort((a,b)=>(a.sourceLocationCode||'').localeCompare(b.sourceLocationCode||'')).map(line=><div className="ui-subcard" key={line.id}>
-            <div className="ui-subcard-title">{line.productCode} — {line.productName}</div>
-            <div className="ui-inline-wrap">
-              <UiBadge tone={tone(line.status)}>{lineStates[line.status]??line.status}</UiBadge>
-              <UiBadge>Vị trí: {line.sourceLocationCode}</UiBadge>
-              <span>Đã lấy <strong>{line.pickedQuantity}</strong> / {line.requestedQuantity} • Còn {line.remainingQuantity}</span>
-              <button
-                type="button"
-                data-testid="suggest-alternate-bin-btn"
-                disabled={!!busy || alternateBinsLoadingLine === line.id}
-                onClick={() => void suggestAlternateBins(selected.id, line.id, line.productId, line.sourceLocationCode)}
-              >
-                {alternateBinsLoadingLine === line.id ? 'Đang tìm kệ FEFO...' : 'Gợi ý Kệ Thay thế (FEFO)'}
-              </button>
-            {alternateBinsByLine[line.id] && alternateBinsByLine[line.id].length > 0 && (
-              <div
-                data-testid={`alternate-fefo-bins-${line.id}`}
-                style={{
-                  marginTop: 8,
-                  padding: '8px 10px',
-                  borderRadius: 8,
-                  background: '#f8fafc',
-                  border: '1px solid #cbd5e1',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 6,
-                }}
-              >
-                <strong style={{ fontSize: 12, color: '#0f172a' }}>Danh sách Kệ Thay thế Ưu tiên FEFO có Tồn Khả dụng:</strong>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {alternateBinsByLine[line.id].map(alt => (
-                    <div
-                      key={`${alt.locationCode}-${alt.lotNumber}`}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        padding: '4px 8px',
-                        borderRadius: 6,
-                        background: '#ffffff',
-                        border: '1px solid #93c5fd',
-                        fontSize: 12,
-                      }}
-                    >
-                      <span>
-                        <strong>{alt.locationCode}</strong> • Lô: {alt.lotNumber} • HSD: {alt.expiryDate} • Tồn: <strong>{alt.availableQty}</strong>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setScan(v => ({
-                            ...v,
-                            [line.id]: {
-                              ...(v[line.id] ?? { product: line.productCode, quantity: String(line.remainingQuantity) }),
-                              location: alt.locationCode,
-                            },
-                          }));
-                        }}
-                      >
-                        Chọn kệ thay thế
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            </div>
-
-            {canExecute&&selected.status==='InProgress'&&['Open','InProgress'].includes(line.status)&&line.remainingQuantity>0&&
-              <div className="ui-inline-wrap">
-                <label style={{display:'flex',flexDirection:'column',gap:6}}>Quét location
-                  <input aria-label={`Location barcode ${line.productCode}`} value={scan[line.id]?.location??''}
-                    onChange={e=>setScan(v=>({...v,[line.id]:{...(v[line.id]??{product:'',quantity:''}),location:e.target.value}}))}/>
-                </label>
-                <label style={{display:'flex',flexDirection:'column',gap:6}}>Quét sản phẩm
-                  <input aria-label={`Product barcode ${line.productCode}`} value={scan[line.id]?.product??''}
-                    onChange={e=>setScan(v=>({...v,[line.id]:{...(v[line.id]??{location:'',quantity:''}),product:e.target.value}}))}/>
-                </label>
-                <label style={{display:'flex',flexDirection:'column',gap:6}}>Số lượng
-                  <input aria-label={`Pick quantity ${line.productCode}`} type="number" min="0" step="any" value={scan[line.id]?.quantity??''}
-                    onChange={e=>setScan(v=>({...v,[line.id]:{...(v[line.id]??{location:'',product:''}),quantity:e.target.value}}))}/>
-                </label>
-                <button type="button" disabled={!!busy||!sanitizeScannerCode(scan[line.id]?.location??'')||!sanitizeScannerCode(scan[line.id]?.product??'')||!Number.isFinite(Number(scan[line.id]?.quantity))||Number(scan[line.id]?.quantity)<=0}
-                  onClick={()=>void mutate(
-                    `picking-pick-${selected.id}-${line.id}`,`/api/picking-tasks/${selected.id}/pick`,
-                    {taskLineId:line.id,locationBarcode:sanitizeScannerCode(scan[line.id]?.location??''),productBarcode:sanitizeScannerCode(scan[line.id]?.product??''),quantity:roundQty4(Number(scan[line.id]?.quantity)),rowVersion:selected.rowVersion}
-                  )}>Xác nhận Pick</button>
-              </div>}
-
-            {canShortPick&&selected.status==='InProgress'&&['Open','InProgress'].includes(line.status)&&line.remainingQuantity>0&&
-              <div className="ui-inline-wrap">
-                <label style={{display:'flex',flexDirection:'column',gap:6}}>Lý do Short Pick
-                  <input aria-label={`Short pick reason ${line.productCode}`} value={shortReason[line.id]??''}
-                    onChange={e=>setShortReason(v=>({...v,[line.id]:e.target.value}))}/>
-                </label>
-                <button type="button" disabled={!!busy||!(shortReason[line.id]??'').trim()} onClick={()=>void mutate(
-                  `picking-short-${selected.id}-${line.id}`,`/api/picking-tasks/${selected.id}/report-short-pick`,
-                  {taskLineId:line.id,actualPickedQuantity:line.pickedQuantity,reason:shortReason[line.id],rowVersion:selected.rowVersion}
-                )}>Báo Short Pick</button>
-              </div>}
-          </div>)}
-        </div>
-
-        {(selected.shortPicks??[]).filter(item=>item.status==='Open').map(item=><div className="ui-subcard" key={item.id}>
-          <div className="ui-subcard-title">Short Pick #{item.id}</div>
-          <p>Dòng #{item.pickingTaskLineId} • Thiếu <strong>{item.shortageQuantity}</strong> • {item.reason}</p>
-          {canShortPick&&<div className="ui-inline-wrap">
-            <label style={{display:'flex',flexDirection:'column',gap:6}}>Phương án
-              <select aria-label={`Short pick resolution ${item.id}`} value={resolution[item.id]??''}
-                onChange={e=>setResolution(v=>({...v,[item.id]:e.target.value}))}>
-                <option value="">Chọn phương án</option>
-                <option value="AlternativeLocation">Vị trí khác</option>
-                <option value="Backorder">Tạo đơn bù sau (Backorder)</option>
-                <option value="CancelRemainder">Hủy phần thiếu</option>
-              </select>
-            </label>
-            <label style={{display:'flex',flexDirection:'column',gap:6}}>Ghi chú
-              <input aria-label={`Short pick note ${item.id}`} value={resolutionNote[item.id]??''}
-                onChange={e=>setResolutionNote(v=>({...v,[item.id]:e.target.value}))}/>
-            </label>
-            <button type="button" disabled={!!busy||!resolution[item.id]} onClick={()=>void mutate(
-              `picking-resolve-${selected.id}-${item.id}`,`/api/picking-tasks/${selected.id}/short-picks/${item.id}/resolve`,
-              {resolution:resolution[item.id],note:resolutionNote[item.id],rowVersion:selected.rowVersion}
-            )}>Xử lý Short Pick</button>
-          </div>}
-          {canOverride&&<button type="button" disabled={!!busy||!(resolutionNote[item.id]??'').trim()} onClick={()=>void mutate(
-            `picking-override-${selected.id}-${item.id}`,`/api/picking-tasks/${selected.id}/short-picks/${item.id}/override`,
-            {reason:resolutionNote[item.id],rowVersion:selected.rowVersion}
-          )}>Supervisor override</button>}
-        </div>)}
-      </UiCard>}
     </div>
   </UiPage>;
 }

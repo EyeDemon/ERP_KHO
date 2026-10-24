@@ -40,7 +40,7 @@ describe('OnboardingWizard Page', () => {
         return {
           data: {
             completedSteps: 3,
-            status: 'Đã cấp phát Tenant & Sơ đồ kho mẫu',
+            status: 'Đã cấp phát thuê bao & Sơ đồ kho mẫu',
           },
         } as never;
       }
@@ -67,9 +67,15 @@ describe('OnboardingWizard Page', () => {
       throw new Error(`Unexpected POST ${url}`);
     });
 
-    render(<OnboardingWizard />);
+    const view = render(<OnboardingWizard />);
 
     expect(await screen.findByText(/2\/5 bước • Đang thiết lập/i)).toBeTruthy();
+    expect(screen.getByText('Trình hướng dẫn Thiết lập Kho Nhanh 5 Bước trong 15 Phút')).toBeTruthy();
+    expect(screen.getByText('Bước 1: Khởi tạo Thuê bao Doanh nghiệp & Sơ đồ Kệ Mẫu 1-Click')).toBeTruthy();
+    expect(screen.getByText('Bước 2 & 3: Tải Biểu mẫu & Nhập Excel Tồn Kho Đầu Kỳ kèm Giá Vốn')).toBeTruthy();
+    expect(view.container.textContent).not.toContain('(Onboarding Wizard)');
+    expect(view.container.textContent).not.toContain('(Tenant Code)');
+    expect(view.container.textContent).not.toContain('(FormData)');
 
     fireEvent.click(screen.getByTestId('btn-provision-tenant'));
     await waitFor(() => {
@@ -81,7 +87,7 @@ describe('OnboardingWizard Page', () => {
         }),
       );
     });
-    expect(await screen.findByText(/3\/5 bước • Đã cấp phát Tenant & Sơ đồ kho mẫu/i)).toBeTruthy();
+    expect(await screen.findByText(/3\/5 bước • Đã cấp phát thuê bao & Sơ đồ kho mẫu/i)).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('btn-quick-start-5steps'));
     await waitFor(() => {

@@ -18,7 +18,7 @@ describe('HandoverManifests Page', () => {
 
   afterEach(cleanup);
 
-  it('loads handover manifests, scans valid AWB, and seals manifest with vehiclePlate and driverName', async () => {
+  it('loads handover manifests with Vietnamese status badges, scans valid AWB, and seals manifest with vehiclePlate and driverName', async () => {
     vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
       if (url === '/api/v1/handover-manifests') {
         return {
@@ -30,9 +30,19 @@ describe('HandoverManifests Page', () => {
                 carrierCode: 'GHN',
                 vehiclePlate: '51C-888.99',
                 driverName: 'Nguyễn Văn Giao',
-                totalParcels: 12,
+                totalPackages: 12,
                 status: 'SEALED',
                 createdAt: '2026-10-24T08:00:00Z',
+              },
+              {
+                id: 102,
+                manifestCode: 'HND-SPX-20261024-002',
+                carrierCode: 'SPX',
+                vehiclePlate: '51D-111.22',
+                driverName: 'Lê Văn Nhận',
+                lines: [{ awbCode: 'SPX-1' }, { awbCode: 'SPX-2' }],
+                status: 'OPEN',
+                createdAt: '2026-10-24T08:15:00Z',
               },
             ],
           },
@@ -55,7 +65,7 @@ describe('HandoverManifests Page', () => {
       if (url === '/api/v1/handover-manifests/confirm-handover') {
         return {
           data: {
-            manifestCode: 'HND-GHN-20261024-002',
+            manifestCode: 'HND-GHN-20261024-003',
             status: 'SEALED',
           },
         } as never;
@@ -63,10 +73,13 @@ describe('HandoverManifests Page', () => {
       throw new Error(`Unexpected POST ${url}`);
     });
 
-    render(<HandoverManifests />);
+    const view = render(<HandoverManifests />);
 
     expect(await screen.findByText('HND-GHN-20261024-001')).toBeTruthy();
     expect(screen.getByText('51C-888.99')).toBeTruthy();
+    expect(screen.getByText('Đã niêm phong & Bàn giao')).toBeTruthy();
+    expect(screen.getByText('Đang mở nhận kiện')).toBeTruthy();
+    expect(view.container.textContent).not.toContain('(Handover Manifests)');
 
     fireEvent.change(screen.getByTestId('input-scan-awb'), { target: { value: 'GHN-AWB-9001' } });
     fireEvent.click(screen.getByTestId('btn-scan-awb'));
@@ -97,7 +110,7 @@ describe('HandoverManifests Page', () => {
         }),
       );
     });
-    expect(await screen.findByText(/Đã niêm phong & xuất kho bàn giao biên bản HND-GHN-20261024-002/i)).toBeTruthy();
+    expect(await screen.findByText(/Đã niêm phong & xuất kho bàn giao biên bản HND-GHN-20261024-003/i)).toBeTruthy();
   });
 
   it('renders critical red alert when scanning an AWB whose order was cancelled mid-flight (409 ORDER_CANCELLED_PUTBACK_REQUIRED)', async () => {

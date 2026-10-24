@@ -83,7 +83,7 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
 
   afterEach(cleanup);
 
-  it('renders shop owner gross profit report, 4 financial KPIs, 5-step onboarding wizard, and executes marketplace sync & 3-way COD reconciliation', async () => {
+  it('renders shop owner gross profit report, 4 financial KPIs, 5-step onboarding badges & quick actions, and executes marketplace sync & 3-way COD reconciliation', async () => {
     const view = render(
       <MemoryRouter>
         <Dashboard />
@@ -112,23 +112,13 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
     expect(view.getByText('Bước 4: Liên kết gian hàng Shopee / TikTok Shop')).toBeTruthy();
     expect(view.getByText('Bước 5: In gộp tem nhiệt & xuất đơn đầu tiên')).toBeTruthy();
 
-    fireEvent.click(view.getByRole('button', { name: 'Khởi tạo Thuê bao & Kho Mẫu' }));
-    expect(
-      await view.findByText(/Đã khởi tạo thuê bao TENANT-SME-2026 và phân bổ sơ đồ kho mẫu/),
-    ).toBeTruthy();
-    expect(post).toHaveBeenCalledWith(
-      '/api/v1/permissions/saas/tenants/provision',
-      expect.objectContaining({ tenantCode: 'TENANT-SME-2026' }),
-    );
-
-    fireEvent.click(view.getByRole('button', { name: 'Kích hoạt Nhanh 5 Bước Thiết lập Kho' }));
-    expect(
-      await view.findByText(/Đã kích hoạt hoàn tất 5 bước thiết lập kho nhanh/),
-    ).toBeTruthy();
-    expect(post).toHaveBeenCalledWith(
-      '/api/v1/reports/onboarding-wizard/quick-start',
-      expect.objectContaining({ tenantCode: 'TENANT-SME-2026' }),
-    );
+    // Quick action links replace duplicate tenant provisioning inputs on Dashboard
+    expect(view.getByTestId('quick-action-cod-reconciliation')).toBeTruthy();
+    expect(view.getByTestId('quick-action-onboarding-wizard')).toBeTruthy();
+    expect(view.getByTestId('quick-action-handover-manifests')).toBeTruthy();
+    expect(view.getByTestId('quick-action-cost-valuation')).toBeTruthy();
+    expect(view.getByTestId('quick-action-saas-billing')).toBeTruthy();
+    expect(view.queryByLabelText('Mã thuê bao doanh nghiệp mới')).toBeNull();
 
     expect(view.getByText('Quản lý Gian hàng Sàn TMĐT & Ánh xạ Mã Sản phẩm Đa Sàn')).toBeTruthy();
     expect(view.container.textContent).not.toContain('Mapping');

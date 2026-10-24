@@ -10,6 +10,7 @@ type ManifestRecord = {
   driverName: string;
   totalParcels: number;
   status: string;
+  statusLabel: string;
   createdAt: string;
 };
 
@@ -28,6 +29,18 @@ const extractErrorInfo = (err: any, fallback: string) => {
   const corr = String(err?.response?.headers?.['x-correlation-id'] ?? data?.correlationId ?? '');
   const rawMessage = String(data?.message ?? data?.title ?? fallback);
   return { status, errorCode, corr, rawMessage };
+};
+
+const formatManifestStatusLabel = (rawStatus: unknown, rawLabel: unknown) => {
+  if (typeof rawLabel === 'string' && rawLabel.trim() && !/^(OPEN|SEALED|DISPATCHED|CLOSED)$/i.test(rawLabel.trim())) {
+    return rawLabel.trim();
+  }
+  const upper = String(rawStatus ?? 'SEALED').trim().toUpperCase();
+  if (upper === 'OPEN' || upper === 'DRAFT' || upper === 'IN_PROGRESS') return 'Đang mở nhận kiện';
+  if (upper === 'SEALED' || upper === 'DISPATCHED' || upper === 'HANDED_OVER' || upper === 'COMPLETED') {
+    return 'Đã niêm phong & Bàn giao';
+  }
+  return String(rawStatus ?? 'Đã niêm phong & Bàn giao');
 };
 
 const HandoverManifests = () => {
@@ -56,16 +69,27 @@ const HandoverManifests = () => {
             ? ((res.data as Record<string, unknown>).manifests as unknown[])
             : [];
       setManifests(
-        rawList.map((item: any, idx: number) => ({
-          id: Number(item.id ?? idx + 1),
-          manifestCode: String(item.manifestCode ?? item.code ?? `HND-${idx + 1}`),
-          carrierCode: String(item.carrierCode ?? item.carrierName ?? 'GHN'),
-          vehiclePlate: String(item.vehiclePlate ?? item.licensePlate ?? ''),
-          driverName: String(item.driverName ?? item.courierName ?? ''),
-          totalParcels: Number(item.totalParcels ?? item.parcelCount ?? item.awbCount ?? 0),
-          status: String(item.status ?? 'SEALED'),
-          createdAt: String(item.createdAt ?? item.handoverAtUtc ?? new Date().toISOString()),
-        })),
+        rawList.map((item: any, idx: number) => {
+          const rawParcels =
+            item.totalPackages ??
+            item.totalParcels ??
+            item.parcelCount ??
+            item.awbCount ??
+            (Array.isArray(item.lines) ? item.lines.length : 1);
+          const count = Math.max(1, Number(rawParcels) || 1);
+          const rawStatus = String(item.status ?? 'SEALED');
+          return {
+            id: Number(item.id ?? idx + 1),
+            manifestCode: String(item.manifestCode ?? item.code ?? `HND-${idx + 1}`),
+            carrierCode: String(item.carrierCode ?? item.carrierName ?? 'GHN'),
+            vehiclePlate: String(item.vehiclePlate ?? item.licensePlate ?? ''),
+            driverName: String(item.driverName ?? item.courierName ?? ''),
+            totalParcels: count,
+            status: rawStatus,
+            statusLabel: formatManifestStatusLabel(rawStatus, item.statusLabel),
+            createdAt: String(item.createdAt ?? item.handoverAtUtc ?? new Date().toISOString()),
+          };
+        }),
       );
     } catch (err) {
       const info = extractErrorInfo(err, 'Không thể tải danh sách biên bản bàn giao bưu tá.');
@@ -96,7 +120,7 @@ const HandoverManifests = () => {
       const d = (res?.data ?? {}) as Record<string, unknown>;
       if (d.cancelledMidFlight === true || d.errorCode === 'ORDER_CANCELLED_PUTBACK_REQUIRED') {
         setCriticalAlert(
-          `CẢNH BÁO ĐỎ [ORDER_CANCELLED_PUTBACK_REQUIRED]: Đơn hàng của vận đơn ${trimmedAwb} đã bị khách hủy trên sàn! Tuyệt đối KHÔNG giao cho bưu tá — đã tạo lệnh hoàn kệ (Putback).`,
+          `CẢNH BÁO ĐỎ [ORDER_CANCELLED_PUTBACK_REQUIRED]: Đơn hàng của vận đơn ${trimmedAwb} đã bị khách hủy trên sàn! Tuyệt đối KHÔNG giao cho bưu tá — đã tạo lệnh hoàn kệ.`,
         );
         return;
       }
@@ -119,7 +143,7 @@ const HandoverManifests = () => {
         (info.errorCode.includes('ORDER_CANCELLED_PUTBACK_REQUIRED') || info.rawMessage.includes('ORDER_CANCELLED'))
       ) {
         setCriticalAlert(
-          `CẢNH BÁO ĐỎ [409 ORDER_CANCELLED_PUTBACK_REQUIRED]: Đơn hàng của mã vận đơn ${trimmedAwb} vừa bị hủy giữa chừng! Yêu cầu tách kiện hàng ra khỏi bao tải và thực hiện hoàn kệ (Putback).`,
+          `CẢNH BÁO ĐỎ [409 ORDER_CANCELLED_PUTBACK_REQUIRED]: Đơn hàng của mã vận đơn ${trimmedAwb} vừa bị hủy giữa chừng! Yêu cầu tách kiện hàng ra khỏi bao tải và thực hiện hoàn kệ.`,
         );
       } else if (info.status === 409 || info.errorCode.includes('DUPLICATE_AWB_SCAN')) {
         setCriticalAlert(
@@ -170,8 +194,8 @@ const HandoverManifests = () => {
     <UiPage>
       <UiPageHeader
         eyebrow="Xuất kho & Bàn giao Vận chuyển"
-        title="Biên bản Bàn giao Bưu tá & Chốt Chặn Đơn Hủy Phút Chót (Handover Manifests)"
-        description="Quét mã vận đơn AWB lên xe tải/bưu tá, tự động chặn đơn bị hủy giữa chừng (409 ORDER_CANCELLED_PUTBACK_REQUIRED) và chống quét trùng AWB (409 DUPLICATE_AWB_SCAN)."
+        title="Biên bản Bàn giao Bưu tá & Chốt Chặn Đơn Hủy Phút Chót"
+        description="Quét mã vận đơn AWB lên xe tải hoặc bưu tá, tự động phát hiện và chặn đơn hàng bị khách hủy giữa chừng để yêu cầu hoàn kệ và chống quét trùng mã vận đơn."
       />
 
       {error && <div role="alert">{error}</div>}
@@ -268,6 +292,7 @@ const HandoverManifests = () => {
               value={vehiclePlate}
               onChange={(e) => setVehiclePlate(e.target.value)}
               placeholder="Nhập biển số xe thực tế..."
+              style={{ minWidth: 220 }}
             />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -278,6 +303,7 @@ const HandoverManifests = () => {
               value={driverName}
               onChange={(e) => setDriverName(e.target.value)}
               placeholder="Nhập họ tên bưu tá nhận bàn giao..."
+              style={{ minWidth: 280 }}
             />
           </label>
           <button
@@ -315,7 +341,11 @@ const HandoverManifests = () => {
                     <td>{m.vehiclePlate || '—'}</td>
                     <td>{m.driverName || '—'}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{m.totalParcels}</td>
-                    <td><UiBadge tone="success">{m.status}</UiBadge></td>
+                    <td>
+                      <UiBadge tone={m.status.toUpperCase() === 'OPEN' ? 'warning' : 'success'}>
+                        {m.statusLabel}
+                      </UiBadge>
+                    </td>
                     <td>{new Date(m.createdAt).toLocaleString('vi-VN')}</td>
                   </tr>
                 ))}

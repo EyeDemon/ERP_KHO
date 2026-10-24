@@ -103,6 +103,9 @@ describe('Packing workbench',()=>{
     const huSelect=await view.findByLabelText('HU đích SKU-1001');
     expect(huSelect.closest('label')?.style.flexDirection).toBe('column');
     expect(huSelect.closest('.ui-subcard')).toBeTruthy();
+    expect(view.getByTestId('unified-packing-station-card').style.gridTemplateColumns).toBe('repeat(2, minmax(0, 1fr))');
+    expect(view.getByText('Mã QR vận đơn')).toBeTruthy();
+    expect(view.queryByText('QR GS1')).toBeNull();
   });
 
   it('records packing video evidence with SHA-256 hash and searches video evidence by AWB code',async()=>{

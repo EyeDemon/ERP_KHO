@@ -81,12 +81,23 @@ describe('CodReconciliation Page', () => {
       throw new Error(`Unexpected POST ${url}`);
     });
 
-    render(<CodReconciliation />);
+    const view = render(<CodReconciliation />);
 
     expect(await screen.findByText('19.500.000 đ')).toBeTruthy();
     expect(screen.getByText('18.200.000 đ')).toBeTruthy();
+    expect(screen.getByText('Sổ cái Đối soát Chi tiết Từng Vận đơn • 2 vận đơn')).toBeTruthy();
+    expect(screen.getByText('MÃ VẬN ĐƠN')).toBeTruthy();
+    expect(screen.getByText('COD PHẢI THU')).toBeTruthy();
+    expect(screen.getByText('COD THỰC NHẬN')).toBeTruthy();
+    expect(screen.getByText('LỆCH PHÍ VC')).toBeTruthy();
+    expect(screen.getByText('TRẠNG THÁI')).toBeTruthy();
+    expect(view.container.textContent).not.toContain('(ShipmentFinancialLedgers)');
+    expect(view.container.textContent).not.toContain('TrackingNumber');
+    expect(view.container.textContent).not.toContain('ExpectedCod');
     expect(screen.getByText('GHN-COD-801')).toBeTruthy();
     expect(screen.getByText('SPX-COD-802')).toBeTruthy();
+    expect(screen.getByText('Khớp đối soát 3 chiều')).toBeTruthy();
+    expect(screen.getByText('Cảnh báo lệch phí')).toBeTruthy();
 
     const fileInput = screen.getByTestId('input-cod-statement-file');
     const statementFile = new File(['awb,cod\nGHN-COD-801,10000000'], 'cod_statement.xlsx', {
@@ -119,7 +130,7 @@ describe('CodReconciliation Page', () => {
         status: 422,
         data: {
           errorCode: 'INVALID_CARRIER_STATEMENT',
-          message: 'Bảng kê đối soát COD thiếu cột Mã vận đơn (TrackingNumber).',
+          message: 'Bảng kê đối soát COD thiếu cột Mã vận đơn.',
           correlationId: 'corr-cod-422',
         },
       },
@@ -131,7 +142,7 @@ describe('CodReconciliation Page', () => {
     fireEvent.click(screen.getByTestId('btn-submit-cod-reconciliation'));
 
     const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toContain('Bảng kê đối soát COD thiếu cột Mã vận đơn (TrackingNumber).');
+    expect(alert.textContent).toContain('Bảng kê đối soát COD thiếu cột Mã vận đơn.');
     expect(alert.textContent).toContain('INVALID_CARRIER_STATEMENT');
     expect(alert.textContent).toContain('corr-cod-422');
   });

@@ -9,18 +9,11 @@ export type ProductionNavItem = {
 };
 
 export const productionNavigation: ProductionNavItem[] = [
-  // 1. Tổng quan
+  // 1. Tổng quan (chỉ giữ đúng 1 mục Tổng quan để không đẩy Nhập kho / Xuất kho xuống dưới)
   { path: '/', label: 'Tổng quan', section: 'Tổng quan', description: 'Điểm vào nhanh tới các trung tâm công việc và trạng thái vận hành thực tế.', access: 'always', expressMode: true },
-  { path: '/dock-yard', label: 'Cổng, sân bãi & cửa kho', section: 'Tổng quan', description: 'Lịch xe, nhận xe vào cổng, vị trí sân bãi, phân cửa kho và thời gian quay vòng.', permission: 'dock_appointment.read', expressMode: false },
-  { path: '/products', label: 'Sản phẩm', section: 'Tổng quan', description: 'SKU, danh mục, đơn vị tính và mã vạch của sản phẩm.', permission: 'product.read', expressMode: true },
-  { path: '/warehouses', label: 'Kho hàng', section: 'Tổng quan', description: 'Danh mục kho và trạng thái hoạt động.', permission: 'warehouse.read', expressMode: true },
-  { path: '/warehouse-structure', label: 'Cấu trúc vị trí', section: 'Tổng quan', description: 'Khu, dãy kệ, kệ, tầng và ô/vị trí theo phạm vi kho được phép.', permission: 'location.read', expressMode: false },
-  { path: '/warehouse-map', label: 'Bản đồ kho', section: 'Tổng quan', description: 'Bố cục vật lý, mức sử dụng và bản đồ nhiệt vận hành theo phạm vi kho được phép.', permission: 'location.read', expressMode: false },
-  { path: '/warehouse-calendar', label: 'Lịch & ca kho', section: 'Tổng quan', description: 'Múi giờ, lịch tuần, giờ chốt và năng lực theo ca vận hành.', permission: 'warehouse.read', expressMode: false },
-  { path: '/units', label: 'Đơn vị tính', section: 'Tổng quan', description: 'Danh mục đơn vị tính dùng trong chứng từ và tồn kho.', permission: 'uom.read', expressMode: true },
-  { path: '/business-partners', label: 'Đối tác', section: 'Tổng quan', description: 'Nhà cung cấp, khách hàng và thông tin liên hệ.', permission: 'partner.read', expressMode: true },
 
   // 2. Nhập kho
+  { path: '/dock-yard', label: 'Cổng, sân bãi & cửa kho', section: 'Nhập kho', description: 'Lịch xe, nhận xe vào cổng, vị trí sân bãi, phân cửa kho và thời gian quay vòng.', permission: 'dock_appointment.read', expressMode: false },
   { path: '/purchase-orders', label: 'Đơn mua (PO)', section: 'Nhập kho', description: 'Đơn hàng dự kiến từ ERP/Mua hàng, dung sai và trạng thái nhận hàng.', permission: 'purchase_order.read', expressMode: false },
   { path: '/asns', label: 'ASN dự kiến', section: 'Nhập kho', description: 'Lô hàng dự kiến, vận chuyển, thời điểm đến và bàn giao sang tiếp nhận.', permission: 'asn.read', expressMode: false },
   { path: '/import-receipts', label: 'Phiếu nhập kho', section: 'Nhập kho', description: 'Nhận hàng, kiểm tra chất lượng, chênh lệch và ghi sổ nhập kho.', permission: 'receipt.read', expressMode: true },
@@ -53,7 +46,14 @@ export const productionNavigation: ProductionNavItem[] = [
 
   // 6. Quản trị
   { path: '/onboarding-wizard', label: 'Thiết lập kho nhanh 5 bước', section: 'Quản trị', description: 'Khởi tạo thuê bao SaaS tự phục vụ, chọn mô hình kệ mẫu 1-Click và nhập Excel tồn đầu kỳ trong 15 phút.', permission: 'permission.read', expressMode: true },
-  { path: '/saas-billing', label: 'Gói cước SaaS & VietQR', section: 'Quản trị', description: 'Quản lý gói cước thuê bao SaaS (STARTER / GROWTH / ENTERPRISE), hạn mức 3 nấc và thanh toán tự động VietQR.', permission: 'permission.read', expressMode: true },
+  { path: '/saas-billing', label: 'Gói cước SaaS & VietQR', section: 'Quản trị', description: 'Quản lý gói cước thuê bao SaaS, hạn mức 3 nấc và thanh toán tự động VietQR.', permission: 'permission.read', expressMode: true },
+  { path: '/products', label: 'Sản phẩm', section: 'Quản trị', description: 'SKU, danh mục, đơn vị tính và mã vạch của sản phẩm.', permission: 'product.read', expressMode: true },
+  { path: '/warehouses', label: 'Kho hàng', section: 'Quản trị', description: 'Danh mục kho và trạng thái hoạt động.', permission: 'warehouse.read', expressMode: true },
+  { path: '/warehouse-structure', label: 'Cấu trúc vị trí', section: 'Quản trị', description: 'Khu, dãy kệ, kệ, tầng và ô/vị trí theo phạm vi kho được phép.', permission: 'location.read', expressMode: false },
+  { path: '/warehouse-map', label: 'Bản đồ kho', section: 'Quản trị', description: 'Bố cục vật lý, mức sử dụng và bản đồ nhiệt vận hành theo phạm vi kho được phép.', permission: 'location.read', expressMode: false },
+  { path: '/warehouse-calendar', label: 'Lịch & ca kho', section: 'Quản trị', description: 'Múi giờ, lịch tuần, giờ chốt và năng lực theo ca vận hành.', permission: 'warehouse.read', expressMode: false },
+  { path: '/units', label: 'Đơn vị tính', section: 'Quản trị', description: 'Danh mục đơn vị tính dùng trong chứng từ và tồn kho.', permission: 'uom.read', expressMode: true },
+  { path: '/business-partners', label: 'Đối tác', section: 'Quản trị', description: 'Nhà cung cấp, khách hàng và thông tin liên hệ.', permission: 'partner.read', expressMode: true },
   { path: '/approvals', label: 'Phê duyệt', section: 'Quản trị', description: 'Hàng đợi phê duyệt theo SLA, chứng từ và phạm vi kho được phép.', access: 'approvals', expressMode: false },
   { path: '/permissions', label: 'Quản trị quyền', section: 'Quản trị', description: 'Danh mục quyền và cấp quyền theo vai trò.', permission: 'permission.read', expressMode: true },
 ];

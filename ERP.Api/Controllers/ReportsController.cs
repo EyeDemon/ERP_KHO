@@ -1070,13 +1070,19 @@ namespace ERP.Api.Controllers
             [FromQuery] int? warehouseId = null,
             CancellationToken cancellationToken = default)
         {
-            if (warehouseId.HasValue && _warehouseAuth != null)
+            IReadOnlyCollection<int>? accessibleIds = null;
+            if (_warehouseAuth != null)
             {
-                await _warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+                accessibleIds = await _warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+                if (warehouseId.HasValue)
+                {
+                    await _warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+                }
             }
 
             var canReadCost = CanReadInventoryCost();
             var skuLines = new List<object>();
+            var skuValuations = new List<object>();
             decimal totalGrossRevenue = 0m;
             decimal totalMovingAverageCogs = 0m;
             decimal totalPlatformFee = 0m;
@@ -1086,6 +1092,82 @@ namespace ERP.Api.Controllers
 
             if (_db != null)
             {
+                var stockValuationQuery = _db.InventoryStocks
+                    .AsNoTracking()
+                    .Include(s => s.Product)
+                        .ThenInclude(p => p.Unit)
+                    .Include(s => s.Warehouse)
+                    .Where(s => s.Quantity > 0m);
+
+                if (warehouseId.HasValue)
+                {
+                    stockValuationQuery = stockValuationQuery.Where(s => s.WarehouseId == warehouseId.Value);
+                }
+                else if (accessibleIds != null && accessibleIds.Count > 0)
+                {
+                    stockValuationQuery = stockValuationQuery.Where(s => accessibleIds.Contains(s.WarehouseId));
+                }
+
+                var positiveStocks = await stockValuationQuery
+                    .OrderBy(s => s.ProductId)
+                    .ThenBy(s => s.WarehouseId)
+                    .ToListAsync(cancellationToken);
+
+                var stockGroups = positiveStocks
+                    .GroupBy(s => new
+                    {
+                        s.ProductId,
+                        ProductCode = s.Product?.Code ?? $"SKU-{s.ProductId}",
+                        ProductName = s.Product?.Name ?? $"Sản phẩm #{s.ProductId}",
+                        UnitName = s.Product?.Unit != null && !string.IsNullOrWhiteSpace(s.Product.Unit.Name)
+                            ? s.Product.Unit.Name
+                            : "Thùng",
+                        ProductMovingAverageCost = s.Product?.MovingAverageCost ?? 0m
+                    })
+                    .OrderBy(g => g.Key.ProductCode, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                foreach (var sg in stockGroups)
+                {
+                    var onHandQuantity = sg.Sum(s => s.Quantity);
+                    var availableQuantity = sg.Sum(s => Math.Max(0m, s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity));
+                    var warehouseNames = sg
+                        .Select(s => s.Warehouse?.Name?.Trim())
+                        .Where(n => !string.IsNullOrWhiteSpace(n))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+                    var warehouseName = warehouseNames.Count > 0
+                        ? string.Join(", ", warehouseNames)
+                        : "Kho Chính WH01";
+
+                    var stocksWithMac = sg.Where(s => s.MovingAverageCost > 0m && s.Quantity > 0m).ToList();
+                    var weightedMac = stocksWithMac.Count > 0
+                        ? decimal.Round(
+                            stocksWithMac.Sum(s => s.Quantity * s.MovingAverageCost) / stocksWithMac.Sum(s => s.Quantity),
+                            4)
+                        : (sg.Key.ProductMovingAverageCost > 0m ? sg.Key.ProductMovingAverageCost : 0m);
+
+                    decimal? movingAverageCost = canReadCost ? weightedMac : null;
+                    decimal? totalValuationAmount = canReadCost ? Math.Round(onHandQuantity * weightedMac, 0) : null;
+
+                    skuValuations.Add(new
+                    {
+                        productId = sg.Key.ProductId,
+                        productCode = sg.Key.ProductCode.Trim(),
+                        productName = sg.Key.ProductName.Trim(),
+                        warehouseName,
+                        unitName = sg.Key.UnitName.Trim(),
+                        onHandQuantity,
+                        onHandQty = onHandQuantity,
+                        availableQuantity,
+                        availableQty = availableQuantity,
+                        movingAverageCost,
+                        movingAverageUnitCost = movingAverageCost,
+                        totalValuationAmount,
+                        totalInventoryValue = totalValuationAmount
+                    });
+                }
+
                 var receiptsQuery = _db.ExportReceipts
                     .AsNoTracking()
                     .Include(r => r.Details)
@@ -1189,6 +1271,9 @@ namespace ERP.Api.Controllers
                 grossMarginPercent = canReadCost ? (decimal?)netMarginPct : null,
                 formula = "NetPocketProfit = GrossRevenue - MovingAverageCogs - PlatformCommissionFee - ShippingFeeDifferentials - PackagingCost",
                 skuBreakdown = skuLines,
+                skuValuations,
+                skuItems = skuValuations,
+                items = skuValuations,
                 statusLabel = canReadCost
                     ? "Đã tổng hợp báo cáo lãi gộp thực bỏ túi cho Chủ doanh nghiệp (đã trừ Giá vốn MAC, Phí sàn & Phí vận chuyển ẩn)"
                     : "Báo cáo doanh thu (đã ẩn Giá vốn MAC & Lãi gộp theo phân quyền RBAC)"

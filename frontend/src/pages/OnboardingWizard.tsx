@@ -69,7 +69,7 @@ const OnboardingWizard = () => {
       setWizardStatus({
         completedSteps: Number(d.completedSteps ?? 3),
         totalSteps: 5,
-        statusText: String(d.status ?? 'Đã cấp phát Tenant & Sơ đồ kho mẫu'),
+        statusText: String(d.status ?? 'Đã cấp phát thuê bao & Sơ đồ kho mẫu'),
       });
       setNotice(`Đã khởi tạo thuê bao ${tenantCode} và phân bổ sơ đồ kệ mẫu (${warehouseName}) thành công.`);
     } catch (err) {
@@ -167,7 +167,7 @@ const OnboardingWizard = () => {
     <UiPage>
       <UiPageHeader
         eyebrow="Quản trị & Khởi tạo Nhanh"
-        title="Trình hướng dẫn Thiết lập Kho Nhanh 5 Bước trong 15 Phút (Onboarding Wizard)"
+        title="Trình hướng dẫn Thiết lập Kho Nhanh 5 Bước trong 15 Phút"
         description="Khởi tạo Thuê bao SaaS tự phục vụ, chọn mô hình sơ đồ kệ 1-Click, nạp danh mục sản phẩm & tồn kho đầu kỳ bằng tệp Excel chuẩn."
       />
 
@@ -176,7 +176,7 @@ const OnboardingWizard = () => {
 
       <UiCard
         title={`Tiến trình Chuẩn hóa 5 Bước (${wizardStatus.completedSteps}/${wizardStatus.totalSteps} bước • ${wizardStatus.statusText})`}
-        subtitle="Thiết kế tối ưu cho Chủ Shop & Quản lý Kho SME hoàn tất thiết lập kho trong 15 phút mà không cần đội IT"
+        subtitle="Thiết kế tối ưu cho Chủ Shop & Quản lý Kho SME hoàn tất thiết lập kho trong 15 phút mà không cần đội kỹ thuật"
       >
         <div className="ui-inline-wrap" style={{ gap: 8 }}>
           <UiBadge tone="success">Bước 1: Chọn mô hình kho mẫu 1-Click (3 giây)</UiBadge>
@@ -187,16 +187,17 @@ const OnboardingWizard = () => {
         </div>
       </UiCard>
 
-      <UiCard title="Bước 1: Khởi tạo Thuê bao Doanh nghiệp (Tenant) & Sơ đồ Kệ Mẫu 1-Click">
+      <UiCard title="Bước 1: Khởi tạo Thuê bao Doanh nghiệp & Sơ đồ Kệ Mẫu 1-Click">
         <form onSubmit={handleProvisionTenant} className="ui-stack" style={{ gap: 12 }}>
-          <div className="ui-inline-wrap" style={{ gap: 12, alignItems: 'end' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.8fr 1.2fr', gap: 12, alignItems: 'end' }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              Mã thuê bao (Tenant Code)
+              Mã thuê bao doanh nghiệp
               <input
                 aria-label="Mã thuê bao doanh nghiệp mới"
                 value={tenantCode}
                 onChange={(e) => setTenantCode(e.target.value)}
                 placeholder="VD: TENANT-SME-2026"
+                style={{ width: '100%', boxSizing: 'border-box' }}
               />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -205,7 +206,7 @@ const OnboardingWizard = () => {
                 aria-label="Tên doanh nghiệp thuê bao"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                style={{ minWidth: 260 }}
+                style={{ width: '100%', boxSizing: 'border-box' }}
               />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -214,22 +215,23 @@ const OnboardingWizard = () => {
                 aria-label="Tên kho khởi tạo nhanh"
                 value={warehouseName}
                 onChange={(e) => setWarehouseName(e.target.value)}
-                style={{ minWidth: 220 }}
+                style={{ width: '100%', boxSizing: 'border-box' }}
               />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              Mô hình kho mẫu 1-Click
-              <select
-                aria-label="Mô hình kho mẫu"
-                value={warehouseTemplate}
-                onChange={(e) => setWarehouseTemplate(e.target.value as 'RETAIL_KIOT' | 'ECOMMERCE_3ZONES' | 'DISTRIBUTION_PALLET')}
-              >
-                <option value="RETAIL_KIOT">Kho Cửa hàng Nhỏ (1 Khu, 10 Kệ)</option>
-                <option value="ECOMMERCE_3ZONES">Kho Sàn TMĐT Tiêu chuẩn (3 Khu: Nhận - Lưu - Đóng gói, 50 Vị trí)</option>
-                <option value="DISTRIBUTION_PALLET">Kho Phân phối Bán buôn (Khu Pallet + Khu Lẻ + Khu Hàng lỗi)</option>
-              </select>
-            </label>
           </div>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            Mô hình kho mẫu 1-Click
+            <select
+              aria-label="Mô hình kho mẫu"
+              value={warehouseTemplate}
+              onChange={(e) => setWarehouseTemplate(e.target.value as 'RETAIL_KIOT' | 'ECOMMERCE_3ZONES' | 'DISTRIBUTION_PALLET')}
+              style={{ maxWidth: 640 }}
+            >
+              <option value="RETAIL_KIOT">Kho Cửa hàng Nhỏ (1 Khu, 10 Kệ)</option>
+              <option value="ECOMMERCE_3ZONES">Kho Sàn TMĐT Tiêu chuẩn (3 Khu: Nhận - Lưu - Đóng gói, 50 Vị trí)</option>
+              <option value="DISTRIBUTION_PALLET">Kho Phân phối Bán buôn (Khu Pallet + Khu Lẻ + Khu Hàng lỗi)</option>
+            </select>
+          </label>
           <div className="ui-inline-wrap" style={{ gap: 8 }}>
             <button type="submit" data-testid="btn-provision-tenant" disabled={busy}>
               Khởi tạo Thuê bao &amp; Sơ đồ Kho Mẫu
@@ -248,8 +250,8 @@ const OnboardingWizard = () => {
       </UiCard>
 
       <UiCard
-        title="Bước 2 & 3: Tải Biểu mẫu & Nhập Excel Tồn Kho Đầu Kỳ kèm Giá Vốn (FormData)"
-        subtitle="Tự động kiểm tra mã SKU, vị trí kệ và sinh bút toán nhập tồn đầu kỳ vào sổ cái bất biến"
+        title="Bước 2 & 3: Tải Biểu mẫu & Nhập Excel Tồn Kho Đầu Kỳ kèm Giá Vốn"
+        subtitle="Tự động kiểm tra mã mặt hàng, vị trí kệ và sinh bút toán nhập tồn đầu kỳ vào sổ cái bất biến"
       >
         <form onSubmit={handleUploadOpeningBalance} className="ui-inline-wrap" style={{ alignItems: 'end', gap: 12 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

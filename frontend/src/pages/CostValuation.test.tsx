@@ -38,12 +38,15 @@ describe('CostValuation Page', () => {
             netPocketProfit: 24500000,
             netMarginPct: 28.8,
             costHiddenByRbac: false,
-            items: [
+            skuValuations: [
               {
                 productId: 10,
-                productCode: 'SKU-VAL-01',
+                productCode: 'QA-E2E-001',
                 productName: 'Cà Phê Rang Xay Đặc Biệt',
+                warehouseName: 'Kho Trung tâm WH01',
+                unitName: 'Gói',
                 onHandQty: 100,
+                availableQty: 95,
                 movingAverageUnitCost: 120000,
                 totalInventoryValue: 12000000,
               },
@@ -69,13 +72,18 @@ describe('CostValuation Page', () => {
       throw new Error(`Unexpected POST ${url}`);
     });
 
-    render(<CostValuation />);
+    const view = render(<CostValuation />);
 
     expect(await screen.findByText('85.000.000 đ')).toBeTruthy();
+    expect(screen.getByText('Giá vốn hàng bán bình quân gia quyền')).toBeTruthy();
+    expect(screen.getByText('Bảng Định giá Tồn kho theo Giá vốn Bình quân Gia quyền • 1 mặt hàng')).toBeTruthy();
+    expect(view.container.textContent).not.toContain('(COGS)');
+    expect(view.container.textContent).not.toContain('(MovingAverageCost)');
+    expect(view.container.textContent).not.toContain('0 SKU');
     expect(screen.getByText('51.000.000 đ')).toBeTruthy();
     expect(screen.getByText('24.500.000 đ')).toBeTruthy();
     expect(screen.getByText('28,8%')).toBeTruthy();
-    expect(screen.getByText('SKU-VAL-01')).toBeTruthy();
+    expect(screen.getByText('QA-E2E-001')).toBeTruthy();
     expect(screen.getByText('120.000 đ')).toBeTruthy();
     expect(screen.getByText('12.000.000 đ')).toBeTruthy();
 
@@ -102,6 +110,46 @@ describe('CostValuation Page', () => {
       );
     });
     expect(await screen.findByText(/EINV-ND70-2026-009/i)).toBeTruthy();
+  });
+
+  it('falls back to /api/v1/inventory when owner-gross-profit returns empty valuation items', async () => {
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url === '/api/v1/reports/owner-gross-profit') {
+        return {
+          data: {
+            grossRevenue: 10000000,
+            movingAverageCogs: 6000000,
+            netPocketProfit: 4000000,
+            netMarginPct: 40,
+          },
+        } as never;
+      }
+      if (url === '/api/v1/inventory') {
+        return {
+          data: {
+            items: [
+              {
+                productId: 2,
+                productCode: 'QA-LOT-002',
+                productName: 'Sữa Tươi Tiệt Trùng Lô Date',
+                warehouseName: 'Kho Trung tâm WH01',
+                unitName: 'Thùng',
+                onHandQty: 50,
+                availableQty: 48,
+                movingAverageUnitCost: 200000,
+                totalInventoryValue: 10000000,
+              },
+            ],
+          },
+        } as never;
+      }
+      throw new Error(`Unexpected GET ${url}`);
+    });
+
+    render(<CostValuation />);
+
+    expect(await screen.findByText('QA-LOT-002')).toBeTruthy();
+    expect(screen.getByText('Bảng Định giá Tồn kho theo Giá vốn Bình quân Gia quyền • 1 mặt hàng')).toBeTruthy();
   });
 
   it('masks COGS & profit when RBAC returns 403 and displays error banner when e-invoice API fails with 500', async () => {

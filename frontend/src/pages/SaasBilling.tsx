@@ -43,7 +43,7 @@ const SaasBilling = () => {
   const [selectedPlanCode, setSelectedPlanCode] = useState<'STARTER' | 'GROWTH' | 'ENTERPRISE'>('GROWTH');
   const [billing, setBilling] = useState<BillingState>({
     planCode: 'GROWTH',
-    planName: 'Gói Tăng trưởng (GROWTH)',
+    planName: 'Gói Tăng trưởng',
     subscriptionStatus: 'ACTIVE',
     activeWarehouses: 0,
     maxWarehouses: 0,
@@ -64,10 +64,10 @@ const SaasBilling = () => {
     const rawPlan = String(bd.planCode ?? bd.planName ?? 'GROWTH').toUpperCase();
     const planName =
       rawPlan.includes('STARTER')
-        ? 'Gói Khởi đầu (STARTER)'
+        ? 'Gói Khởi đầu'
         : rawPlan.includes('ENTERPRISE')
-          ? 'Gói Doanh nghiệp (ENTERPRISE)'
-          : 'Gói Tăng trưởng (GROWTH)';
+          ? 'Gói Doanh nghiệp'
+          : 'Gói Tăng trưởng';
     setBilling({
       planCode: rawPlan,
       planName,
@@ -104,6 +104,13 @@ const SaasBilling = () => {
     void loadSubscription();
   }, [loadSubscription]);
 
+  const selectedPlanLabel =
+    selectedPlanCode === 'STARTER'
+      ? 'Gói Khởi đầu'
+      : selectedPlanCode === 'ENTERPRISE'
+        ? 'Gói Doanh nghiệp'
+        : 'Gói Tăng trưởng';
+
   const createVietQrInvoice = async () => {
     if (busy) return;
     setBusy(true);
@@ -130,7 +137,7 @@ const SaasBilling = () => {
         transferReference: `Nội dung CK: ${transferContent}`,
         gatewayStatus: 'Đối soát tự động PayOS / SePay: Đã tạo lệnh thanh toán & sẵn sàng kích hoạt tự động',
       });
-      setNotice(`Đã khởi tạo mã thanh toán VietQR tự động cho gói ${selectedPlanCode} (${transferContent}).`);
+      setNotice(`Đã khởi tạo mã thanh toán VietQR tự động cho ${selectedPlanLabel} (${transferContent}).`);
     } catch (err) {
       setError(extractErrorText(err, 'Không thể khởi tạo hóa đơn thanh toán VietQR.'));
     } finally {
@@ -162,7 +169,7 @@ const SaasBilling = () => {
       setNotice(
         typeof d.message === 'string' && d.message
           ? d.message
-          : `Đã xác nhận thanh toán tự động Webhook PayOS / SePay cho gói ${selectedPlanCode} • Trạng thái: ${statusLabel}.`,
+          : `Đã xác nhận thanh toán tự động Webhook PayOS / SePay cho ${selectedPlanLabel} • Trạng thái: ${statusLabel}.`,
       );
       await loadSubscription();
     } catch (err) {
@@ -182,7 +189,7 @@ const SaasBilling = () => {
       <UiPageHeader
         eyebrow="Quản trị & Thuê bao SaaS"
         title="Gói cước Thuê bao SaaS, Hạn mức 3 Nấc & Thanh toán Tự động VietQR"
-        description="Theo dõi hạn mức kho, tài khoản, danh mục SKU, sản lượng đơn hàng tháng và thanh toán gia hạn tự động qua VietQR (PayOS / SePay)."
+        description="Theo dõi hạn mức kho, tài khoản, danh mục mặt hàng, sản lượng đơn hàng tháng và thanh toán gia hạn tự động qua VietQR (PayOS / SePay)."
         actions={
           <Link to="/permissions" className="ui-btn-secondary" style={{ textDecoration: 'none', padding: '6px 12px', borderRadius: 6, border: '1px solid #cbd5e1' }}>
             ← Quay lại Quản trị Quyền RBAC
@@ -198,7 +205,7 @@ const SaasBilling = () => {
         <UiMetric value={billing.planName} label={`Trạng thái: ${billing.subscriptionStatus === 'ACTIVE' ? 'Đang hoạt động' : billing.subscriptionStatus}`} />
         <UiMetric value={`${billing.activeWarehouses} / ${billing.maxWarehouses} kho`} label={`Hạn mức kho: ${whTier.label} (${whTier.pct}%)`} />
         <UiMetric value={`${billing.activeUsers} / ${billing.maxUsers} người dùng`} label={`Hạn mức tài khoản: ${userTier.label} (${userTier.pct}%)`} />
-        <UiMetric value={`${billing.activeProducts} / ${billing.maxProducts.toLocaleString('vi-VN')} mặt hàng`} label={`Hạn mức SKU: ${skuTier.label} (${skuTier.pct}%)`} />
+        <UiMetric value={`${billing.activeProducts} / ${billing.maxProducts.toLocaleString('vi-VN')} mặt hàng`} label={`Hạn mức mặt hàng: ${skuTier.label} (${skuTier.pct}%)`} />
       </UiMetricGrid>
 
       <UiCard
@@ -217,7 +224,7 @@ const SaasBilling = () => {
             {[
               { title: 'Kho đang hoạt động', used: billing.activeWarehouses, max: billing.maxWarehouses, tier: whTier },
               { title: 'Tài khoản người dùng', used: billing.activeUsers, max: billing.maxUsers, tier: userTier },
-              { title: 'Danh mục mặt hàng (SKU)', used: billing.activeProducts, max: billing.maxProducts, tier: skuTier },
+              { title: 'Danh mục mặt hàng', used: billing.activeProducts, max: billing.maxProducts, tier: skuTier },
               { title: 'Sản lượng đơn hàng tháng', used: billing.currentMonthOrderCount, max: billing.monthlyOrderQuota, tier: orderTier },
             ].map((item) => (
               <div key={item.title} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc' }}>
@@ -244,15 +251,15 @@ const SaasBilling = () => {
       </UiCard>
 
       <UiCard
-        title="Bảng Gói cước Thuê bao SaaS (STARTER / GROWTH / ENTERPRISE) & Thanh toán Gia hạn VietQR"
+        title="Bảng Gói cước Thuê bao SaaS & Thanh toán Gia hạn VietQR"
         subtitle="Chọn gói cước phù hợp quy mô doanh nghiệp và quét mã VietQR để tự động mở khóa hạn mức tức thì"
       >
         <div className="ui-stack" style={{ gap: 14 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
             {[
-              { code: 'STARTER' as const, title: 'Gói Khởi đầu (STARTER)', price: '490.000 đ/tháng', specs: '1 kho • 5 tài khoản • 1.500 đơn/tháng' },
-              { code: 'GROWTH' as const, title: 'Gói Tăng trưởng (GROWTH)', price: '1.490.000 đ/tháng', specs: '3 kho • 20 tài khoản • 10.000 đơn/tháng' },
-              { code: 'ENTERPRISE' as const, title: 'Gói Doanh nghiệp (ENTERPRISE)', price: '3.490.000 đ/tháng', specs: '20 kho • 100 tài khoản • Không giới hạn SKU' },
+              { code: 'STARTER' as const, title: 'Gói Khởi đầu', price: '490.000 đ/tháng', specs: '1 kho • 5 tài khoản • 1.500 đơn/tháng' },
+              { code: 'GROWTH' as const, title: 'Gói Tăng trưởng', price: '1.490.000 đ/tháng', specs: '3 kho • 20 tài khoản • 10.000 đơn/tháng' },
+              { code: 'ENTERPRISE' as const, title: 'Gói Doanh nghiệp', price: '3.490.000 đ/tháng', specs: '20 kho • 100 tài khoản • Không giới hạn mặt hàng' },
             ].map((plan) => {
               const active = selectedPlanCode === plan.code;
               return (
@@ -287,7 +294,7 @@ const SaasBilling = () => {
                   disabled={busy}
                   onClick={() => void createVietQrInvoice()}
                 >
-                  Tạo Hóa đơn Thanh toán VietQR ({selectedPlanCode})
+                  Tạo Hóa đơn Thanh toán VietQR
                 </button>
                 <button
                   type="button"

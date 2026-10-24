@@ -104,5 +104,7 @@ describe('Picking workbench',()=>{
     const locInput=await view.findByLabelText('Location barcode SKU-1001');
     expect(locInput.closest('label')?.style.flexDirection).toBe('column');
     expect(locInput.closest('.ui-subcard')).toBeTruthy();
+    expect(view.getByRole('button',{name:'Tối ưu Lộ trình Đi bộ Nhặt hàng Chữ S (Dãy → Kệ → Tầng → Ô)'})).toBeTruthy();
+    expect(view.queryByText(/WCS\/WES|RFID\/IoT|Voice\/Pick-to-Light/)).toBeNull();
   });
 });

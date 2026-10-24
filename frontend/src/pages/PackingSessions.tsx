@@ -365,13 +365,13 @@ export default function PackingSessions(){
           data-testid="unified-packing-station-card"
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-            gap: 12,
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: 16,
           }}
         >
           <div style={{ padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-              <strong style={{ fontSize: 13, color: '#0f172a' }}>Bước 1: Quét nhanh Mã Đơn / Phiếu Nhặt</strong>
+              <strong style={{ fontSize: 13, color: '#0f172a', whiteSpace: 'nowrap' }}>Bước 1: Quét nhanh Mã Đơn / Phiếu Nhặt</strong>
               <UiBadge tone={unifiedScanCancelledWarning ? 'danger' : 'success'}>
                 {unifiedScanCancelledWarning ? 'Chặn đóng gói' : 'Kiểm tra hủy đơn giữa chừng'}
               </UiBadge>
@@ -390,7 +390,7 @@ export default function PackingSessions(){
                   }
                 }}
                 placeholder="Quét mã đơn / PICK-001 / PACK-001..."
-                style={{ flex: '1 1 150px', minWidth: 0 }}
+                style={{ flex: '1 1 240px', minWidth: 220 }}
               />
               <button
                 type="button"
@@ -423,7 +423,7 @@ export default function PackingSessions(){
 
           <div style={{ padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-              <strong style={{ fontSize: 13, color: '#0f172a' }}>Bước 2: Gợi ý Thùng Carton Tự động</strong>
+              <strong style={{ fontSize: 13, color: '#0f172a', whiteSpace: 'nowrap' }}>Bước 2: Gợi ý Thùng Carton Tự động</strong>
               <UiBadge tone="info">Tối ưu Thể tích &amp; Trọng lượng</UiBadge>
             </div>
             <div data-testid="unified-carton-suggestion" style={{ fontSize: 13, fontWeight: 700, color: '#1e3a8a', padding: '6px 10px', borderRadius: 8, background: '#eff6ff', border: '1px solid #bfdbfe' }}>
@@ -457,12 +457,12 @@ export default function PackingSessions(){
 
           <div style={{ padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-              <strong style={{ fontSize: 13, color: '#0f172a' }}>Bước 3: Ghi Hình Đóng Gói SHA-256</strong>
+              <strong style={{ fontSize: 13, color: '#0f172a', whiteSpace: 'nowrap' }}>Bước 3: Ghi Hình Đóng Gói SHA-256</strong>
               <UiBadge tone="success">CAM-PACK-01 • Watermark</UiBadge>
             </div>
             <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.45 }}>
               <div>Mốc thời gian quét: <strong>{unifiedScanTimestamp}</strong> • Vận đơn: <strong>{videoAwbCode || 'SPXVN058291042'}</strong></div>
-              <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#475569', wordBreak: 'break-all', overflowWrap: 'anywhere' }}>
                 SHA-256: {videoSha256}
               </div>
             </div>
@@ -478,14 +478,14 @@ export default function PackingSessions(){
 
           <div style={{ padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-              <strong style={{ fontSize: 13, color: '#0f172a' }}>Bước 4: Tem Nhiệt AWB 100×150mm</strong>
+              <strong style={{ fontSize: 13, color: '#0f172a', whiteSpace: 'nowrap' }}>Bước 4: Tem Nhiệt AWB 100×150mm</strong>
               <UiBadge tone="neutral">1D Code-128 &amp; 2D QR (A → Z)</UiBadge>
             </div>
             <div style={{ padding: '6px 8px', borderRadius: 8, border: '1px dashed #94a3b8', background: '#f8fafc', textAlign: 'center' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
                 VẬN ĐƠN TMĐT: {videoAwbCode || 'SPXVN058291042'} • Kệ nhặt: A → Z
               </div>
-              <BarcodeSvg value={videoAwbCode || 'SPXVN058291042'} height={34} />
+              <BarcodeSvg value={videoAwbCode || 'SPXVN058291042'} height={34} qrCaption="Mã QR vận đơn" />
             </div>
             <button
               type="button"
@@ -724,7 +724,7 @@ export default function PackingSessions(){
             <UiBadge tone={tone(labelPreviewHu.status)}>{huStateLabels[labelPreviewHu.status]??labelPreviewHu.status}</UiBadge>
           </div>
           <div>
-            <BarcodeSvg value={labelPreviewHu.barcode||labelPreviewHu.huCode} sscc={labelPreviewHu.sscc||'008938505000000018'} label={labelPreviewHu.huCode} />
+            <BarcodeSvg value={labelPreviewHu.barcode||labelPreviewHu.huCode} sscc={labelPreviewHu.sscc||'008938505000000018'} label={labelPreviewHu.huCode} qrCaption="Mã QR kiện hàng" />
           </div>
           <div>
             <strong>Danh sách SKU bên trong:</strong>
@@ -744,11 +744,11 @@ export default function PackingSessions(){
         <div className="ui-inline-wrap" style={{ marginBottom: 12, gap: 12 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#0f172a' }}>Tem chuẩn HU-QA-001 • SSCC: 008938505000000018</div>
-            <BarcodeSvg value="HU-QA-001" sscc="008938505000000018" label="HU-QA-001" />
+            <BarcodeSvg value="HU-QA-001" sscc="008938505000000018" label="HU-QA-001" qrCaption="Mã QR kiện hàng" />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#0f172a' }}>Tem chuẩn HU-QA-002 • SSCC: 008938505000000025</div>
-            <BarcodeSvg value="HU-QA-002" sscc="008938505000000025" label="HU-QA-002" />
+            <BarcodeSvg value="HU-QA-002" sscc="008938505000000025" label="HU-QA-002" qrCaption="Mã QR kiện hàng" />
           </div>
           <button
             type="button"

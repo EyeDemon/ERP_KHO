@@ -7,7 +7,10 @@ type ValuationRow = {
   productId: number;
   productCode: string;
   productName: string;
+  warehouseName: string;
+  unitName: string;
   onHandQty: number;
+  availableQty: number;
   movingAverageUnitCost: number;
   totalInventoryValue: number;
 };
@@ -21,6 +24,28 @@ const extractErrorText = (err: any, fallback: string) => {
 };
 
 const formatCurrencyVnd = (amount: number) => `${Math.round(amount).toLocaleString('vi-VN')} đ`;
+
+const mapRawValuationItems = (rawItems: unknown[], hidden: boolean): ValuationRow[] =>
+  rawItems.map((raw: any, idx: number) => {
+    const item = (raw ?? {}) as Record<string, unknown>;
+    const onHandQty = Number(item.onHandQty ?? item.onHandQuantity ?? item.quantity ?? 0);
+    const availableQty = Number(item.availableQty ?? item.availableQuantity ?? onHandQty);
+    const unitCost = hidden ? 0 : Number(item.movingAverageUnitCost ?? item.unitCost ?? item.averageCost ?? item.costPrice ?? 0);
+    const totalValue = hidden
+      ? 0
+      : Number(item.totalInventoryValue ?? item.totalCostValue ?? item.inventoryValue ?? Math.round(onHandQty * unitCost));
+    return {
+      productId: Number(item.productId ?? item.id ?? idx + 1),
+      productCode: String(item.productCode ?? item.sku ?? item.code ?? `MH-${idx + 1}`),
+      productName: String(item.productName ?? item.name ?? 'Mặt hàng tồn kho'),
+      warehouseName: String(item.warehouseName ?? item.warehouseCode ?? 'Kho trung tâm'),
+      unitName: String(item.unitName ?? item.uomName ?? item.uomCode ?? 'Cái'),
+      onHandQty,
+      availableQty,
+      movingAverageUnitCost: unitCost,
+      totalInventoryValue: totalValue,
+    };
+  });
 
 const CostValuation = () => {
   const canReadCost = usePermission('inventory.cost.read');
@@ -54,18 +79,23 @@ const CostValuation = () => {
         netMarginPct: hidden ? 0 : Number(d.netMarginPct ?? d.grossMarginPercent ?? d.grossMarginPct ?? 0),
       });
 
-      const rawItems = d.items ?? d.skuValuations ?? d.products ?? [];
-      if (Array.isArray(rawItems)) {
-        setValuationRows(
-          rawItems.map((item: Record<string, unknown>, idx: number) => ({
-            productId: Number(item.productId ?? item.id ?? idx + 1),
-            productCode: String(item.productCode ?? item.sku ?? `SKU-${idx + 1}`),
-            productName: String(item.productName ?? item.name ?? 'Sản phẩm kho'),
-            onHandQty: Number(item.onHandQty ?? item.onHandQuantity ?? 0),
-            movingAverageUnitCost: hidden ? 0 : Number(item.movingAverageUnitCost ?? item.unitCost ?? 0),
-            totalInventoryValue: hidden ? 0 : Number(item.totalInventoryValue ?? item.totalCostValue ?? 0),
-          })),
-        );
+      const primaryList = d.skuValuations ?? d.skuItems ?? d.items ?? d.products;
+      if (Array.isArray(primaryList) && primaryList.length > 0) {
+        setValuationRows(mapRawValuationItems(primaryList, hidden));
+      } else {
+        const invRes = await apiClient
+          .get<Record<string, unknown> | unknown[]>('/api/v1/inventory')
+          .catch(() => apiClient.get<Record<string, unknown> | unknown[]>('/api/Inventory'))
+          .catch(() => null);
+        const invData = invRes?.data;
+        const invList = Array.isArray(invData)
+          ? invData
+          : Array.isArray((invData as Record<string, unknown>)?.items)
+            ? ((invData as Record<string, unknown>).items as unknown[])
+            : Array.isArray((invData as Record<string, unknown>)?.balances)
+              ? ((invData as Record<string, unknown>).balances as unknown[])
+              : [];
+        setValuationRows(mapRawValuationItems(invList, hidden));
       }
     } catch (err: any) {
       if (err?.response?.status === 403) {
@@ -138,7 +168,7 @@ const CostValuation = () => {
       <UiPageHeader
         eyebrow="Tài chính & Kế toán Giá vốn"
         title="Giá Vốn Bình Quân Gia Quyền, Lãi Gộp Chủ Shop & Kết Xuất MISA AMIS"
-        description="Tính giá vốn bình quân gia quyền di động (Moving Average Cost), bảo mật giá vốn theo quyền RBAC (inventory.cost.read), kết xuất bảng kê .xlsx chuẩn MISA AMIS và phát hành HĐĐT nháp NĐ 70/2025."
+        description="Tính giá vốn bình quân gia quyền di động, bảo mật giá vốn theo quyền RBAC, kết xuất bảng kê .xlsx chuẩn MISA AMIS và phát hành HĐĐT nháp NĐ 70/2025."
       />
 
       {error && <div role="alert">{error}</div>}
@@ -166,7 +196,7 @@ const CostValuation = () => {
         <UiMetric value={formatCurrencyVnd(financeSummary.grossRevenue)} label="Doanh thu thuần thực xuất" />
         <UiMetric
           value={costHiddenByRbac ? 'Ẩn theo RBAC' : formatCurrencyVnd(financeSummary.movingAverageCogs)}
-          label="Giá vốn bình quân gia quyền (COGS)"
+          label="Giá vốn hàng bán bình quân gia quyền"
         />
         <UiMetric
           value={costHiddenByRbac ? 'Ẩn theo RBAC' : formatCurrencyVnd(financeSummary.netPocketProfit)}
@@ -214,6 +244,7 @@ const CostValuation = () => {
                 value={einvoiceBuyerName}
                 onChange={(e) => setEinvoiceBuyerName(e.target.value)}
                 placeholder="Nhập tên doanh nghiệp mua..."
+                style={{ minWidth: 260 }}
               />
             </label>
             <button type="submit" data-testid="btn-issue-einvoice-nd70" disabled={busy}>
@@ -223,27 +254,33 @@ const CostValuation = () => {
         </div>
       </UiCard>
 
-      <UiCard title={`Bảng Định giá Tồn kho theo Giá vốn Bình quân Gia quyền (MovingAverageCost) • ${valuationRows.length} SKU`}>
+      <UiCard title={`Bảng Định giá Tồn kho theo Giá vốn Bình quân Gia quyền • ${valuationRows.length} mặt hàng`}>
         {valuationRows.length === 0 ? (
-          <p className="ui-muted-text">Chưa có dòng chi tiết định giá SKU hoặc dữ liệu được tổng hợp ở cấp toàn kho.</p>
+          <p className="ui-muted-text">Chưa có dòng chi tiết định giá mặt hàng hoặc dữ liệu được tổng hợp ở cấp toàn kho.</p>
         ) : (
           <UiTableScroll>
-            <table className="ui-table-compact" aria-label="Bảng định giá tồn kho bình quân gia quyền">
+            <table className="ui-table-compact" aria-label="Bảng định giá tồn kho bình quân gia quyền" style={{ width: '100%' }}>
               <thead>
                 <tr>
-                  <th>Mã SKU</th>
+                  <th>Mã mặt hàng</th>
                   <th>Tên sản phẩm</th>
+                  <th>Kho</th>
+                  <th>ĐVT</th>
                   <th style={{ textAlign: 'right' }}>Tồn thực tế</th>
+                  <th style={{ textAlign: 'right' }}>Khả dụng</th>
                   <th style={{ textAlign: 'right' }}>Đơn giá vốn bình quân</th>
-                  <th style={{ textAlign: 'right' }}>Tổng giá trị tồn kho</th>
+                  <th style={{ textAlign: 'right' }}>Thành tiền tồn kho</th>
                 </tr>
               </thead>
               <tbody>
-                {valuationRows.map((row) => (
-                  <tr key={row.productId}>
+                {valuationRows.map((row, idx) => (
+                  <tr key={`${row.productId}-${row.productCode}-${idx}`}>
                     <td><strong>{row.productCode}</strong></td>
                     <td>{row.productName}</td>
+                    <td>{row.warehouseName}</td>
+                    <td>{row.unitName}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.onHandQty}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.availableQty}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                       {costHiddenByRbac ? <UiBadge tone="warning">Ẩn theo RBAC</UiBadge> : formatCurrencyVnd(row.movingAverageUnitCost)}
                     </td>

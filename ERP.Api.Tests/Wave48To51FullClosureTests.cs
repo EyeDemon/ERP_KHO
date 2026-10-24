@@ -1431,4 +1431,189 @@ public class Wave48To51FullClosureTests
         line.GetProperty("macDeltaPct").GetDecimal().Should().Be(25.00m);
         line.GetProperty("projectedInventoryValuation").GetDecimal().Should().Be(2500000m);
     }
+
+    [Fact]
+    public async Task Wave55_OwnerGrossProfit_ReturnsNonEmptySkuValuations_And_HandoverManifests_ReturnPositivePackageCounts()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase($"W55_ValAndHandover_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ErpKhoDbContext(options);
+
+        var wh = new Warehouse { Id = 1, Code = "WH01", Name = "Kho Chính WH01", IsActive = true };
+        var unit = new Unit { Id = 1, Code = "THUNG", Name = "Thùng", DecimalPlaces = 0, IsActive = true };
+        var prod1 = new Product
+        {
+            Id = 501,
+            Code = "QA-E2E-001",
+            Name = "Thùng linh kiện điện tử QA-01",
+            UnitId = 1,
+            Unit = unit,
+            MovingAverageCost = 120000m,
+            IsActive = true
+        };
+        var prod2 = new Product
+        {
+            Id = 502,
+            Code = "QA-LOT-002",
+            Name = "Hộp cảm biến nhiệt độ QA-02",
+            UnitId = 1,
+            Unit = unit,
+            MovingAverageCost = 85000m,
+            IsActive = true
+        };
+
+        db.Warehouses.Add(wh);
+        db.Units.Add(unit);
+        db.Products.AddRange(prod1, prod2);
+        db.InventoryStocks.AddRange(
+            new InventoryStock
+            {
+                Id = 5001,
+                TenantId = 1,
+                WarehouseId = 1,
+                Warehouse = wh,
+                ProductId = 501,
+                Product = prod1,
+                Status = InventoryStatus.Available,
+                Quantity = 40m,
+                ReservedQuantity = 5m,
+                MovingAverageCost = 120000m
+            },
+            new InventoryStock
+            {
+                Id = 5002,
+                TenantId = 1,
+                WarehouseId = 1,
+                Warehouse = wh,
+                ProductId = 502,
+                Product = prod2,
+                Status = InventoryStatus.Available,
+                Quantity = 25m,
+                ReservedQuantity = 0m,
+                MovingAverageCost = 85000m
+            });
+
+        var manifestSealed = new HandoverManifest
+        {
+            Id = 601,
+            TenantId = 1,
+            ManifestCode = "MAN-VTP-20261021-01",
+            WarehouseId = 1,
+            CarrierCode = "VTP",
+            DriverName = "Nguyễn Văn Hùng",
+            DriverPhone = "0909333444",
+            VehiclePlate = "51D-668.88",
+            Status = "SEALED",
+            TotalPackages = 0,
+            CreatedBy = 1,
+            CreatedAtUtc = DateTime.UtcNow.AddHours(-2),
+            SealedBy = 1,
+            SealedAtUtc = DateTime.UtcNow.AddHours(-1),
+            Lines =
+            [
+                new HandoverManifestLine { Id = 6001, ManifestId = 601, ExportReceiptId = 1, TrackingNumber = "VTP8938505001", ScannedAtUtc = DateTime.UtcNow.AddHours(-1), ScannedBy = 1 },
+                new HandoverManifestLine { Id = 6002, ManifestId = 601, ExportReceiptId = 1, TrackingNumber = "VTP8938505002", ScannedAtUtc = DateTime.UtcNow.AddHours(-1), ScannedBy = 1 },
+                new HandoverManifestLine { Id = 6003, ManifestId = 601, ExportReceiptId = 1, TrackingNumber = "VTP8938505003", ScannedAtUtc = DateTime.UtcNow.AddHours(-1), ScannedBy = 1 }
+            ]
+        };
+        var manifestOpen = new HandoverManifest
+        {
+            Id = 602,
+            TenantId = 1,
+            ManifestCode = "MAN-GHN-20261021-02",
+            WarehouseId = 1,
+            CarrierCode = "GHN",
+            DriverName = "Trần Minh Tuấn",
+            DriverPhone = "0909555666",
+            VehiclePlate = "51C-889.12",
+            Status = "OPEN",
+            TotalPackages = 0,
+            CreatedBy = 1,
+            CreatedAtUtc = DateTime.UtcNow.AddMinutes(-30),
+            Lines =
+            [
+                new HandoverManifestLine { Id = 6004, ManifestId = 602, ExportReceiptId = 2, TrackingNumber = "GHN8938505002", ScannedAtUtc = DateTime.UtcNow.AddMinutes(-20), ScannedBy = 1 },
+                new HandoverManifestLine { Id = 6005, ManifestId = 602, ExportReceiptId = 2, TrackingNumber = "GHN8938505005", ScannedAtUtc = DateTime.UtcNow.AddMinutes(-15), ScannedBy = 1 }
+            ]
+        };
+        db.HandoverManifests.AddRange(manifestSealed, manifestOpen);
+        await db.SaveChangesAsync();
+
+        var whAuth = new Mock<IWarehouseAuthorizationService>();
+        whAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([1]);
+        whAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        // 1a. Admin/Manager with inventory.cost.read -> skuValuations has >= 2 SKUs with positive cost & valuation
+        var adminUser = new Mock<ICurrentUser>();
+        adminUser.SetupGet(x => x.IsAuthenticated).Returns(true);
+        adminUser.SetupGet(x => x.UserId).Returns(1);
+        adminUser.SetupGet(x => x.Role).Returns(AppRoles.Admin);
+        adminUser.SetupGet(x => x.IsGlobalAdmin).Returns(true);
+        adminUser.Setup(x => x.HasPermission(ERP.Domain.Security.AppPermissions.InventoryCostRead)).Returns(true);
+
+        var reportsAdminCtrl = new ReportsController(new Mock<IReportService>().Object, db, whAuth.Object, adminUser.Object);
+        var adminRes = await reportsAdminCtrl.GetOwnerGrossProfit(1, default);
+        using var adminDoc = JsonSerializer.SerializeToDocument(adminRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+
+        adminDoc.RootElement.GetProperty("costHiddenByRbac").GetBoolean().Should().BeFalse();
+        var skuValuations = adminDoc.RootElement.GetProperty("skuValuations");
+        skuValuations.GetArrayLength().Should().BeGreaterThanOrEqualTo(2);
+        adminDoc.RootElement.GetProperty("skuItems").GetArrayLength().Should().Be(skuValuations.GetArrayLength());
+        adminDoc.RootElement.GetProperty("items").GetArrayLength().Should().Be(skuValuations.GetArrayLength());
+
+        foreach (var item in skuValuations.EnumerateArray())
+        {
+            var qty = item.GetProperty("onHandQuantity").GetDecimal();
+            var mac = item.GetProperty("movingAverageCost").GetDecimal();
+            var totalVal = item.GetProperty("totalValuationAmount").GetDecimal();
+            qty.Should().BeGreaterThan(0m);
+            mac.Should().BeGreaterThan(0m);
+            totalVal.Should().Be(Math.Round(qty * mac, 0));
+        }
+
+        // 1b. WarehouseStaff without inventory.cost.read -> movingAverageCost == null & totalValuationAmount == null
+        var staffUser = new Mock<ICurrentUser>();
+        staffUser.SetupGet(x => x.IsAuthenticated).Returns(true);
+        staffUser.SetupGet(x => x.UserId).Returns(15);
+        staffUser.SetupGet(x => x.Role).Returns(AppRoles.WarehouseStaff);
+        staffUser.SetupGet(x => x.IsGlobalAdmin).Returns(false);
+        staffUser.Setup(x => x.HasPermission(ERP.Domain.Security.AppPermissions.InventoryCostRead)).Returns(false);
+
+        var reportsStaffCtrl = new ReportsController(new Mock<IReportService>().Object, db, whAuth.Object, staffUser.Object);
+        var staffRes = await reportsStaffCtrl.GetOwnerGrossProfit(1, default);
+        using var staffDoc = JsonSerializer.SerializeToDocument(staffRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+
+        staffDoc.RootElement.GetProperty("costHiddenByRbac").GetBoolean().Should().BeTrue();
+        var maskedValuations = staffDoc.RootElement.GetProperty("skuValuations");
+        maskedValuations.GetArrayLength().Should().BeGreaterThanOrEqualTo(2);
+        foreach (var item in maskedValuations.EnumerateArray())
+        {
+            item.GetProperty("onHandQuantity").GetDecimal().Should().BeGreaterThan(0m);
+            item.GetProperty("movingAverageCost").ValueKind.Should().Be(JsonValueKind.Null);
+            item.GetProperty("totalValuationAmount").ValueKind.Should().Be(JsonValueKind.Null);
+        }
+
+        // 2. HandoverManifestsController.GetHandoverManifests -> totalPackages >= 1 and Vietnamese statusLabel
+        var handoverCtrl = new HandoverManifestsController(null, db, new Mock<IExportReceiptService>().Object, whAuth.Object, adminUser.Object);
+        var manifestRes = await handoverCtrl.GetHandoverManifests(1, null, default);
+        using var manifestDoc = JsonSerializer.SerializeToDocument(manifestRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+
+        var manifestItems = manifestDoc.RootElement.GetProperty("items");
+        manifestItems.GetArrayLength().Should().Be(2);
+
+        // Ordered by Id DESC -> first is 602 (OPEN, 2 lines), second is 601 (SEALED, 3 lines)
+        manifestItems[0].GetProperty("manifestCode").GetString().Should().Be("MAN-GHN-20261021-02");
+        manifestItems[0].GetProperty("totalPackages").GetInt32().Should().Be(2);
+        manifestItems[0].GetProperty("totalParcels").GetInt32().Should().Be(2);
+        manifestItems[0].GetProperty("awbCount").GetInt32().Should().Be(2);
+        manifestItems[0].GetProperty("statusLabel").GetString().Should().Be("Đang mở nhận kiện");
+
+        manifestItems[1].GetProperty("manifestCode").GetString().Should().Be("MAN-VTP-20261021-01");
+        manifestItems[1].GetProperty("totalPackages").GetInt32().Should().Be(3);
+        manifestItems[1].GetProperty("totalParcels").GetInt32().Should().Be(3);
+        manifestItems[1].GetProperty("awbCount").GetInt32().Should().Be(3);
+        manifestItems[1].GetProperty("statusLabel").GetString().Should().Be("Đã niêm phong & Bàn giao");
+    }
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import apiClient from '../services/apiClient';
-import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader } from '../ui/ProductionUi';
 
 type CodLedgerItem = {
   id: number;
@@ -34,7 +34,7 @@ const statusBadgeTone = (status: string) => {
 const statusLabelVi = (status: string) => {
   const upper = status.toUpperCase();
   if (upper === 'MATCHED' || upper === 'RECONCILED') return 'Khớp đối soát 3 chiều';
-  if (upper === 'FEE_DISCREPANCY' || upper === 'DISCREPANCY') return 'Cảnh báo lệch phí / COD';
+  if (upper === 'FEE_DISCREPANCY' || upper === 'DISCREPANCY') return 'Cảnh báo lệch phí';
   if (upper === 'OVERDUE_RETURN') return 'Quá hạn hoàn hàng (>7 ngày)';
   if (upper === 'PENDING') return 'Chờ đối soát';
   return status;
@@ -169,7 +169,7 @@ const CodReconciliation = () => {
       <UiPageHeader
         eyebrow="Tài chính & Kế toán Kho"
         title="Đối soát Tiền Thu Hộ (COD) & Phí Vận chuyển 3 Chiều"
-        description="Đối chiếu tự động sổ cái vận đơn nội bộ (ShipmentFinancialLedgers) với bảng kê quyết toán của Đơn vị Vận chuyển (GHN, GHTK, ViettelPost, SPX) để phát hiện lệch COD, đội cước cân nặng và đơn hoàn quá hạn."
+        description="Đối chiếu tự động sổ cái vận đơn nội bộ với bảng kê quyết toán của Đơn vị Vận chuyển (GHN, GHTK, ViettelPost, SPX) để phát hiện lệch COD, đội cước cân nặng và đơn hoàn quá hạn."
       />
 
       {error && <div role="alert">{error}</div>}
@@ -185,7 +185,7 @@ const CodReconciliation = () => {
 
       <UiCard
         title="Tải lên Bảng kê Quyết toán ĐVVC (.xlsx / .csv) & Chạy Đối soát Tự động 3 Chiều"
-        subtitle="Gửi tệp nhị phân bảng kê đối soát qua FormData lên máy chủ để khớp từng mã vận đơn AWB"
+        subtitle="Gửi tệp nhị phân bảng kê đối soát lên máy chủ để khớp từng mã vận đơn AWB"
       >
         <form onSubmit={handleUploadReconciliationStatement} className="ui-inline-wrap" style={{ alignItems: 'end', gap: 12 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -217,26 +217,38 @@ const CodReconciliation = () => {
         </form>
       </UiCard>
 
-      <UiCard title={`Sổ cái Đối soát Chi tiết Từng Vận đơn (ShipmentFinancialLedgers) • ${ledgers.length} vận đơn`}>
+      <UiCard title={`Sổ cái Đối soát Chi tiết Từng Vận đơn • ${ledgers.length} vận đơn`}>
         {ledgers.length === 0 ? (
           <p className="ui-muted-text">Chưa có bản ghi vận đơn COD cần đối soát trong kỳ hiện tại.</p>
         ) : (
-          <UiTableScroll>
-            <table className="ui-table-compact" aria-label="Bảng chi tiết đối soát vận đơn COD">
+          <div style={{ width: '100%', overflowX: 'hidden' }}>
+            <table
+              className="ui-table-compact"
+              aria-label="Bảng chi tiết đối soát vận đơn COD"
+              style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}
+            >
+              <colgroup>
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '16%' }} />
+                <col style={{ width: '20%' }} />
+              </colgroup>
               <thead>
                 <tr>
-                  <th>Mã vận đơn (TrackingNumber)</th>
+                  <th>MÃ VẬN ĐƠN</th>
                   <th>ĐVVC</th>
-                  <th style={{ textAlign: 'right' }}>COD kỳ vọng (ExpectedCod)</th>
-                  <th style={{ textAlign: 'right' }}>COD thực nhận (ActualCod)</th>
-                  <th style={{ textAlign: 'right' }}>Chênh lệch phí VC (ShippingFeeVariance)</th>
-                  <th>Trạng thái (Status)</th>
+                  <th style={{ textAlign: 'right' }}>COD PHẢI THU</th>
+                  <th style={{ textAlign: 'right' }}>COD THỰC NHẬN</th>
+                  <th style={{ textAlign: 'right' }}>LỆCH PHÍ VC</th>
+                  <th>TRẠNG THÁI</th>
                 </tr>
               </thead>
               <tbody>
                 {ledgers.map((row) => (
                   <tr key={`${row.trackingNumber}-${row.id}`}>
-                    <td><strong>{row.trackingNumber}</strong></td>
+                    <td style={{ wordBreak: 'break-word' }}><strong>{row.trackingNumber}</strong></td>
                     <td><UiBadge>{row.carrierCode}</UiBadge></td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatCurrencyVnd(row.expectedCod)}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatCurrencyVnd(row.actualCod)}</td>
@@ -250,7 +262,7 @@ const CodReconciliation = () => {
                     >
                       {formatCurrencyVnd(row.shippingFeeVariance)}
                     </td>
-                    <td>
+                    <td style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
                       <UiBadge tone={statusBadgeTone(row.status)}>
                         {statusLabelVi(row.status)}
                       </UiBadge>
@@ -259,7 +271,7 @@ const CodReconciliation = () => {
                 ))}
               </tbody>
             </table>
-          </UiTableScroll>
+          </div>
         )}
       </UiCard>
     </UiPage>

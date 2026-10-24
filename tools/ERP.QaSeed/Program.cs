@@ -3831,21 +3831,41 @@ DELETE FROM dbo.HandoverManifestLines WHERE TenantId = 1;
 DELETE FROM dbo.HandoverManifests WHERE TenantId = 1;
 INSERT INTO dbo.HandoverManifests (TenantId, ManifestCode, WarehouseId, CarrierCode, DriverName, DriverPhone, VehiclePlate, Status, TotalPackages, CreatedBy, CreatedAtUtc, SealedBy, SealedAtUtc)
 VALUES
-(1, N'MAN-VTP-20261021-01', {primaryWarehouse.Id}, N'VTP', N'Nguyễn Văn Hùng', N'0909333444', N'51D-668.88', N'SEALED', 1, {qaAdmin.Id}, DATEADD(HOUR, -12, SYSUTCDATETIME()), {qaAdmin.Id}, DATEADD(HOUR, -11, SYSUTCDATETIME())),
-(1, N'MAN-GHN-20261021-02', {primaryWarehouse.Id}, N'GHN', N'Trần Minh Tuấn', N'0909555666', N'51C-889.12', N'OPEN', 1, {qaAdmin.Id}, DATEADD(HOUR, -2, SYSUTCDATETIME()), NULL, NULL);
+(1, N'MAN-VTP-20261021-01', {primaryWarehouse.Id}, N'VTP', N'Nguyễn Văn Hùng', N'0909333444', N'51D-668.88', N'SEALED', 3, {qaAdmin.Id}, DATEADD(HOUR, -12, SYSUTCDATETIME()), {qaAdmin.Id}, DATEADD(HOUR, -11, SYSUTCDATETIME())),
+(1, N'MAN-GHN-20261021-02', {primaryWarehouse.Id}, N'GHN', N'Trần Minh Tuấn', N'0909555666', N'51C-889.12', N'OPEN', 2, {qaAdmin.Id}, DATEADD(HOUR, -2, SYSUTCDATETIME()), NULL, NULL);
 
 DECLARE @manVtpId int = (SELECT TOP 1 Id FROM dbo.HandoverManifests WHERE TenantId = 1 AND ManifestCode = N'MAN-VTP-20261021-01');
 DECLARE @manGhnId int = (SELECT TOP 1 Id FROM dbo.HandoverManifests WHERE TenantId = 1 AND ManifestCode = N'MAN-GHN-20261021-02');
 DECLARE @er01Id int = (SELECT TOP 1 Id FROM dbo.ExportReceipts WHERE Code = 'ER-QA-001');
 DECLARE @er02Id int = (SELECT TOP 1 Id FROM dbo.ExportReceipts WHERE Code = 'ER-QA-002');
+IF @er01Id IS NULL SET @er01Id = (SELECT TOP 1 Id FROM dbo.ExportReceipts ORDER BY Id ASC);
+IF @er02Id IS NULL SET @er02Id = (SELECT TOP 1 Id FROM dbo.ExportReceipts ORDER BY Id DESC);
 
 IF @manVtpId IS NOT NULL AND @er01Id IS NOT NULL
+BEGIN
     INSERT INTO dbo.HandoverManifestLines (TenantId, ManifestId, ExportReceiptId, TrackingNumber, MarketplaceOrderId, ScannedAtUtc, ScannedBy)
-    VALUES (1, @manVtpId, @er01Id, N'VTP8938505001', N'SHOPEE-VN-20261021-01', DATEADD(HOUR, -11, SYSUTCDATETIME()), {qaAdmin.Id});
+    VALUES
+    (1, @manVtpId, @er01Id, N'VTP8938505001', N'SHOPEE-VN-20261021-01', DATEADD(HOUR, -11, SYSUTCDATETIME()), {qaAdmin.Id}),
+    (1, @manVtpId, @er01Id, N'VTP8938505002', N'SHOPEE-VN-20261021-03', DATEADD(HOUR, -11, SYSUTCDATETIME()), {qaAdmin.Id}),
+    (1, @manVtpId, @er01Id, N'VTP8938505003', N'SHOPEE-VN-20261021-04', DATEADD(HOUR, -11, SYSUTCDATETIME()), {qaAdmin.Id});
+END;
 
 IF @manGhnId IS NOT NULL AND @er02Id IS NOT NULL
+BEGIN
     INSERT INTO dbo.HandoverManifestLines (TenantId, ManifestId, ExportReceiptId, TrackingNumber, MarketplaceOrderId, ScannedAtUtc, ScannedBy)
-    VALUES (1, @manGhnId, @er02Id, N'GHN8938505002', N'LAZADA-VN-20261021-02', DATEADD(HOUR, -1, SYSUTCDATETIME()), {qaAdmin.Id});
+    VALUES
+    (1, @manGhnId, @er02Id, N'GHN8938505002', N'LAZADA-VN-20261021-02', DATEADD(HOUR, -1, SYSUTCDATETIME()), {qaAdmin.Id}),
+    (1, @manGhnId, @er02Id, N'GHN8938505005', N'TIKTOK-VN-20261021-05', DATEADD(HOUR, -1, SYSUTCDATETIME()), {qaAdmin.Id});
+END;
+
+UPDATE m
+SET m.TotalPackages = CASE
+    WHEN (SELECT COUNT(*) FROM dbo.HandoverManifestLines l WHERE l.ManifestId = m.Id) > 0
+    THEN (SELECT COUNT(*) FROM dbo.HandoverManifestLines l WHERE l.ManifestId = m.Id)
+    ELSE 1
+END
+FROM dbo.HandoverManifests m
+WHERE m.TotalPackages <= 0;
 
 DELETE FROM dbo.SaasPlans;
 INSERT INTO dbo.SaasPlans (PlanCode, PlanName, MonthlyPriceVnd, MonthlyOrderQuota, MaxWarehouses, MaxUsers, IsActive)
