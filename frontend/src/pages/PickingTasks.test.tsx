@@ -107,4 +107,62 @@ describe('Picking workbench',()=>{
     expect(view.getByRole('button',{name:'Tối ưu Lộ trình Đi bộ Nhặt hàng Chữ S (Dãy → Kệ → Tầng → Ô)'})).toBeTruthy();
     expect(view.queryByText(/WCS\/WES|RFID\/IoT|Voice\/Pick-to-Light/)).toBeNull();
   });
+
+  it('loads 8 Put-to-Wall sortation slots (SLOT-01..SLOT-08) and validates barcode scan into slot',async()=>{
+    grant('picking.read','picking.execute');
+    vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(url==='/api/picking-tasks') return {data:[summary]} as never;
+      if(url==='/api/v1/picking-tasks/88/put-to-wall-slots'){
+        return {
+          data:{
+            taskId:88,
+            taskCode:'PICK-2026-0088',
+            wallCode:'PTW-WALL-01',
+            totalSlots:8,
+            activeSlotsCount:1,
+            slots:[
+              {slotCode:'SLOT-01',slotIndex:1,status:'SORTING',orderCode:'EX-2026-5108',skuCode:'SKU-1001',productName:'Cà phê',requiredQty:10,pickedQty:2,remainingQty:8},
+              {slotCode:'SLOT-02',slotIndex:2,status:'EMPTY',orderCode:null,skuCode:null,productName:null,requiredQty:0,pickedQty:0,remainingQty:0},
+            ]
+          }
+        } as never;
+      }
+      return {data:detail} as never;
+    });
+
+    vi.mocked(apiClient.post).mockImplementation(async(url:string)=>{
+      if(url==='/api/v1/picking-tasks/88/put-to-wall-sort'){
+        return {
+          data:{
+            taskId:88,
+            matched:true,
+            sortedSlotCode:'SLOT-01',
+            skuCode:'SKU-1001',
+            sortedQuantity:1,
+            slotSortedTotal:3,
+            slotRequiredQty:10,
+            slotRemainingQty:7,
+            slotStatus:'SORTING_IN_PROGRESS',
+            vietnameseMessage:'Đã chia đúng 1 sản phẩm SKU-1001 vào ô SLOT-01 (3/10).',
+          }
+        } as never;
+      }
+      return {data:{}} as never;
+    });
+
+    const view=render(<PickingTasks/>);
+    await view.findByText('PICK-2026-0088');
+
+    expect(await view.findByTestId('put-to-wall-grid')).toBeTruthy();
+    expect(view.getByTestId('put-to-wall-SLOT-01')).toBeTruthy();
+
+    fireEvent.change(view.getByLabelText('Quét mã SKU chia vào ô Put-to-Wall'),{target:{value:'SKU-1001'}});
+    fireEvent.change(view.getByLabelText('Chọn ô chia hàng Put-to-Wall'),{target:{value:'SLOT-01'}});
+    fireEvent.click(view.getByTestId('btn-confirm-put-to-wall'));
+
+    const notice=await view.findByTestId('put-to-wall-sort-notice');
+    expect(notice.textContent).toContain('SLOT-01');
+    expect(notice.textContent).toContain('SKU-1001');
+    expect(notice.textContent).toContain('Put-to-Wall');
+  });
 });

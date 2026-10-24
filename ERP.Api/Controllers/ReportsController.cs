@@ -757,7 +757,48 @@ namespace ERP.Api.Controllers
             var totalNetPayout = items.Sum(x => x.NetPayoutAmount);
             var discrepancyItems = items
                 .Where(x => x.ReconciliationStatus == "DISCREPANCY")
-                .Select(x => new
+                .Select(x =>
+                {
+                    var vatAmt = Math.Round(x.ExpectedCodAmount * 0.01m, 0);
+                    var pitAmt = Math.Round(x.ExpectedCodAmount * 0.005m, 0);
+                    var taxAmt = vatAmt + pitAmt;
+                    var fixedFee = 3000m;
+                    return new
+                    {
+                        x.Id,
+                        x.ExportReceiptId,
+                        x.CarrierCode,
+                        x.TrackingNumber,
+                        x.ExpectedCodAmount,
+                        x.ActualCodCollected,
+                        actualRemittedCodAmount = x.ActualCodCollected,
+                        codDiscrepancy = x.ExpectedCodAmount - x.ActualCodCollected,
+                        x.EstimatedShippingFee,
+                        x.ActualShippingFee,
+                        x.FeeOverchargeVariance,
+                        x.PlatformCommissionFee,
+                        x.ReturnFee,
+                        x.NetPayoutAmount,
+                        vatWithheldRatePct = 1.0m,
+                        pitWithheldRatePct = 0.5m,
+                        vatWithheldAmount = vatAmt,
+                        pitWithheldAmount = pitAmt,
+                        withheldTaxAmount = taxAmt,
+                        fixedOrderProcessingFee = fixedFee,
+                        netAfterTaxAndFees = x.ActualCodCollected - taxAmt - fixedFee,
+                        x.ReconciliationStatus
+                    };
+                })
+                .ToList();
+            var discrepancyCount = discrepancyItems.Count;
+
+            var mappedItems = items.Select(x =>
+            {
+                var vatAmt = Math.Round(x.ExpectedCodAmount * 0.01m, 0);
+                var pitAmt = Math.Round(x.ExpectedCodAmount * 0.005m, 0);
+                var taxAmt = vatAmt + pitAmt;
+                var fixedFee = 3000m;
+                return new
                 {
                     x.Id,
                     x.ExportReceiptId,
@@ -765,36 +806,32 @@ namespace ERP.Api.Controllers
                     x.TrackingNumber,
                     x.ExpectedCodAmount,
                     x.ActualCodCollected,
+                    actualRemittedCodAmount = x.ActualCodCollected,
                     codDiscrepancy = x.ExpectedCodAmount - x.ActualCodCollected,
                     x.EstimatedShippingFee,
                     x.ActualShippingFee,
-                    x.FeeOverchargeVariance,
                     x.PlatformCommissionFee,
                     x.ReturnFee,
                     x.NetPayoutAmount,
-                    x.ReconciliationStatus
-                })
-                .ToList();
-            var discrepancyCount = discrepancyItems.Count;
-
-            var mappedItems = items.Select(x => new
-            {
-                x.Id,
-                x.ExportReceiptId,
-                x.CarrierCode,
-                x.TrackingNumber,
-                x.ExpectedCodAmount,
-                x.ActualCodCollected,
-                codDiscrepancy = x.ExpectedCodAmount - x.ActualCodCollected,
-                x.EstimatedShippingFee,
-                x.ActualShippingFee,
-                x.PlatformCommissionFee,
-                x.ReturnFee,
-                x.NetPayoutAmount,
-                x.FeeOverchargeVariance,
-                x.ReconciliationStatus,
-                x.SettledAtUtc
+                    x.FeeOverchargeVariance,
+                    vatWithheldRatePct = 1.0m,
+                    pitWithheldRatePct = 0.5m,
+                    vatWithheldAmount = vatAmt,
+                    pitWithheldAmount = pitAmt,
+                    withheldTaxAmount = taxAmt,
+                    fixedOrderProcessingFee = fixedFee,
+                    netAfterTaxAndFees = x.ActualCodCollected - taxAmt - fixedFee,
+                    x.ReconciliationStatus,
+                    x.SettledAtUtc
+                };
             }).ToList();
+
+            var totalVatWithheldAmount = mappedItems.Sum(x => x.vatWithheldAmount);
+            var totalPitWithheldAmount = mappedItems.Sum(x => x.pitWithheldAmount);
+            var totalWithheldTaxAmount = mappedItems.Sum(x => x.withheldTaxAmount);
+            var totalFixedOrderProcessingFee = mappedItems.Sum(x => x.fixedOrderProcessingFee);
+            var totalNetAfterTaxAndFees = mappedItems.Sum(x => x.netAfterTaxAndFees);
+            const string taxPolicyReference = "Nghị định 70/2025/NĐ-CP (1% GTGT + 0,5% TNCN)";
 
             return Ok(new
             {
@@ -810,6 +847,29 @@ namespace ERP.Api.Controllers
                 totalFeeOverchargeVariance,
                 totalPlatformFee,
                 totalNetPayout,
+                totalVatWithheldAmount,
+                totalPitWithheldAmount,
+                totalWithheldTaxAmount,
+                totalFixedOrderProcessingFee,
+                totalNetAfterTaxAndFees,
+                taxPolicyReference,
+                summary = new
+                {
+                    totalCount = items.Count,
+                    discrepancyCount,
+                    matchedCount = items.Count(x => x.ReconciliationStatus == "MATCHED"),
+                    totalExpectedCod,
+                    totalActualCod,
+                    totalFeeOverchargeVariance,
+                    totalPlatformFee,
+                    totalNetPayout,
+                    totalVatWithheldAmount,
+                    totalPitWithheldAmount,
+                    totalWithheldTaxAmount,
+                    totalFixedOrderProcessingFee,
+                    totalNetAfterTaxAndFees,
+                    taxPolicyReference
+                },
                 discrepancies = discrepancyItems,
                 feeDiscrepancyWarnings = discrepancyItems,
                 items = mappedItems,
@@ -1016,6 +1076,11 @@ namespace ERP.Api.Controllers
                         existing.SettledAtUtc = now;
                     }
 
+                    var vatAmt = Math.Round(expectedCodAmount * 0.01m, 0);
+                    var pitAmt = Math.Round(expectedCodAmount * 0.005m, 0);
+                    var taxAmt = vatAmt + pitAmt;
+                    var fixedFee = 3000m;
+
                     var entryObj = new
                     {
                         exportReceiptId,
@@ -1023,6 +1088,7 @@ namespace ERP.Api.Controllers
                         carrierCode = carrier,
                         expectedCodAmount,
                         actualCodCollected = item.ActualCodCollected,
+                        actualRemittedCodAmount = item.ActualCodCollected,
                         codDiscrepancy = codDiff,
                         estimatedShippingFee = item.EstimatedShippingFee,
                         actualShippingFee = item.ActualShippingFee,
@@ -1030,6 +1096,13 @@ namespace ERP.Api.Controllers
                         platformCommissionFee = item.PlatformCommissionFee,
                         returnFee = item.ReturnFee,
                         netPayoutAmount = netPayout,
+                        vatWithheldRatePct = 1.0m,
+                        pitWithheldRatePct = 0.5m,
+                        vatWithheldAmount = vatAmt,
+                        pitWithheldAmount = pitAmt,
+                        withheldTaxAmount = taxAmt,
+                        fixedOrderProcessingFee = fixedFee,
+                        netAfterTaxAndFees = item.ActualCodCollected - taxAmt - fixedFee,
                         reconciliationStatus = status
                     };
                     processed.Add(entryObj);
@@ -1043,6 +1116,12 @@ namespace ERP.Api.Controllers
                 await _db.SaveChangesAsync(cancellationToken);
             }
 
+            var verifyTotalVat = Math.Round(totalExpectedCod * 0.01m, 0);
+            var verifyTotalPit = Math.Round(totalExpectedCod * 0.005m, 0);
+            var verifyTotalTax = verifyTotalVat + verifyTotalPit;
+            var verifyTotalFixedFee = processed.Count * 3000m;
+            const string verifyTaxPolicyRef = "Nghị định 70/2025/NĐ-CP (1% GTGT + 0,5% TNCN)";
+
             return Ok(new
             {
                 reconciliationBatchId = $"COD-REC-{now:yyyyMMdd-HHmmss}",
@@ -1054,6 +1133,24 @@ namespace ERP.Api.Controllers
                 totalActualCod,
                 pendingCodAmount = Math.Max(0m, totalExpectedCod - totalActualCod),
                 receivedFromCarrierAmount = totalActualCod,
+                totalVatWithheldAmount = verifyTotalVat,
+                totalPitWithheldAmount = verifyTotalPit,
+                totalWithheldTaxAmount = verifyTotalTax,
+                totalFixedOrderProcessingFee = verifyTotalFixedFee,
+                taxPolicyReference = verifyTaxPolicyRef,
+                summary = new
+                {
+                    verifiedCount = processed.Count,
+                    discrepancyCount,
+                    matchedCount = processed.Count - discrepancyCount,
+                    totalExpectedCod,
+                    totalActualCod,
+                    totalVatWithheldAmount = verifyTotalVat,
+                    totalPitWithheldAmount = verifyTotalPit,
+                    totalWithheldTaxAmount = verifyTotalTax,
+                    totalFixedOrderProcessingFee = verifyTotalFixedFee,
+                    taxPolicyReference = verifyTaxPolicyRef
+                },
                 discrepancies,
                 feeDiscrepancyWarnings = discrepancies,
                 items = processed,
@@ -1083,12 +1180,14 @@ namespace ERP.Api.Controllers
             var canReadCost = CanReadInventoryCost();
             var skuLines = new List<object>();
             var skuValuations = new List<object>();
+            var channelBreakdown = new List<object>();
             decimal totalGrossRevenue = 0m;
             decimal totalMovingAverageCogs = 0m;
             decimal totalPlatformFee = 0m;
             decimal totalShippingFeeDiff = 0m;
             decimal totalReturnRmaFee = 0m;
             decimal totalPackagingCost = 0m;
+            var totalOrderCount = 0;
 
             if (_db != null)
             {
@@ -1180,6 +1279,7 @@ namespace ERP.Api.Controllers
                 }
 
                 var receipts = await receiptsQuery.OrderByDescending(r => r.Id).Take(200).ToListAsync(cancellationToken);
+                totalOrderCount = receipts.Count;
                 var receiptIds = receipts.Select(r => r.Id).ToHashSet();
                 var receiptTrackings = receipts
                     .Where(r => !string.IsNullOrWhiteSpace(r.TrackingNumber))
@@ -1220,6 +1320,11 @@ namespace ERP.Api.Controllers
                     var estPlatformFee = decimal.Round(revenue * 0.07m, 2);
                     var estPackCost = decimal.Round(qty * 2500m, 2);
                     var netPocket = revenue - cogs - estPlatformFee - estPackCost;
+                    var skuVat = Math.Round(revenue * 0.01m, 0);
+                    var skuPit = Math.Round(revenue * 0.005m, 0);
+                    var skuTaxTotal = skuVat + skuPit;
+                    var skuFixedFee = 3000m;
+                    var skuNetAfterTax = netPocket - skuTaxTotal - skuFixedFee;
 
                     totalGrossRevenue += revenue;
                     totalMovingAverageCogs += cogs;
@@ -1238,8 +1343,13 @@ namespace ERP.Api.Controllers
                         totalCogs = canReadCost ? (decimal?)cogs : null,
                         platformFee = estPlatformFee,
                         packagingCost = estPackCost,
+                        withheldVatAmount = skuVat,
+                        withheldPitAmount = skuPit,
+                        withheldTaxTotalAmount = skuTaxTotal,
+                        fixedInfrastructureFeeTotal = skuFixedFee,
                         netPocketProfit = canReadCost ? (decimal?)netPocket : null,
                         estimatedGrossProfit = canReadCost ? (decimal?)netPocket : null,
+                        netProfitAfterWithheldTax = canReadCost ? (decimal?)skuNetAfterTax : null,
                         grossMarginPct = canReadCost ? (decimal?)(revenue > 0m ? decimal.Round((netPocket * 100m) / revenue, 2) : 0m) : null
                     });
                 }
@@ -1248,15 +1358,80 @@ namespace ERP.Api.Controllers
                 {
                     totalPlatformFee = decimal.Round(totalGrossRevenue * 0.07m, 2);
                 }
+
+                var receiptsByChannel = receipts
+                    .GroupBy(r => !string.IsNullOrWhiteSpace(r.CarrierCode) ? r.CarrierCode.Trim().ToUpperInvariant() : "SHOPEE")
+                    .ToList();
+
+                foreach (var chGroup in receiptsByChannel)
+                {
+                    var chOrderCount = chGroup.Count();
+                    var chDetails = chGroup.SelectMany(r => r.Details).ToList();
+                    var chRevenue = chDetails.Sum(d => decimal.Round(d.Quantity * d.UnitPrice, 2));
+                    var chCogs = chDetails.Sum(d => decimal.Round(d.Quantity * (d.Product?.MovingAverageCost ?? 0m), 2));
+                    var chPlatformFee = decimal.Round(chRevenue * 0.07m, 2);
+                    var chPackCost = decimal.Round(chDetails.Sum(d => d.Quantity) * 2500m, 2);
+                    var chNetGrossProfit = chRevenue - chCogs - chPlatformFee - chPackCost;
+                    var chVat = Math.Round(chRevenue * 0.01m, 0);
+                    var chPit = Math.Round(chRevenue * 0.005m, 0);
+                    var chTaxTotal = chVat + chPit;
+                    var chFixedFee = chOrderCount * 3000m;
+                    var chNetAfterTax = chNetGrossProfit - chTaxTotal - chFixedFee;
+
+                    channelBreakdown.Add(new
+                    {
+                        channelCode = chGroup.Key,
+                        orderCount = chOrderCount,
+                        grossRevenue = chRevenue,
+                        movingAverageCogs = canReadCost ? (decimal?)chCogs : null,
+                        platformCommissionFee = chPlatformFee,
+                        packagingCost = chPackCost,
+                        netGrossProfit = canReadCost ? (decimal?)chNetGrossProfit : null,
+                        withheldVatAmount = chVat,
+                        withheldPitAmount = chPit,
+                        withheldTaxTotalAmount = chTaxTotal,
+                        fixedInfrastructureFeeTotal = chFixedFee,
+                        netProfitAfterWithheldTax = canReadCost ? (decimal?)chNetAfterTax : null
+                    });
+                }
             }
 
             var netPocketProfit = totalGrossRevenue - totalMovingAverageCogs - totalPlatformFee - totalShippingFeeDiff - totalPackagingCost;
             var netMarginPct = totalGrossRevenue > 0m ? decimal.Round((netPocketProfit * 100m) / totalGrossRevenue, 2) : 0m;
+            var withheldVatAmount = Math.Round(totalGrossRevenue * 0.01m, 0);
+            var withheldPitAmount = Math.Round(totalGrossRevenue * 0.005m, 0);
+            var withheldTaxTotalAmount = withheldVatAmount + withheldPitAmount;
+            var fixedInfrastructureFeeTotal = totalOrderCount * 3000m;
+            decimal? netGrossProfitNullable = canReadCost ? netPocketProfit : null;
+            decimal? netProfitAfterWithheldTax = canReadCost
+                ? (decimal?)(netGrossProfitNullable.GetValueOrDefault() - withheldTaxTotalAmount - fixedInfrastructureFeeTotal)
+                : null;
+            const string ownerTaxPolicyRef = "Nghị định 70/2025/NĐ-CP (1% GTGT + 0,5% TNCN)";
+
+            if (channelBreakdown.Count == 0)
+            {
+                channelBreakdown.Add(new
+                {
+                    channelCode = "SHOPEE",
+                    orderCount = totalOrderCount,
+                    grossRevenue = totalGrossRevenue,
+                    movingAverageCogs = canReadCost ? (decimal?)totalMovingAverageCogs : null,
+                    platformCommissionFee = totalPlatformFee,
+                    packagingCost = totalPackagingCost,
+                    netGrossProfit = netGrossProfitNullable,
+                    withheldVatAmount,
+                    withheldPitAmount,
+                    withheldTaxTotalAmount,
+                    fixedInfrastructureFeeTotal,
+                    netProfitAfterWithheldTax
+                });
+            }
 
             return Ok(new
             {
                 warehouseId,
                 costHiddenByRbac = !canReadCost,
+                orderCount = totalOrderCount,
                 grossRevenue = totalGrossRevenue,
                 netRevenue = totalGrossRevenue,
                 movingAverageCogs = canReadCost ? (decimal?)totalMovingAverageCogs : null,
@@ -1265,18 +1440,221 @@ namespace ERP.Api.Controllers
                 shippingFeeDifferentials = totalShippingFeeDiff,
                 returnRmaFee = totalReturnRmaFee,
                 packagingCost = totalPackagingCost,
+                withheldVatAmount,
+                withheldPitAmount,
+                withheldTaxTotalAmount,
+                fixedInfrastructureFeeTotal,
                 netPocketProfit = canReadCost ? (decimal?)netPocketProfit : null,
                 estimatedGrossProfit = canReadCost ? (decimal?)netPocketProfit : null,
+                netProfitAfterWithheldTax,
                 netMarginPct = canReadCost ? (decimal?)netMarginPct : null,
                 grossMarginPercent = canReadCost ? (decimal?)netMarginPct : null,
-                formula = "NetPocketProfit = GrossRevenue - MovingAverageCogs - PlatformCommissionFee - ShippingFeeDifferentials - PackagingCost",
+                taxPolicyReference = ownerTaxPolicyRef,
+                formula = "NetPocketProfit = GrossRevenue - MovingAverageCogs - PlatformCommissionFee - ShippingFeeDifferentials - PackagingCost - WithheldTax(1.5%) - FixedFee(3000/order)",
+                summary = new
+                {
+                    warehouseId,
+                    costHiddenByRbac = !canReadCost,
+                    orderCount = totalOrderCount,
+                    grossRevenue = totalGrossRevenue,
+                    movingAverageCogs = canReadCost ? (decimal?)totalMovingAverageCogs : null,
+                    platformCommissionFee = totalPlatformFee,
+                    shippingFeeDifferentials = totalShippingFeeDiff,
+                    packagingCost = totalPackagingCost,
+                    withheldVatAmount,
+                    withheldPitAmount,
+                    withheldTaxTotalAmount,
+                    fixedInfrastructureFeeTotal,
+                    netGrossProfit = netGrossProfitNullable,
+                    netPocketProfit = netGrossProfitNullable,
+                    netProfitAfterWithheldTax,
+                    taxPolicyReference = ownerTaxPolicyRef
+                },
+                channels = channelBreakdown,
                 skuBreakdown = skuLines,
                 skuValuations,
                 skuItems = skuValuations,
                 items = skuValuations,
                 statusLabel = canReadCost
-                    ? "Đã tổng hợp báo cáo lãi gộp thực bỏ túi cho Chủ doanh nghiệp (đã trừ Giá vốn MAC, Phí sàn & Phí vận chuyển ẩn)"
+                    ? "Đã tổng hợp báo cáo lãi gộp thực bỏ túi cho Chủ doanh nghiệp (đã trừ Giá vốn MAC, Phí sàn, Thuế khấu trừ tại nguồn 1,5% & Phí vận chuyển ẩn)"
                     : "Báo cáo doanh thu (đã ẩn Giá vốn MAC & Lãi gộp theo phân quyền RBAC)"
+            });
+        }
+
+        [HttpGet("3pl-storage-snapshot")]
+        [HttpPost("3pl-storage-snapshot")]
+        [PermissionAuthorize(AppPermissions.InventoryRead)]
+        public async Task<IActionResult> GetOrCaptureThreePlStorageSnapshot(
+            [FromQuery] int? warehouseId = null,
+            [FromQuery] int? ownerId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var isPost = HttpMethods.IsPost(Request?.Method ?? "GET");
+            if (isPost && User?.IsInRole(AppRoles.Viewer) == true)
+            {
+                return Forbid();
+            }
+
+            IReadOnlyCollection<int>? accessibleIds = null;
+            if (_warehouseAuth != null)
+            {
+                accessibleIds = await _warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+                if (warehouseId.HasValue)
+                {
+                    await _warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+                }
+            }
+
+            var now = DateTime.UtcNow;
+            var ownerRows = new List<object>();
+            decimal totalOnHandQty = 0m;
+            int totalOccupiedBins = 0;
+            decimal totalVolumeCbm = 0m;
+            decimal totalPalletEquivalent = 0m;
+            decimal totalDailyFeeVnd = 0m;
+            decimal totalMonthlyFeeVnd = 0m;
+
+            if (_db != null)
+            {
+                var stockQuery = _db.InventoryStocks
+                    .AsNoTracking()
+                    .Include(x => x.Product)
+                    .Include(x => x.Warehouse)
+                    .Where(x => x.Quantity > 0m);
+
+                if (warehouseId.HasValue)
+                {
+                    stockQuery = stockQuery.Where(x => x.WarehouseId == warehouseId.Value);
+                }
+                else if (accessibleIds != null && accessibleIds.Count > 0)
+                {
+                    stockQuery = stockQuery.Where(x => accessibleIds.Contains(x.WarehouseId));
+                }
+
+                if (ownerId.HasValue)
+                {
+                    stockQuery = stockQuery.Where(x => x.OwnerId == ownerId.Value);
+                }
+
+                var stocks = await stockQuery.ToListAsync(cancellationToken);
+                var ownerIds = stocks
+                    .Where(x => x.OwnerId.HasValue && x.OwnerId.Value > 0)
+                    .Select(x => x.OwnerId!.Value)
+                    .Distinct()
+                    .ToList();
+
+                var partnersById = ownerIds.Count > 0
+                    ? await _db.BusinessPartners
+                        .AsNoTracking()
+                        .Where(bp => ownerIds.Contains(bp.Id))
+                        .ToDictionaryAsync(bp => bp.Id, bp => (bp.Code, bp.Name), cancellationToken)
+                    : new Dictionary<int, (string Code, string Name)>();
+
+                var groupedByOwnerAndWh = stocks
+                    .GroupBy(x => new { x.OwnerId, x.WarehouseId })
+                    .OrderBy(g => g.Key.WarehouseId)
+                    .ThenBy(g => g.Key.OwnerId ?? 0)
+                    .ToList();
+
+                foreach (var g in groupedByOwnerAndWh)
+                {
+                    string resolvedOwnerCode = "OWN-DEFAULT";
+                    string resolvedOwnerName = "Chủ hàng Mặc định (Tự doanh & 3PL Chính)";
+                    if (g.Key.OwnerId.HasValue && partnersById.TryGetValue(g.Key.OwnerId.Value, out var partnerInfo))
+                    {
+                        resolvedOwnerCode = partnerInfo.Code;
+                        resolvedOwnerName = partnerInfo.Name;
+                    }
+
+                    var whName = g.First().Warehouse?.Name?.Trim() ?? $"Kho #{g.Key.WarehouseId}";
+                    var distinctSkuCount = g.Select(x => x.ProductId).Distinct().Count();
+                    var occupiedBinCount = g.Where(x => x.LocationId.HasValue).Select(x => x.LocationId!.Value).Distinct().Count();
+                    var ownerOnHandQty = g.Sum(x => x.Quantity);
+                    var ownerVolumeCbm = Math.Round(
+                        g.Sum(x => x.Quantity * (x.Product != null && x.Product.UnitVolumeM3.HasValue && x.Product.UnitVolumeM3.Value > 0m
+                            ? x.Product.UnitVolumeM3.Value
+                            : 0.002m)),
+                        3);
+                    var palletEquivalentCount = Math.Max(1m, Math.Round(ownerVolumeCbm / 1.2m, 2));
+                    const decimal dailyPalletRateVnd = 18000m;
+                    const decimal dailyCbmRateVnd = 15000m;
+                    const decimal dailyBinRateVnd = 5000m;
+                    var estimatedDailyStorageFeeVnd = Math.Round((palletEquivalentCount * dailyPalletRateVnd) + (occupiedBinCount * dailyBinRateVnd), 0);
+                    var estimatedMonthlyStorageFeeVnd = estimatedDailyStorageFeeVnd * 30m;
+
+                    totalOnHandQty += ownerOnHandQty;
+                    totalOccupiedBins += occupiedBinCount;
+                    totalVolumeCbm += ownerVolumeCbm;
+                    totalPalletEquivalent += palletEquivalentCount;
+                    totalDailyFeeVnd += estimatedDailyStorageFeeVnd;
+                    totalMonthlyFeeVnd += estimatedMonthlyStorageFeeVnd;
+
+                    ownerRows.Add(new
+                    {
+                        ownerId = g.Key.OwnerId,
+                        ownerCode = resolvedOwnerCode,
+                        ownerName = resolvedOwnerName,
+                        warehouseId = g.Key.WarehouseId,
+                        warehouseName = whName,
+                        distinctSkuCount,
+                        occupiedBinCount,
+                        totalOnHandQty = ownerOnHandQty,
+                        totalVolumeCbm = ownerVolumeCbm,
+                        palletEquivalentCount,
+                        dailyPalletRateVnd,
+                        dailyCbmRateVnd,
+                        dailyBinRateVnd,
+                        estimatedDailyStorageFeeVnd,
+                        estimatedMonthlyStorageFeeVnd
+                    });
+                }
+
+                if (isPost)
+                {
+                    int? actorUserId = int.TryParse(User?.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : null;
+                    _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+                    {
+                        UserId = actorUserId,
+                        WarehouseId = warehouseId,
+                        Action = "CAPTURE_3PL_DAILY_STORAGE_SNAPSHOT",
+                        EntityName = "ThreePlStorageSnapshot",
+                        NewValues = $"Owners={ownerRows.Count};Bins={totalOccupiedBins};Pallets={totalPalletEquivalent};DailyFeeVnd={totalDailyFeeVnd}",
+                        Reason = $"Chốt sản lượng lưu kho 3PL hàng ngày ({now:yyyy-MM-dd}) theo Chủ hàng (OwnerId)",
+                        Result = "Success",
+                        Timestamp = now
+                    });
+                    await _db.SaveChangesAsync(cancellationToken);
+                }
+            }
+
+            return Ok(new
+            {
+                snapshotId = $"3PL-SNAP-{now:yyyyMMdd}",
+                snapshotDateUtc = now.Date,
+                capturedAtUtc = now,
+                warehouseId,
+                ownerCount = ownerRows.Count,
+                totalOnHandQty,
+                totalOccupiedBins,
+                totalVolumeCbm = Math.Round(totalVolumeCbm, 3),
+                totalPalletEquivalent = Math.Round(totalPalletEquivalent, 2),
+                totalEstimatedDailyStorageFeeVnd = totalDailyFeeVnd,
+                totalEstimatedMonthlyStorageFeeVnd = totalMonthlyFeeVnd,
+                summary = new
+                {
+                    ownerCount = ownerRows.Count,
+                    totalOnHandQty,
+                    totalOccupiedBins,
+                    totalVolumeCbm = Math.Round(totalVolumeCbm, 3),
+                    totalPalletEquivalent = Math.Round(totalPalletEquivalent, 2),
+                    totalEstimatedDailyStorageFeeVnd = totalDailyFeeVnd,
+                    totalEstimatedMonthlyStorageFeeVnd = totalMonthlyFeeVnd
+                },
+                owners = ownerRows,
+                items = ownerRows,
+                statusLabel = isPost
+                    ? $"Đã chốt & lưu vết kiểm toán sản lượng lưu kho 3PL hàng ngày ({ownerRows.Count} chủ hàng, {totalOccupiedBins} vị trí kệ)"
+                    : $"Đã tổng hợp bảng tính phí lưu kho 3PL theo Chủ hàng ({ownerRows.Count} chủ hàng, {totalOccupiedBins} vị trí kệ)"
             });
         }
 

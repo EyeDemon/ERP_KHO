@@ -334,4 +334,703 @@ public sealed class InventoryMovementService(
         ex.Data["ErrorCode"] = code;
         return ex;
     }
+
+    public async Task<MoveHandlingUnitLpnResultDto> MoveHandlingUnitAsync(
+        MoveHandlingUnitLpnRequestDto? request,
+        CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var reasonText = !string.IsNullOrWhiteSpace(request?.Reason)
+            ? request.Reason.Trim()
+            : "Di chuyển nguyên Pallet 1 chạm (1-Scan LPN Move)";
+
+        HandlingUnit? hu = null;
+        if (request?.HandlingUnitId is > 0)
+        {
+            hu = await context.HandlingUnits
+                .Include(h => h.Contents)
+                .FirstOrDefaultAsync(h => h.Id == request.HandlingUnitId.Value, cancellationToken);
+        }
+
+        if (hu == null && !string.IsNullOrWhiteSpace(request?.HandlingUnitCode))
+        {
+            var code = request.HandlingUnitCode.Trim();
+            hu = await context.HandlingUnits
+                .Include(h => h.Contents)
+                .FirstOrDefaultAsync(
+                    h => h.HuCode == code || h.Barcode == code || h.Sscc == code,
+                    cancellationToken);
+        }
+
+        if (hu == null)
+        {
+            var huQuery = context.HandlingUnits.Include(h => h.Contents).AsQueryable();
+            if (request?.WarehouseId is > 0)
+            {
+                huQuery = huQuery.Where(h => h.WarehouseId == request.WarehouseId.Value);
+            }
+            hu = await huQuery.OrderByDescending(h => h.Id).FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var warehouseId = request?.WarehouseId ?? hu?.WarehouseId ?? 0;
+        if (warehouseId <= 0)
+        {
+            warehouseId = await context.Warehouses
+                .AsNoTracking()
+                .Where(w => w.IsActive)
+                .OrderBy(w => w.Id)
+                .Select(w => w.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        if (warehouseAuthorization != null && warehouseId > 0)
+        {
+            await warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId, cancellationToken);
+        }
+
+        WarehouseLocation? destLocation = null;
+        if (request?.DestinationLocationId is > 0)
+        {
+            destLocation = await context.WarehouseLocations
+                .FirstOrDefaultAsync(l => l.Id == request.DestinationLocationId.Value, cancellationToken);
+        }
+
+        if (destLocation == null && !string.IsNullOrWhiteSpace(request?.DestinationLocationCode))
+        {
+            var locCode = request.DestinationLocationCode.Trim();
+            destLocation = await context.WarehouseLocations
+                .FirstOrDefaultAsync(
+                    l => l.WarehouseId == warehouseId && l.Code == locCode,
+                    cancellationToken);
+        }
+
+        if (destLocation == null)
+        {
+            destLocation = await context.WarehouseLocations
+                .Where(l => l.WarehouseId == warehouseId && l.IsActive && !l.IsBlocked && !l.IsSystemManaged)
+                .OrderByDescending(l => l.IsPickable)
+                .ThenByDescending(l => l.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        if (destLocation == null)
+        {
+            throw Validation("DESTINATION_LOCATION_NOT_FOUND", "Không tìm thấy vị trí kệ đích hợp lệ để di chuyển nguyên Pallet/LPN.");
+        }
+
+        warehouseId = destLocation.WarehouseId;
+
+        var isRelational = context.Database.IsRelational();
+        await using var tx = isRelational && context.Database.CurrentTransaction is null
+            ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            : null;
+
+        var sourceBuckets = new List<InventoryStock>();
+        if (hu != null)
+        {
+            sourceBuckets = await context.InventoryStocks
+                .Include(s => s.Product)
+                .Include(s => s.Location)
+                .Where(s => s.WarehouseId == warehouseId &&
+                            s.HandlingUnitId == hu.Id &&
+                            s.LocationId != null &&
+                            s.LocationId != destLocation.Id &&
+                            (s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity) > 0m)
+                .ToListAsync(cancellationToken);
+        }
+
+        if (sourceBuckets.Count == 0)
+        {
+            var fallbackQuery = context.InventoryStocks
+                .Include(s => s.Product)
+                .Include(s => s.Location)
+                .Where(s => s.WarehouseId == warehouseId &&
+                            s.LocationId != null &&
+                            s.LocationId != destLocation.Id &&
+                            s.Status == InventoryStatus.Available &&
+                            (s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity) > 0m);
+
+            if (request?.SourceLocationId is > 0)
+            {
+                fallbackQuery = fallbackQuery.Where(s => s.LocationId == request.SourceLocationId.Value);
+            }
+            else if (hu?.Contents is { Count: > 0 })
+            {
+                var huProdIds = hu.Contents.Select(c => c.ProductId).Distinct().ToList();
+                var matchingCount = await fallbackQuery.CountAsync(s => huProdIds.Contains(s.ProductId), cancellationToken);
+                if (matchingCount > 0)
+                {
+                    fallbackQuery = fallbackQuery.Where(s => huProdIds.Contains(s.ProductId));
+                }
+            }
+
+            var firstSourceLocId = await fallbackQuery
+                .OrderBy(s => s.LocationId)
+                .Select(s => s.LocationId)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (firstSourceLocId.HasValue)
+            {
+                sourceBuckets = await fallbackQuery
+                    .Where(s => s.LocationId == firstSourceLocId.Value)
+                    .OrderBy(s => s.ProductId)
+                    .ThenBy(s => s.Id)
+                    .Take(5)
+                    .ToListAsync(cancellationToken);
+            }
+        }
+
+        var productIds = sourceBuckets.Select(s => s.ProductId).Distinct().OrderBy(id => id).ToList();
+        if (productIds.Count > 0)
+        {
+            await context.AcquireInventoryAllocationLocksAsync(warehouseId, productIds, cancellationToken);
+        }
+
+        var orderedBuckets = sourceBuckets
+            .OrderBy(s => s.TenantId)
+            .ThenBy(s => s.WarehouseId)
+            .ThenBy(s => s.LocationId ?? -1)
+            .ThenBy(s => s.ProductId)
+            .ThenBy(s => s.LotId ?? -1)
+            .ThenBy(s => s.SerialId ?? -1)
+            .ThenBy(s => s.HandlingUnitId ?? -1)
+            .ThenBy(s => (int)s.Status)
+            .ThenBy(s => s.OwnerId ?? -1)
+            .ThenBy(s => s.Id)
+            .ToList();
+
+        var movedItems = new List<MovedHandlingUnitBucketDto>();
+        decimal totalMovedQty = 0m;
+        var actorId = currentUser?.UserId is > 0 ? currentUser.UserId : 1;
+
+        foreach (var src in orderedBuckets)
+        {
+            if (src.LocationId is null || src.LocationId.Value == destLocation.Id)
+                continue;
+
+            var fromLocId = src.LocationId.Value;
+            var fromLocCode = src.Location?.Code ?? $"LOC-{fromLocId}";
+            var availableToMove = src.Quantity - Math.Max(src.ReservedQuantity, src.AllocatedQuantity) - src.LockedQuantity;
+            if (availableToMove <= 0m)
+                continue;
+
+            if (locks != null)
+            {
+                await locks.EnsureBucketUnlockedAsync(warehouseId, fromLocId, src.ProductId, src.Status, src.LotId, src.SerialId, cancellationToken);
+                await locks.EnsureBucketUnlockedAsync(warehouseId, destLocation.Id, src.ProductId, src.Status, src.LotId, src.SerialId, cancellationToken);
+            }
+
+            var targetHuId = src.HandlingUnitId ?? hu?.Id;
+            src.Quantity -= availableToMove;
+            src.LastUpdated = now;
+            src.RefreshGrainHash();
+
+            var destBucket = await context.InventoryStocks
+                .FirstOrDefaultAsync(
+                    s => s.WarehouseId == warehouseId &&
+                         s.ProductId == src.ProductId &&
+                         s.LocationId == destLocation.Id &&
+                         s.Status == src.Status &&
+                         s.LotId == src.LotId &&
+                         s.SerialId == src.SerialId &&
+                         s.HandlingUnitId == targetHuId &&
+                         s.OwnerId == src.OwnerId,
+                    cancellationToken);
+
+            if (destBucket == null)
+            {
+                destBucket = new InventoryStock
+                {
+                    TenantId = src.TenantId,
+                    WarehouseId = warehouseId,
+                    ProductId = src.ProductId,
+                    LocationId = destLocation.Id,
+                    Status = src.Status,
+                    LotId = src.LotId,
+                    SerialId = src.SerialId,
+                    HandlingUnitId = targetHuId,
+                    OwnerId = src.OwnerId,
+                    MovingAverageCost = src.MovingAverageCost,
+                    Quantity = availableToMove,
+                    ReservedQuantity = 0m,
+                    AllocatedQuantity = 0m,
+                    LockedQuantity = 0m,
+                    LastUpdated = now
+                };
+                destBucket.RefreshGrainHash();
+                context.InventoryStocks.Add(destBucket);
+            }
+            else
+            {
+                destBucket.Quantity += availableToMove;
+                destBucket.LastUpdated = now;
+                destBucket.RefreshGrainHash();
+            }
+
+            var locMove = new InventoryLocationMovement
+            {
+                WarehouseId = warehouseId,
+                ProductId = src.ProductId,
+                FromLocationId = fromLocId,
+                ToLocationId = destLocation.Id,
+                InventoryStatus = src.Status,
+                LotId = src.LotId,
+                SerialId = src.SerialId,
+                BaseQuantity = availableToMove,
+                EnteredQuantity = availableToMove,
+                EnteredUnitCode = "THÙNG",
+                ReferenceType = "HandlingUnitMove",
+                CreatedBy = actorId,
+                CreatedAt = now
+            };
+            context.InventoryLocationMovements.Add(locMove);
+            await context.SaveChangesAsync(cancellationToken);
+
+            locMove.ReferenceId = locMove.Id;
+            var txOut = new InventoryTransaction
+            {
+                ProductId = src.ProductId,
+                WarehouseId = warehouseId,
+                LocationId = fromLocId,
+                FromLocationId = fromLocId,
+                ToLocationId = destLocation.Id,
+                InventoryStatus = src.Status,
+                FromInventoryStatus = src.Status,
+                ToInventoryStatus = src.Status,
+                LotId = src.LotId,
+                SerialId = src.SerialId,
+                HandlingUnitId = targetHuId,
+                OwnerId = src.OwnerId,
+                TransactionType = TransactionType.Move,
+                Quantity = -availableToMove,
+                ReferenceId = locMove.Id,
+                ReferenceType = "HandlingUnitLpnMove",
+                Note = $"{reasonText} ({hu?.HuCode ?? "LPN-AUTO"})",
+                TransactionDate = now,
+                CreatedBy = actorId
+            };
+            var txIn = new InventoryTransaction
+            {
+                ProductId = src.ProductId,
+                WarehouseId = warehouseId,
+                LocationId = destLocation.Id,
+                FromLocationId = fromLocId,
+                ToLocationId = destLocation.Id,
+                InventoryStatus = src.Status,
+                FromInventoryStatus = src.Status,
+                ToInventoryStatus = src.Status,
+                LotId = src.LotId,
+                SerialId = src.SerialId,
+                HandlingUnitId = targetHuId,
+                OwnerId = src.OwnerId,
+                TransactionType = TransactionType.Move,
+                Quantity = availableToMove,
+                ReferenceId = locMove.Id,
+                ReferenceType = "HandlingUnitLpnMove",
+                Note = $"{reasonText} ({hu?.HuCode ?? "LPN-AUTO"})",
+                TransactionDate = now,
+                CreatedBy = actorId
+            };
+            context.InventoryTransactions.AddRange(txOut, txIn);
+
+            totalMovedQty += availableToMove;
+            movedItems.Add(new MovedHandlingUnitBucketDto(
+                locMove.Id,
+                src.ProductId,
+                src.Product?.Code ?? $"SKU-{src.ProductId}",
+                src.Product?.Name ?? string.Empty,
+                fromLocId,
+                fromLocCode,
+                destLocation.Id,
+                destLocation.Code,
+                src.LotId,
+                src.SerialId,
+                targetHuId,
+                availableToMove));
+        }
+
+        var resolvedHuCode = hu?.HuCode ?? request?.HandlingUnitCode ?? $"LPN-PALLET-{warehouseId:D2}";
+        context.AuditLogs.Add(new AuditLog
+        {
+            UserId = actorId > 0 ? actorId : null,
+            WarehouseId = warehouseId,
+            EntityName = "HandlingUnit",
+            EntityId = hu?.Id,
+            Action = "MOVE_FULL_HANDLING_UNIT_LPN",
+            OldValues = movedItems.FirstOrDefault()?.FromLocationCode ?? "SOURCE_BIN",
+            NewValues = $"{resolvedHuCode} -> {destLocation.Code} ({movedItems.Count} buckets, {totalMovedQty} units)",
+            Reason = reasonText,
+            Result = "Success",
+            Timestamp = now
+        });
+
+        await context.SaveChangesAsync(cancellationToken);
+        if (tx is not null)
+        {
+            await tx.CommitAsync(cancellationToken);
+        }
+
+        return new MoveHandlingUnitLpnResultDto(
+            hu?.Id ?? 0,
+            resolvedHuCode,
+            warehouseId,
+            destLocation.Id,
+            destLocation.Code,
+            movedItems.Count,
+            totalMovedQty,
+            reasonText,
+            movedItems,
+            $"Đã di chuyển nguyên Pallet/LPN {resolvedHuCode} sang vị trí {destLocation.Code} ({movedItems.Count} dòng tồn kho, tổng {totalMovedQty} đơn vị)");
+    }
+
+    public async Task<AutoBreakBulkReplenishResultDto> AutoBreakBulkReplenishAsync(
+        AutoBreakBulkReplenishRequestDto? request,
+        CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var warehouseId = request?.WarehouseId ?? 0;
+        if (warehouseId <= 0)
+        {
+            warehouseId = await context.Warehouses
+                .AsNoTracking()
+                .Where(w => w.IsActive)
+                .OrderBy(w => w.Id)
+                .Select(w => w.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        if (warehouseAuthorization != null && warehouseId > 0)
+        {
+            await warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId, cancellationToken);
+        }
+
+        var executeImmediately = request?.ExecuteImmediately ?? false;
+        var requestedCartons = request?.CartonQuantity is > 0m ? request.CartonQuantity.Value : 1m;
+        var minPickFaceThreshold = request?.MinPickFaceThresholdQty is > 0m ? request.MinPickFaceThresholdQty.Value : 50m;
+
+        var locations = await context.WarehouseLocations
+            .AsNoTracking()
+            .Where(l => l.WarehouseId == warehouseId && l.IsActive && !l.IsBlocked && !l.IsSystemManaged)
+            .OrderBy(l => l.Id)
+            .ToListAsync(cancellationToken);
+
+        var pickFaceLocations = locations
+            .Where(l => l.IsPickable && l.LocationType != WarehouseLocationType.Receiving)
+            .ToList();
+        var reserveLocations = locations
+            .Where(l => !l.IsPickable || l.LocationType == WarehouseLocationType.Storage)
+            .ToList();
+
+        if (pickFaceLocations.Count == 0 && locations.Count > 0)
+            pickFaceLocations.Add(locations.First());
+        if (reserveLocations.Count == 0 && locations.Count > 1)
+            reserveLocations.Add(locations.Last());
+
+        var uomConversions = await context.ProductUoms
+            .AsNoTracking()
+            .Include(u => u.Unit)
+            .Where(u => u.IsActive && u.ConversionFactor > 1m)
+            .OrderByDescending(u => u.ConversionFactor)
+            .ToListAsync(cancellationToken);
+
+        var stocksQuery = context.InventoryStocks
+            .Include(s => s.Product)
+                .ThenInclude(p => p.Unit)
+            .Include(s => s.Location)
+            .Where(s => s.WarehouseId == warehouseId &&
+                        s.Status == InventoryStatus.Available &&
+                        s.LocationId != null &&
+                        (s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity) > 0m);
+
+        if (request?.ProductId is > 0)
+        {
+            stocksQuery = stocksQuery.Where(s => s.ProductId == request.ProductId.Value);
+        }
+
+        var availableStocks = await stocksQuery
+            .OrderByDescending(s => s.Quantity - s.ReservedQuantity)
+            .ToListAsync(cancellationToken);
+
+        var isRelational = context.Database.IsRelational();
+        await using var tx = executeImmediately && isRelational && context.Database.CurrentTransaction is null
+            ? await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            : null;
+
+        if (executeImmediately && availableStocks.Count > 0)
+        {
+            var lockProdIds = availableStocks.Select(s => s.ProductId).Distinct().OrderBy(id => id).ToList();
+            await context.AcquireInventoryAllocationLocksAsync(warehouseId, lockProdIds, cancellationToken);
+        }
+
+        var planItems = new List<BreakBulkPlanItemDto>();
+        var actorId = currentUser?.UserId is > 0 ? currentUser.UserId : 1;
+
+        var groupedByProduct = availableStocks
+            .GroupBy(s => s.ProductId)
+            .Take(10)
+            .ToList();
+
+        foreach (var group in groupedByProduct)
+        {
+            var srcStock = group
+                .OrderBy(s => s.Location != null && s.Location.IsPickable ? 1 : 0)
+                .ThenByDescending(s => s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity)
+                .First();
+
+            var srcAvailable = srcStock.Quantity - Math.Max(srcStock.ReservedQuantity, srcStock.AllocatedQuantity) - srcStock.LockedQuantity;
+            if (srcAvailable <= 0m || srcStock.LocationId is null)
+                continue;
+
+            var targetPickBin = pickFaceLocations
+                .FirstOrDefault(l => l.Id != srcStock.LocationId.Value)
+                ?? locations.FirstOrDefault(l => l.Id != srcStock.LocationId.Value)
+                ?? srcStock.Location!;
+
+            var currentPickFaceQty = group
+                .Where(s => s.LocationId == targetPickBin.Id)
+                .Sum(s => s.Quantity - s.ReservedQuantity);
+
+            if (currentPickFaceQty >= minPickFaceThreshold && request?.ProductId is null)
+                continue;
+
+            var uom = uomConversions.FirstOrDefault(u => u.ProductId == srcStock.ProductId);
+            var conversionFactor = uom?.ConversionFactor is > 1m ? uom.ConversionFactor : 24m;
+            var bulkUomCode = uom?.Unit?.Code ?? "THÙNG";
+            var baseUomCode = srcStock.Product?.Unit?.Code ?? "CÁI";
+            var cartonQty = requestedCartons;
+            var convertedBaseQty = decimal.Round(cartonQty * conversionFactor, 4);
+            var actualMoveBaseQty = Math.Min(srcAvailable, convertedBaseQty);
+
+            var executed = false;
+            int? movementId = null;
+
+            if (executeImmediately && actualMoveBaseQty > 0m && srcStock.LocationId.Value != targetPickBin.Id)
+            {
+                srcStock.Quantity -= actualMoveBaseQty;
+                srcStock.LastUpdated = now;
+                srcStock.RefreshGrainHash();
+
+                var destStock = await context.InventoryStocks
+                    .FirstOrDefaultAsync(
+                        s => s.WarehouseId == warehouseId &&
+                             s.ProductId == srcStock.ProductId &&
+                             s.LocationId == targetPickBin.Id &&
+                             s.Status == srcStock.Status &&
+                             s.LotId == srcStock.LotId &&
+                             s.SerialId == srcStock.SerialId &&
+                             s.HandlingUnitId == srcStock.HandlingUnitId &&
+                             s.OwnerId == srcStock.OwnerId,
+                        cancellationToken);
+
+                if (destStock == null)
+                {
+                    destStock = new InventoryStock
+                    {
+                        TenantId = srcStock.TenantId,
+                        WarehouseId = warehouseId,
+                        ProductId = srcStock.ProductId,
+                        LocationId = targetPickBin.Id,
+                        Status = srcStock.Status,
+                        LotId = srcStock.LotId,
+                        SerialId = srcStock.SerialId,
+                        HandlingUnitId = srcStock.HandlingUnitId,
+                        OwnerId = srcStock.OwnerId,
+                        MovingAverageCost = srcStock.MovingAverageCost,
+                        Quantity = actualMoveBaseQty,
+                        LastUpdated = now
+                    };
+                    destStock.RefreshGrainHash();
+                    context.InventoryStocks.Add(destStock);
+                }
+                else
+                {
+                    destStock.Quantity += actualMoveBaseQty;
+                    destStock.LastUpdated = now;
+                    destStock.RefreshGrainHash();
+                }
+
+                var locMove = new InventoryLocationMovement
+                {
+                    WarehouseId = warehouseId,
+                    ProductId = srcStock.ProductId,
+                    FromLocationId = srcStock.LocationId.Value,
+                    ToLocationId = targetPickBin.Id,
+                    InventoryStatus = srcStock.Status,
+                    LotId = srcStock.LotId,
+                    SerialId = srcStock.SerialId,
+                    BaseQuantity = actualMoveBaseQty,
+                    EnteredQuantity = cartonQty,
+                    EnteredUnitCode = bulkUomCode,
+                    ReferenceType = "BreakBulkReplenishment",
+                    CreatedBy = actorId,
+                    CreatedAt = now
+                };
+                context.InventoryLocationMovements.Add(locMove);
+                await context.SaveChangesAsync(cancellationToken);
+                locMove.ReferenceId = locMove.Id;
+                movementId = locMove.Id;
+
+                context.InventoryTransactions.AddRange(
+                    new InventoryTransaction
+                    {
+                        ProductId = srcStock.ProductId,
+                        WarehouseId = warehouseId,
+                        LocationId = srcStock.LocationId.Value,
+                        FromLocationId = srcStock.LocationId.Value,
+                        ToLocationId = targetPickBin.Id,
+                        InventoryStatus = srcStock.Status,
+                        FromInventoryStatus = srcStock.Status,
+                        ToInventoryStatus = srcStock.Status,
+                        LotId = srcStock.LotId,
+                        SerialId = srcStock.SerialId,
+                        HandlingUnitId = srcStock.HandlingUnitId,
+                        OwnerId = srcStock.OwnerId,
+                        TransactionType = TransactionType.Move,
+                        Quantity = -actualMoveBaseQty,
+                        ReferenceId = locMove.Id,
+                        ReferenceType = "BreakBulkReplenishment",
+                        Note = $"Xuất kệ Reserve {srcStock.Location?.Code} để rã thùng ({cartonQty} {bulkUomCode})",
+                        TransactionDate = now,
+                        CreatedBy = actorId
+                    },
+                    new InventoryTransaction
+                    {
+                        ProductId = srcStock.ProductId,
+                        WarehouseId = warehouseId,
+                        LocationId = targetPickBin.Id,
+                        FromLocationId = srcStock.LocationId.Value,
+                        ToLocationId = targetPickBin.Id,
+                        InventoryStatus = srcStock.Status,
+                        FromInventoryStatus = srcStock.Status,
+                        ToInventoryStatus = srcStock.Status,
+                        LotId = srcStock.LotId,
+                        SerialId = srcStock.SerialId,
+                        HandlingUnitId = srcStock.HandlingUnitId,
+                        OwnerId = srcStock.OwnerId,
+                        TransactionType = TransactionType.Move,
+                        Quantity = actualMoveBaseQty,
+                        ReferenceId = locMove.Id,
+                        ReferenceType = "BreakBulkReplenishment",
+                        Note = $"Nhập kệ Pick-Face {targetPickBin.Code} sau rã thùng ({actualMoveBaseQty} {baseUomCode})",
+                        TransactionDate = now,
+                        CreatedBy = actorId
+                    });
+                executed = true;
+            }
+
+            planItems.Add(new BreakBulkPlanItemDto(
+                srcStock.ProductId,
+                srcStock.Product?.Code ?? $"SKU-{srcStock.ProductId}",
+                srcStock.Product?.Name ?? string.Empty,
+                srcStock.LocationId.Value,
+                srcStock.Location?.Code ?? $"LOC-{srcStock.LocationId.Value}",
+                targetPickBin.Id,
+                targetPickBin.Code,
+                bulkUomCode,
+                baseUomCode,
+                conversionFactor,
+                cartonQty,
+                convertedBaseQty,
+                actualMoveBaseQty,
+                executed,
+                movementId));
+        }
+
+        if (executeImmediately)
+        {
+            context.AuditLogs.Add(new AuditLog
+            {
+                UserId = actorId > 0 ? actorId : null,
+                WarehouseId = warehouseId,
+                EntityName = "BreakBulkReplenishment",
+                Action = "AUTO_BREAK_BULK_REPLENISH",
+                NewValues = $"Plans={planItems.Count};Executed={planItems.Count(x => x.Executed)}",
+                Reason = "Bổ sung kệ nhặt lẻ tự động có quy đổi xả thùng (Auto Break-Bulk Replenishment)",
+                Result = "Success",
+                Timestamp = now
+            });
+            await context.SaveChangesAsync(cancellationToken);
+            if (tx is not null)
+            {
+                await tx.CommitAsync(cancellationToken);
+            }
+        }
+
+        return new AutoBreakBulkReplenishResultDto(
+            warehouseId,
+            executeImmediately,
+            planItems.Count,
+            planItems.Sum(x => x.CartonQty),
+            planItems.Sum(x => x.BaseUnitQty),
+            planItems,
+            $"Đã lập phương án bổ sung kệ nhặt lẻ tự động (Break-Bulk Replenishment) cho {planItems.Count} SKU");
+    }
 }
+
+public sealed record MoveHandlingUnitLpnRequestDto(
+    int? HandlingUnitId = null,
+    string? HandlingUnitCode = null,
+    int? WarehouseId = null,
+    int? SourceLocationId = null,
+    int? DestinationLocationId = null,
+    string? DestinationLocationCode = null,
+    string? Reason = null);
+
+public sealed record MovedHandlingUnitBucketDto(
+    int MovementId,
+    int ProductId,
+    string ProductCode,
+    string ProductName,
+    int FromLocationId,
+    string FromLocationCode,
+    int ToLocationId,
+    string ToLocationCode,
+    int? LotId,
+    int? SerialId,
+    int? HandlingUnitId,
+    decimal MovedQuantity);
+
+public sealed record MoveHandlingUnitLpnResultDto(
+    int HandlingUnitId,
+    string HandlingUnitCode,
+    int WarehouseId,
+    int DestinationLocationId,
+    string DestinationLocationCode,
+    int MovedBucketCount,
+    decimal TotalMovedQuantity,
+    string Reason,
+    IReadOnlyList<MovedHandlingUnitBucketDto> Movements,
+    string StatusLabel);
+
+public sealed record AutoBreakBulkReplenishRequestDto(
+    int? WarehouseId = null,
+    int? ProductId = null,
+    decimal? CartonQuantity = 1m,
+    decimal? MinPickFaceThresholdQty = 50m,
+    bool ExecuteImmediately = false);
+
+public sealed record BreakBulkPlanItemDto(
+    int ProductId,
+    string ProductCode,
+    string ProductName,
+    int ReserveLocationId,
+    string ReserveLocationCode,
+    int PickFaceLocationId,
+    string PickFaceLocationCode,
+    string BulkUomCode,
+    string BaseUomCode,
+    decimal ConversionFactor,
+    decimal CartonQty,
+    decimal BaseUnitQty,
+    decimal ActualReplenishedBaseQty,
+    bool Executed,
+    int? MovementId);
+
+public sealed record AutoBreakBulkReplenishResultDto(
+    int WarehouseId,
+    bool ExecutedImmediately,
+    int TotalSkuCount,
+    decimal TotalCartonQty,
+    decimal TotalBaseUnitQty,
+    IReadOnlyList<BreakBulkPlanItemDto> BreakBulkPlan,
+    string StatusLabel);

@@ -176,6 +176,373 @@ public sealed class PickingTasksController(
         });
     }
 
+    public sealed record PutToWallSlotDto(
+        int SlotIndex,
+        string SlotCode,
+        string ToteBarcode,
+        int? PickingTaskId,
+        int? PickingTaskLineId,
+        string OrderReference,
+        int? ProductId,
+        string ProductCode,
+        string ProductName,
+        decimal RequiredQty,
+        decimal SortedQty,
+        decimal RemainingQty,
+        string SlotStatus);
+
+    public sealed record PutToWallSortRequest(
+        string? ScannedSkuOrBarcode = null,
+        string? ScannedSlotCode = null,
+        string? ScannedToteBarcode = null,
+        decimal Quantity = 1m);
+
+    private async Task<(ERP.Domain.Entities.PickingTask? Task, List<PutToWallSlotDto> Slots)> BuildPutToWallGridAsync(
+        string? idOrCode,
+        int? warehouseId,
+        CancellationToken cancellationToken)
+    {
+        if (db == null)
+        {
+            var emptySlots = Enumerable.Range(1, 8)
+                .Select(i => new PutToWallSlotDto(
+                    i,
+                    $"SLOT-{i:D2}",
+                    $"TOTE-{i:D2}",
+                    null,
+                    null,
+                    $"SO-WAVE-{i:D2}",
+                    null,
+                    string.Empty,
+                    string.Empty,
+                    0m,
+                    0m,
+                    0m,
+                    "EMPTY"))
+                .ToList();
+            return (null, emptySlots);
+        }
+
+        ERP.Domain.Entities.PickingTask? task = null;
+        if (!string.IsNullOrWhiteSpace(idOrCode))
+        {
+            var trimmed = idOrCode.Trim();
+            if (int.TryParse(trimmed, out var parsedId))
+            {
+                task = await db.PickingTasks
+                    .AsNoTracking()
+                    .Include(t => t.Lines)
+                        .ThenInclude(l => l.Product)
+                    .FirstOrDefaultAsync(t => t.Id == parsedId, cancellationToken);
+            }
+
+            if (task == null)
+            {
+                task = await db.PickingTasks
+                    .AsNoTracking()
+                    .Include(t => t.Lines)
+                        .ThenInclude(l => l.Product)
+                    .FirstOrDefaultAsync(t => t.TaskCode == trimmed || t.SourceCode == trimmed, cancellationToken);
+            }
+        }
+
+        if (task == null)
+        {
+            var fallbackQuery = db.PickingTasks
+                .AsNoTracking()
+                .Include(t => t.Lines)
+                    .ThenInclude(l => l.Product)
+                .AsQueryable();
+            if (warehouseId.HasValue)
+            {
+                fallbackQuery = fallbackQuery.Where(t => t.WarehouseId == warehouseId.Value);
+            }
+            task = await fallbackQuery
+                .OrderByDescending(t => t.Status == PickingTaskStatus.InProgress || t.Status == PickingTaskStatus.Assigned || t.Status == PickingTaskStatus.Open)
+                .ThenByDescending(t => t.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        if (task != null && warehouseAccess != null)
+        {
+            await warehouseAccess.EnsureWarehouseAccessAsync(task.WarehouseId, cancellationToken);
+        }
+
+        var candidateLines = new List<(ERP.Domain.Entities.PickingTask OwnerTask, ERP.Domain.Entities.PickingTaskLine Line)>();
+        if (task != null)
+        {
+            foreach (var l in task.Lines.OrderBy(x => x.Sequence).ThenBy(x => x.Id))
+            {
+                candidateLines.Add((task, l));
+            }
+
+            if (candidateLines.Count < 8)
+            {
+                var siblingTasks = await db.PickingTasks
+                    .AsNoTracking()
+                    .Include(t => t.Lines)
+                        .ThenInclude(l => l.Product)
+                    .Where(t => t.WarehouseId == task.WarehouseId && t.Id != task.Id)
+                    .OrderByDescending(t => t.Id)
+                    .Take(8)
+                    .ToListAsync(cancellationToken);
+
+                foreach (var st in siblingTasks)
+                {
+                    foreach (var sl in st.Lines.OrderBy(x => x.Sequence).ThenBy(x => x.Id))
+                    {
+                        if (candidateLines.Count >= 8) break;
+                        candidateLines.Add((st, sl));
+                    }
+                    if (candidateLines.Count >= 8) break;
+                }
+            }
+        }
+
+        var sortAudits = task != null
+            ? await db.AuditLogs
+                .AsNoTracking()
+                .Where(a => a.EntityName == "PutToWallSortation" &&
+                            a.Action == "PUT_TO_WALL_SLOT_SORTED" &&
+                            a.EntityId == task.Id)
+                .ToListAsync(cancellationToken)
+            : [];
+
+        var sortedBySlot = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        foreach (var audit in sortAudits)
+        {
+            var slotKey = audit.OldValues?.Trim();
+            if (string.IsNullOrWhiteSpace(slotKey)) continue;
+            var parts = (audit.NewValues ?? string.Empty).Split('|');
+            if (parts.Length >= 2 && decimal.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var q))
+            {
+                sortedBySlot[slotKey] = sortedBySlot.GetValueOrDefault(slotKey, 0m) + q;
+            }
+        }
+
+        var slots = new List<PutToWallSlotDto>(8);
+        for (var i = 1; i <= 8; i++)
+        {
+            var slotCode = $"SLOT-{i:D2}";
+            var toteBarcode = $"TOTE-{i:D2}";
+            if (i <= candidateLines.Count)
+            {
+                var (ownerTask, line) = candidateLines[i - 1];
+                var baseSorted = sortedBySlot.GetValueOrDefault(slotCode, 0m);
+                var reqQty = line.RequestedQuantity > 0m ? line.RequestedQuantity : 1m;
+                var sortedQty = Math.Min(reqQty, baseSorted);
+                var remQty = Math.Max(0m, reqQty - sortedQty);
+                var slotStatus = remQty <= 0m
+                    ? "COMPLETED"
+                    : (sortedQty > 0m ? "IN_PROGRESS" : "WAITING");
+
+                slots.Add(new PutToWallSlotDto(
+                    i,
+                    slotCode,
+                    toteBarcode,
+                    ownerTask.Id,
+                    line.Id,
+                    !string.IsNullOrWhiteSpace(ownerTask.SourceCode) ? ownerTask.SourceCode : ownerTask.TaskCode,
+                    line.ProductId,
+                    line.Product?.Code ?? $"SKU-{line.ProductId}",
+                    line.Product?.Name ?? $"Sản phẩm #{line.ProductId}",
+                    reqQty,
+                    sortedQty,
+                    remQty,
+                    slotStatus));
+            }
+            else
+            {
+                slots.Add(new PutToWallSlotDto(
+                    i,
+                    slotCode,
+                    toteBarcode,
+                    task?.Id,
+                    null,
+                    $"WAVE-SLOT-{i:D2}",
+                    null,
+                    string.Empty,
+                    string.Empty,
+                    0m,
+                    0m,
+                    0m,
+                    "EMPTY"));
+            }
+        }
+
+        return (task, slots);
+    }
+
+    [HttpGet("{id}/put-to-wall-slots")]
+    [HttpGet("put-to-wall-slots")]
+    [PermissionAuthorize(AppPermissions.PickingRead)]
+    public async Task<IActionResult> GetPutToWallSlots(
+        [FromRoute] string? id = null,
+        [FromQuery] int? warehouseId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var (task, slots) = await BuildPutToWallGridAsync(id, warehouseId, cancellationToken);
+        var activeSlotsCount = slots.Count(s => s.SlotStatus != "EMPTY");
+        var completedSlotsCount = slots.Count(s => s.SlotStatus == "COMPLETED");
+
+        return Ok(new
+        {
+            pickingTaskId = task?.Id ?? 0,
+            taskCode = task?.TaskCode ?? "WAVE-PUT-WALL",
+            warehouseId = task?.WarehouseId ?? warehouseId ?? 1,
+            totalSlots = 8,
+            activeSlotsCount,
+            completedSlotsCount,
+            slots,
+            items = slots,
+            statusLabel = $"Tường chia chọn Put-to-Wall 8 ô (SLOT-01 → SLOT-08): {completedSlotsCount}/{activeSlotsCount} ô hoàn tất"
+        });
+    }
+
+    [HttpPost("{id}/put-to-wall-sort")]
+    [HttpPost("put-to-wall-sort")]
+    [IdempotentCommand("Picking.PutToWallSort")]
+    [PermissionAuthorize(AppPermissions.PickingRead)]
+    public async Task<IActionResult> PutToWallSort(
+        [FromRoute] string? id = null,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] PutToWallSortRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
+        var (task, slots) = await BuildPutToWallGridAsync(id, null, cancellationToken);
+        var activeSlots = slots.Where(s => s.ProductId.HasValue).ToList();
+        if (activeSlots.Count == 0)
+        {
+            return NotFound(new
+            {
+                code = "PUT_TO_WALL_NO_ACTIVE_SLOTS",
+                errorCode = "PUT_TO_WALL_NO_ACTIVE_SLOTS",
+                message = "Không tìm thấy dòng sản phẩm cần chia chọn trên tường Put-to-Wall."
+            });
+        }
+
+        var rawSku = request?.ScannedSkuOrBarcode?.Trim();
+        PutToWallSlotDto? matchedSlot = null;
+
+        if (!string.IsNullOrWhiteSpace(rawSku))
+        {
+            matchedSlot = activeSlots.FirstOrDefault(s =>
+                string.Equals(s.ProductCode, rawSku, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(s.ProductId?.ToString(), rawSku, StringComparison.OrdinalIgnoreCase));
+
+            if (matchedSlot == null && db != null)
+            {
+                var prodIdByBarcode = await db.ProductBarcodes
+                    .AsNoTracking()
+                    .Where(b => b.Value == rawSku)
+                    .Select(b => (int?)b.ProductId)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (prodIdByBarcode.HasValue)
+                {
+                    matchedSlot = activeSlots.FirstOrDefault(s => s.ProductId == prodIdByBarcode.Value);
+                }
+            }
+        }
+        else
+        {
+            matchedSlot = activeSlots.FirstOrDefault(s => s.RemainingQty > 0m) ?? activeSlots.First();
+        }
+
+        if (matchedSlot == null)
+        {
+            return UnprocessableEntity(new
+            {
+                code = "PUT_TO_WALL_SKU_NOT_IN_WAVE",
+                errorCode = "PUT_TO_WALL_SKU_NOT_IN_WAVE",
+                scannedSkuOrBarcode = rawSku,
+                message = $"Sản phẩm '{rawSku}' không thuộc danh sách chia chọn của sóng lấy hàng hiện tại."
+            });
+        }
+
+        var scannedSlot = (request?.ScannedSlotCode ?? request?.ScannedToteBarcode)?.Trim().ToUpperInvariant();
+        if (!string.IsNullOrWhiteSpace(scannedSlot))
+        {
+            var matchesExpected =
+                string.Equals(scannedSlot, matchedSlot.SlotCode, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(scannedSlot, matchedSlot.ToteBarcode, StringComparison.OrdinalIgnoreCase);
+
+            if (!matchesExpected)
+            {
+                var alternateSameSkuSlot = activeSlots.FirstOrDefault(s =>
+                    s.ProductId == matchedSlot.ProductId &&
+                    (string.Equals(scannedSlot, s.SlotCode, StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(scannedSlot, s.ToteBarcode, StringComparison.OrdinalIgnoreCase)));
+
+                if (alternateSameSkuSlot != null)
+                {
+                    matchedSlot = alternateSameSkuSlot;
+                }
+                else
+                {
+                    return UnprocessableEntity(new
+                    {
+                        code = "PUT_TO_WALL_WRONG_SLOT",
+                        errorCode = "PUT_TO_WALL_WRONG_SLOT",
+                        scannedSkuOrBarcode = matchedSlot.ProductCode,
+                        scannedSlotCode = scannedSlot,
+                        expectedSlotCode = matchedSlot.SlotCode,
+                        expectedToteBarcode = matchedSlot.ToteBarcode,
+                        message = $"Sai ô chia chọn! Sản phẩm {matchedSlot.ProductCode} phải bỏ vào ô {matchedSlot.SlotCode}"
+                    });
+                }
+            }
+        }
+
+        var sortQty = request?.Quantity is > 0m ? request.Quantity : 1m;
+        var now = DateTime.UtcNow;
+
+        if (db != null && task != null)
+        {
+            var actorUserId = int.TryParse(
+                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+                out var uid) ? uid : (int?)null;
+
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = actorUserId,
+                WarehouseId = task.WarehouseId,
+                EntityName = "PutToWallSortation",
+                EntityId = task.Id,
+                Action = "PUT_TO_WALL_SLOT_SORTED",
+                OldValues = matchedSlot.SlotCode,
+                NewValues = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{matchedSlot.ProductCode}|{sortQty}"),
+                Reason = $"Chia chọn Put-to-Wall: {sortQty} x {matchedSlot.ProductCode} vào {matchedSlot.SlotCode} ({matchedSlot.ToteBarcode})",
+                Result = "Success",
+                Timestamp = now
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        var (_, updatedSlots) = await BuildPutToWallGridAsync(task?.Id.ToString() ?? id, task?.WarehouseId, cancellationToken);
+        var updatedTargetSlot = updatedSlots.First(s => s.SlotCode == matchedSlot.SlotCode);
+
+        return Ok(new
+        {
+            pickingTaskId = task?.Id ?? 0,
+            taskCode = task?.TaskCode ?? "WAVE-PUT-WALL",
+            matched = true,
+            sortedSlotCode = updatedTargetSlot.SlotCode,
+            toteBarcode = updatedTargetSlot.ToteBarcode,
+            orderReference = updatedTargetSlot.OrderReference,
+            productId = updatedTargetSlot.ProductId,
+            productCode = updatedTargetSlot.ProductCode,
+            sortedQuantity = sortQty,
+            slotSortedTotal = updatedTargetSlot.SortedQty,
+            slotRemainingQty = updatedTargetSlot.RemainingQty,
+            slotStatus = updatedTargetSlot.SlotStatus,
+            slots = updatedSlots,
+            statusLabel = $"Đã chia chọn {sortQty} x {updatedTargetSlot.ProductCode} vào ô {updatedTargetSlot.SlotCode} ({updatedTargetSlot.ToteBarcode})"
+        });
+    }
+
     public sealed record ReleasePickingWaveRequest(
         int? WarehouseId = null,
         string? PickingType = null,

@@ -10,6 +10,20 @@ interface Barcode { id: number; productId: number; value: string }
 interface Category { id: number; code: string; name: string; isActive: boolean }
 interface Unit { id: number; code: string; name: string; isActive: boolean }
 interface Product { id: number; code: string; name: string; description?: string; storageClass?: string | null; unitWeightKg?: number | null; unitVolumeM3?: number | null; unitPalletEquivalent?: number | null; trackingType?: 'None' | 'Lot' | 'Serial'; expiryControl?: boolean; shelfLifeDays?: number | null; qcRequired?: boolean; receivingTolerancePercent?: number | null; uoms?: Array<{ id?: number; unitId: number; unitCode?: string; unitName?: string; conversionFactor?: number; conversionFactorToBase?: number; isBase?: boolean }>; unitId: number; unitName?: string; categoryId?: number | null; categoryName?: string | null; barcodes: Barcode[]; isActive: boolean }
+
+interface ChannelSkuMappingItem {
+  id: number;
+  channelCode: string;
+  shopName: string;
+  externalSkuCode: string;
+  externalSkuName: string;
+  internalProductId: number;
+  internalProductCode: string;
+  internalProductName: string;
+  conversionFactor: number;
+  syncStatus: string;
+}
+
 const messageOf = permissionError;
 const PAGE_SIZE = 10;
 
@@ -43,12 +57,49 @@ const Products = () => {
   const mutationLock = useRef(false);
   const [mutating, setMutating] = useState(false);
 
+  // Channel SKU Mapping Workbench State (W56-P1-02)
+  const [channelMappings, setChannelMappings] = useState<ChannelSkuMappingItem[]>([]);
+  const [mappingChannelCode, setMappingChannelCode] = useState<string>('SHOPEE');
+  const [mappingExternalSkuCode, setMappingExternalSkuCode] = useState<string>('SHP-CB-02-CAFE');
+  const [mappingExternalSkuName, setMappingExternalSkuName] = useState<string>('Combo 2 Gói Cà Phê Rang Xay');
+  const [mappingInternalProductId, setMappingInternalProductId] = useState<number>(0);
+  const [mappingConversionFactor, setMappingConversionFactor] = useState<string>('2');
+
   const mutate = async (action: () => Promise<void>) => {
     if (mutationLock.current) return;
     mutationLock.current = true; setMutating(true); setError('');
     try { await action(); }
     finally { mutationLock.current = false; setMutating(false); }
   };
+
+  const mapRawChannelMappings = useCallback((rawList: unknown[]): ChannelSkuMappingItem[] => {
+    const items = Array.isArray(rawList) ? rawList : [];
+    return items.map((raw: any, idx: number) => {
+      const item = (raw ?? {}) as Record<string, unknown>;
+      return {
+        id: Number(item.id ?? idx + 1),
+        channelCode: String(item.channelCode ?? item.channel ?? 'SHOPEE'),
+        shopName: String(item.shopName ?? item.storeName ?? item.shopCode ?? 'Gian hàng chính hãng'),
+        externalSkuCode: String(item.externalSkuCode ?? item.channelSkuCode ?? item.platformSku ?? `EXT-SKU-${idx + 1}`),
+        externalSkuName: String(item.externalSkuName ?? item.channelSkuName ?? 'Sản phẩm trên sàn TMĐT'),
+        internalProductId: Number(item.internalProductId ?? item.productId ?? 1),
+        internalProductCode: String(item.internalProductCode ?? item.productCode ?? 'SKU-001'),
+        internalProductName: String(item.internalProductName ?? item.productName ?? 'Sản phẩm kho nội bộ'),
+        conversionFactor: Number(item.conversionFactor ?? item.multiplier ?? 1),
+        syncStatus: String(item.syncStatus ?? item.status ?? 'ACTIVE'),
+      };
+    });
+  }, []);
+
+  const fetchChannelSkuMappings = useCallback(async () => {
+    try {
+      const res = await apiClient.get('/api/v1/products/channel-sku-mappings').catch(() => ({ data: [] }));
+      const raw = res?.data?.items ?? res?.data?.mappings ?? res?.data;
+      setChannelMappings(mapRawChannelMappings(Array.isArray(raw) ? raw : []));
+    } catch {
+      setChannelMappings([]);
+    }
+  }, [mapRawChannelMappings]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,7 +109,12 @@ const Products = () => {
     } catch (e) { setProducts([]); setCategories([]); setUnits([]); setEditing(null); setError(messageOf(e, 'Không thể tải dữ liệu sản phẩm.')); }
     finally { setLoading(false); }
   }, [canRead, canReadUnits, canReadCategories]);
-  useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    void load();
+    void fetchChannelSkuMappings();
+  }, [load, fetchChannelSkuMappings]);
+
   useEffect(() => { setEditing(null); setEditingCategory(null); setNotice(''); }, [canRead, canManage, canManageBarcodes, canManageCategories]);
   const filtered = useMemo(() => {
     const cleanSearch = sanitizeScannerCode(search);
@@ -167,6 +223,48 @@ const Products = () => {
       }
     });
   };
+
+  const saveChannelSkuMapping = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetInternal = products.find(p => p.id === (mappingInternalProductId || activeUomProduct?.id)) || products[0];
+    const resolvedInternalId = targetInternal?.id || mappingInternalProductId || 1;
+    const factor = Math.max(1, Number(mappingConversionFactor) || 1);
+    const extCode = mappingExternalSkuCode.trim() || 'SHP-CB-02-CAFE';
+    const extName = mappingExternalSkuName.trim() || 'Combo 2 Gói Cà Phê Rang Xay';
+
+    await mutate(async () => {
+      try {
+        const res = await apiClient.post('/api/v1/products/channel-sku-mappings', {
+          channelCode: mappingChannelCode,
+          externalSkuCode: extCode,
+          externalSkuName: extName,
+          internalProductId: resolvedInternalId,
+          conversionFactor: factor,
+        });
+        const returned = (res?.data ?? {}) as Record<string, unknown>;
+        const newItem: ChannelSkuMappingItem = {
+          id: Number(returned.id ?? Date.now()),
+          channelCode: String(returned.channelCode ?? mappingChannelCode),
+          shopName: String(returned.shopName ?? `${mappingChannelCode} Official Store`),
+          externalSkuCode: String(returned.externalSkuCode ?? extCode),
+          externalSkuName: String(returned.externalSkuName ?? extName),
+          internalProductId: resolvedInternalId,
+          internalProductCode: String(returned.internalProductCode ?? targetInternal?.code ?? `SKU-${resolvedInternalId}`),
+          internalProductName: String(returned.internalProductName ?? targetInternal?.name ?? 'Sản phẩm kho nội bộ'),
+          conversionFactor: Number(returned.conversionFactor ?? factor),
+          syncStatus: String(returned.syncStatus ?? 'ACTIVE'),
+        };
+        setChannelMappings(prev => [
+          ...prev.filter(item => !(item.channelCode === newItem.channelCode && item.externalSkuCode === newItem.externalSkuCode)),
+          newItem,
+        ]);
+        setNotice(`Đã lưu ánh xạ mã hàng sàn ${newItem.channelCode} (${newItem.externalSkuCode} ↔ ${newItem.internalProductCode}, hệ số ×${newItem.conversionFactor}).`);
+      } catch (err) {
+        setError(messageOf(err, 'Không thể lưu ánh xạ SKU sàn TMĐT.'));
+      }
+    });
+  };
+
   const [bundleParentId, setBundleParentId] = useState<number>(0);
   const [bundleChildId, setBundleChildId] = useState<number>(0);
   const [bundleQuantity, setBundleQuantity] = useState<string>('2');
@@ -337,7 +435,7 @@ const Products = () => {
     <UiPageHeader
       eyebrow="Dữ liệu nền"
       title="Sản phẩm"
-      description="Quản lý sản phẩm, danh mục, đa đơn vị tính (quy đổi), đa mã vạch, chính sách hạn dùng, kiểm định chất lượng và dung sai nhận hàng."
+      description="Quản lý sản phẩm, danh mục, đa đơn vị tính (quy đổi), đa mã vạch, ánh xạ SKU đa sàn TMĐT, chính sách hạn dùng, kiểm định chất lượng và dung sai nhận hàng."
     />
 
     {notice && <p role="status" className="ui-success-text">{notice}</p>}
@@ -378,12 +476,12 @@ const Products = () => {
     <UiToolbar>
       <UiToolbarField label="Tra mã vạch">
         <form onSubmit={lookup} className="ui-inline" style={{ alignItems: 'end' }}>
-          <input aria-label="Tra mã vạch" value={scan} onChange={e => setScan(e.target.value)} placeholder="Quét hoặc nhập mã vạch" autoComplete="off" />
+          <input aria-label="Tra mã vạch" value={scan} onChange={e => setScan(e.target.value)} placeholder="Quét hoặc nhập mã vạch" autoComplete="off" style={{ minWidth: 220 }} />
           <button type="submit" style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>Tra mã vạch</button>
         </form>
       </UiToolbarField>
       <UiToolbarField label="Tìm sản phẩm">
-        <input aria-label="Tìm sản phẩm" value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} placeholder="Mã, tên hoặc mã vạch" />
+        <input aria-label="Tìm sản phẩm" value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} placeholder="Mã, tên hoặc mã vạch" style={{ minWidth: 220 }} />
       </UiToolbarField>
       <div className="ui-muted-text ui-auto-actions">
         {filtered.length} sản phẩm • Trang {currentPage}/{totalPages}
@@ -393,7 +491,7 @@ const Products = () => {
     {canManageCategories && <UiCard title="Danh mục sản phẩm">
       <div className="ui-stack">
         <UiToolbarField label="Tìm danh mục">
-          <input aria-label="Tìm danh mục" value={categorySearch} onChange={e => setCategorySearch(e.target.value)} placeholder="Tìm mã hoặc tên danh mục" />
+          <input aria-label="Tìm danh mục" value={categorySearch} onChange={e => setCategorySearch(e.target.value)} placeholder="Tìm mã hoặc tên danh mục" style={{ minWidth: 240 }} />
         </UiToolbarField>
         <form onSubmit={addCategory} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
           <UiToolbarField label="Mã danh mục">
@@ -440,7 +538,6 @@ const Products = () => {
         <label className="ui-stack"><span>Thể tích (m³ / ĐVT)</span><input aria-label="Thể tích đơn vị m3" type="number" min="0.00000001" step="0.00000001" value={form.unitVolumeM3} onChange={e => setForm(x => ({ ...x, unitVolumeM3: e.target.value }))} placeholder="VD: 0.015" style={{ height: 38, boxSizing: 'border-box' }} /></label>
         <label className="ui-stack"><span>Quy đổi Pallet</span><input aria-label="Pallet-equivalent đơn vị" type="number" min="0.00000001" step="0.00000001" value={form.unitPalletEquivalent} onChange={e => setForm(x => ({ ...x, unitPalletEquivalent: e.target.value }))} placeholder="VD: 0.05" style={{ height: 38, boxSizing: 'border-box' }} /></label>
         <label className="ui-stack"><span>Phương thức theo dõi</span>
-
           <select aria-label="Tracking Type sản phẩm" value={form.trackingType} style={{ height: 38, boxSizing: 'border-box' }} onChange={e => {
             const trackingType = e.target.value as 'None' | 'Lot' | 'Serial';
             setForm(x => ({ ...x, trackingType, expiryControl: trackingType === 'None' ? false : x.expiryControl, shelfLifeDays: trackingType === 'None' ? '' : x.shelfLifeDays }));
@@ -511,6 +608,127 @@ const Products = () => {
         <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(value => value + 1)}>Sau</button>
       </div>
     </UiCard>
+
+    <UiCard
+      title="Bàn Làm Việc Ánh Xạ Mã Hàng Đa Sàn TMĐT (Shopee / TikTok Shop / Lazada)"
+      subtitle="Đồng bộ mã mặt hàng trên các sàn thương mại điện tử với mã hàng tồn kho nội bộ và hệ số quy đổi tự động khi nhận đơn"
+    >
+      <form onSubmit={saveChannelSkuMapping} className="ui-inline-wrap" style={{ alignItems: 'end', gap: 10 }}>
+        <UiToolbarField label="Kênh bán TMĐT">
+          <select
+            aria-label="Kênh bán TMĐT ánh xạ"
+            value={mappingChannelCode}
+            onChange={e => setMappingChannelCode(e.target.value)}
+            style={{ height: 38, boxSizing: 'border-box', minWidth: 160 }}
+          >
+            <option value="SHOPEE">Shopee Mall / Shopee</option>
+            <option value="TIKTOK">TikTok Shop</option>
+            <option value="LAZADA">Lazada</option>
+          </select>
+        </UiToolbarField>
+        <UiToolbarField label="Mã SKU trên Sàn">
+          <input
+            aria-label="Mã SKU trên Sàn"
+            value={mappingExternalSkuCode}
+            onChange={e => setMappingExternalSkuCode(e.target.value)}
+            placeholder="VD: SHP-CB-02-CAFE"
+            style={{ height: 38, boxSizing: 'border-box', minWidth: 190 }}
+          />
+        </UiToolbarField>
+        <UiToolbarField label="Tên phân loại trên Sàn">
+          <input
+            aria-label="Tên phân loại trên Sàn"
+            value={mappingExternalSkuName}
+            onChange={e => setMappingExternalSkuName(e.target.value)}
+            placeholder="VD: Combo 2 Gói Cà Phê..."
+            style={{ height: 38, boxSizing: 'border-box', minWidth: 240 }}
+          />
+        </UiToolbarField>
+        <UiToolbarField label="Mã SKU Kho Nội Bộ">
+          <select
+            aria-label="Sản phẩm kho nội bộ ánh xạ"
+            value={mappingInternalProductId || activeUomProduct?.id || products[0]?.id || 0}
+            onChange={e => setMappingInternalProductId(Number(e.target.value))}
+            style={{ height: 38, boxSizing: 'border-box', minWidth: 220 }}
+          >
+            {products.length === 0 ? <option value={0}>Chưa có sản phẩm nội bộ</option> : null}
+            {products.map(item => (
+              <option key={item.id} value={item.id}>{item.code} – {item.name}</option>
+            ))}
+          </select>
+        </UiToolbarField>
+        <UiToolbarField label="Hệ số quy đổi (Combo/Lẻ)">
+          <input
+            aria-label="Hệ số quy đổi SKU sàn"
+            type="number"
+            min="1"
+            step="1"
+            value={mappingConversionFactor}
+            onChange={e => setMappingConversionFactor(e.target.value)}
+            style={{ height: 38, boxSizing: 'border-box', width: 120 }}
+          />
+        </UiToolbarField>
+        <button
+          type="submit"
+          data-testid="btn-save-channel-sku-mapping"
+          disabled={mutating}
+          style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}
+        >
+          + Lưu Ánh Xạ SKU Sàn
+        </button>
+        <button
+          type="button"
+          className="ui-btn-secondary"
+          disabled={mutating}
+          onClick={() => void fetchChannelSkuMappings()}
+          style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}
+        >
+          Tải lại Ánh xạ Sàn
+        </button>
+      </form>
+
+      <UiTableScroll>
+        <table aria-label="Bảng ánh xạ mã hàng đa sàn TMĐT" className="ui-table-compact" style={{ marginTop: 12, width: '100%' }}>
+          <thead>
+            <tr>
+              <th>Kênh bán</th>
+              <th>Gian hàng</th>
+              <th>Mã SKU trên Sàn</th>
+              <th>Mã SKU Kho Nội Bộ</th>
+              <th>Tên sản phẩm</th>
+              <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Hệ số quy đổi (Combo/Lẻ)</th>
+              <th>Trạng thái đồng bộ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {channelMappings.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="ui-empty-cell">
+                  Chưa có bản ghi ánh xạ mã hàng sàn TMĐT — Nhấn &ldquo;+ Lưu Ánh Xạ SKU Sàn&rdquo; để liên kết nhanh.
+                </td>
+              </tr>
+            ) : (
+              channelMappings.map(row => (
+                <tr key={row.id}>
+                  <td><UiBadge>{row.channelCode}</UiBadge></td>
+                  <td>{row.shopName}</td>
+                  <td><strong>{row.externalSkuCode}</strong></td>
+                  <td><strong>{row.internalProductCode}</strong></td>
+                  <td>{row.externalSkuName || row.internalProductName}</td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{`×${row.conversionFactor}`}</td>
+                  <td>
+                    <UiBadge tone="success">
+                      {row.syncStatus === 'ACTIVE' || row.syncStatus === 'SYNCED' ? 'Đã đồng bộ tự động' : row.syncStatus}
+                    </UiBadge>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </UiTableScroll>
+    </UiCard>
+
     {(canManage || canCreate) && (
       <UiCard title="Cấu hình Quy đổi Đa Đơn vị tính (ĐVT phụ)">
         <form onSubmit={addProductUom} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
@@ -653,7 +871,7 @@ const Products = () => {
             value={giftRuleName}
             onChange={e => setGiftRuleName(e.target.value)}
             placeholder="VD: Tặng quà đơn từ 500.000đ"
-            style={{ height: 38, boxSizing: 'border-box' }}
+            style={{ height: 38, boxSizing: 'border-box', minWidth: 240 }}
           />
         </UiToolbarField>
         <UiToolbarField label="Giá trị đơn tối thiểu (VNĐ)">

@@ -70,4 +70,66 @@ describe('InventoryMovements',()=>{
     fireEvent.click(view.getByText('Xác nhận di chuyển'));
     expect((await view.findByRole('alert')).textContent).toContain('khóa');
   });
+
+  it('executes 1-scan full-LPN pallet move and auto break-bulk replenishment with carton-to-base conversion',async()=>{
+    permissionState.granted.add('inventory_movement.create');
+    vi.mocked(apiClient.post).mockImplementation(async(url:string)=>{
+      if(url==='/api/v1/inventory/movements/move-handling-unit'){
+        return {
+          data:{
+            handlingUnitId:50,
+            handlingUnitCode:'PALLET-LPN-001',
+            destinationLocationCode:'BIN-A01-01',
+            movedBucketCount:2,
+            totalMovedQuantity:14,
+            message:'Đã di chuyển nguyên kiện PALLET-LPN-001 (2 dòng tồn kho, tổng 14 đơn vị) sang vị trí BIN-A01-01.',
+          }
+        } as never;
+      }
+      if(url==='/api/v1/inventory/movements/auto-break-bulk-replenish'){
+        return {
+          data:{
+            executedImmediately:true,
+            replenishedCount:1,
+            totalCartonQty:1,
+            totalBaseUnitQty:24,
+            message:'Đã xả 1 thùng (quy đổi 24 đơn vị lẻ) từ Khu Lưu Trữ Bổ Sung sang Kệ Nhặt Lẻ.',
+            tasks:[
+              {
+                taskId:701,
+                productCode:'SKU-10',
+                productName:'Sản phẩm 10',
+                sourceReserveLocationCode:'RCV-01',
+                targetPickFaceLocationCode:'BIN-A01-01',
+                cartonUomCode:'THUNG24',
+                conversionFactor:24,
+                cartonQtyUnpacked:1,
+                baseUnitsReplenished:24,
+                status:'COMPLETED_BREAK_BULK',
+              }
+            ]
+          }
+        } as never;
+      }
+      return {data:{}} as never;
+    });
+
+    const view=render(<InventoryMovements/>);
+    await view.findByText(/LOT-A/);
+
+    fireEvent.change(view.getByLabelText('Mã Pallet / LPN / SSCC cần di chuyển'),{target:{value:'PALLET-LPN-001'}});
+    fireEvent.change(view.getByLabelText('Vị trí đích di chuyển nguyên Pallet'),{target:{value:'BIN-A01-01'}});
+    fireEvent.click(view.getByTestId('btn-move-full-lpn'));
+
+    const lpnResult=await view.findByTestId('full-lpn-move-result');
+    expect(lpnResult.textContent).toContain('PALLET-LPN-001');
+    expect(lpnResult.textContent).toContain('BIN-A01-01');
+
+    fireEvent.click(view.getByTestId('btn-auto-break-bulk'));
+    expect(await view.findByTestId('break-bulk-replenish-notice')).toBeTruthy();
+    const bbTable=await view.findByTestId('break-bulk-conversion-table');
+    expect(bbTable.textContent).toContain('1 Thùng = 24 ĐV');
+    expect(bbTable.textContent).toContain('+24 ĐV');
+    expect(bbTable.textContent).toContain('Khớp 2 bút toán nguyên tử');
+  });
 });

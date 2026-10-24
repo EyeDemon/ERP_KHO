@@ -955,9 +955,9 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     {
         p.CategoryId ??= catQa01.Id;
         p.StorageClass ??= "AMBIENT";
-        p.UnitWeightKg ??= 2.0m;
-        p.UnitVolumeM3 ??= 0.02m;
-        p.UnitPalletEquivalent ??= 0.04m;
+        if (p.UnitWeightKg is null or <= 0m) p.UnitWeightKg = 0.45m;
+        if (p.UnitVolumeM3 is null or <= 0m) p.UnitVolumeM3 = 0.0024m;
+        if (p.UnitPalletEquivalent is null or <= 0m) p.UnitPalletEquivalent = 0.04m;
         if (p.ExpiryControl && p.ShelfLifeDays is null)
         {
             p.ShelfLifeDays = 365;
@@ -3668,6 +3668,116 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
     customer.ReceivableBalance = arInvoice.RemainingAmount;
 
+    // 6b. Wave 56-57 PALLET-LPN-001 HandlingUnit + 2 available InventoryStock buckets at RCV-01
+    var rcv01Location = await context.WarehouseLocations.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(l => l.WarehouseId == primaryWarehouse.Id && l.Code == "RCV-01")
+        ?? receivingLocation;
+    var palletLpn001 = await context.HandlingUnits.IgnoreQueryFilters()
+        .Include(h => h.Contents)
+        .FirstOrDefaultAsync(h => h.HuCode == "PALLET-LPN-001");
+    if (palletLpn001 is null)
+    {
+        palletLpn001 = new HandlingUnit
+        {
+            HuCode = "PALLET-LPN-001",
+            Barcode = "BC-PALLET-LPN-001",
+            Sscc = "008938505000000099",
+            WarehouseId = primaryWarehouse.Id,
+            PackingSessionId = packingSession.Id,
+            Type = HandlingUnitType.Pallet,
+            Status = HandlingUnitStatus.InUse,
+            GrossWeightKg = 45.0m,
+            NetWeightKg = 42.0m,
+            VolumeM3 = 0.24m,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-20),
+            CreatedBy = qaAdmin.Id
+        };
+        context.HandlingUnits.Add(palletLpn001);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        palletLpn001.Barcode = "BC-PALLET-LPN-001";
+        palletLpn001.Sscc = "008938505000000099";
+        palletLpn001.WarehouseId = primaryWarehouse.Id;
+        palletLpn001.PackingSessionId = packingSession.Id;
+        palletLpn001.Type = HandlingUnitType.Pallet;
+        palletLpn001.Status = HandlingUnitStatus.InUse;
+        palletLpn001.GrossWeightKg = 45.0m;
+        palletLpn001.NetWeightKg = 42.0m;
+        palletLpn001.VolumeM3 = 0.24m;
+        await context.SaveChangesAsync();
+    }
+
+    await context.Database.ExecuteSqlInterpolatedAsync($@"
+        DELETE FROM InventoryTransactions WHERE ReferenceType IN ('HandlingUnitPalletSeed', 'HandlingUnitLpnMove');
+        DELETE FROM InventoryLocationMovements WHERE ReferenceType = 'HandlingUnitMove';
+        DELETE FROM InventoryStocks WHERE HandlingUnitId = {palletLpn001.Id};");
+
+    var lpnStock1 = new InventoryStock
+    {
+        WarehouseId = primaryWarehouse.Id,
+        ProductId = product.Id,
+        LocationId = rcv01Location.Id,
+        Status = InventoryStatus.Available,
+        HandlingUnitId = palletLpn001.Id,
+        Quantity = 8m,
+        ReservedQuantity = 0m,
+        MovingAverageCost = 250000m,
+        LastUpdated = DateTime.UtcNow
+    };
+    lpnStock1.RefreshGrainHash();
+    var lpnStock2 = new InventoryStock
+    {
+        WarehouseId = primaryWarehouse.Id,
+        ProductId = lotProduct.Id,
+        LocationId = rcv01Location.Id,
+        LotId = lotQa002.Id,
+        Status = InventoryStatus.Available,
+        HandlingUnitId = palletLpn001.Id,
+        Quantity = 6m,
+        ReservedQuantity = 0m,
+        MovingAverageCost = 420000m,
+        LastUpdated = DateTime.UtcNow
+    };
+    lpnStock2.RefreshGrainHash();
+    context.InventoryStocks.AddRange(lpnStock1, lpnStock2);
+    context.InventoryTransactions.AddRange(
+        new InventoryTransaction
+        {
+            WarehouseId = primaryWarehouse.Id,
+            ProductId = product.Id,
+            LocationId = rcv01Location.Id,
+            HandlingUnitId = palletLpn001.Id,
+            InventoryStatus = InventoryStatus.Available,
+            TransactionType = TransactionType.Import,
+            Quantity = 8m,
+            UnitCost = 250000m,
+            ReferenceType = "HandlingUnitPalletSeed",
+            ReferenceId = palletLpn001.Id,
+            TransactionDate = DateTime.UtcNow.AddMinutes(-20),
+            CreatedBy = qaAdmin.Id,
+            Note = "Nhập kiện Pallet PALLET-LPN-001 (8 thùng linh kiện QA-01) tại cửa tiếp nhận RCV-01"
+        },
+        new InventoryTransaction
+        {
+            WarehouseId = primaryWarehouse.Id,
+            ProductId = lotProduct.Id,
+            LocationId = rcv01Location.Id,
+            LotId = lotQa002.Id,
+            HandlingUnitId = palletLpn001.Id,
+            InventoryStatus = InventoryStatus.Available,
+            TransactionType = TransactionType.Import,
+            Quantity = 6m,
+            UnitCost = 420000m,
+            ReferenceType = "HandlingUnitPalletSeed",
+            ReferenceId = palletLpn001.Id,
+            TransactionDate = DateTime.UtcNow.AddMinutes(-20),
+            CreatedBy = qaAdmin.Id,
+            Note = "Nhập kiện Pallet PALLET-LPN-001 (6 hộp cảm biến LOT-QA-002) tại cửa tiếp nhận RCV-01"
+        });
+    await context.SaveChangesAsync();
+
     // 7. Idempotent Inventory Reconciliation pass — ensure 100% Match across all (WarehouseId, ProductId, Status) pairs
     await context.Database.ExecuteSqlRawAsync(
         "DELETE FROM InventoryTransactions WHERE ReferenceType = 'QASeedReconcile' OR Quantity <= 0 OR TransactionType = 6; " +
@@ -3759,6 +3869,8 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
 UPDATE dbo.Products SET MovingAverageCost = 250000 WHERE Id = {product.Id};
 UPDATE dbo.Products SET MovingAverageCost = 420000 WHERE Id = {lotProduct.Id};
 UPDATE dbo.Products SET MovingAverageCost = 250000 WHERE MovingAverageCost <= 0;
+UPDATE dbo.Products SET UnitWeightKg = 0.45 WHERE UnitWeightKg IS NULL OR UnitWeightKg <= 0;
+UPDATE dbo.Products SET UnitVolumeM3 = 0.0024 WHERE UnitVolumeM3 IS NULL OR UnitVolumeM3 <= 0;
 
 UPDATE dbo.InventoryStocks SET MovingAverageCost = 250000 WHERE ProductId = {product.Id};
 UPDATE dbo.InventoryStocks SET MovingAverageCost = 420000 WHERE ProductId = {lotProduct.Id};
@@ -3821,7 +3933,9 @@ DECLARE @lazadaShopId int = (SELECT TOP 1 Id FROM dbo.MarketplaceShops WHERE Ten
 INSERT INTO dbo.ChannelSkuMappings (TenantId, ShopId, ChannelItemId, ChannelSkuCode, InternalProductId, ConversionFactor, LastPushedQty, LastPushedAtUtc, IsActive)
 VALUES
 (1, @shopeeOfficialId, N'SHP-OFF-1001', N'SHP-OFF-PROD-01', {product.Id}, 1, 152, DATEADD(MINUTE, -5, SYSUTCDATETIME()), 1),
+(1, @shopeeOfficialId, N'SP-COMBO-ITEM-02', N'SP-COMBO-02', {product.Id}, 2, 76, DATEADD(MINUTE, -4, SYSUTCDATETIME()), 1),
 (1, @tiktokMallId, N'TTS-MALL-2001', N'TTS-MALL-PROD-01', {product.Id}, 1, 129, DATEADD(MINUTE, -5, SYSUTCDATETIME()), 1),
+(1, @tiktokMallId, N'TTS-FLASH-ITEM-01', N'TTS-FLASH-01', {product.Id}, 1, 129, DATEADD(MINUTE, -4, SYSUTCDATETIME()), 1),
 (1, @shopeeShopId, N'SHP-ITEM-1001', N'SHP-QA-PROD-01', {product.Id}, 1, 152, DATEADD(MINUTE, -5, SYSUTCDATETIME()), 1),
 (1, @shopeeShopId, N'SHP-ITEM-1002', N'SHP-QA-LOT-02', {lotProduct.Id}, 1, 55, DATEADD(MINUTE, -5, SYSUTCDATETIME()), 1),
 (1, @tiktokShopId, N'TTS-ITEM-2001', N'TTS-QA-PROD-01', {product.Id}, 1, 121, DATEADD(MINUTE, -5, SYSUTCDATETIME()), 1),
@@ -3915,13 +4029,30 @@ DELETE FROM dbo.CustomerReturnLines WHERE TenantId = 1;
 DELETE FROM dbo.CustomerReturns WHERE TenantId = 1;
 INSERT INTO dbo.CustomerReturns (TenantId, ReturnCode, WarehouseId, SalesOrderId, ExportReceiptId, TrackingNumber, OrderNumber, ReturnReason, Status, CreatedBy, CreatedAtUtc, CompletedAtUtc)
 VALUES
-(1, N'RMA-INSP-20261022-01', {primaryWarehouse.Id}, {salesOrder.Id}, ISNULL(@er01Id, 1), N'GHN84920188', N'SO-QA-001', N'Khách đổi size / Kiểm định bao bì móp nhẹ khi vận chuyển', N'COMPLETED', {qaAdmin.Id}, DATEADD(HOUR, -3, SYSUTCDATETIME()), DATEADD(HOUR, -2, SYSUTCDATETIME()));
-DECLARE @seedReturnId int = SCOPE_IDENTITY();
+(1, N'RMA-INSP-20261022-01', {primaryWarehouse.Id}, {salesOrder.Id}, ISNULL(@er01Id, 1), N'GHN84920188', N'SO-QA-001', N'Khách đổi size / Kiểm định bao bì móp nhẹ khi vận chuyển', N'COMPLETED', {qaAdmin.Id}, DATEADD(HOUR, -3, SYSUTCDATETIME()), DATEADD(HOUR, -2, SYSUTCDATETIME())),
+(1, N'RMA-RTS-OVERDUE-09D', {primaryWarehouse.Id}, {salesOrder.Id}, ISNULL(@er01Id, 1), N'GHN-RTS-OVERDUE-09D', N'SO-QA-001', N'Hoàn trả RTS quá hạn 7 ngày chưa kiểm định phân loại', N'PENDING_INSPECTION', {qaAdmin.Id}, DATEADD(DAY, -9, SYSUTCDATETIME()), NULL),
+(1, N'RMA-RTS-48H-CLAIM', {primaryWarehouse.Id}, {packSalesOrder.Id}, ISNULL(@er02Id, 1), N'SPX-RTS-48H-CLAIM', N'SO-QA-002', N'Hoàn trả RTS trong cửa sổ khiếu nại sàn < 48h cần quay video bằng chứng', N'PENDING_INSPECTION', {qaAdmin.Id}, DATEADD(HOUR, -12, SYSUTCDATETIME()), NULL);
+
+DECLARE @seedReturnId int = (SELECT TOP 1 Id FROM dbo.CustomerReturns WHERE TenantId = 1 AND ReturnCode = N'RMA-INSP-20261022-01');
+DECLARE @overdueReturnId int = (SELECT TOP 1 Id FROM dbo.CustomerReturns WHERE TenantId = 1 AND ReturnCode = N'RMA-RTS-OVERDUE-09D');
+DECLARE @claim48hReturnId int = (SELECT TOP 1 Id FROM dbo.CustomerReturns WHERE TenantId = 1 AND ReturnCode = N'RMA-RTS-48H-CLAIM');
 IF @seedReturnId IS NOT NULL
 BEGIN
     INSERT INTO dbo.CustomerReturnLines (TenantId, CustomerReturnId, ProductId, QuarantineLocationId, TargetLocationId, Quantity, UnitCost, Condition, Disposition, PackagingProductId, PackagingQuantity)
     VALUES
     (1, @seedReturnId, {product.Id}, {receivingLocation.Id}, {storageBin.Id}, 2, 120000, N'GOOD_RESELLABLE', N'RESTOCK_AVAILABLE', NULL, 0);
+END;
+IF @overdueReturnId IS NOT NULL
+BEGIN
+    INSERT INTO dbo.CustomerReturnLines (TenantId, CustomerReturnId, ProductId, QuarantineLocationId, TargetLocationId, Quantity, UnitCost, Condition, Disposition, PackagingProductId, PackagingQuantity)
+    VALUES
+    (1, @overdueReturnId, {product.Id}, {receivingLocation.Id}, {storageBin.Id}, 3, 250000, N'GOOD_RESELLABLE', N'RESTOCK_AVAILABLE', NULL, 0);
+END;
+IF @claim48hReturnId IS NOT NULL
+BEGIN
+    INSERT INTO dbo.CustomerReturnLines (TenantId, CustomerReturnId, ProductId, QuarantineLocationId, TargetLocationId, Quantity, UnitCost, Condition, Disposition, PackagingProductId, PackagingQuantity)
+    VALUES
+    (1, @claim48hReturnId, {lotProduct.Id}, {receivingLocation.Id}, {storageBin.Id}, 1, 420000, N'DAMAGED_PACKAGING', N'REPACK_REQUIRED', NULL, 0);
 END;
 
 DELETE FROM dbo.StocktakeAdjustmentProposals WHERE TenantId = 1;

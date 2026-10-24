@@ -1,64 +1,71 @@
-# HANDOFF REPORT — SUBAGENT 4A (`Zero-Cheat Test & SQL Harness Engineer [P2-01]`)
-**Wave:** Wave 54 (Đợt 3 — Kỷ luật Kiểm thử Thực chất, 7 Bài Test Bắt buộc Wave 54 & Vitest cho 5 Màn hình Mới)  
-**Status:** `COMPLETED (100% PASS)`
+# HANDOFF REPORT — SUBAGENT 4A (`6422df5d-bfc7-41fe-94d9-ebff5172e411`)
+**Wave 56–57 (`DEPTH-01..07`, `W56-P0-01..04`, `W56-P1-01..04`, `W57-P2-01..02`) — QA Seed, Backend Tests & Frontend Vitest Suite**
 
 ---
 
-## 1. Đã thay đổi gì (Danh sách file & Tọa độ `File:Line` — `FACT`)
-
-### A. Bổ sung 7 bài kiểm thử thực chất vào `ERP.Api.Tests/Wave48To51FullClosureTests.cs` (`L953-L1434`)
-1. `Wave54_GrainHash_RefreshAndComputeCanonical_ProduceIdentical32ByteSha256Hash` (`L953-L1007`):
-   - Kiểm chứng `stock.RefreshGrainHash()` và `InventoryStock.ComputeCanonicalGrainHash(...)` trên đủ 9 chiều định danh trả về mảng `byte[32]` (`SHA-256`) trùng khớp tuyệt đối (`SequenceEqual == true`), và sinh băm khác biệt khi thay đổi `LocationId` hoặc `OwnerId`.
-2. `Wave54_ExportReceiptsAndManifest_NoNullDbFake_RequiresAuthActor_DispatchesViaDomainServiceWithLedgerAndOutbox` (`L1009-L1119`):
-   - Kiểm chứng `HandoverManifestService` ném `InvalidOperationException` khi `db == null`, ném `UnauthorizedAccessException` khi `isAuthenticated == true` nhưng thiếu `actorUserId` hợp lệ, và khi niêm phong (`SealHandoverManifestAsync`) thực sự gọi `IExportReceiptService.DispatchAsync`, chuyển `HandoverManifest` sang `SEALED`, chuyển `ExportReceipt` sang `Dispatched`, trừ `InventoryStocks.Quantity`, ghi `InventoryTransactions` (`Quantity = -5m`), `IntegrationOutboxMessages` (`ExportReceiptDispatched`) và `AuditLogs`.
-3. `Wave54_ShipmentFinancialLedgerAndStocktakeProposal_HaveExplicitPrecisionAndRowVersion` (`L1121-L1153`):
-   - Kiểm chứng metadata EF Core của `ShipmentFinancialLedger` và `StocktakeAdjustmentProposal` có toàn bộ cột `decimal` đạt `GetPrecision() == 18` & `GetScale() == 4`, đồng thời `RowVersion` có `IsConcurrencyToken == true`.
-4. `Wave54_StocktakeStatus_DedicatedEnumAndDomainTransitionGuards_WorkCorrectly` (`L1155-L1182`):
-   - Kiểm chứng `Stocktake.Status` dùng enum chuyên biệt `StocktakeStatus`, chuyển từ `Draft -> Approved` thành công, và chặn chuyển lùi `Approved -> Draft` bằng `ConflictException` (`ErrorCode == "DOC_INVALID_STATE_TRANSITION"`), đồng thời kiểm chứng `UnprocessableDomainException` giữ đúng `ErrorCode`.
-5. `Wave54_SplitControllers_HandoverManifests_DataImports_SaasBilling_WorkOnCanonicalV1Routes` (`L1184-L1285`):
-   - Kiểm chứng 3 Controller tách mới (`HandoverManifestsController`, `DataImportsController`, `SaasBillingController`) hoạt động trên `ErpKhoDbContext` thật (`ScanHandoverAwb`, `GetHandoverManifests`, `GetDataImportTemplates`, `ImportOpeningBalance`, `GetSubscription`, `GenerateVietQrInvoice`).
-6. `Wave54_PickingPathSort_And_AlternateBinSuggestion_ReturnSortedPickableBins` (`L1287-L1364`):
-   - Kiểm chứng `PickingTasksController.GetAlternateBins` loại bỏ vị trí gốc đang thiếu hàng và lô hết hạn, sắp xếp các kệ thay thế khả dụng theo đúng thứ tự ưu tiên FEFO (`ExpiryDate` tăng dần) rồi đến mã vị trí (`Location.Code`).
-7. `Wave54_ImportReceiptMacPreview_CalculatesExactWeightedAverageDelta` (`L1366-L1433`):
-   - Kiểm chứng `ImportReceiptsController.GetMacPreview` tính chính xác giá vốn bình quân gia quyền di động (`oldQuantity = 10`, `oldMovingAverageCost = 100.000`, `incomingQuantity = 10`, `receiptUnitCost = 150.000`, `projectedMovingAverageCost = 125.000`, `macDelta = 25.000`, `macDeltaPct = 25%`, `projectedInventoryValuation = 2.500.000`).
-
-### B. Tạo mới 5 file Vitest cho 5 màn hình mới & cập nhật 2 file Vitest hiện hữu (`FACT`)
-8. `frontend/src/pages/SaasBilling.test.tsx` (`L1-L124`):
-   - Kiểm chứng tải hạn mức thuê bao 3 nấc từ `/api/v1/permissions/saas/subscription-billing`, tạo hóa đơn VietQR (`/api/v1/permissions/saas/subscription-billing/create-vietqr-invoice`), xác nhận Webhook (`/api/v1/permissions/saas/subscription-billing/webhook-vietqr`), và hiển thị `role="alert"` kèm `errorCode` + `correlationId` khi API trả lỗi `500`.
-9. `frontend/src/pages/CodReconciliation.test.tsx` (`L1-L134`):
-   - Kiểm chứng hiển thị sổ cái đối soát COD 3 chiều từ `/api/v1/reports/cod-shipping-reconciliation`, tải lên tệp `File` nhị phân qua `FormData` (`multipart/form-data`), và hiển thị `role="alert"` khi API trả lỗi `422 INVALID_CARRIER_STATEMENT`.
-10. `frontend/src/pages/OnboardingWizard.test.tsx` (`L1-L134`):
-    - Kiểm chứng trạng thái 5 bước (`/api/v1/permissions/onboarding-wizard/status`), cấp phát thuê bao (`/api/v1/permissions/saas/tenants/provision`), kích hoạt nhanh 5 bước (`/api/v1/reports/onboarding-wizard/quick-start`), tải lên tệp `.xlsx` tồn đầu kỳ qua `FormData` (`/api/v1/data-imports/opening-balance`), và hiển thị `role="alert"` khi API trả lỗi `422 TENANT_CODE_DUPLICATE`.
-11. `frontend/src/pages/HandoverManifests.test.tsx` (`L1-L120`):
-    - Kiểm chứng tải danh sách biên bản bàn giao (`/api/v1/handover-manifests`), quét AWB hợp lệ (`/api/v1/handover-manifests/scan-awb`), xác nhận niêm phong bàn giao kèm biển số xe & tên tài xế (`/api/v1/handover-manifests/confirm-handover`), và hiển thị cảnh báo đỏ (`data-testid="handover-critical-alert"`) khi gặp `409 ORDER_CANCELLED_PUTBACK_REQUIRED`.
-12. `frontend/src/pages/CostValuation.test.tsx` (`L1-L130`):
-    - Kiểm chứng tải báo cáo lãi gộp & định giá tồn kho bình quân gia quyền (`/api/v1/reports/owner-gross-profit`), kết xuất bảng kê `.xlsx` MISA AMIS (`/api/v1/export-receipts/misa-excel-export?format=xlsx`), phát hành HĐĐT nháp NĐ 70/2025 (`/api/v1/export-receipts/einvoice-nd70-draft`), ẩn giá vốn khi gặp `403 Forbidden` (`data-testid="rbac-cost-hidden-banner"`), và hiển thị `role="alert"` khi cổng HĐĐT trả lỗi `500`.
-13. `frontend/src/pages/Dashboard.test.tsx` (`L69-L162`):
-    - Cập nhật mock & kỳ vọng thông báo đối soát COD động (`Đã đối soát 23/25 vận đơn (92%), phát hiện 2 cảnh báo lệch phí/chậm hoàn.`) khớp với logic thực chất của `Dashboard.tsx`.
-14. `frontend/src/pages/Permissions.test.tsx` (`L1-L12`):
-    - Bọc `<MemoryRouter>` cho helper `render` trong `Permissions.test.tsx` để hỗ trợ `<Link to="/saas-billing">` mới được bổ sung trên trang `Permissions.tsx`.
+## 1. `[SKILL ROUTING & ACTIVATION CHECK]`
+- **Role:** Role 8 — QA Automation, Reviewer & Debugging (`test-driven-development`, `vitest`, `verification-before-completion`)
+- **Skills Activated:** `test-driven-development`, `vitest`, `verification-before-completion`
+- **Core Rules Applied:** `PROJECT_RULES.md` (5-Layer Discipline, UTF-8 no-BOM Gate, Zero File Overlap), `rules-testing.md` (`[TST-001]`, `[TST-002]`), `rules-agent-workflow.md` (`[REP-001]`, `[REP-002]`).
 
 ---
 
-## 2. Bằng chứng kiểm chứng (`FACT`)
+## 2. Đã Thay Đổi Gì (Exclusive File Ownership — 8 Owned Files) (`FACT`)
 
-- **Encoding Gate:**
-  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-encoding.ps1` -> **PASS (`Exit Code 0`, `Encoding check passed.`)**
-- **Backend Wave 48–54 Closure Suite (16 tests):**
-  - `dotnet test ERP.Api.Tests/ERP.Api.Tests.csproj -c Release --filter "FullyQualifiedName~Wave48To51FullClosureTests"` -> **PASS (`Passed: 16, Failed: 0, Skipped: 0, Total: 16`)**
-- **Full Frontend Vitest Suite (All 70 test files):**
-  - `npm --prefix frontend test -- --run` -> **PASS (`Test Files: 70 passed (70)`, `Tests: 390 passed (390)`, `Exit Code 0`)**
+1. **[`tools/ERP.QaSeed/Program.cs`](file:///d:/ERP_KHO/tools/ERP.QaSeed/Program.cs)** (`Lines 421–672`):
+   - Mở rộng dữ liệu `ERP.QaSeed` cho Wave 56–57 và thực thi thành công lệnh `dotnet run --project tools/ERP.QaSeed/ERP.QaSeed.csproj -c Release -- --apply` (`Exit Code 0`) trên toàn bộ các instance `ERP_KHO` cục bộ (`(localdb)\MSSQLLocalDB` và `localhost`):
+     - `ProductUoms`: Seed quy đổi `THUNG24` (1 Thùng = 24 Cái) cho `QA-E2E-001` và `QA-LOT-002` phục vụ Break-Bulk Replenishment (`W57-P2-01`).
+     - `HandlingUnits` & `InventoryStocks`: Seed Pallet LPN `PALLET-W56-001` (`SSCC: 008938505000990012`) chứa các dòng tồn kho đa sản phẩm phục vụ 1-Scan Full-LPN Move (`W56-P1-04`).
+     - `ProductBundleComponents`: Seed định mức BOM cho `QA-E2E-001` để kiểm thử lắp ráp & xả bộ `DEKIT_DISASSEMBLE` (`W56-P1-03`).
+     - `StocktakeDetails`: Seed phiếu kiểm kê có dòng chênh lệch nhỏ (`< 1%` & `<= 500.000đ`) và dòng chênh lệch lớn (`> 1%` hoặc `> 500.000đ`) phục vụ `evaluate-auto-approval` (`W56-P0-01`).
+     - `AuditLogs`: Seed dữ liệu đối chiếu 3 chiều PO - ASN - GRN có cờ `REQUIRE_PROCUREMENT_APPROVAL` (> 5% over-receipt) (`W56-P0-02`), cấu hình khấu trừ thuế sàn TMĐT 1,5% (`1% GTGT + 0,5% TNCN` theo Nghị định `70/2025/NĐ-CP`) + phí cố định `3.000đ/đơn` (`W56-P0-03`, `W56-P0-04`), gợi ý thùng 3D Cartonization & DIM Weight (`W56-P1-02`), và 8 ô chia hàng `Put-to-Wall` (`SLOT-01..SLOT-08`) (`W57-P2-02`).
+
+2. **[`ERP.Api.Tests/Wave48To51FullClosureTests.cs`](file:///d:/ERP_KHO/ERP.Api.Tests/Wave48To51FullClosureTests.cs)** (`Lines 1620–2488`):
+   - Bổ sung 6 bài kiểm thử Backend `[Fact]` kiểm chứng toàn diện các endpoint Wave 56–57:
+     1. `Wave56_StocktakeEvaluateAutoApproval_And_CountAttempts_WorkCorrectly`: Kiểm chứng `POST /api/v1/stocktakes/{id}/evaluate-auto-approval` và `GET /api/v1/stocktakes/{id}/count-attempts-and-auto-approval` phân loại chính xác dòng chênh lệch `< 1%` & `<= 500.000đ` (`AUTO_APPROVE_ELIGIBLE`) và dòng vượt ngưỡng (`REQUIRES_WAREHOUSE_DIRECTOR_APPROVAL`).
+     2. `Wave56_ThreeWayMatchPoAsnGrn_Enforces5PercentOverReceiptTolerance`: Kiểm chứng `GET /api/v1/import-receipts/three-way-match-po-asn` gắn trạng thái `OVER_TOLERANCE_BLOCKED`, `requiresProcurementApproval = true` và `overReceiptTolerancePct = 5.0m` khi thực nhận vượt > 5% PO.
+     3. `Wave56_CodAndOwnerGrossProfit_IncludeWithheldTax15PctAndFixed3000Fee`: Kiểm chứng `GET /api/v1/reports/cod-shipping-reconciliation` và `GET /api/v1/reports/owner-gross-profit` tính chính xác thuế sàn TMĐT khấu trừ tại nguồn 1,5% (`1% GTGT + 0,5% TNCN` theo Nghị định `70/2025/NĐ-CP`), phí cố định `3.000đ/đơn` và lợi nhuận ròng sau thuế (`netProfitAfterWithheldTax`).
+     4. `Wave56_PackingRecommendCarton3D_And_DekitDisassemble_ExecuteCorrectly`: Kiểm chứng `POST /api/v1/packing-sessions/{id}/recommend-carton` (tính thể tích 3D, trọng lượng thực, trọng lượng quy đổi DIM) và `POST /api/v1/packing-sessions/kitting-vas` với `OperationMode = "DEKIT_DISASSEMBLE"` (trừ tồn KIT cha, cộng hoàn tồn thành phần con vào `InventoryStocks` và sinh cặp bút toán `InventoryTransactions` nguyên tử `VAS_DEKIT`).
+     5. `Wave56_MoveHandlingUnitLpn_And_AutoBreakBulkReplenish_ExecuteAtomically`: Kiểm chứng `POST /api/v1/inventory/movements/move-handling-unit` (di chuyển nguyên Pallet/LPN đa SKU trong 1 lần quét) và `POST /api/v1/inventory/movements/auto-break-bulk-replenish` (xả 1 thùng = 24 đơn vị cơ sở từ kệ dự trữ sang kệ nhặt lẻ).
+     6. `Wave56_PutToWallSlots_And_SortValidation_EnforceSlotMatch`: Kiểm chứng `GET /api/v1/picking-tasks/{id}/put-to-wall-slots` (trả về 8 ô `SLOT-01..SLOT-08`) và `POST /api/v1/picking-tasks/{id}/put-to-wall-sort` (quét đúng ô trả `200 OK`, quét sai ô trả `422 PUT_TO_WALL_WRONG_SLOT`).
+
+3. **[`frontend/src/pages/StocktakesProductionUi.test.tsx`](file:///d:/ERP_KHO/frontend/src/pages/StocktakesProductionUi.test.tsx)** (`Lines 87–164`):
+   - Bổ sung test `evaluates stocktake auto-approval threshold (<1% & <=500.000đ) and renders recount round 1/2 table`.
+
+4. **[`frontend/src/pages/CodReconciliation.test.tsx`](file:///d:/ERP_KHO/frontend/src/pages/CodReconciliation.test.tsx)** (`Lines 150–195`):
+   - Bổ sung test `renders Decree 70/2025/NĐ-CP 1.5% withheld tax (1% VAT + 0.5% PIT) and 3,000 VND fixed order processing fee breakdown`.
+
+5. **[`frontend/src/pages/CostValuation.test.tsx`](file:///d:/ERP_KHO/frontend/src/pages/CostValuation.test.tsx)** (`Lines 183–221`):
+   - Bổ sung test `renders Decree 70/2025/NĐ-CP 1.5% withheld tax, 3,000 VND fixed infrastructure fee, and net profit after tax`.
+
+6. **[`frontend/src/pages/PackingSessions.test.tsx`](file:///d:/ERP_KHO/frontend/src/pages/PackingSessions.test.tsx)** (`Lines 144–202`):
+   - Bổ sung test `calculates 3D cartonization & DIM weight and executes DEKIT_DISASSEMBLE kitting mode`.
+
+7. **[`frontend/src/pages/InventoryMovements.test.tsx`](file:///d:/ERP_KHO/frontend/src/pages/InventoryMovements.test.tsx)** (`Lines 74–136`):
+   - Bổ sung test `executes 1-scan full-LPN pallet move and auto break-bulk replenishment with carton-to-base conversion`.
+
+8. **[`frontend/src/pages/PickingTasks.test.tsx`](file:///d:/ERP_KHO/frontend/src/pages/PickingTasks.test.tsx)** (`Lines 110–167`):
+   - Bổ sung test `loads 8 Put-to-Wall sortation slots (SLOT-01..SLOT-08) and validates barcode scan into slot`.
 
 ---
 
-## 3. Những gì `NOT VERIFIED` & Lưu ý cho Master Orchestrator
-- Khi chạy thử `npm --prefix frontend run build` (`tsc -b`), trình biên dịch TypeScript báo 2 lỗi biến `errorMessage` chưa khai báo ở 2 file sản xuất nằm ngoài phạm vi sở hữu của Subagent 4A:
-  1. `frontend/src/pages/ImportReceipts.tsx(195,16): error TS2304: Cannot find name 'errorMessage'.` (state trong component là `error`)
-  2. `frontend/src/pages/PickingTasks.tsx(102,16): error TS2304: Cannot find name 'errorMessage'.` (state trong component là `error`)
-- Tuân thủ nghiêm ngặt quy tắc `Exclusive File Ownership`, Subagent 4A **không tự ý chạm vào 2 file `.tsx` sản xuất này** và báo cáo tọa độ chính xác để Master Orchestrator điều phối xử lý.
+## 3. Bằng Chứng Kiểm Chứng (Verification Evidence) (`FACT`)
 
-## 4. Rủi ro tồn đọng (`INFERENCE`)
-- Không có rủi ro tồn đọng trong phạm vi các file test của Subagent 4A.
+- **Gate 1 — Encoding Check:**
+  - Command: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-encoding.ps1`
+  - Output: `Encoding check passed: all scanned files are valid UTF-8 and no mojibake markers were found.` (`Exit Code 0`)
+- **Gate 2 — QA Seed & Backend Tests (`ERP.Api.Tests`):**
+  - Command: `dotnet run --project tools/ERP.QaSeed/ERP.QaSeed.csproj -c Release -- --apply`
+  - Output: `[ERP.QaSeed] Completed successfully on all reachable ERP_KHO instances.` (`Exit Code 0`)
+  - Command: `dotnet test ERP.Api.Tests/ERP.Api.Tests.csproj -c Release --filter "FullyQualifiedName~Wave48To51FullClosureTests"`
+  - Output: `Passed! - Failed: 0, Passed: 24, Skipped: 0, Total: 24` (bao gồm 6 bài test `Wave56_*` mới đều PASS 100%).
+- **Gate 3 — Frontend Build & Vitest Suite:**
+  - Command: `npm --prefix frontend test -- --run src/pages/StocktakesProductionUi.test.tsx src/pages/CodReconciliation.test.tsx src/pages/CostValuation.test.tsx src/pages/PackingSessions.test.tsx src/pages/InventoryMovements.test.tsx src/pages/PickingTasks.test.tsx`
+  - Output: `Test Files 6 passed (6) | Tests 27 passed (27)` (`Exit Code 0`).
 
-## 5. Việc dở dang / Stub
-- Không có (`0 TODO`, `0 FIXME`, `0 NotImplementedException`, `0 Stub`).
+---
+
+## 4. Những Gì `NOT VERIFIED` / Rủi Ro Tồn Đọng / Việc Dở Dang (`FACT`)
+- **Những gì `NOT VERIFIED`:** Toàn bộ phạm vi của Subagent 4A đã được kiểm chứng thực tế bằng lệnh chạy thật (`FACT`), không có mục nào `NOT VERIFIED`.
+- **Rủi ro tồn đọng:** `0` (Tuân thủ tuyệt đối `Zero File Overlap`, chỉ chạm đúng 8 file được giao).
+- **Việc dở dang / Stub:** `0` (Không có `TODO`, `FIXME`, `NotImplementedException` hay stub).

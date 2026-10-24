@@ -11,6 +11,9 @@ type CodLedgerItem = {
   expectedShippingFee: number;
   actualShippingFee: number;
   shippingFeeVariance: number;
+  withheldTaxAmount: number;
+  fixedOrderProcessingFee: number;
+  netAfterTaxAndFees: number;
   status: string;
 };
 
@@ -54,6 +57,10 @@ const CodReconciliation = () => {
     discrepancyCount: 0,
     totalCount: 0,
     matchedCount: 0,
+    totalWithheldTaxAmount: 0,
+    totalVatWithheldAmount: 0,
+    totalPitWithheldAmount: 0,
+    totalFixedOrderProcessingFee: 0,
   });
   const [ledgers, setLedgers] = useState<CodLedgerItem[]>([]);
 
@@ -67,10 +74,21 @@ const CodReconciliation = () => {
       const actualShippingFee = Number(item.actualShippingFee ?? item.chargedShippingFee ?? expectedShippingFee);
       const variance = Number(
         item.shippingFeeVariance ??
-        item.feeVariance ??
-        item.codDiscrepancyAmount ??
-        (actualShippingFee - expectedShippingFee),
+          item.feeVariance ??
+          item.codDiscrepancyAmount ??
+          actualShippingFee - expectedShippingFee,
       );
+      const withheldTaxAmount = Number(
+        item.withheldTaxAmount ?? item.platformWithheldTax ?? Math.round(expectedCod * 0.015),
+      );
+      const fixedOrderProcessingFee = Number(
+        item.fixedOrderProcessingFee ?? item.fixedInfrastructureFee ?? (expectedCod > 0 ? 3000 : 0),
+      );
+      const netAfterTaxAndFees = Number(
+        item.netAfterTaxAndFees ??
+          Math.max(0, actualCod - actualShippingFee - withheldTaxAmount - fixedOrderProcessingFee),
+      );
+
       return {
         id: Number(item.id ?? idx + 1),
         trackingNumber: String(item.trackingNumber ?? item.awbCode ?? item.shipmentCode ?? `AWB-${idx + 1}`),
@@ -80,27 +98,65 @@ const CodReconciliation = () => {
         expectedShippingFee,
         actualShippingFee,
         shippingFeeVariance: variance,
-        status: String(item.status ?? item.reconciliationStatus ?? (variance !== 0 || expectedCod !== actualCod ? 'DISCREPANCY' : 'MATCHED')),
+        withheldTaxAmount,
+        fixedOrderProcessingFee,
+        netAfterTaxAndFees,
+        status: String(
+          item.status ??
+            item.reconciliationStatus ??
+            (variance !== 0 || expectedCod !== actualCod ? 'DISCREPANCY' : 'MATCHED'),
+        ),
       };
     });
 
     const discrepancyCount = Number(
       d.discrepancyCount ??
-      d.feeDiscrepancyWarnings ??
-      d.discrepancyWarningCount ??
-      mapped.filter((x) => x.shippingFeeVariance !== 0 || x.expectedCod !== x.actualCod).length,
+        d.feeDiscrepancyWarnings ??
+        d.discrepancyWarningCount ??
+        mapped.filter((x) => x.shippingFeeVariance !== 0 || x.expectedCod !== x.actualCod).length,
     );
     const totalCount = Number(d.totalShipments ?? d.totalCount ?? mapped.length);
     const matchedCount = Number(d.matchedShipments ?? d.matchedCount ?? Math.max(0, totalCount - discrepancyCount));
+    const totalExpectedCod = Number(
+      d.totalExpectedCod ?? d.pendingCodAmount ?? mapped.reduce((s, i) => s + i.expectedCod, 0),
+    );
+    const totalActualCod = Number(
+      d.totalActualCod ?? d.receivedFromCarrierAmount ?? mapped.reduce((s, i) => s + i.actualCod, 0),
+    );
+    const totalShippingFeeVariance = Number(
+      d.totalShippingFeeVariance ?? d.totalFeeVariance ?? mapped.reduce((s, i) => s + i.shippingFeeVariance, 0),
+    );
+    const totalWithheldTaxAmount = Number(
+      d.totalWithheldTaxAmount ??
+        d.withheldTaxTotalAmount ??
+        (mapped.length > 0
+          ? mapped.reduce((s, i) => s + i.withheldTaxAmount, 0)
+          : Math.round(totalExpectedCod * 0.015)),
+    );
+    const totalVatWithheldAmount = Number(
+      d.totalVatWithheldAmount ?? Math.round((totalExpectedCod > 0 ? totalExpectedCod : totalWithheldTaxAmount / 0.015) * 0.01),
+    );
+    const totalPitWithheldAmount = Number(
+      d.totalPitWithheldAmount ?? Math.max(0, totalWithheldTaxAmount - totalVatWithheldAmount),
+    );
+    const totalFixedOrderProcessingFee = Number(
+      d.totalFixedOrderProcessingFee ??
+        d.fixedInfrastructureFeeTotal ??
+        (mapped.length > 0 ? mapped.reduce((s, i) => s + i.fixedOrderProcessingFee, 0) : totalCount * 3000),
+    );
 
     setLedgers(mapped);
     setSummary({
-      totalExpectedCod: Number(d.totalExpectedCod ?? d.pendingCodAmount ?? mapped.reduce((s, i) => s + i.expectedCod, 0)),
-      totalActualCod: Number(d.totalActualCod ?? d.receivedFromCarrierAmount ?? mapped.reduce((s, i) => s + i.actualCod, 0)),
-      totalShippingFeeVariance: Number(d.totalShippingFeeVariance ?? d.totalFeeVariance ?? mapped.reduce((s, i) => s + i.shippingFeeVariance, 0)),
+      totalExpectedCod,
+      totalActualCod,
+      totalShippingFeeVariance,
       discrepancyCount,
       totalCount,
       matchedCount,
+      totalWithheldTaxAmount,
+      totalVatWithheldAmount,
+      totalPitWithheldAmount,
+      totalFixedOrderProcessingFee,
     });
 
     return { matchedCount, totalCount, discrepancyCount };
@@ -169,19 +225,78 @@ const CodReconciliation = () => {
       <UiPageHeader
         eyebrow="Tài chính & Kế toán Kho"
         title="Đối soát Tiền Thu Hộ (COD) & Phí Vận chuyển 3 Chiều"
-        description="Đối chiếu tự động sổ cái vận đơn nội bộ với bảng kê quyết toán của Đơn vị Vận chuyển (GHN, GHTK, ViettelPost, SPX) để phát hiện lệch COD, đội cước cân nặng và đơn hoàn quá hạn."
+        description="Đối chiếu tự động sổ cái vận đơn nội bộ với bảng kê quyết toán của Đơn vị Vận chuyển (GHN, GHTK, ViettelPost, SPX) để phát hiện lệch COD, đội cước cân nặng, khấu trừ thuế sàn 1,5% (NĐ 70/2025) và đơn hoàn quá hạn."
       />
 
       {error && <div role="alert">{error}</div>}
-      {notice && <p role="status" className="ui-success-text" data-testid="cod-reconciliation-notice">{notice}</p>}
+      {notice && (
+        <p role="status" className="ui-success-text" data-testid="cod-reconciliation-notice">
+          {notice}
+        </p>
+      )}
       {loading && <p role="status">Đang tải sổ cái đối soát COD 3 chiều...</p>}
 
       <UiMetricGrid>
         <UiMetric value={formatCurrencyVnd(summary.totalExpectedCod)} label="Tổng COD phải thu theo phiếu xuất" />
         <UiMetric value={formatCurrencyVnd(summary.totalActualCod)} label="Tổng COD thực nhận từ ĐVVC" />
         <UiMetric value={formatCurrencyVnd(summary.totalShippingFeeVariance)} label="Chênh lệch phí vận chuyển (Đội cước)" />
-        <UiMetric value={`${summary.discrepancyCount} vận đơn`} label={`Cảnh báo lệch phí / chậm hoàn (Tổng ${summary.totalCount} vận đơn)`} />
+        <UiMetric
+          value={`${summary.discrepancyCount} vận đơn`}
+          label={`Cảnh báo lệch phí / chậm hoàn (Tổng ${summary.totalCount} vận đơn)`}
+        />
       </UiMetricGrid>
+
+      <UiCard
+        title="Khấu trừ Thuế Sàn TMĐT Tại Nguồn 1,5% (Nghị định 70/2025/NĐ-CP) & Phí Hạ tầng Đơn hàng Cố định"
+        subtitle="Tự động bóc tách 1% Thuế GTGT + 0,5% Thuế TNCN do sàn TMĐT khấu trừ nộp thay và phí hạ tầng xử lý đơn cố định 3.000 ₫/đơn"
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              padding: '12px 14px',
+              borderRadius: 10,
+              border: '1px solid #cbd5e1',
+              background: '#f8fafc',
+            }}
+          >
+            <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 600 }}>
+              Thuế sàn khấu trừ tại nguồn (1,5% - NĐ 70/2025)
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
+              {formatCurrencyVnd(summary.totalWithheldTaxAmount)}
+            </div>
+            <div style={{ fontSize: 12, color: '#334155', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
+              Tách bạch: <strong>1% GTGT: {formatCurrencyVnd(summary.totalVatWithheldAmount)}</strong> •{' '}
+              <strong>0,5% TNCN: {formatCurrencyVnd(summary.totalPitWithheldAmount)}</strong>
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: '12px 14px',
+              borderRadius: 10,
+              border: '1px solid #cbd5e1',
+              background: '#f8fafc',
+            }}
+          >
+            <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 600 }}>
+              Phí hạ tầng xử lý đơn cố định (3.000đ/đơn)
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
+              {formatCurrencyVnd(summary.totalFixedOrderProcessingFee)}
+            </div>
+            <div style={{ fontSize: 12, color: '#334155', marginTop: 4 }}>
+              Áp dụng định mức cố định 3.000 ₫ trên mỗi đơn hàng giao thành công
+            </div>
+          </div>
+        </div>
+      </UiCard>
 
       <UiCard
         title="Tải lên Bảng kê Quyết toán ĐVVC (.xlsx / .csv) & Chạy Đối soát Tự động 3 Chiều"
@@ -190,7 +305,11 @@ const CodReconciliation = () => {
         <form onSubmit={handleUploadReconciliationStatement} className="ui-inline-wrap" style={{ alignItems: 'end', gap: 12 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             Đơn vị vận chuyển (ĐVVC)
-            <select aria-label="Đơn vị vận chuyển đối soát" value={carrierCode} onChange={(e) => setCarrierCode(e.target.value)}>
+            <select
+              aria-label="Đơn vị vận chuyển đối soát"
+              value={carrierCode}
+              onChange={(e) => setCarrierCode(e.target.value)}
+            >
               <option value="GHN">Giao Hàng Nhanh (GHN)</option>
               <option value="GHTK">Giao Hàng Tiết Kiệm (GHTK)</option>
               <option value="VTP">ViettelPost (VTP)</option>
@@ -228,12 +347,13 @@ const CodReconciliation = () => {
               style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}
             >
               <colgroup>
-                <col style={{ width: '18%' }} />
-                <col style={{ width: '10%' }} />
-                <col style={{ width: '18%' }} />
-                <col style={{ width: '18%' }} />
-                <col style={{ width: '16%' }} />
-                <col style={{ width: '20%' }} />
+                <col style={{ width: '14%' }} />
+                <col style={{ width: '7%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '24%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '17%' }} />
               </colgroup>
               <thead>
                 <tr>
@@ -241,6 +361,7 @@ const CodReconciliation = () => {
                   <th>ĐVVC</th>
                   <th style={{ textAlign: 'right' }}>COD PHẢI THU</th>
                   <th style={{ textAlign: 'right' }}>COD THỰC NHẬN</th>
+                  <th style={{ textAlign: 'right', whiteSpace: 'normal', lineHeight: 1.25 }}>Thuế khấu trừ 1,5% &amp; Phí cố định</th>
                   <th style={{ textAlign: 'right' }}>LỆCH PHÍ VC</th>
                   <th>TRẠNG THÁI</th>
                 </tr>
@@ -248,10 +369,26 @@ const CodReconciliation = () => {
               <tbody>
                 {ledgers.map((row) => (
                   <tr key={`${row.trackingNumber}-${row.id}`}>
-                    <td style={{ wordBreak: 'break-word' }}><strong>{row.trackingNumber}</strong></td>
-                    <td><UiBadge>{row.carrierCode}</UiBadge></td>
-                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatCurrencyVnd(row.expectedCod)}</td>
-                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{formatCurrencyVnd(row.actualCod)}</td>
+                    <td style={{ wordBreak: 'break-word' }}>
+                      <strong>{row.trackingNumber}</strong>
+                    </td>
+                    <td>
+                      <UiBadge>{row.carrierCode}</UiBadge>
+                    </td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {formatCurrencyVnd(row.expectedCod)}
+                    </td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {formatCurrencyVnd(row.actualCod)}
+                    </td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      <div>
+                        <strong>{formatCurrencyVnd(row.withheldTaxAmount + row.fixedOrderProcessingFee)}</strong>
+                      </div>
+                      <small style={{ color: '#64748b', fontSize: 11 }}>
+                        Thuế 1,5%: {formatCurrencyVnd(row.withheldTaxAmount)} • Phí: {formatCurrencyVnd(row.fixedOrderProcessingFee)}
+                      </small>
+                    </td>
                     <td
                       style={{
                         textAlign: 'right',
@@ -263,9 +400,7 @@ const CodReconciliation = () => {
                       {formatCurrencyVnd(row.shippingFeeVariance)}
                     </td>
                     <td style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                      <UiBadge tone={statusBadgeTone(row.status)}>
-                        {statusLabelVi(row.status)}
-                      </UiBadge>
+                      <UiBadge tone={statusBadgeTone(row.status)}>{statusLabelVi(row.status)}</UiBadge>
                     </td>
                   </tr>
                 ))}

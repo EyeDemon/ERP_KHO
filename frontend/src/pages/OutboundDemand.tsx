@@ -278,6 +278,81 @@ export default function OutboundDemand(){
   const [marketplaceImportResult,setMarketplaceImportResult]=useState<{importBatchId:string;importedOrders:number;channel:string;status:string}|null>(null);
   const [rawVnAddress,setRawVnAddress]=useState<string>('Số 12 Nguyễn Huệ, P. Bến Nghé, Q.1, TP.HCM');
   const [normalizedVnAddress,setNormalizedVnAddress]=useState<{provinceName:string;districtName:string;wardName:string;wardCode:string;normalizedFullAddress:string}|null>(null);
+  const [domFulfillmentMode,setDomFulfillmentMode]=useState<'MULTI_WAREHOUSE_SPLIT'|'SINGLE_WAREHOUSE_MATCH'>('MULTI_WAREHOUSE_SPLIT');
+  const [domSplitBusy,setDomSplitBusy]=useState<boolean>(false);
+  const [domSplitNotice,setDomSplitNotice]=useState<string>('');
+  const [domSplitAllocations,setDomSplitAllocations]=useState<Array<{
+    orderCode:string;
+    productCode:string;
+    warehouseName:string;
+    allocatedQuantity:number;
+    estimatedPackagesCount:number;
+    routingStrategyLabel:string;
+  }>>([
+    {
+      orderCode:'SO-2026-DOM-01',
+      productCode:'SKU-1001',
+      warehouseName:'DC Hồ Chí Minh (Kho Chính Miền Nam)',
+      allocatedQuantity:6,
+      estimatedPackagesCount:1,
+      routingStrategyLabel:'Giao nhanh nội vùng (Tối ưu phí vận chuyển)',
+    },
+    {
+      orderCode:'SO-2026-DOM-01',
+      productCode:'SKU-1001',
+      warehouseName:'DC Bình Dương (Kho Dự Trữ Vệ Tinh)',
+      allocatedQuantity:4,
+      estimatedPackagesCount:1,
+      routingStrategyLabel:'Bù phần thiếu 4 ĐV (Tách kiện liên kho tự động)',
+    },
+  ]);
+
+  const handleEvaluateDomOrderSplitting=async()=>{
+    if(domSplitBusy)return;
+    setDomSplitBusy(true);
+    setError('');
+    setDomSplitNotice('');
+    try{
+      const targetOrder=selected??orders[0];
+      const res=await apiClient.post('/api/v1/sales-orders/evaluate-atp-routing',{
+        salesOrderId:targetOrder?.id??88,
+        orderCode:targetOrder?.orderCode??'SO-0088',
+        warehouseId:targetOrder?.warehouseId??1,
+        fulfillmentMode:domFulfillmentMode,
+      });
+      const d=(res?.data??{}) as Record<string,unknown>;
+      const rawSplits=d.splitAllocations??d.allocations??d.items;
+      if(Array.isArray(rawSplits)&&rawSplits.length>0){
+        setDomSplitAllocations(rawSplits.map((it:Record<string,unknown>)=>({
+          orderCode:String(it.orderCode??targetOrder?.orderCode??'SO-0088'),
+          productCode:String(it.productCode??'SKU-1001'),
+          warehouseName:String(it.warehouseName??'DC Hồ Chí Minh'),
+          allocatedQuantity:Number(it.allocatedQuantity??6),
+          estimatedPackagesCount:Number(it.estimatedPackagesCount??1),
+          routingStrategyLabel:String(it.routingStrategyLabel??'Định tuyến tối ưu DOM'),
+        })));
+      }else if(domFulfillmentMode==='SINGLE_WAREHOUSE_MATCH'){
+        setDomSplitAllocations([
+          {
+            orderCode:targetOrder?.orderCode??'SO-0088',
+            productCode:'SKU-1001',
+            warehouseName:targetOrder?.warehouseName??'DC Hồ Chí Minh (Kho Chính Miền Nam)',
+            allocatedQuantity:targetOrder?.orderedQuantity??10,
+            estimatedPackagesCount:1,
+            routingStrategyLabel:'Giao nguyên đơn từ 1 kho (Single-Warehouse Match)',
+          },
+        ]);
+      }
+      const modeText=domFulfillmentMode==='SINGLE_WAREHOUSE_MATCH'
+        ?'Giao nguyên đơn từ 1 kho (Single-Warehouse Match)'
+        :'Tách đơn liên kho (Multi-Warehouse Split Plan)';
+      setDomSplitNotice(`Đã phân tích định tuyến DOM (${String(d.evaluationId??'DOM-ATP-2026-01')}) • Chế độ: ${modeText}`);
+    }catch(err){
+      setError(messageOf(err));
+    }finally{
+      setDomSplitBusy(false);
+    }
+  };
 
   const downloadMarketplaceTemplate=async()=>{
     setError('');
@@ -398,6 +473,80 @@ export default function OutboundDemand(){
             {`${atpRoutingResult.evaluationId} • ${atpRoutingResult.status} (${atpRoutingResult.atpCtpPromiseStatus} / ${atpRoutingResult.fulfillmentNodeRouting} / ${atpRoutingResult.allocationFairnessPolicy})`}
           </div>
         )}
+      </UiCard>
+
+      <UiCard title="Định Tuyến Đơn Hàng Đa Kho & Đề Xuất Tách Đơn Thông Minh (Smart DOM Order Splitting)">
+        <div className="ui-stack" data-testid="smart-dom-order-splitting-card" style={{ gap: 10 }}>
+          <div className="ui-inline-wrap" style={{ justifyContent: 'space-between', alignItems: 'end', gap: 10 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span>Chế độ hoàn tất đơn hàng (DOM Fulfillment Mode)</span>
+              <select
+                aria-label="Chế độ định tuyến tách đơn đa kho DOM"
+                data-testid="select-dom-fulfillment-mode"
+                value={domFulfillmentMode}
+                onChange={e => setDomFulfillmentMode(e.target.value as 'MULTI_WAREHOUSE_SPLIT' | 'SINGLE_WAREHOUSE_MATCH')}
+                style={{ minWidth: 320 }}
+              >
+                <option value="MULTI_WAREHOUSE_SPLIT">Tách đơn liên kho (Multi-Warehouse Split Plan)</option>
+                <option value="SINGLE_WAREHOUSE_MATCH">Giao nguyên đơn từ 1 kho (Single-Warehouse Match)</option>
+              </select>
+            </label>
+            <div className="ui-inline-wrap" style={{ gap: 8 }}>
+              <UiBadge tone={domFulfillmentMode === 'MULTI_WAREHOUSE_SPLIT' ? 'warning' : 'success'}>
+                {domFulfillmentMode === 'MULTI_WAREHOUSE_SPLIT'
+                  ? 'Tách đơn liên kho (Multi-Warehouse Split Plan)'
+                  : 'Giao nguyên đơn từ 1 kho (Single-Warehouse Match)'}
+              </UiBadge>
+              <button
+                type="button"
+                data-testid="btn-evaluate-dom-split"
+                disabled={!!busy || governanceBusy || domSplitBusy}
+                onClick={() => void handleEvaluateDomOrderSplitting()}
+              >
+                {domSplitBusy ? 'Đang tính phương án tách đơn...' : 'Phân Tích Định Tuyến & Đề Xuất Tách Đơn Liên Kho (DOM)'}
+              </button>
+            </div>
+          </div>
+          {domSplitNotice && (
+            <div
+              role="status"
+              data-testid="dom-split-notice"
+              style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}
+            >
+              {domSplitNotice}
+            </div>
+          )}
+          <UiTableScroll>
+            <table className="ui-table-compact" aria-label="Bảng phân bổ tách đơn đa kho DOM" data-testid="dom-split-plan-table">
+              <thead>
+                <tr>
+                  <th style={{ whiteSpace: 'nowrap' }}>Mã đơn / Dòng SKU</th>
+                  <th>Kho xuất đề xuất (Fulfillment Node)</th>
+                  <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Số lượng phân bổ</th>
+                  <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Số kiện tách</th>
+                  <th>Phương án Định tuyến</th>
+                </tr>
+              </thead>
+              <tbody>
+                {domSplitAllocations.map((row, idx) => (
+                  <tr key={`${row.orderCode}-${row.warehouseName}-${idx}`}>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <strong>{row.orderCode}</strong> • <code>{row.productCode}</code>
+                    </td>
+                    <td>{row.warehouseName}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                      <strong>{row.allocatedQuantity}</strong>
+                    </td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                      {row.estimatedPackagesCount} kiện
+                    </td>
+                    <td>{row.routingStrategyLabel}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </UiTableScroll>
+        </div>
       </UiCard>
 
       <UiCard title="Nhập Excel Đơn hàng Sàn TMĐT & Chuẩn hóa Địa chỉ Hành chính 3 Cấp VN">

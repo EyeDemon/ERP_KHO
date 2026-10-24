@@ -30,10 +30,17 @@ const mapRawValuationItems = (rawItems: unknown[], hidden: boolean): ValuationRo
     const item = (raw ?? {}) as Record<string, unknown>;
     const onHandQty = Number(item.onHandQty ?? item.onHandQuantity ?? item.quantity ?? 0);
     const availableQty = Number(item.availableQty ?? item.availableQuantity ?? onHandQty);
-    const unitCost = hidden ? 0 : Number(item.movingAverageUnitCost ?? item.unitCost ?? item.averageCost ?? item.costPrice ?? 0);
+    const unitCost = hidden
+      ? 0
+      : Number(item.movingAverageUnitCost ?? item.unitCost ?? item.averageCost ?? item.costPrice ?? 0);
     const totalValue = hidden
       ? 0
-      : Number(item.totalInventoryValue ?? item.totalCostValue ?? item.inventoryValue ?? Math.round(onHandQty * unitCost));
+      : Number(
+          item.totalInventoryValue ??
+            item.totalCostValue ??
+            item.inventoryValue ??
+            Math.round(onHandQty * unitCost),
+        );
     return {
       productId: Number(item.productId ?? item.id ?? idx + 1),
       productCode: String(item.productCode ?? item.sku ?? item.code ?? `MH-${idx + 1}`),
@@ -59,6 +66,9 @@ const CostValuation = () => {
     movingAverageCogs: 0,
     netPocketProfit: 0,
     netMarginPct: 0,
+    withheldTaxTotalAmount: 0,
+    fixedInfrastructureFeeTotal: 0,
+    netProfitAfterWithheldTax: 0,
   });
   const [valuationRows, setValuationRows] = useState<ValuationRow[]>([]);
   const [einvoiceBuyerTaxCode, setEinvoiceBuyerTaxCode] = useState('');
@@ -72,11 +82,31 @@ const CostValuation = () => {
       const d = (res?.data ?? {}) as Record<string, unknown>;
       const hidden = d.costHiddenByRbac === true || !canReadCost;
       setCostHiddenByRbac(hidden);
+      const grossRevenue = Number(d.grossRevenue ?? d.netRevenue ?? d.totalDispatchedRevenue ?? 0);
+      const movingAverageCogs = hidden ? 0 : Number(d.movingAverageCogs ?? d.totalCogs ?? d.cogsAmount ?? 0);
+      const netPocketProfit = hidden ? 0 : Number(d.netPocketProfit ?? d.estimatedGrossProfit ?? d.grossProfit ?? 0);
+      const netMarginPct = hidden ? 0 : Number(d.netMarginPct ?? d.grossMarginPercent ?? d.grossMarginPct ?? 0);
+      const withheldTaxTotalAmount = Number(
+        d.withheldTaxTotalAmount ?? d.totalWithheldTaxAmount ?? Math.round(grossRevenue * 0.015),
+      );
+      const fixedInfrastructureFeeTotal = Number(
+        d.fixedInfrastructureFeeTotal ?? d.totalFixedOrderProcessingFee ?? (grossRevenue > 0 ? 3000 : 0),
+      );
+      const netProfitAfterWithheldTax = hidden
+        ? 0
+        : Number(
+            d.netProfitAfterWithheldTax ??
+              Math.max(0, netPocketProfit - withheldTaxTotalAmount - fixedInfrastructureFeeTotal),
+          );
+
       setFinanceSummary({
-        grossRevenue: Number(d.grossRevenue ?? d.netRevenue ?? d.totalDispatchedRevenue ?? 0),
-        movingAverageCogs: hidden ? 0 : Number(d.movingAverageCogs ?? d.totalCogs ?? d.cogsAmount ?? 0),
-        netPocketProfit: hidden ? 0 : Number(d.netPocketProfit ?? d.estimatedGrossProfit ?? d.grossProfit ?? 0),
-        netMarginPct: hidden ? 0 : Number(d.netMarginPct ?? d.grossMarginPercent ?? d.grossMarginPct ?? 0),
+        grossRevenue,
+        movingAverageCogs,
+        netPocketProfit,
+        netMarginPct,
+        withheldTaxTotalAmount,
+        fixedInfrastructureFeeTotal,
+        netProfitAfterWithheldTax,
       });
 
       const primaryList = d.skuValuations ?? d.skuItems ?? d.items ?? d.products;
@@ -155,7 +185,9 @@ const CostValuation = () => {
       );
       const d = (res?.data ?? {}) as Record<string, unknown>;
       const draftCode = String(d.invoiceDraftCode ?? d.draftNumber ?? 'EINV-ND70-DRAFT');
-      setNotice(`Đã phát hành Hóa đơn điện tử nháp (${draftCode}) tuân thủ Nghị định 70/2025/NĐ-CP & Thông tư 32/2025/TT-BTC.`);
+      setNotice(
+        `Đã phát hành Hóa đơn điện tử nháp (${draftCode}) tuân thủ Nghị định 70/2025/NĐ-CP & Thông tư 32/2025/TT-BTC.`,
+      );
     } catch (err) {
       setError(extractErrorText(err, 'Không thể phát hành Hóa đơn điện tử nháp NĐ 70/2025.'));
     } finally {
@@ -172,7 +204,11 @@ const CostValuation = () => {
       />
 
       {error && <div role="alert">{error}</div>}
-      {notice && <p role="status" className="ui-success-text">{notice}</p>}
+      {notice && (
+        <p role="status" className="ui-success-text">
+          {notice}
+        </p>
+      )}
       {loading && <p role="status">Đang tải dữ liệu định giá tồn kho và giá vốn...</p>}
 
       {costHiddenByRbac && (
@@ -209,6 +245,91 @@ const CostValuation = () => {
       </UiMetricGrid>
 
       <UiCard
+        title="Báo cáo Lợi nhuận Ròng Chủ Shop Sau Khấu Trừ Thuế Sàn TMĐT NĐ 70/2025 & Phí Hạ Tầng"
+        subtitle="Minh bạch hóa các khoản khấu trừ thuế tại nguồn 1,5% (1% GTGT + 0,5% TNCN) và phí hạ tầng xử lý đơn cố định"
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              padding: '12px 14px',
+              borderRadius: 10,
+              border: '1px solid #cbd5e1',
+              background: '#f8fafc',
+            }}
+          >
+            <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 600 }}>
+              Thuế Sàn TMĐT Khấu trừ Nộp thay 1,5% (1% GTGT + 0,5% TNCN)
+            </div>
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 700,
+                color: '#0f172a',
+                marginTop: 4,
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {formatCurrencyVnd(financeSummary.withheldTaxTotalAmount)}
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: '12px 14px',
+              borderRadius: 10,
+              border: '1px solid #cbd5e1',
+              background: '#f8fafc',
+            }}
+          >
+            <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 600 }}>
+              Phí Hạ tầng Đơn hàng Cố định (3.000đ/đơn)
+            </div>
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 700,
+                color: '#0f172a',
+                marginTop: 4,
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {formatCurrencyVnd(financeSummary.fixedInfrastructureFeeTotal)}
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: '12px 14px',
+              borderRadius: 10,
+              border: '1px solid #a7f3d0',
+              background: '#ecfdf5',
+            }}
+          >
+            <div style={{ fontSize: 12.5, color: '#065f46', fontWeight: 600 }}>
+              Lợi nhuận Ròng Sau Thuế Sàn &amp; Phí
+            </div>
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 700,
+                color: '#065f46',
+                marginTop: 4,
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {costHiddenByRbac ? 'Ẩn theo RBAC' : formatCurrencyVnd(financeSummary.netProfitAfterWithheldTax)}
+            </div>
+          </div>
+        </div>
+      </UiCard>
+
+      <UiCard
         title="Kết xuất Bảng kê Kế toán MISA AMIS (.xlsx) & Phát hành Hóa đơn Điện tử Nháp NĐ 70/2025"
         subtitle="Tự động định khoản Nợ/Có TK 1561, 632, 131, 331 và chuẩn bị dữ liệu XML hóa đơn điện tử có mã của Cơ quan Thuế"
       >
@@ -235,6 +356,7 @@ const CostValuation = () => {
                 value={einvoiceBuyerTaxCode}
                 onChange={(e) => setEinvoiceBuyerTaxCode(e.target.value)}
                 placeholder="VD: 0312345678"
+                style={{ minWidth: 200 }}
               />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -259,7 +381,11 @@ const CostValuation = () => {
           <p className="ui-muted-text">Chưa có dòng chi tiết định giá mặt hàng hoặc dữ liệu được tổng hợp ở cấp toàn kho.</p>
         ) : (
           <UiTableScroll>
-            <table className="ui-table-compact" aria-label="Bảng định giá tồn kho bình quân gia quyền" style={{ width: '100%' }}>
+            <table
+              className="ui-table-compact"
+              aria-label="Bảng định giá tồn kho bình quân gia quyền"
+              style={{ width: '100%' }}
+            >
               <thead>
                 <tr>
                   <th>Mã mặt hàng</th>
@@ -275,17 +401,27 @@ const CostValuation = () => {
               <tbody>
                 {valuationRows.map((row, idx) => (
                   <tr key={`${row.productId}-${row.productCode}-${idx}`}>
-                    <td><strong>{row.productCode}</strong></td>
+                    <td>
+                      <strong>{row.productCode}</strong>
+                    </td>
                     <td>{row.productName}</td>
                     <td>{row.warehouseName}</td>
                     <td>{row.unitName}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.onHandQty}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.availableQty}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {costHiddenByRbac ? <UiBadge tone="warning">Ẩn theo RBAC</UiBadge> : formatCurrencyVnd(row.movingAverageUnitCost)}
+                      {costHiddenByRbac ? (
+                        <UiBadge tone="warning">Ẩn theo RBAC</UiBadge>
+                      ) : (
+                        formatCurrencyVnd(row.movingAverageUnitCost)
+                      )}
                     </td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {costHiddenByRbac ? <UiBadge tone="warning">Ẩn theo RBAC</UiBadge> : formatCurrencyVnd(row.totalInventoryValue)}
+                      {costHiddenByRbac ? (
+                        <UiBadge tone="warning">Ẩn theo RBAC</UiBadge>
+                      ) : (
+                        formatCurrencyVnd(row.totalInventoryValue)
+                      )}
                     </td>
                   </tr>
                 ))}

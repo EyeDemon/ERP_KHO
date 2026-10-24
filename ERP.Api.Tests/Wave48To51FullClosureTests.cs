@@ -1616,4 +1616,871 @@ public class Wave48To51FullClosureTests
         manifestItems[1].GetProperty("awbCount").GetInt32().Should().Be(3);
         manifestItems[1].GetProperty("statusLabel").GetString().Should().Be("Đã niêm phong & Bàn giao");
     }
+
+    [Fact]
+    public async Task Wave56_StocktakeCountAttemptsAndAutoApproval_EvaluatesOnePercentAnd500kThreshold()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase($"W56_StocktakeAutoApproval_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ErpKhoDbContext(options);
+
+        var wh = new Warehouse { Id = 1, Code = "WH-01", Name = "Kho Chính", IsActive = true };
+        var unit = new Unit { Id = 1, Code = "CAI", Name = "Cái", DecimalPlaces = 0, IsActive = true };
+        var prodWithin = new Product
+        {
+            Id = 601,
+            Code = "SKU-WITHIN-601",
+            Name = "Cáp tín hiệu trong ngưỡng tự động duyệt",
+            UnitId = 1,
+            Unit = unit,
+            MovingAverageCost = 40000m,
+            IsActive = true
+        };
+        var prodExceed = new Product
+        {
+            Id = 602,
+            Code = "SKU-EXCEED-602",
+            Name = "Cảm biến công nghiệp vượt ngưỡng duyệt",
+            UnitId = 1,
+            Unit = unit,
+            MovingAverageCost = 300000m,
+            IsActive = true
+        };
+        var loc = new WarehouseLocation
+        {
+            Id = 10,
+            WarehouseId = 1,
+            Code = "BIN-A01-01",
+            Name = "Kệ A01",
+            LocationType = WarehouseLocationType.Storage,
+            IsActive = true,
+            IsPickable = true
+        };
+        var stocktake = new Stocktake
+        {
+            Id = 701,
+            Code = "KK-W56-701",
+            WarehouseId = 1,
+            Warehouse = wh,
+            Status = StocktakeStatus.InProgress,
+            CreatedBy = 1,
+            CreatedAt = DateTime.UtcNow.AddHours(-1),
+            Details =
+            [
+                // System 200, Actual 199 -> variance -1 (0.5% <= 1.0%) and 40,000 VND (<= 500,000 VND) -> autoApproveEligible = true
+                new StocktakeDetail
+                {
+                    Id = 7001,
+                    StocktakeId = 701,
+                    ProductId = 601,
+                    Product = prodWithin,
+                    LocationId = 10,
+                    Location = loc,
+                    SystemQuantity = 200m,
+                    ActualQuantity = 199m,
+                    DifferenceQuantity = -1m,
+                    Note = "Đếm lần 1"
+                },
+                // System 100, Actual 96 -> variance -4 (4.0% > 1.0%) and 1,200,000 VND (> 500,000 VND) -> requiresManagerApproval = true
+                new StocktakeDetail
+                {
+                    Id = 7002,
+                    StocktakeId = 701,
+                    ProductId = 602,
+                    Product = prodExceed,
+                    LocationId = 10,
+                    Location = loc,
+                    SystemQuantity = 100m,
+                    ActualQuantity = 96m,
+                    DifferenceQuantity = -4m,
+                    Note = "Đếm lần 1"
+                }
+            ]
+        };
+
+        db.Warehouses.Add(wh);
+        db.Units.Add(unit);
+        db.Products.AddRange(prodWithin, prodExceed);
+        db.WarehouseLocations.Add(loc);
+        db.Stocktakes.Add(stocktake);
+        await db.SaveChangesAsync();
+
+        var whAuth = new Mock<IWarehouseAuthorizationService>();
+        whAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([1]);
+        whAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        var adminUser = new Mock<ICurrentUser>();
+        adminUser.SetupGet(x => x.IsAuthenticated).Returns(true);
+        adminUser.SetupGet(x => x.UserId).Returns(1);
+        adminUser.SetupGet(x => x.Role).Returns(AppRoles.Admin);
+        adminUser.SetupGet(x => x.IsGlobalAdmin).Returns(true);
+        adminUser.Setup(x => x.HasPermission(ERP.Domain.Security.AppPermissions.InventoryCostRead)).Returns(true);
+
+        var controller = new StocktakesController(
+            new Mock<IStocktakeService>().Object,
+            new Mock<IStocktakeQueryService>().Object,
+            db,
+            whAuth.Object,
+            adminUser.Object);
+
+        // 1. Submit Recount Attempt #2 for detail 7002 and evaluate auto-approval
+        var evalRes = await controller.EvaluateAutoApproval(
+            "701",
+            new StocktakesController.EvaluateAutoApprovalRequest(
+                ThresholdPct: 1.0m,
+                ThresholdValueVnd: 500000m,
+                RecountSubmissions:
+                [
+                    new StocktakesController.RecountSubmissionDto(
+                        DetailId: 7002,
+                        ProductId: 602,
+                        CountedQuantity: 97m,
+                        Note: "Đếm chéo lần 2 xác nhận thiếu 3 cái")
+                ]),
+            default);
+
+        using var evalDoc = JsonSerializer.SerializeToDocument(evalRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        evalDoc.RootElement.GetProperty("autoApprovalThresholdPct").GetDecimal().Should().Be(1.0m);
+        evalDoc.RootElement.GetProperty("autoApprovalThresholdValueVnd").GetDecimal().Should().Be(500000m);
+        evalDoc.RootElement.GetProperty("autoApprovalDecision").GetString().Should().Be("ESCALATED_TO_MANAGER_APPROVAL");
+
+        var lines = evalDoc.RootElement.GetProperty("lines").EnumerateArray().ToList();
+        lines.Should().HaveCount(2);
+
+        var lineWithin = lines.Single(x => x.GetProperty("productCode").GetString() == "SKU-WITHIN-601");
+        lineWithin.GetProperty("variancePct").GetDecimal().Should().BeLessThanOrEqualTo(1.0m);
+        lineWithin.GetProperty("varianceValueVnd").GetDecimal().Should().BeLessThanOrEqualTo(500000m);
+        lineWithin.GetProperty("autoApproveEligible").GetBoolean().Should().BeTrue();
+        lineWithin.GetProperty("requiresManagerApproval").GetBoolean().Should().BeFalse();
+        lineWithin.GetProperty("approvalStatus").GetString().Should().Be("AUTO_APPROVED_WITHIN_THRESHOLD");
+
+        var lineExceed = lines.Single(x => x.GetProperty("productCode").GetString() == "SKU-EXCEED-602");
+        lineExceed.GetProperty("countedQty").GetDecimal().Should().Be(97m);
+        lineExceed.GetProperty("variancePct").GetDecimal().Should().Be(3.0m);
+        lineExceed.GetProperty("varianceValueVnd").GetDecimal().Should().Be(900000m);
+        lineExceed.GetProperty("autoApproveEligible").GetBoolean().Should().BeFalse();
+        lineExceed.GetProperty("requiresManagerApproval").GetBoolean().Should().BeTrue();
+        lineExceed.GetProperty("attemptCount").GetInt32().Should().BeGreaterThanOrEqualTo(2);
+        lineExceed.GetProperty("attemptHistory").GetArrayLength().Should().BeGreaterThanOrEqualTo(2);
+
+        // 2. GET count-attempts-and-auto-approval returns consistent multi-round history
+        var getRes = await controller.GetCountAttemptsAndAutoApproval("701", null, 1.0m, 500000m, default);
+        using var getDoc = JsonSerializer.SerializeToDocument(getRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        getDoc.RootElement.GetProperty("summary").GetProperty("autoApprovedCount").GetInt32().Should().Be(1);
+        getDoc.RootElement.GetProperty("summary").GetProperty("requiresManagerApprovalCount").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Wave56_CodAndOwnerGrossProfit_IncludeWithheldTax15PctAndFixed3000Fee()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase($"W56_TaxAndFee_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ErpKhoDbContext(options);
+
+        var wh = new Warehouse { Id = 1, Code = "WH-01", Name = "Kho Chính", IsActive = true };
+        var unit = new Unit { Id = 1, Code = "CAI", Name = "Cái", DecimalPlaces = 0, IsActive = true };
+        var prod = new Product
+        {
+            Id = 701,
+            Code = "SKU-TAX-701",
+            Name = "Tai nghe Bluetooth True Wireless",
+            UnitId = 1,
+            Unit = unit,
+            MovingAverageCost = 400000m,
+            IsActive = true
+        };
+        db.Warehouses.Add(wh);
+        db.Units.Add(unit);
+        db.Products.Add(prod);
+
+        // Dispatched export receipt: 2 units * 1,000,000 VND = 2,000,000 VND gross revenue
+        var exportReceipt = new ExportReceipt
+        {
+            Id = 801,
+            Code = "PXK-TAX-801",
+            WarehouseId = 1,
+            Status = ReceiptStatus.Dispatched,
+            TrackingNumber = "GHN-TAX-801",
+            CarrierCode = "GHN",
+            CreatedBy = 1,
+            CreatedAt = DateTime.UtcNow.AddHours(-2),
+            Details =
+            [
+                new ExportReceiptDetail
+                {
+                    Id = 8011,
+                    ExportReceiptId = 801,
+                    ProductId = 701,
+                    Product = prod,
+                    Quantity = 2m,
+                    UnitPrice = 1000000m
+                }
+            ]
+        };
+        db.ExportReceipts.Add(exportReceipt);
+
+        db.ShipmentFinancialLedgers.Add(new ShipmentFinancialLedger
+        {
+            Id = 901,
+            ExportReceiptId = 801,
+            ExportReceipt = exportReceipt,
+            TrackingNumber = "GHN-TAX-801",
+            CarrierCode = "GHN",
+            ExpectedCodAmount = 2000000m,
+            ActualCodCollected = 2000000m,
+            EstimatedShippingFee = 30000m,
+            ActualShippingFee = 32000m,
+            FeeOverchargeVariance = 2000m,
+            PlatformCommissionFee = 120000m,
+            ReturnFee = 0m,
+            NetPayoutAmount = 1848000m,
+            ReconciliationStatus = "DISCREPANCY",
+            SettledAtUtc = DateTime.UtcNow.AddHours(-1)
+        });
+        await db.SaveChangesAsync();
+
+        var whAuth = new Mock<IWarehouseAuthorizationService>();
+        whAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([1]);
+        whAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        var adminUser = new Mock<ICurrentUser>();
+        adminUser.SetupGet(x => x.IsAuthenticated).Returns(true);
+        adminUser.SetupGet(x => x.UserId).Returns(1);
+        adminUser.SetupGet(x => x.Role).Returns(AppRoles.Admin);
+        adminUser.SetupGet(x => x.IsGlobalAdmin).Returns(true);
+        adminUser.Setup(x => x.HasPermission(ERP.Domain.Security.AppPermissions.InventoryCostRead)).Returns(true);
+
+        var reportsController = new ReportsController(new Mock<IReportService>().Object, db, whAuth.Object, adminUser.Object);
+
+        // 1. COD & Settlement Reconciliation verifies 1% VAT + 0.5% PIT = 1.5% and 3,000 VND fixed order fee
+        var codRes = await reportsController.GetCodAndSettlementReconciliation(1, null, default);
+        using var codDoc = JsonSerializer.SerializeToDocument(codRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        codDoc.RootElement.GetProperty("totalExpectedCod").GetDecimal().Should().Be(2000000m);
+        codDoc.RootElement.GetProperty("totalVatWithheldAmount").GetDecimal().Should().Be(20000m); // 1% of 2,000,000
+        codDoc.RootElement.GetProperty("totalPitWithheldAmount").GetDecimal().Should().Be(10000m); // 0.5% of 2,000,000
+        codDoc.RootElement.GetProperty("totalWithheldTaxAmount").GetDecimal().Should().Be(30000m); // 1.5% total
+        codDoc.RootElement.GetProperty("totalFixedOrderProcessingFee").GetDecimal().Should().Be(3000m); // 1 order * 3,000
+        codDoc.RootElement.GetProperty("taxPolicyReference").GetString().Should().Contain("Nghị định 70/2025/NĐ-CP");
+
+        // 2. Owner Gross Profit verifies withheldVatAmount, withheldPitAmount, withheldTaxTotalAmount, fixedInfrastructureFeeTotal, netProfitAfterWithheldTax
+        var pnlRes = await reportsController.GetOwnerGrossProfit(1, default);
+        using var pnlDoc = JsonSerializer.SerializeToDocument(pnlRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        pnlDoc.RootElement.GetProperty("grossRevenue").GetDecimal().Should().Be(2000000m);
+        pnlDoc.RootElement.GetProperty("withheldVatAmount").GetDecimal().Should().Be(20000m);
+        pnlDoc.RootElement.GetProperty("withheldPitAmount").GetDecimal().Should().Be(10000m);
+        pnlDoc.RootElement.GetProperty("withheldTaxTotalAmount").GetDecimal().Should().Be(30000m);
+        pnlDoc.RootElement.GetProperty("fixedInfrastructureFeeTotal").GetDecimal().Should().Be(3000m);
+        var netPocket = pnlDoc.RootElement.GetProperty("netPocketProfit").GetDecimal();
+        pnlDoc.RootElement.GetProperty("netProfitAfterWithheldTax").GetDecimal().Should().Be(netPocket - 30000m - 3000m);
+    }
+
+    [Fact]
+    public async Task Wave56_PackingRecommendCarton3D_And_DekitDisassemble_ExecuteCorrectly()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase($"W56_Packing3DAndDekit_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ErpKhoDbContext(options);
+
+        var wh = new Warehouse { Id = 1, Code = "WH-01", Name = "Kho Chính", IsActive = true };
+        var loc = new WarehouseLocation
+        {
+            Id = 10,
+            WarehouseId = 1,
+            Code = "BIN-A01-01",
+            Name = "Kệ Lưu Trữ A01",
+            LocationType = WarehouseLocationType.Storage,
+            IsActive = true,
+            IsPickable = true
+        };
+        var unit = new Unit { Id = 1, Code = "CAI", Name = "Cái", DecimalPlaces = 0, IsActive = true };
+        var kitProd = new Product
+        {
+            Id = 801,
+            Code = "KIT-COMBO-801",
+            Name = "Bộ Kit Quà Tặng Cao Cấp",
+            UnitId = 1,
+            Unit = unit,
+            UnitWeightKg = 1.2m,
+            UnitVolumeM3 = 0.0045m,
+            MovingAverageCost = 350000m,
+            IsActive = true
+        };
+        var compProd = new Product
+        {
+            Id = 802,
+            Code = "COMP-ITEM-802",
+            Name = "Sản Phẩm Thành Phần Lẻ",
+            UnitId = 1,
+            Unit = unit,
+            UnitWeightKg = 0.5m,
+            UnitVolumeM3 = 0.0020m,
+            MovingAverageCost = 150000m,
+            IsActive = true
+        };
+        db.Warehouses.Add(wh);
+        db.WarehouseLocations.Add(loc);
+        db.Units.Add(unit);
+        db.Products.AddRange(kitProd, compProd);
+
+        db.ProductBundleComponents.Add(new ProductBundleComponent
+        {
+            Id = 1,
+            ParentProductId = 801,
+            ParentProduct = kitProd,
+            ComponentProductId = 802,
+            ComponentProduct = compProd,
+            ComponentQuantity = 2m,
+            IsActive = true
+        });
+
+        var kitStock = new InventoryStock
+        {
+            Id = 8001,
+            TenantId = 1,
+            WarehouseId = 1,
+            ProductId = 801,
+            Product = kitProd,
+            LocationId = 10,
+            Location = loc,
+            Status = InventoryStatus.Available,
+            Quantity = 5m,
+            ReservedQuantity = 0m
+        };
+        var compStock = new InventoryStock
+        {
+            Id = 8002,
+            TenantId = 1,
+            WarehouseId = 1,
+            ProductId = 802,
+            Product = compProd,
+            LocationId = 10,
+            Location = loc,
+            Status = InventoryStatus.Available,
+            Quantity = 10m,
+            ReservedQuantity = 0m
+        };
+        kitStock.RefreshGrainHash();
+        compStock.RefreshGrainHash();
+        db.InventoryStocks.AddRange(kitStock, compStock);
+
+        db.ExportReceipts.Add(new ExportReceipt
+        {
+            Id = 850,
+            Code = "PXK-CARTON-850",
+            WarehouseId = 1,
+            Status = ReceiptStatus.Approved,
+            CreatedBy = 1,
+            CreatedAt = DateTime.UtcNow,
+            Details =
+            [
+                new ExportReceiptDetail
+                {
+                    Id = 8501,
+                    ExportReceiptId = 850,
+                    ProductId = 801,
+                    Product = kitProd,
+                    Quantity = 2m,
+                    UnitPrice = 500000m
+                }
+            ]
+        });
+        await db.SaveChangesAsync();
+
+        var whAuth = new Mock<IWarehouseAuthorizationService>();
+        whAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([1]);
+        whAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        var controller = new PackingSessionsController(new Mock<IPackingService>().Object, db, whAuth.Object);
+
+        // 1. 3D Cartonization & DIM Weight Calculator
+        var cartonRes = await controller.RecommendCarton(
+            "850",
+            new PackingSessionsController.RecommendCartonRequest(
+                DimDivisor: 5000m,
+                ServiceType: "ROAD_STANDARD",
+                FragileBubbleWrapAllowancePct: 15m),
+            default);
+
+        using var cartonDoc = JsonSerializer.SerializeToDocument(cartonRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        cartonDoc.RootElement.GetProperty("recommendedCartonCode").GetString().Should().BeOneOf("CARTON-S", "CARTON-M", "CARTON-L", "CARTON-XL");
+        cartonDoc.RootElement.GetProperty("totalItemWeightKg").GetDecimal().Should().Be(2.4m); // 2 * 1.2kg
+        cartonDoc.RootElement.GetProperty("rawVolumeCm3").GetDecimal().Should().Be(9000m); // 2 * 4500cm3
+        cartonDoc.RootElement.GetProperty("dimWeightKg").GetDecimal().Should().BeGreaterThan(0m);
+        cartonDoc.RootElement.GetProperty("billableWeightKg").GetDecimal().Should().BeGreaterThanOrEqualTo(2.4m);
+
+        // 2. De-kitting / Disassemble 2 kits -> Kit stock 5 -> 3, Component stock 10 -> 14 (+4 units)
+        var dekitRes = await controller.ExecuteKittingVas(
+            new PackingSessionsController.ExecuteKittingVasRequest(
+                WarehouseId: 1,
+                KitProductId: 801,
+                LocationId: 10,
+                KitQuantity: 2m,
+                OperationMode: "DEKIT_DISASSEMBLE",
+                ExecuteStockMutation: true),
+            default);
+
+        using var dekitDoc = JsonSerializer.SerializeToDocument(dekitRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        dekitDoc.RootElement.GetProperty("operationMode").GetString().Should().Be("DEKIT_DISASSEMBLE");
+        dekitDoc.RootElement.GetProperty("executedStockMutation").GetBoolean().Should().BeTrue();
+
+        var updatedKitStock = await db.InventoryStocks.SingleAsync(s => s.Id == 8001);
+        var updatedCompStock = await db.InventoryStocks.SingleAsync(s => s.Id == 8002);
+        updatedKitStock.Quantity.Should().Be(3m);
+        updatedCompStock.Quantity.Should().Be(14m);
+
+        var dekitTxs = await db.InventoryTransactions.Where(t => t.ReferenceType == "VAS_DEKIT").ToListAsync();
+        dekitTxs.Should().Contain(t => t.ProductId == 801 && t.TransactionType == TransactionType.TransferOut && t.Quantity == 2m);
+        dekitTxs.Should().Contain(t => t.ProductId == 802 && t.TransactionType == TransactionType.TransferIn && t.Quantity == 4m);
+    }
+
+    [Fact]
+    public async Task Wave56_MoveHandlingUnitLpn_And_AutoBreakBulkReplenish_ExecuteAtomically()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase($"W56_LpnAndBreakBulk_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ErpKhoDbContext(options);
+
+        var wh = new Warehouse { Id = 1, Code = "WH-01", Name = "Kho Chính", IsActive = true };
+        var locRcv = new WarehouseLocation
+        {
+            Id = 10,
+            WarehouseId = 1,
+            Code = "RCV-01",
+            Name = "Khu Tiếp Nhận",
+            LocationType = WarehouseLocationType.Receiving,
+            IsActive = true,
+            IsPickable = false
+        };
+        var locPick = new WarehouseLocation
+        {
+            Id = 11,
+            WarehouseId = 1,
+            Code = "BIN-A01-01",
+            Name = "Kệ Nhặt Lẻ A01",
+            LocationType = WarehouseLocationType.Storage,
+            IsActive = true,
+            IsPickable = true
+        };
+        var unitPcs = new Unit { Id = 1, Code = "CAI", Name = "Cái", DecimalPlaces = 0, IsActive = true };
+        var unitCarton = new Unit { Id = 2, Code = "THUNG24", Name = "Thùng 24 Cái", DecimalPlaces = 0, IsActive = true };
+        var prod1 = new Product
+        {
+            Id = 901,
+            Code = "SKU-LPN-901",
+            Name = "Linh Kiện Pallet 901",
+            UnitId = 1,
+            Unit = unitPcs,
+            UnitWeightKg = 0.5m,
+            UnitVolumeM3 = 0.002m,
+            IsActive = true
+        };
+        var prod2 = new Product
+        {
+            Id = 902,
+            Code = "SKU-LPN-902",
+            Name = "Linh Kiện Pallet 902",
+            UnitId = 1,
+            Unit = unitPcs,
+            UnitWeightKg = 0.4m,
+            UnitVolumeM3 = 0.0015m,
+            IsActive = true
+        };
+        db.Warehouses.Add(wh);
+        db.WarehouseLocations.AddRange(locRcv, locPick);
+        db.Units.AddRange(unitPcs, unitCarton);
+        db.Products.AddRange(prod1, prod2);
+
+        db.ProductUoms.Add(new ProductUom
+        {
+            Id = 1,
+            ProductId = 901,
+            Product = prod1,
+            UnitId = 2,
+            Unit = unitCarton,
+            ConversionFactor = 24m,
+            Version = 1,
+            EffectiveFromUtc = DateTime.UtcNow.AddDays(-10),
+            IsActive = true
+        });
+
+        var palletHu = new HandlingUnit
+        {
+            Id = 50,
+            HuCode = "PALLET-LPN-001",
+            WarehouseId = 1,
+            Type = HandlingUnitType.Pallet,
+            Status = HandlingUnitStatus.InUse,
+            Barcode = "BC-PALLET-LPN-001",
+            Sscc = "008938505000000099",
+            CreatedBy = 1,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.HandlingUnits.Add(palletHu);
+
+        var huBucket1 = new InventoryStock
+        {
+            Id = 9001,
+            TenantId = 1,
+            WarehouseId = 1,
+            ProductId = 901,
+            Product = prod1,
+            LocationId = 10,
+            Location = locRcv,
+            HandlingUnitId = 50,
+            Status = InventoryStatus.Available,
+            Quantity = 8m
+        };
+        var huBucket2 = new InventoryStock
+        {
+            Id = 9002,
+            TenantId = 1,
+            WarehouseId = 1,
+            ProductId = 902,
+            Product = prod2,
+            LocationId = 10,
+            Location = locRcv,
+            HandlingUnitId = 50,
+            Status = InventoryStatus.Available,
+            Quantity = 6m
+        };
+        var reserveBulkStock = new InventoryStock
+        {
+            Id = 9003,
+            TenantId = 1,
+            WarehouseId = 1,
+            ProductId = 901,
+            Product = prod1,
+            LocationId = 10,
+            Location = locRcv,
+            HandlingUnitId = null,
+            Status = InventoryStatus.Available,
+            Quantity = 48m
+        };
+        huBucket1.RefreshGrainHash();
+        huBucket2.RefreshGrainHash();
+        reserveBulkStock.RefreshGrainHash();
+        db.InventoryStocks.AddRange(huBucket1, huBucket2, reserveBulkStock);
+        await db.SaveChangesAsync();
+
+        var whAuth = new Mock<IWarehouseAuthorizationService>();
+        whAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([1]);
+        whAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        var currentUser = new Mock<ICurrentUser>();
+        currentUser.SetupGet(x => x.UserId).Returns(1);
+        currentUser.SetupGet(x => x.IsGlobalAdmin).Returns(true);
+
+        var controller = new InventoryMovementsController(
+            null!,
+            db,
+            new Mock<IInventoryLockEvaluator>().Object,
+            currentUser.Object,
+            whAuth.Object);
+
+        // 1. 1-Scan Full Pallet / LPN Move moves both buckets (8 + 6 = 14 units) from RCV-01 to BIN-A01-01
+        var moveRes = await controller.MoveHandlingUnit(
+            new InventoryMovementsController.FlexibleMoveHandlingUnitRequest(
+                HandlingUnitCode: "PALLET-LPN-001",
+                WarehouseId: 1,
+                DestinationLocationCode: "BIN-A01-01",
+                Reason: "Cất nguyên Pallet 1 chạm vào kệ A01"),
+            default);
+
+        using var moveDoc = JsonSerializer.SerializeToDocument(moveRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        moveDoc.RootElement.GetProperty("handlingUnitCode").GetString().Should().Be("PALLET-LPN-001");
+        moveDoc.RootElement.GetProperty("destinationLocationCode").GetString().Should().Be("BIN-A01-01");
+        moveDoc.RootElement.GetProperty("movedBucketCount").GetInt32().Should().Be(2);
+        moveDoc.RootElement.GetProperty("totalMovedQuantity").GetDecimal().Should().Be(14m);
+
+        var movedDestStocks = await db.InventoryStocks
+            .Where(s => s.HandlingUnitId == 50 && s.LocationId == 11 && s.Quantity > 0m)
+            .ToListAsync();
+        movedDestStocks.Should().HaveCount(2);
+        movedDestStocks.Sum(s => s.Quantity).Should().Be(14m);
+
+        // 2. Auto Break-Bulk Replenishment converts 1 carton (24 base units) of SKU 901 from RCV-01 to BIN-A01-01
+        var breakBulkRes = await controller.AutoBreakBulkReplenish(
+            new AutoBreakBulkReplenishRequestDto(
+                WarehouseId: 1,
+                ProductId: 901,
+                CartonQuantity: 1m,
+                MinPickFaceThresholdQty: 100m,
+                ExecuteImmediately: true),
+            warehouseId: 1,
+            productId: 901,
+            executeImmediately: true,
+            cancellationToken: default);
+
+        using var bbDoc = JsonSerializer.SerializeToDocument(breakBulkRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        bbDoc.RootElement.GetProperty("executedImmediately").GetBoolean().Should().BeTrue();
+        bbDoc.RootElement.GetProperty("totalCartonQty").GetDecimal().Should().Be(1m);
+        bbDoc.RootElement.GetProperty("totalBaseUnitQty").GetDecimal().Should().Be(24m);
+
+        var updatedReserveStock = await db.InventoryStocks.SingleAsync(s => s.Id == 9003);
+        updatedReserveStock.Quantity.Should().Be(24m); // 48 - 24 = 24 remaining in reserve
+    }
+
+    [Fact]
+    public async Task Wave56_PutToWallSlots_And_SortValidation_EnforceSlotMatch()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase($"W56_PutToWall_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ErpKhoDbContext(options);
+
+        var wh = new Warehouse { Id = 1, Code = "WH-01", Name = "Kho Chính", IsActive = true };
+        var loc = new WarehouseLocation
+        {
+            Id = 10,
+            WarehouseId = 1,
+            Code = "BIN-A01-01",
+            Name = "Kệ A01",
+            LocationType = WarehouseLocationType.Storage,
+            IsActive = true,
+            IsPickable = true
+        };
+        var prod1 = new Product { Id = 1001, Code = "SKU-WALL-01", Name = "Sản phẩm Chia chọn 01", UnitId = 1, IsActive = true };
+        var prod2 = new Product { Id = 1002, Code = "SKU-WALL-02", Name = "Sản phẩm Chia chọn 02", UnitId = 1, IsActive = true };
+        var task = new PickingTask
+        {
+            Id = 301,
+            TaskCode = "PICK-WALL-301",
+            WarehouseId = 1,
+            Warehouse = wh,
+            SourceType = "SalesOrder",
+            SourceId = 501,
+            SourceCode = "SO-WALL-501",
+            Status = PickingTaskStatus.InProgress,
+            Priority = 1,
+            CreatedBy = 1,
+            CreatedAt = DateTime.UtcNow,
+            Lines =
+            [
+                new PickingTaskLine
+                {
+                    Id = 3011,
+                    PickingTaskId = 301,
+                    Sequence = 1,
+                    ProductId = 1001,
+                    Product = prod1,
+                    SourceLocationId = 10,
+                    SourceLocation = loc,
+                    RequestedQuantity = 3m,
+                    PickedQuantity = 3m
+                },
+                new PickingTaskLine
+                {
+                    Id = 3012,
+                    PickingTaskId = 301,
+                    Sequence = 2,
+                    ProductId = 1002,
+                    Product = prod2,
+                    SourceLocationId = 10,
+                    SourceLocation = loc,
+                    RequestedQuantity = 2m,
+                    PickedQuantity = 2m
+                }
+            ]
+        };
+
+        db.Warehouses.Add(wh);
+        db.WarehouseLocations.Add(loc);
+        db.Products.AddRange(prod1, prod2);
+        db.PickingTasks.Add(task);
+        await db.SaveChangesAsync();
+
+        var whAuth = new Mock<IWarehouseAuthorizationService>();
+        whAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([1]);
+        whAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        var controller = new PickingTasksController(new Mock<IPickingService>().Object, db, whAuth.Object);
+
+        // 1. GetPutToWallSlots returns 8 slots (SLOT-01 .. SLOT-08)
+        var slotsRes = await controller.GetPutToWallSlots("301", 1, default);
+        using var slotsDoc = JsonSerializer.SerializeToDocument(slotsRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        slotsDoc.RootElement.GetProperty("totalSlots").GetInt32().Should().Be(8);
+        slotsDoc.RootElement.GetProperty("activeSlotsCount").GetInt32().Should().Be(2);
+        slotsDoc.RootElement.GetProperty("slots").GetArrayLength().Should().Be(8);
+
+        // 2. Scanning correct SKU + SLOT-01 succeeds
+        var sortOkRes = await controller.PutToWallSort(
+            "301",
+            new PickingTasksController.PutToWallSortRequest(
+                ScannedSkuOrBarcode: "SKU-WALL-01",
+                ScannedSlotCode: "SLOT-01",
+                Quantity: 1m),
+            default);
+        using var sortOkDoc = JsonSerializer.SerializeToDocument(sortOkRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        sortOkDoc.RootElement.GetProperty("matched").GetBoolean().Should().BeTrue();
+        sortOkDoc.RootElement.GetProperty("sortedSlotCode").GetString().Should().Be("SLOT-01");
+        sortOkDoc.RootElement.GetProperty("slotSortedTotal").GetDecimal().Should().Be(1m);
+        sortOkDoc.RootElement.GetProperty("slotRemainingQty").GetDecimal().Should().Be(2m);
+
+        // 3. Scanning SKU-WALL-01 into wrong slot SLOT-02 returns 422 PUT_TO_WALL_WRONG_SLOT
+        var sortWrongRes = await controller.PutToWallSort(
+            "301",
+            new PickingTasksController.PutToWallSortRequest(
+                ScannedSkuOrBarcode: "SKU-WALL-01",
+                ScannedSlotCode: "SLOT-02",
+                Quantity: 1m),
+            default);
+        var unprocessable = sortWrongRes.Should().BeOfType<UnprocessableEntityObjectResult>().Subject;
+        unprocessable.StatusCode.Should().Be(422);
+        using var wrongDoc = JsonSerializer.SerializeToDocument(unprocessable.Value);
+        wrongDoc.RootElement.GetProperty("errorCode").GetString().Should().Be("PUT_TO_WALL_WRONG_SLOT");
+        wrongDoc.RootElement.GetProperty("expectedSlotCode").GetString().Should().Be("SLOT-01");
+    }
+
+    [Fact]
+    public async Task Wave56_CustomerReturnsAging7Days_And_ChannelSkuMappings_And_3PlStorageSnapshot()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase($"W56_RtsChannel3Pl_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ErpKhoDbContext(options);
+
+        var wh = new Warehouse { Id = 1, Code = "WH-01", Name = "Kho Chính", IsActive = true };
+        var loc = new WarehouseLocation
+        {
+            Id = 10,
+            WarehouseId = 1,
+            Code = "BIN-A01-01",
+            Name = "Kệ Lưu Trữ A01",
+            LocationType = WarehouseLocationType.Storage,
+            IsActive = true,
+            IsPickable = true
+        };
+        var owner = new BusinessPartner
+        {
+            Id = 20,
+            Code = "OWN-3PL-01",
+            Name = "Chủ Hàng 3PL Minh Phát",
+            IsCustomer = true,
+            IsActive = true
+        };
+        var prod = new Product
+        {
+            Id = 1101,
+            Code = "SKU-3PL-1101",
+            Name = "Thùng Sữa Dinh Dưỡng 3PL",
+            CategoryId = 1,
+            UnitId = 1,
+            UnitWeightKg = 4.5m,
+            UnitVolumeM3 = 0.06m,
+            MovingAverageCost = 450000m,
+            IsActive = true
+        };
+        db.Warehouses.Add(wh);
+        db.WarehouseLocations.Add(loc);
+        db.BusinessPartners.Add(owner);
+        db.Products.Add(prod);
+
+        var stock = new InventoryStock
+        {
+            Id = 11001,
+            TenantId = 1,
+            WarehouseId = 1,
+            Warehouse = wh,
+            ProductId = 1101,
+            Product = prod,
+            LocationId = 10,
+            Location = loc,
+            OwnerId = 20,
+            Status = InventoryStatus.Available,
+            Quantity = 40m,
+            ReservedQuantity = 4m
+        };
+        stock.RefreshGrainHash();
+        db.InventoryStocks.Add(stock);
+
+        db.CustomerReturns.AddRange(
+            new CustomerReturn
+            {
+                Id = 401,
+                ReturnCode = "RMA-RTS-OVERDUE-09D",
+                WarehouseId = 1,
+                TrackingNumber = "GHN-RTS-OVERDUE-09D",
+                OrderNumber = "SO-RTS-09D",
+                ReturnReason = "RTS_BUYER_UNREACHABLE",
+                Status = "PENDING_INSPECTION",
+                CreatedBy = 1,
+                CreatedAtUtc = DateTime.UtcNow.AddDays(-9)
+            },
+            new CustomerReturn
+            {
+                Id = 402,
+                ReturnCode = "RMA-RTS-48H-CLAIM",
+                WarehouseId = 1,
+                TrackingNumber = "SPX-RTS-48H-CLAIM",
+                OrderNumber = "SO-RTS-48H",
+                ReturnReason = "RTS_DAMAGED_PARCEL",
+                Status = "PENDING_INSPECTION",
+                CreatedBy = 1,
+                CreatedAtUtc = DateTime.UtcNow.AddHours(-12)
+            });
+        await db.SaveChangesAsync();
+
+        var whAuth = new Mock<IWarehouseAuthorizationService>();
+        whAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([1]);
+        whAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        // 1. CustomerReturns aging > 7 days alert & 48h claim window countdown
+        var importCtrl = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, null, db, whAuth.Object);
+        var returnsRes = await importCtrl.GetCustomerReturns(1, default);
+        using var returnsDoc = JsonSerializer.SerializeToDocument(returnsRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        var returnItems = returnsDoc.RootElement.EnumerateArray().ToList();
+        returnItems.Should().HaveCount(2);
+
+        var overdueItem = returnItems.Single(x => x.GetProperty("ReturnCode").GetString() == "RMA-RTS-OVERDUE-09D");
+        overdueItem.GetProperty("returnAgingDays").GetInt32().Should().BeGreaterThanOrEqualTo(9);
+        overdueItem.GetProperty("isOverdueInTransit").GetBoolean().Should().BeTrue();
+        overdueItem.GetProperty("overdueAlertLevel").GetString().Should().Be("CRITICAL_OVERDUE_7D");
+
+        var claimItem = returnItems.Single(x => x.GetProperty("ReturnCode").GetString() == "RMA-RTS-48H-CLAIM");
+        claimItem.GetProperty("isOverdueInTransit").GetBoolean().Should().BeFalse();
+        claimItem.GetProperty("disputeRemainingHours").GetDecimal().Should().BeGreaterThan(20m);
+        claimItem.GetProperty("disputeClaimStatus").GetString().Should().Be("PENDING_VIDEO_EVIDENCE");
+
+        // 2. Multi-Channel SKU Mapping (1 internal SKU -> Shopee Combo x2)
+        var productsCtrl = new ProductsController(new Mock<IProductService>().Object, db);
+        var upsertRes = await productsCtrl.UpsertChannelSkuMapping(
+            new ProductsController.UpsertChannelSkuMappingRequest(
+                ChannelCode: "SHOPEE",
+                ShopName: "Gian hàng Shopee Official",
+                ChannelSkuCode: "SP-COMBO-02",
+                ChannelItemId: "SP-ITEM-1101",
+                ProductId: 1101,
+                ConversionFactor: 2m,
+                IsActive: true),
+            default);
+        using var upsertDoc = JsonSerializer.SerializeToDocument(upsertRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        upsertDoc.RootElement.GetProperty("channelSkuCode").GetString().Should().Be("SP-COMBO-02");
+        upsertDoc.RootElement.GetProperty("conversionFactor").GetDecimal().Should().Be(2m);
+
+        var listMappingsRes = await productsCtrl.GetChannelSkuMappings(1101, null, "SHOPEE", default);
+        using var listMappingsDoc = JsonSerializer.SerializeToDocument(listMappingsRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        var mappingRow = listMappingsDoc.RootElement.GetProperty("items")[0];
+        mappingRow.GetProperty("internalAvailableQty").GetDecimal().Should().Be(36m); // 40 - 4 reserved
+        mappingRow.GetProperty("maxChannelSellableQty").GetDecimal().Should().Be(18m); // floor(36 / 2) = 18 combos
+
+        // 3. 3PL Daily Storage Billing Snapshot (CBM / Pallet / Bin fee calculation)
+        var reportsCtrl = new ReportsController(new Mock<IReportService>().Object, db, whAuth.Object);
+        var snapRes = await reportsCtrl.GetOrCaptureThreePlStorageSnapshot(1, 20, default);
+        using var snapDoc = JsonSerializer.SerializeToDocument(snapRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        snapDoc.RootElement.GetProperty("ownerCount").GetInt32().Should().Be(1);
+        snapDoc.RootElement.GetProperty("totalOccupiedBins").GetInt32().Should().Be(1);
+        snapDoc.RootElement.GetProperty("totalVolumeCbm").GetDecimal().Should().Be(2.4m); // 40 * 0.06m3 = 2.4 CBM
+        snapDoc.RootElement.GetProperty("totalPalletEquivalent").GetDecimal().Should().Be(2.0m); // 2.4 / 1.2 = 2.0 pallets
+        snapDoc.RootElement.GetProperty("totalEstimatedDailyStorageFeeVnd").GetDecimal().Should().Be(41000m); // (2 * 18,000) + (1 * 5,000)
+    }
 }

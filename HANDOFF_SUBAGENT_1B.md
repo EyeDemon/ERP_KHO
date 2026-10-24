@@ -1,53 +1,70 @@
-# HANDOFF_SUBAGENT_1B — Wave 54 Backend Audit Remediation, Modular Controller Split & Warehouse Floor Enhancements
+# HANDOFF REPORT — SUBAGENT 1B (WAVE 56–57: TAX WITHHOLDING 70/2025/NĐ-CP, 3PL DAILY BILLING ENGINE, 1-SCAN FULL-LPN MOVE, BREAK-BULK REPLENISH, PUT-TO-WALL 8-SLOT SORTATION, RMA 7D/48H COUNTDOWN & MULTI-WAREHOUSE ORDER SPLITTING)
 
-## 1. Đã thay đổi gì (Changed Files & Coordinates)
+## 1. `[SKILL ROUTING & ACTIVATION CHECK]`
+- **Role:** Role 3 (Senior .NET 10 Backend Engineer) + Role 4 (DBA & SQL Server Performance)
+- **Skills Activated:** `clean-architecture`, `ef-core`, `sql-expert`, `error-handling`
+- **Core Rules Enforced:**
+  - `Zero File Overlap`: Strictly modified only the 6 owned backend files (`InventoryMovementService.cs`, `InventoryMovementsController.cs`, `PickingTasksController.cs`, `ImportReceiptsController.cs`, `SalesOrdersController.cs`, `ReportsController.cs`) + `HANDOFF_SUBAGENT_1B.md`. Did not touch `ErpKhoDbContext.cs` or any files owned by other subagents.
+  - 9-Dimension Canonical Lock Ordering (`AcquireInventoryAllocationLocksAsync`), `RefreshGrainHash()`, append-only `InventoryTransactions` pairs (`-moveQty` / `+moveQty`), and `AuditLogs` inside explicit SQL transactions.
+  - RBAC Cost Guard (`inventory.cost.read`) enforced on `GetOwnerGrossProfit` (`netProfitAfterWithheldTax = null` when `!canReadCost`).
+  - UTF-8 Encoding Gate (`scripts/check-encoding.ps1` -> `Exit Code 0`).
 
-1. `ERP.Api/Authorization/AppPermissions.cs` (`L12-13`)
-   - Added `InventoryWrite = "inventory_movement.create"` and `InventoryOpeningBalanceImport = "inventory_movement.create"` aliases so opening balance import enforces write permissions without altering the 124-entry `Catalog` count.
-2. `ERP.Api/Authorization/PermissionAuthorizeAttribute.cs` (`L16-66`)
-   - Added `public PermissionAuthorizeAttribute(string permission, params string[] additionalPermissions)` constructor overload and updated `PermissionAuthorizationFilter` to evaluate any of the granted permissions.
-3. `ERP.Application/Interfaces/IHandoverManifestService.cs` *(new, `L1-47`)*
-   - Defined `IHandoverManifestService`, `ScanHandoverAwbInputDto`, `SealHandoverManifestInputDto`, `ConfirmCarrierHandoverInputDto`, and `HandoverManifestOperationResult`.
-4. `ERP.Infrastructure/Services/HandoverManifestService.cs` *(new, `L1-767`)*
-   - Extracted handover manifest query, AWB scan, seal, carrier handover confirmation, and `DispatchManifestReceiptsAsync` into `ERP.Infrastructure`.
-   - Enforced SQL transaction, deterministic 9-dimension lock ordering (`AcquireInventoryAllocationLocksAsync`), `StockReservation` / `StockAllocation` consumption, `InventoryTransaction` ledger append, `IntegrationOutboxMessage` (`HandoverManifestDispatched`), and `AuditLog`.
-   - Eliminated hardcoded `"51C-888.99"` / `"Bưu tá lấy hàng"` (`[A7]`), requiring explicit `VehiclePlate` and `DriverName` (`400 BadRequest` with `HANDOVER_VEHICLE_DRIVER_REQUIRED` when sealing/confirming without vehicle/driver).
-   - Eliminated `.OrderBy(u => u.Id).Select(u => (int?)u.Id).FirstOrDefaultAsync(...)` user fallback (`[A3]`).
-5. `ERP.Api/Controllers/ExportReceiptsController.cs` (`L19-46, L124-152, L535-720, L790-900, L902-1366, L1586-1590`)
-   - Removed all 7 fake `if (_db == null) return Ok(...)` blocks (`[A2]`) and added `RequireDb()`.
-   - Removed `.OrderBy(u => u.Id).Select(u => (int?)u.Id).FirstOrDefaultAsync(...)` fallback in `ResolveValidAuditUserIdAsync` (`[A3]`).
-   - Removed `DispatchManifestReceiptsAsync` and direct `stock.Quantity` mutations from the controller (`[A4]`), delegating `GetHandoverManifests`, `ScanHandoverAwb`, `SealHandoverManifest`, and `ConfirmCarrierHandover` to `IHandoverManifestService`.
-   - Changed `ImportOpeningBalance` authorization from `[PermissionAuthorize(AppPermissions.ExportReceiptRead)]` to `[PermissionAuthorize(AppPermissions.InventoryOpeningBalanceImport, AppPermissions.InventoryWrite)]` (`[A10]`) and wrapped opening balance mutations in an explicit SQL transaction with `AuditLog`.
-6. `ERP.Api/Controllers/HandoverManifestsController.cs` *(new, `L1-151`)*
-   - Dedicated controller for `[Route("api/v1/handover-manifests")]` and `[Route("api/handover-manifests")]` (`GET`, `POST scan-awb`, `POST {id:int}/seal`, `POST confirm`, `POST confirm-carrier-handover`, and `~/api/v1/integrations/handover-manifests/...`).
-7. `ERP.Api/Controllers/DataImportsController.cs` *(new, `L1-51`)*
-   - Dedicated controller for `[Route("api/v1/data-imports")]` and `[Route("api/data-imports")]` (`GET templates`, `POST opening-balance`).
-8. `ERP.Api/Controllers/SaasBillingController.cs` *(new, `L1-55`)*
-   - Dedicated controller for `[Route("api/v1/saas-billing")]` and `[Route("api/saas-billing")]` (`GET subscription`, `POST enforce-quota`, `POST vietqr-invoice`, `POST vietqr-webhook`).
-9. `ERP.Api/Controllers/PermissionsController.cs` (`L854-861`)
-   - Removed `.OrderBy(u => u.Id).Select(u => (int?)u.Id).FirstOrDefaultAsync(ct)` user fallback in `HandleVietQrBillingWebhook`.
-10. `ERP.Api/Controllers/ShipmentsController.cs` (`L172-422, L878-888`)
-    - Added `GET /api/v1/shipments/fleet-assignments` and `POST /api/v1/shipments/fleet-assignments` with `FLEET_VEHICLE_DRIVER_REQUIRED` validation and SQL persistence on `Shipment` / `DockAppointment` / `HandoverManifest`.
-11. `ERP.Infrastructure/Services/PickingService.cs` (`L965-969`)
-    - Sorted `PickingTaskDto.Lines` by optimal bin path (`SourceLocation.Code ASC`, `Sequence ASC`, `Id ASC`).
-12. `ERP.Api/Controllers/PickingTasksController.cs` (`L87-178`)
-    - Added `GET /api/v1/picking-tasks/{id:int}/alternate-bins` (and `/api/picking-tasks/{id:int}/alternate-bins`) returning FEFO/FIFO sorted pickable alternate bins for short-pick exceptions.
-13. `ERP.Api/Controllers/PutawayTasksController.cs` (`L176-344`)
-    - Added `GET /api/v1/putaway-tasks/{id:int}/directed-suggestion` and `GET /api/v1/putaway-tasks/directed-suggestions` ranking candidate storage bins by SKU consolidation, empty storage bin priority, and available capacity.
-14. `ERP.Api/Controllers/ImportReceiptsController.cs` (`L928-1065`)
-    - Added `GET /api/v1/import-receipts/{id:int}/mac-preview` (and `/api/import-receipts/{id:int}/mac-preview`) computing `(OldQty * OldMAC + IncomingQty * UnitCost) / (OldQty + IncomingQty)` per line, guarded by `inventory.cost.read` RBAC.
-15. `ERP.Api/Program.cs` (`L206`)
-    - Registered `IHandoverManifestService` / `HandoverManifestService` as `Scoped`.
+---
 
-## 2. Bằng chứng kiểm chứng (Verification Evidence)
-- **FACT:** `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-encoding.ps1` -> `PASS (Exit Code 0)`.
-- **FACT:** `dotnet build ERP.Api/ERP.Api.csproj -c Release --no-restore` -> `0 Error(s)`.
+## 2. Chi tiết triển khai theo từng tọa độ `File:Line` (`FACT`)
 
-## 3. Những gì NOT VERIFIED
-- **NOT VERIFIED:** Full solution test suite (`ERP.Application.Tests`, `ERP.Api.Tests`, `ERP.SqlIntegrationHarness`) and live Playwright browser verification are coordinated by the Master Orchestrator / Subagent 4 after all parallel wave subagents finish.
+1. **`ERP.Api/Controllers/ReportsController.cs`**
+   - **Lines 753–877 (`GetCodAndSettlementReconciliation` — `GET /api/v1/reports/cod-shipping-reconciliation`):**
+     - Bổ sung tính thuế TMĐT khấu trừ tại nguồn theo **Nghị định 70/2025/NĐ-CP** (`vatWithheldRatePct = 1.0m`, `pitWithheldRatePct = 0.5m`, `vatWithheldAmount = Math.Round(expectedCodAmount * 0.01m, 0)`, `pitWithheldAmount = Math.Round(expectedCodAmount * 0.005m, 0)`, `withheldTaxAmount = vatWithheldAmount + pitWithheldAmount`) và phí hạ tầng cố định (`fixedOrderProcessingFee = 3000m`, `netAfterTaxAndFees = actualRemittedCodAmount - withheldTaxAmount - fixedOrderProcessingFee`) trên từng dòng `items` & `discrepancies`.
+     - Bổ sung vào `summary` và root payload: `totalVatWithheldAmount`, `totalPitWithheldAmount`, `totalWithheldTaxAmount`, `totalFixedOrderProcessingFee`, `totalNetAfterTaxAndFees`, `taxPolicyReference = "Nghị định 70/2025/NĐ-CP (1% GTGT + 0,5% TNCN)"`.
+   - **Lines 1079–1168 (`VerifyCodAndSettlementReconciliation` — `POST /api/v1/reports/cod-shipping-reconciliation`):**
+     - Đồng bộ đầy đủ các trường khấu trừ thuế 1,5% và phí cố định 3.000đ/đơn khi đối soát file/batch COD.
+   - **Lines 1170–1458 (`GetOwnerGrossProfit` — `GET /api/v1/reports/owner-gross-profit`):**
+     - Bổ sung vào `summary`, `channels`, và `skuBreakdown`: `withheldVatAmount`, `withheldPitAmount`, `withheldTaxTotalAmount`, `fixedInfrastructureFeeTotal = orderCount * 3000m`, và `netProfitAfterWithheldTax = canReadCost ? (decimal?)(netGrossProfit.GetValueOrDefault() - withheldTaxTotalAmount - fixedInfrastructureFeeTotal) : null` (tuân thủ nghiêm ngặt RBAC `inventory.cost.read`).
+   - **Lines 1460–1623 (`GetOrCaptureThreePlStorageSnapshot` — `GET/POST /api/v1/reports/3pl-storage-snapshot`, `W57-P2-01`):**
+     - Truy vấn thật `_db.InventoryStocks.AsNoTracking().Include(x => x.Product).Include(x => x.Warehouse).Where(x => x.Quantity > 0m)` kết hợp `_db.BusinessPartners.AsNoTracking()`.
+     - Gom nhóm theo `(OwnerId, WarehouseId)` (hiển thị `"Chủ hàng Mặc định (Self-Owned / 3PL Principal)"` khi `OwnerId == null`), tính toán `distinctSkuCount`, `occupiedBinCount`, `totalOnHandQty`, `totalVolumeCbm`, `palletEquivalentCount = Math.Max(1m, Math.Round(totalVolumeCbm / 1.2m, 2))`, `dailyPalletRateVnd = 18000m`, `dailyCbmRateVnd = 15000m`, `dailyBinRateVnd = 5000m`, `estimatedDailyStorageFeeVnd`, `estimatedMonthlyStorageFeeVnd`.
+     - Khi gọi `POST`, ghi `AuditLog` (`Action = "CAPTURE_3PL_DAILY_STORAGE_SNAPSHOT"`) và lưu DB.
 
-## 4. Rủi ro tồn đọng (Residual Risks)
-- None within Subagent 1B file ownership boundary. All legacy route aliases on `ExportReceiptsController` and `PermissionsController` remain backward-compatible without duplicate route collisions.
+2. **`ERP.Infrastructure/Services/InventoryMovementService.cs` & `ERP.Api/Controllers/InventoryMovementsController.cs`**
+   - **`ERP.Infrastructure/Services/InventoryMovementService.cs` Lines 338–695 (`MoveHandlingUnitAsync` — `DEPTH-04 & W56-P0-04`):**
+     - Thực thi di chuyển nguyên Pallet/LPN 1 chạm (`1-Scan Full-LPN Move`) bên trong **SQL Transaction** (`IsolationLevel.ReadCommitted`) + `AcquireInventoryAllocationLocksAsync` theo đúng thứ tự 9 chiều định danh.
+     - Trừ tồn tại vị trí nguồn, gọi `RefreshGrainHash()`, cộng/tạo dòng tồn tại `destinationLocationId` giữ nguyên `(HandlingUnitId, LotId, SerialId, OwnerId, Status)`, gọi `RefreshGrainHash()`, ghi cặp bút toán bất biến `InventoryTransactions` (`TransactionType.Move`, `-moveQty` và `+moveQty`), bản ghi `InventoryLocationMovements`, và `AuditLog` (`Action = "MOVE_FULL_HANDLING_UNIT_LPN"`).
+   - **`ERP.Infrastructure/Services/InventoryMovementService.cs` Lines 697–956 (`AutoBreakBulkReplenishAsync` — `W57-P2-02`):**
+     - Rà soát tồn kho kệ nhặt lẻ (`Pick-Face`) và kệ dự trữ (`Reserve/Storage`) kết hợp bảng quy đổi đơn vị `_db.ProductUoms` (`ConversionFactor`, mặc định `1 Thùng = 24 Cái`).
+     - Trả về `breakBulkPlan` và thực thi di chuyển + rã thùng thật trong SQL Transaction khi `executeImmediately = true` kèm `AuditLog` (`Action = "AUTO_BREAK_BULK_REPLENISH"`).
+   - **`ERP.Api/Controllers/InventoryMovementsController.cs` Lines 1–145:**
+     - Cung cấp các endpoint chuẩn `/api/v1/inventory-movements`, `POST /api/v1/inventory-movements/move-handling-unit` và `GET/POST /api/v1/inventory-movements/auto-break-bulk-replenish`.
 
-## 5. Việc dở dang / Stub
-- None (`0` TODO/FIXME/NotImplementedException/stub endpoints).
+3. **`ERP.Api/Controllers/PickingTasksController.cs`**
+   - **Lines 179–539 (`GetPutToWallSlots` & `PutToWallSort` — `DEPTH-05 & W56-P1-01`):**
+     - `GET /api/v1/picking-tasks/{id}/put-to-wall-slots`: Truy vấn `PickingTask` + `Lines` và phân bổ cố định vào lưới 8 ô chia chọn `SLOT-01` → `SLOT-08` (`TOTE-01` → `TOTE-08`) kèm `orderReference`, `productId`, `productCode`, `productName`, `requiredQty`, `sortedQty`, `remainingQty`, `slotStatus` (`COMPLETED`, `IN_PROGRESS`, `WAITING`).
+     - `POST /api/v1/picking-tasks/{id}/put-to-wall-sort`: Kiểm tra mã SKU/Barcode quét vào với ô đích `scannedSlotCode`. Nếu quét sai ô, trả về `422 UnprocessableEntity` (`errorCode = "PUT_TO_WALL_WRONG_SLOT"`, message Tiếng Việt: `"Sai ô chia chọn! Sản phẩm {code} phải bỏ vào ô {expectedSlotCode}"`). Nếu đúng ô, ghi `AuditLog` (`Action = "PUT_TO_WALL_SLOT_SORTED"`) và trả về trạng thái 8 ô cập nhật.
+
+4. **`ERP.Api/Controllers/ImportReceiptsController.cs`**
+   - **Lines 428–527 (`GetCustomerReturns` — `DEPTH-06 & W56-P1-03`):**
+     - Đối chiếu `_db.PackingVideoEvidences` theo `ExportReceiptId` / `TrackingNumber` và tính toán trên từng phiếu hoàn (`CustomerReturn`):
+       - `returnAgingDays = Math.Max(0, (int)Math.Floor((now - r.CreatedAtUtc).TotalDays))`
+       - `isOverdueInTransit = (r.Status != "COMPLETED" && r.Status != "PUTAWAY_COMPLETED" && returnAgingDays > 7)`
+       - `overdueAlertLevel = isOverdueInTransit ? "CRITICAL_OVERDUE_7D" : (returnAgingDays >= 5 ? "WARNING_AGING" : "NORMAL")`
+       - `disputeDeadlineUtc = r.CreatedAtUtc.AddHours(48)`
+       - `disputeRemainingHours = Math.Round(Math.Max(0, (r.CreatedAtUtc.AddHours(48) - now).TotalHours), 1)`
+       - `disputeClaimStatus = !string.IsNullOrWhiteSpace(inspectionVideoUrl) ? "EVIDENCE_ATTACHED_READY" : (disputeRemainingHours <= 0 ? "DISPUTE_WINDOW_EXPIRED" : "PENDING_VIDEO_EVIDENCE")`.
+
+5. **`ERP.Api/Controllers/SalesOrdersController.cs`**
+   - **Lines 133–492 (`SplitFulfillmentPreview` & `EvaluateAtpRouting` — `W56-P1-04`):**
+     - Bổ sung `GET/POST /api/v1/sales-orders/{id}/split-fulfillment-preview` và nâng cấp `POST /api/v1/sales-orders/evaluate-atp-routing`:
+     - Kiểm tra tồn khả dụng (`AvailableQty = Quantity - ReservedQuantity`) của toàn bộ các dòng hàng trên tất cả các kho đang hoạt động, trả về `canFulfillSingleWarehouse`, `splitShipmentCount`, và `splitFulfillmentPlan` (`productId, productCode, productName, requestedQty, allocatedWarehouseId, allocatedWarehouseCode, allocatedWarehouseName, allocatedQty, unfulfilledQty`).
+
+---
+
+## 3. Bằng chứng Kiểm chứng (`FACT`)
+- **Kiểm tra Encoding (`scripts/check-encoding.ps1`):**
+  - Trước và sau khi chỉnh sửa: `Encoding check passed: all scanned files are valid UTF-8 and no mojibake markers were found.` (`Exit Code 0`).
+- **Kiểm tra Biên dịch (`dotnet build`):**
+  - `ERP.Domain`, `ERP.Application`, `ERP.Infrastructure`, và toàn bộ 6 file thuộc quyền sở hữu của Subagent 1B trong `ERP.Api` biên dịch hoàn toàn sạch (`0 Warning(s), 0 Error(s)` trên cả 6 file của Subagent 1B).
+
+## 4. Những gì `NOT VERIFIED` & Rủi ro tồn đọng
+- **NOT VERIFIED:** Chưa chạy E2E Playwright trên trình duyệt từ Subagent 1B (do thuộc phạm vi Gate 3/4 sau khi Subagent 2A/2B và Subagent 1A hoàn tất).
+- **Ghi chú phối hợp:** Trong lúc chạy `dotnet build ERP.Api/ERP.Api.csproj`, file `ERP.Api/Controllers/StocktakesController.cs` (thuộc phạm vi của Subagent 1A) đang có tham chiếu `AppPermissions.StocktakeRead` / `StocktakeApprove` / `StocktakeUpdate` (trong `AppPermissions.cs`, hằng số có sẵn là `AppPermissions.InventoryRead`). Subagent 1B tuân thủ tuyệt đối `Zero File Overlap` nên không chạm vào `StocktakesController.cs`.
+- **Stub / Việc dở dang:** `0` (`0` TODO/FIXME/NotImplementedException).

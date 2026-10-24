@@ -146,4 +146,51 @@ describe('CodReconciliation Page', () => {
     expect(alert.textContent).toContain('INVALID_CARRIER_STATEMENT');
     expect(alert.textContent).toContain('corr-cod-422');
   });
+
+  it('renders Decree 70/2025/NĐ-CP 1.5% withheld tax (1% VAT + 0.5% PIT) and 3,000 VND fixed order processing fee breakdown', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: {
+        totalExpectedCod: 2000000,
+        totalActualCod: 2000000,
+        totalShippingFeeVariance: 0,
+        totalVatWithheldAmount: 20000,
+        totalPitWithheldAmount: 10000,
+        totalWithheldTaxAmount: 30000,
+        totalFixedOrderProcessingFee: 3000,
+        discrepancyCount: 0,
+        totalShipments: 1,
+        matchedShipments: 1,
+        items: [
+          {
+            id: 901,
+            trackingNumber: 'GHN-TAX-801',
+            carrierCode: 'GHN',
+            expectedCod: 2000000,
+            actualCod: 2000000,
+            expectedShippingFee: 30000,
+            actualShippingFee: 30000,
+            shippingFeeVariance: 0,
+            vatWithheld1Pct: 20000,
+            pitWithheld05Pct: 10000,
+            totalWithheldTax15Pct: 30000,
+            fixedOrderProcessingFee: 3000,
+            status: 'MATCHED',
+          },
+        ],
+      },
+    } as never);
+
+    render(<CodReconciliation />);
+
+    expect(
+      await screen.findByText(
+        /Khấu trừ Thuế Sàn TMĐT Tại Nguồn 1,5% \(Nghị định 70\/2025\/NĐ-CP\) & Phí Hạ tầng Đơn hàng Cố định/i,
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText('Thuế sàn khấu trừ tại nguồn (1,5% - NĐ 70/2025)')).toBeTruthy();
+    expect(screen.getByText('Phí hạ tầng xử lý đơn cố định (3.000đ/đơn)')).toBeTruthy();
+    expect(screen.getByText('Thuế khấu trừ 1,5% & Phí cố định')).toBeTruthy();
+    expect(screen.getAllByText('30.000 đ').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('3.000 đ').length).toBeGreaterThanOrEqual(1);
+  });
 });

@@ -140,4 +140,63 @@ describe('Packing workbench',()=>{
     fireEvent.click(view.getByRole('button',{name:'Tra cứu Video theo Mã vận đơn (AWB)'}));
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith('/api/v1/packing-sessions/video-evidence',{params:{awbCode:'SPXVN058291042'}}));
   });
+
+  it('calculates 3D cartonization & DIM weight and executes DEKIT_DISASSEMBLE kitting mode',async()=>{
+    vi.mocked(apiClient.post).mockImplementation(async(url:string)=>{
+      if(url==='/api/v1/packing-sessions/77/recommend-carton'){
+        return {
+          data:{
+            sessionId:77,
+            recommendedCartonCode:'CARTON-M',
+            recommendedCartonName:'Thùng Tiêu chuẩn M (30x25x20cm)',
+            recommendedDimensionsCm:'30x25x20',
+            totalItemWeightKg:1.2,
+            dimWeightKg:3.0,
+            billableWeightKg:3.0,
+            dimDivisor:5000,
+            isDimWeightCharged:true,
+            dimWeightWarning:'CẢNH BÁO CƯỚC THỂ TÍCH (DIM): Cước vận chuyển bị tính theo Trọng lượng Quy đổi 3,00 kg (> Trọng lượng thực 1,20 kg).',
+          }
+        } as never;
+      }
+      if(url==='/api/packing-sessions/execute-kitting-vas'){
+        return {
+          data:{
+            vasExecutionCode:'VAS-DEKIT-2026-001',
+            status:'DEKIT_DISASSEMBLED',
+            statusLabel:'Đã xả bộ KIT trả tồn thành phần về kệ',
+            vasServiceType:'DEKIT_DISASSEMBLE',
+            activePackingSessionsCount:1,
+            handlingUnitsCount:1,
+          }
+        } as never;
+      }
+      return {data:{}} as never;
+    });
+
+    const view=render(<PackingSessions/>);
+    await view.findByText('PACK-2026-0077');
+
+    fireEvent.click(view.getByTestId('btn-recommend-carton-3d'));
+    expect(await view.findByTestId('dim-weight-warning-badge')).toBeTruthy();
+    expect(view.getByTestId('unified-carton-suggestion').textContent).toContain('Thùng Tiêu chuẩn M (30x25x20cm)');
+    expect(view.getByTestId('unified-carton-suggestion').textContent).toContain('Cảnh báo Cước Quy Đổi');
+
+    const modeSelect=view.getByTestId('select-kitting-vas-mode');
+    fireEvent.change(modeSelect,{target:{value:'DEKIT_DISASSEMBLE'}});
+    fireEvent.click(view.getByRole('button',{name:'Thực thi Đóng bộ / Tách bộ & Dịch vụ Gia tăng'}));
+
+    await waitFor(()=>{
+      expect(apiClient.post).toHaveBeenCalledWith(
+        '/api/packing-sessions/execute-kitting-vas',
+        expect.objectContaining({
+          vasMode:'DEKIT_DISASSEMBLE',
+          vasServiceType:'DEKIT_DISASSEMBLE',
+        }),
+        expect.anything(),
+      );
+    });
+    expect(await view.findByText(/VAS-DEKIT-2026-001/)).toBeTruthy();
+    expect(view.getByText(/Đã xả bộ KIT trả tồn thành phần về kệ/)).toBeTruthy();
+  });
 });

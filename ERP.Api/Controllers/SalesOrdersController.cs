@@ -130,6 +130,260 @@ public sealed class SalesOrdersController(
         });
     }
 
+    public sealed record SplitFulfillmentPlanItemDto(
+        int ProductId,
+        string ProductCode,
+        string ProductName,
+        decimal RequestedQty,
+        int AllocatedWarehouseId,
+        string AllocatedWarehouseCode,
+        string AllocatedWarehouseName,
+        decimal AllocatedQty,
+        decimal UnfulfilledQty);
+
+    private async Task<(bool CanFulfillSingleWarehouse, int SplitShipmentCount, List<SplitFulfillmentPlanItemDto> Plan, ERP.Domain.Entities.SalesOrder? Order)> BuildSplitFulfillmentPreviewCoreAsync(
+        string? orderIdOrCode,
+        int? preferredWarehouseId,
+        IReadOnlyCollection<int>? accessibleIds,
+        CancellationToken cancellationToken)
+    {
+        if (db == null)
+        {
+            return (true, 1, [], null);
+        }
+
+        ERP.Domain.Entities.SalesOrder? order = null;
+        if (!string.IsNullOrWhiteSpace(orderIdOrCode))
+        {
+            var trimmed = orderIdOrCode.Trim();
+            if (int.TryParse(trimmed, out var parsedId))
+            {
+                order = await db.SalesOrders
+                    .AsNoTracking()
+                    .Include(o => o.Lines)
+                        .ThenInclude(l => l.Product)
+                    .FirstOrDefaultAsync(o => o.Id == parsedId, cancellationToken);
+            }
+
+            if (order == null)
+            {
+                order = await db.SalesOrders
+                    .AsNoTracking()
+                    .Include(o => o.Lines)
+                        .ThenInclude(l => l.Product)
+                    .FirstOrDefaultAsync(o => o.OrderCode == trimmed || o.ExternalOrderId == trimmed, cancellationToken);
+            }
+        }
+
+        if (order == null)
+        {
+            var fallbackQuery = db.SalesOrders
+                .AsNoTracking()
+                .Include(o => o.Lines)
+                    .ThenInclude(l => l.Product)
+                .AsQueryable();
+
+            if (preferredWarehouseId.HasValue)
+            {
+                fallbackQuery = fallbackQuery.Where(o => o.WarehouseId == preferredWarehouseId.Value);
+            }
+            else if (accessibleIds != null && accessibleIds.Count > 0)
+            {
+                fallbackQuery = fallbackQuery.Where(o => accessibleIds.Contains(o.WarehouseId));
+            }
+
+            order = await fallbackQuery
+                .OrderByDescending(o => o.Lines.Count > 1)
+                .ThenByDescending(o => o.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var whQuery = db.Warehouses.AsNoTracking().Where(w => w.IsActive);
+        if (accessibleIds != null && accessibleIds.Count > 0)
+        {
+            whQuery = whQuery.Where(w => accessibleIds.Contains(w.Id));
+        }
+        var warehouses = await whQuery.OrderBy(w => w.Id).ToListAsync(cancellationToken);
+        var whById = warehouses.ToDictionary(w => w.Id);
+
+        var lineReqs = new List<(int ProductId, string ProductCode, string ProductName, decimal RequestedQty)>();
+        if (order?.Lines is { Count: > 0 })
+        {
+            foreach (var g in order.Lines.GroupBy(l => new
+            {
+                l.ProductId,
+                Code = l.Product?.Code ?? $"SKU-{l.ProductId}",
+                Name = l.Product?.Name ?? $"Sản phẩm #{l.ProductId}"
+            }))
+            {
+                var reqQty = g.Sum(l => Math.Max(0m, l.OrderedQuantity - l.CancelledQuantity));
+                if (reqQty <= 0m)
+                {
+                    reqQty = g.Sum(l => Math.Max(1m, l.OrderedQuantity));
+                }
+                lineReqs.Add((g.Key.ProductId, g.Key.Code, g.Key.Name, reqQty));
+            }
+        }
+        else
+        {
+            var sampleProducts = await db.Products
+                .AsNoTracking()
+                .Where(p => p.IsActive)
+                .OrderBy(p => p.Id)
+                .Take(2)
+                .ToListAsync(cancellationToken);
+            foreach (var p in sampleProducts)
+            {
+                lineReqs.Add((p.Id, p.Code, p.Name, 2m));
+            }
+        }
+
+        var prodIds = lineReqs.Select(x => x.ProductId).Distinct().ToList();
+        var availableStocks = prodIds.Count > 0
+            ? await db.InventoryStocks
+                .AsNoTracking()
+                .Where(s => prodIds.Contains(s.ProductId) &&
+                            s.Status == ERP.Domain.Enums.InventoryStatus.Available &&
+                            (s.Quantity - s.ReservedQuantity) > 0m)
+                .ToListAsync(cancellationToken)
+            : [];
+
+        var atpByWhAndProduct = availableStocks
+            .GroupBy(s => (s.WarehouseId, s.ProductId))
+            .ToDictionary(
+                g => g.Key,
+                g => g.Sum(s => Math.Max(0m, s.Quantity - s.ReservedQuantity)));
+
+        var defaultWhId = order?.WarehouseId ?? preferredWarehouseId ?? warehouses.FirstOrDefault()?.Id ?? 1;
+        var orderedCandidateWhs = warehouses
+            .OrderByDescending(w => w.Id == defaultWhId)
+            .ThenBy(w => w.Id)
+            .ToList();
+
+        ERP.Domain.Entities.Warehouse? singleFulfillWh = null;
+        foreach (var candidateWh in orderedCandidateWhs)
+        {
+            var canCoverAll = lineReqs.All(req =>
+                atpByWhAndProduct.GetValueOrDefault((candidateWh.Id, req.ProductId), 0m) >= req.RequestedQty);
+            if (canCoverAll && lineReqs.Count > 0)
+            {
+                singleFulfillWh = candidateWh;
+                break;
+            }
+        }
+
+        var plan = new List<SplitFulfillmentPlanItemDto>();
+        if (singleFulfillWh != null)
+        {
+            foreach (var req in lineReqs)
+            {
+                plan.Add(new SplitFulfillmentPlanItemDto(
+                    req.ProductId,
+                    req.ProductCode,
+                    req.ProductName,
+                    req.RequestedQty,
+                    singleFulfillWh.Id,
+                    singleFulfillWh.Code,
+                    singleFulfillWh.Name,
+                    req.RequestedQty,
+                    0m));
+            }
+            return (true, 1, plan, order);
+        }
+
+        foreach (var req in lineReqs)
+        {
+            var remaining = req.RequestedQty;
+            var whsForSku = orderedCandidateWhs
+                .Select(w => (Warehouse: w, Available: atpByWhAndProduct.GetValueOrDefault((w.Id, req.ProductId), 0m)))
+                .Where(x => x.Available > 0m)
+                .OrderByDescending(x => x.Warehouse.Id == defaultWhId)
+                .ThenByDescending(x => x.Available)
+                .ToList();
+
+            if (whsForSku.Count == 0)
+            {
+                whById.TryGetValue(defaultWhId, out var fallbackWh);
+                plan.Add(new SplitFulfillmentPlanItemDto(
+                    req.ProductId,
+                    req.ProductCode,
+                    req.ProductName,
+                    req.RequestedQty,
+                    defaultWhId,
+                    fallbackWh?.Code ?? $"WH-{defaultWhId:D2}",
+                    fallbackWh?.Name ?? $"Kho #{defaultWhId}",
+                    0m,
+                    req.RequestedQty));
+                continue;
+            }
+
+            foreach (var (wh, avail) in whsForSku)
+            {
+                if (remaining <= 0m)
+                    break;
+
+                var alloc = Math.Min(remaining, avail);
+                remaining -= alloc;
+                plan.Add(new SplitFulfillmentPlanItemDto(
+                    req.ProductId,
+                    req.ProductCode,
+                    req.ProductName,
+                    req.RequestedQty,
+                    wh.Id,
+                    wh.Code,
+                    wh.Name,
+                    alloc,
+                    remaining));
+            }
+        }
+
+        var distinctAllocatedWhCount = plan
+            .Where(x => x.AllocatedQty > 0m)
+            .Select(x => x.AllocatedWarehouseId)
+            .Distinct()
+            .Count();
+        var splitShipmentCount = Math.Max(1, distinctAllocatedWhCount);
+        var canFulfillSingle = distinctAllocatedWhCount == 1 && plan.All(x => x.UnfulfilledQty == 0m);
+
+        return (canFulfillSingle, splitShipmentCount, plan, order);
+    }
+
+    [HttpGet("{id}/split-fulfillment-preview")]
+    [HttpPost("{id}/split-fulfillment-preview")]
+    [HttpPost("split-fulfillment-preview")]
+    [PermissionAuthorize(AppPermissions.SalesOrderRead)]
+    public async Task<IActionResult> SplitFulfillmentPreview(
+        [FromRoute] string? id = null,
+        [FromQuery] int? warehouseId = null,
+        CancellationToken cancellationToken = default)
+    {
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (warehouseAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
+
+        var (canFulfillSingleWarehouse, splitShipmentCount, splitFulfillmentPlan, order) =
+            await BuildSplitFulfillmentPreviewCoreAsync(id, warehouseId, accessibleIds, cancellationToken);
+
+        return Ok(new
+        {
+            salesOrderId = order?.Id ?? 0,
+            orderCode = order?.OrderCode ?? id ?? "SO-PREVIEW",
+            warehouseId = order?.WarehouseId ?? warehouseId ?? 1,
+            canFulfillSingleWarehouse,
+            splitShipmentCount,
+            splitFulfillmentPlan,
+            items = splitFulfillmentPlan,
+            statusLabel = canFulfillSingleWarehouse
+                ? "Đơn hàng có thể xuất trọn vẹn 100% từ 1 kho duy nhất (Không cần tách kiện)"
+                : $"Đề xuất tách đơn thông minh thành {splitShipmentCount} kiện xuất từ nhiều kho để giao đủ 100% đơn hàng"
+        });
+    }
+
     [HttpPost("evaluate-atp-routing")]
     [PermissionAuthorize(AppPermissions.SalesOrderRead)]
     public async Task<IActionResult> EvaluateAtpRouting(
@@ -208,6 +462,9 @@ public sealed class SalesOrdersController(
             }
         }
 
+        var (canFulfillSingleWarehouse, splitShipmentCount, splitFulfillmentPlan, _) =
+            await BuildSplitFulfillmentPreviewCoreAsync(null, warehouseId, accessibleIds, cancellationToken);
+
         var atpFulfillmentRatePct = totalDemandQuantity > 0m
             ? Math.Round(Math.Min(100m, totalAtpQuantity * 100m / totalDemandQuantity), 2)
             : 100m;
@@ -222,6 +479,9 @@ public sealed class SalesOrdersController(
             totalDemandQuantity,
             atpFulfillmentRatePct,
             optimalWarehouseNode,
+            canFulfillSingleWarehouse,
+            splitShipmentCount,
+            splitFulfillmentPlan,
             atpCtpPromiseStatus = "Đã đối chiếu khả năng cung ứng khả dụng (ATP) theo thời gian thực",
             fulfillmentNodeRouting = $"Điều phối xuất từ kho tối ưu: {optimalWarehouseNode}",
             allocationFairnessPolicy = "Phân bổ công bằng theo cấp độ dịch vụ (SLA) & thứ tự ưu tiên đơn hàng",

@@ -83,4 +83,84 @@ describe('Stocktakes shared production UI', () => {
     expect(view.getByLabelText('Số lượng thực tế SKU-10')).toBeTruthy();
     expect(view.getByLabelText('Ghi chú kiểm kê SKU-10')).toBeTruthy();
   });
+
+  it('evaluates stocktake auto-approval threshold (<1% & <=500.000đ) and renders recount round 1/2 table', async () => {
+    const autoApprovalPayload = {
+      stocktakeId: 1,
+      stocktakeCode: 'ST-2026-0001',
+      eligibleForAutoApproval: false,
+      requiresDirectorApproval: true,
+      autoApprovedLineCount: 1,
+      directorReviewLineCount: 1,
+      maxAllowedVariancePct: 1.0,
+      maxAllowedVarianceValueVnd: 500000,
+      lines: [
+        {
+          detailId: 11,
+          productId: 10,
+          productCode: 'SKU-10',
+          productName: 'Sản phẩm 10',
+          systemQuantity: 200,
+          actualQuantity: 199,
+          firstCountQty: 199,
+          secondCountQty: 199,
+          recountRound: 2,
+          varianceQty: -1,
+          variancePct: 0.5,
+          unitCost: 100000,
+          varianceValueVnd: 100000,
+          autoApproved: true,
+          decisionCode: 'AUTO_APPROVE_ELIGIBLE',
+        },
+        {
+          detailId: 12,
+          productId: 11,
+          productCode: 'SKU-11',
+          productName: 'Sản phẩm 11',
+          systemQuantity: 50,
+          actualQuantity: 45,
+          firstCountQty: 44,
+          secondCountQty: 45,
+          recountRound: 2,
+          varianceQty: -5,
+          variancePct: 10.0,
+          unitCost: 200000,
+          varianceValueVnd: 1000000,
+          autoApproved: false,
+          decisionCode: 'REQUIRES_WAREHOUSE_DIRECTOR_APPROVAL',
+        },
+      ],
+    };
+
+    get.mockImplementation(async (url) => {
+      if (url === '/api/stocktakes') return { data: [summary] } as never;
+      if (url === '/api/warehouses') return { data: [{ id: 1, name: 'DC Hồ Chí Minh', isActive: true }] } as never;
+      if (url === '/api/stocktakes/1') return { data: detail } as never;
+      if (url === '/api/v1/stocktakes/1/count-attempts-and-auto-approval') return { data: autoApprovalPayload } as never;
+      return { data: [] } as never;
+    });
+
+    const post = vi.mocked(apiClient.post);
+    post.mockImplementation(async (url) => {
+      if (url === '/api/v1/stocktakes/1/evaluate-auto-approval') {
+        return { data: autoApprovalPayload } as never;
+      }
+      return { data: {} } as never;
+    });
+
+    const view = render(<Stocktakes />);
+    await view.findByText('ST-2026-0001');
+
+    const evalBtn = view.getByTestId('btn-evaluate-stocktake-auto-approval');
+    fireEvent.click(evalBtn);
+
+    const recountTable = await view.findByRole('table', {
+      name: 'Bảng đối chiếu lịch sử đếm lại và đánh giá tự động duyệt',
+    });
+    expect(recountTable).toBeTruthy();
+    expect(within(recountTable).getByText('Đếm Lần 1')).toBeTruthy();
+    expect(within(recountTable).getByText('Đếm Lại Lần 2')).toBeTruthy();
+    expect(await within(recountTable).findByText('Tự động duyệt (<1% & ≤500k)')).toBeTruthy();
+    expect(within(recountTable).getByText('Cần Giám đốc kho duyệt')).toBeTruthy();
+  });
 });

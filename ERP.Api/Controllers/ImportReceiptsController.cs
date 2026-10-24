@@ -434,14 +434,59 @@ namespace ERP.Api.Controllers
             if (_db == null)
                 return Ok(Array.Empty<object>());
 
+            if (warehouseId.HasValue && _warehouseAccess != null)
+                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+
             var query = _db.CustomerReturns.AsNoTracking().Include(r => r.Lines).AsQueryable();
             if (warehouseId.HasValue)
                 query = query.Where(r => r.WarehouseId == warehouseId.Value);
 
-            var items = await query
+            var rawReturns = await query
                 .OrderByDescending(r => r.Id)
                 .Take(100)
-                .Select(r => new
+                .ToListAsync(cancellationToken);
+
+            var trackingNumbers = rawReturns
+                .Where(r => !string.IsNullOrWhiteSpace(r.TrackingNumber))
+                .Select(r => r.TrackingNumber!.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var exportReceiptIds = rawReturns
+                .Where(r => r.ExportReceiptId.HasValue)
+                .Select(r => r.ExportReceiptId!.Value)
+                .Distinct()
+                .ToList();
+
+            var videoEvidences = (trackingNumbers.Count > 0 || exportReceiptIds.Count > 0)
+                ? await _db.PackingVideoEvidences
+                    .AsNoTracking()
+                    .Where(v => (v.ExportReceiptId.HasValue && exportReceiptIds.Contains(v.ExportReceiptId.Value)) ||
+                                trackingNumbers.Contains(v.TrackingNumber))
+                    .ToListAsync(cancellationToken)
+                : [];
+
+            var now = DateTime.UtcNow;
+            var items = rawReturns.Select(r =>
+            {
+                var matchedVideo = videoEvidences.FirstOrDefault(v =>
+                    (r.ExportReceiptId.HasValue && v.ExportReceiptId == r.ExportReceiptId.Value) ||
+                    (!string.IsNullOrWhiteSpace(r.TrackingNumber) && string.Equals(v.TrackingNumber, r.TrackingNumber, StringComparison.OrdinalIgnoreCase)));
+                var inspectionVideoUrl = matchedVideo?.StorageUrl;
+
+                var returnAgingDays = Math.Max(0, (int)Math.Floor((now - r.CreatedAtUtc).TotalDays));
+                var isOverdueInTransit = !string.Equals(r.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase) &&
+                                         !string.Equals(r.Status, "PUTAWAY_COMPLETED", StringComparison.OrdinalIgnoreCase) &&
+                                         returnAgingDays > 7;
+                var overdueAlertLevel = isOverdueInTransit
+                    ? "CRITICAL_OVERDUE_7D"
+                    : (returnAgingDays >= 5 ? "WARNING_AGING" : "NORMAL");
+                var disputeDeadlineUtc = r.CreatedAtUtc.AddHours(48);
+                var disputeRemainingHours = Math.Round(Math.Max(0, (disputeDeadlineUtc - now).TotalHours), 1);
+                var disputeClaimStatus = !string.IsNullOrWhiteSpace(inspectionVideoUrl)
+                    ? "EVIDENCE_ATTACHED_READY"
+                    : (disputeRemainingHours <= 0 ? "DISPUTE_WINDOW_EXPIRED" : "PENDING_VIDEO_EVIDENCE");
+
+                return new
                 {
                     r.Id,
                     r.ReturnCode,
@@ -454,7 +499,15 @@ namespace ERP.Api.Controllers
                     r.Status,
                     r.CreatedBy,
                     r.CreatedAtUtc,
+                    createdAt = r.CreatedAtUtc,
                     r.CompletedAtUtc,
+                    inspectionVideoUrl,
+                    returnAgingDays,
+                    isOverdueInTransit,
+                    overdueAlertLevel,
+                    disputeDeadlineUtc,
+                    disputeRemainingHours,
+                    disputeClaimStatus,
                     lines = r.Lines.Select(l => new
                     {
                         l.Id,
@@ -468,8 +521,8 @@ namespace ERP.Api.Controllers
                         l.PackagingProductId,
                         l.PackagingQuantity
                     }).ToList()
-                })
-                .ToListAsync(cancellationToken);
+                };
+            }).ToList();
 
             return Ok(items);
         }

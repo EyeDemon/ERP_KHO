@@ -179,4 +179,44 @@ describe('CostValuation Page', () => {
     expect(alert.textContent).toContain('EINVOICE_GATEWAY_ERROR');
     expect(alert.textContent).toContain('corr-einv-500');
   });
+
+  it('renders Decree 70/2025/NĐ-CP 1.5% withheld tax, 3,000 VND fixed infrastructure fee, and net profit after tax', async () => {
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url === '/api/v1/reports/owner-gross-profit') {
+        return {
+          data: {
+            grossRevenue: 2000000,
+            movingAverageCogs: 800000,
+            netPocketProfit: 1048000,
+            netMarginPct: 52.4,
+            withheldVatAmount: 20000,
+            withheldPitAmount: 10000,
+            withheldTaxTotalAmount: 30000,
+            fixedInfrastructureFeeTotal: 3000,
+            netProfitAfterWithheldTax: 1015000,
+            costHiddenByRbac: false,
+            skuValuations: [],
+          },
+        } as never;
+      }
+      if (url === '/api/v1/inventory') {
+        return { data: { items: [] } } as never;
+      }
+      throw new Error(`Unexpected GET ${url}`);
+    });
+
+    render(<CostValuation />);
+
+    expect(
+      await screen.findByText(
+        /Báo cáo Lợi nhuận Ròng Chủ Shop Sau Khấu Trừ Thuế Sàn TMĐT NĐ 70\/2025 & Phí Hạ Tầng/i,
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText('Thuế Sàn TMĐT Khấu trừ Nộp thay 1,5% (1% GTGT + 0,5% TNCN)')).toBeTruthy();
+    expect(screen.getByText('Phí Hạ tầng Đơn hàng Cố định (3.000đ/đơn)')).toBeTruthy();
+    expect(screen.getByText('Lợi nhuận Ròng Sau Thuế Sàn & Phí')).toBeTruthy();
+    expect(screen.getByText('30.000 đ')).toBeTruthy();
+    expect(screen.getByText('3.000 đ')).toBeTruthy();
+    expect(screen.getByText('1.015.000 đ')).toBeTruthy();
+  });
 });

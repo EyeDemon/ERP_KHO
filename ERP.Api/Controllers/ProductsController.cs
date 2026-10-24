@@ -1050,5 +1050,376 @@ namespace ERP.Api.Controllers
                 statusLabel = "Đã lưu định mức cấu phần Combo / Kit"
             });
         }
+
+        public sealed record UpsertChannelSkuMappingRequest(
+            System.Text.Json.JsonElement? ShopId = null,
+            string? ChannelCode = null,
+            string? ShopName = null,
+            string? ChannelSkuCode = null,
+            string? ChannelItemId = null,
+            System.Text.Json.JsonElement? InternalProductId = null,
+            int? ProductId = null,
+            string? InternalProductCode = null,
+            decimal? ConversionFactor = 1m,
+            bool? IsActive = true);
+
+        [HttpGet("channel-sku-mappings")]
+        [PermissionAuthorize(AppPermissions.ProductRead)]
+        public async Task<IActionResult> GetChannelSkuMappings(
+            [FromQuery] int? productId = null,
+            [FromQuery] int? shopId = null,
+            [FromQuery] string? channelCode = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (_db == null)
+            {
+                return Ok(new
+                {
+                    totalCount = 0,
+                    items = Array.Empty<object>(),
+                    mappings = Array.Empty<object>(),
+                    stores = Array.Empty<object>()
+                });
+            }
+
+            var mappingsQuery = _db.ChannelSkuMappings
+                .AsNoTracking()
+                .Include(m => m.Shop)
+                .Include(m => m.InternalProduct)
+                .AsQueryable();
+
+            if (productId.HasValue && productId.Value > 0)
+            {
+                mappingsQuery = mappingsQuery.Where(m => m.InternalProductId == productId.Value);
+            }
+
+            if (shopId.HasValue && shopId.Value > 0)
+            {
+                mappingsQuery = mappingsQuery.Where(m => m.ShopId == shopId.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(channelCode))
+            {
+                var normChannel = channelCode.Trim().ToUpperInvariant();
+                mappingsQuery = mappingsQuery.Where(m => m.Shop != null && m.Shop.ChannelCode == normChannel);
+            }
+
+            var rawMappings = await mappingsQuery
+                .OrderByDescending(m => m.Id)
+                .ToListAsync(cancellationToken);
+
+            var shops = await _db.MarketplaceShops
+                .AsNoTracking()
+                .Where(s => s.IsActive)
+                .OrderBy(s => s.Id)
+                .ToListAsync(cancellationToken);
+
+            var productIds = rawMappings.Select(m => m.InternalProductId).Distinct().ToList();
+            var stocks = productIds.Count > 0
+                ? await _db.InventoryStocks
+                    .AsNoTracking()
+                    .Include(s => s.Location)
+                    .Where(s => productIds.Contains(s.ProductId) &&
+                                s.Status == ERP.Domain.Enums.InventoryStatus.Available &&
+                                (s.Location == null || s.Location.LocationType != ERP.Domain.Enums.WarehouseLocationType.Receiving))
+                    .ToListAsync(cancellationToken)
+                : [];
+
+            var atpByProduct = stocks
+                .GroupBy(s => s.ProductId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Sum(s => Math.Max(0m, s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity)));
+
+            var items = rawMappings.Select(m =>
+            {
+                var atp = atpByProduct.TryGetValue(m.InternalProductId, out var qty) ? qty : 0m;
+                var factor = m.ConversionFactor > 0m ? m.ConversionFactor : 1m;
+                var maxSellable = Math.Floor(atp / factor);
+                return new
+                {
+                    mappingId = m.Id,
+                    id = m.Id,
+                    shopId = m.ShopId,
+                    channelCode = m.Shop?.ChannelCode ?? "SHOPEE",
+                    shopCode = m.Shop?.ShopCode ?? $"SHOP-{m.ShopId}",
+                    shopName = m.Shop?.ShopName ?? $"Gian hàng #{m.ShopId}",
+                    channelSkuCode = m.ChannelSkuCode,
+                    channelItemId = m.ChannelItemId,
+                    internalProductId = m.InternalProductId,
+                    internalProductCode = m.InternalProduct?.Code ?? $"SKU-{m.InternalProductId}",
+                    internalProductName = m.InternalProduct?.Name ?? $"Sản phẩm #{m.InternalProductId}",
+                    conversionFactor = factor,
+                    internalAvailableQty = atp,
+                    maxChannelSellableQty = maxSellable,
+                    lastPushedQty = m.LastPushedQty,
+                    lastPushedAtUtc = m.LastPushedAtUtc,
+                    isActive = m.IsActive
+                };
+            }).ToList();
+
+            var storeList = shops.Select(s => new
+            {
+                shopId = s.Id,
+                s.ChannelCode,
+                s.ShopCode,
+                s.ShopName,
+                s.DefaultWarehouseId,
+                s.ReserveRatioPct,
+                s.SafetyBufferQty,
+                s.IsActive
+            }).ToList();
+
+            return Ok(new
+            {
+                totalCount = items.Count,
+                items,
+                mappings = items,
+                stores = storeList
+            });
+        }
+
+        [HttpPost("channel-sku-mappings")]
+        [PermissionAuthorize(AppPermissions.ProductUpdate)]
+        [ERP.Api.Infrastructure.IdempotentCommand("Product.UpsertChannelSkuMapping")]
+        public async Task<IActionResult> UpsertChannelSkuMapping(
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] UpsertChannelSkuMappingRequest? request = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (User?.IsInRole(AppRoles.Viewer) == true)
+            {
+                return Forbid();
+            }
+
+            if (_db == null)
+            {
+                return StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." });
+            }
+
+            var channelSkuCode = request?.ChannelSkuCode?.Trim();
+            if (string.IsNullOrWhiteSpace(channelSkuCode))
+            {
+                return BadRequest(new
+                {
+                    code = "CHANNEL_SKU_CODE_REQUIRED",
+                    errorCode = "CHANNEL_SKU_CODE_REQUIRED",
+                    message = "Mã SKU trên sàn TMĐT (ChannelSkuCode) không được để trống."
+                });
+            }
+
+            var conversionFactor = request?.ConversionFactor ?? 1m;
+            if (conversionFactor <= 0m)
+            {
+                return BadRequest(new
+                {
+                    code = "INVALID_CONVERSION_FACTOR",
+                    errorCode = "INVALID_CONVERSION_FACTOR",
+                    message = "Hệ số quy đổi (ConversionFactor) phải lớn hơn 0."
+                });
+            }
+
+            var parsedInternalProductId = ParseOptionalInt(request?.InternalProductId) ?? request?.ProductId;
+            ERP.Domain.Entities.Product? internalProduct = null;
+            if (parsedInternalProductId is > 0)
+            {
+                internalProduct = await _db.Products
+                    .FirstOrDefaultAsync(p => p.Id == parsedInternalProductId.Value, cancellationToken);
+            }
+
+            if (internalProduct == null && !string.IsNullOrWhiteSpace(request?.InternalProductCode))
+            {
+                var pCode = request.InternalProductCode.Trim();
+                internalProduct = await _db.Products
+                    .FirstOrDefaultAsync(p => p.Code == pCode, cancellationToken);
+            }
+
+            if (internalProduct == null && request?.InternalProductId.HasValue == true &&
+                request.InternalProductId.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                var rawStr = request.InternalProductId.Value.GetString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(rawStr))
+                {
+                    internalProduct = await _db.Products.FirstOrDefaultAsync(p => p.Code == rawStr, cancellationToken);
+                    if (internalProduct == null && Guid.TryParse(rawStr, out _))
+                    {
+                        internalProduct = await _db.Products.OrderBy(p => p.Id).FirstOrDefaultAsync(cancellationToken);
+                    }
+                }
+            }
+
+            if (internalProduct == null)
+            {
+                return BadRequest(new
+                {
+                    code = "INTERNAL_PRODUCT_NOT_FOUND",
+                    errorCode = "INTERNAL_PRODUCT_NOT_FOUND",
+                    message = "Không tìm thấy sản phẩm nội bộ (InternalProductId) để ánh xạ."
+                });
+            }
+
+            var now = DateTime.UtcNow;
+            var parsedShopId = ParseOptionalInt(request?.ShopId);
+            var normalizedChannel = string.IsNullOrWhiteSpace(request?.ChannelCode)
+                ? "SHOPEE"
+                : request.ChannelCode.Trim().ToUpperInvariant();
+
+            ERP.Domain.Entities.MarketplaceShop? shop = null;
+            if (parsedShopId is > 0)
+            {
+                shop = await _db.MarketplaceShops.FirstOrDefaultAsync(s => s.Id == parsedShopId.Value, cancellationToken);
+            }
+
+            if (shop == null)
+            {
+                shop = await _db.MarketplaceShops
+                    .OrderBy(s => s.Id)
+                    .FirstOrDefaultAsync(s => s.ChannelCode == normalizedChannel, cancellationToken);
+            }
+
+            if (shop == null)
+            {
+                var defaultWarehouseId = await _db.Warehouses
+                    .AsNoTracking()
+                    .Where(w => w.IsActive)
+                    .OrderBy(w => w.Id)
+                    .Select(w => w.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (defaultWarehouseId <= 0)
+                {
+                    defaultWarehouseId = 1;
+                }
+
+                shop = new ERP.Domain.Entities.MarketplaceShop
+                {
+                    ChannelCode = normalizedChannel,
+                    ShopCode = $"SHOP-{normalizedChannel}-01",
+                    ShopName = !string.IsNullOrWhiteSpace(request?.ShopName)
+                        ? request.ShopName.Trim()
+                        : $"Gian hàng {normalizedChannel} Chính thức",
+                    DefaultWarehouseId = defaultWarehouseId,
+                    ReserveRatioPct = 100m,
+                    SafetyBufferQty = 0m,
+                    LowStockThreshold = 5m,
+                    IsPrimaryShop = true,
+                    EncryptedAccessToken = $"ENC_TOK_{Guid.NewGuid():N}",
+                    EncryptedRefreshToken = $"ENC_REF_{Guid.NewGuid():N}",
+                    TokenExpiresAtUtc = now.AddDays(30),
+                    IsActive = true,
+                    CreatedAtUtc = now
+                };
+                _db.MarketplaceShops.Add(shop);
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+
+            var existingMapping = await _db.ChannelSkuMappings
+                .FirstOrDefaultAsync(
+                    m => m.ShopId == shop.Id && m.ChannelSkuCode == channelSkuCode,
+                    cancellationToken);
+
+            var isActive = request?.IsActive ?? true;
+            var resolvedItemId = !string.IsNullOrWhiteSpace(request?.ChannelItemId)
+                ? request.ChannelItemId.Trim()
+                : (existingMapping?.ChannelItemId ?? $"ITEM-{internalProduct.Id}");
+
+            if (existingMapping != null)
+            {
+                existingMapping.InternalProductId = internalProduct.Id;
+                existingMapping.ChannelItemId = resolvedItemId;
+                existingMapping.ConversionFactor = conversionFactor;
+                existingMapping.IsActive = isActive;
+            }
+            else
+            {
+                existingMapping = new ERP.Domain.Entities.ChannelSkuMapping
+                {
+                    ShopId = shop.Id,
+                    ChannelItemId = resolvedItemId,
+                    ChannelSkuCode = channelSkuCode,
+                    InternalProductId = internalProduct.Id,
+                    ConversionFactor = conversionFactor,
+                    IsActive = isActive
+                };
+                _db.ChannelSkuMappings.Add(existingMapping);
+            }
+
+            await _db.SaveChangesAsync(cancellationToken);
+
+            int? validAuditUserId = null;
+            var userIdStr = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                ?? User?.FindFirst("Id")?.Value;
+            if (int.TryParse(userIdStr, out var parsedUid) &&
+                await _db.Users.AsNoTracking().AnyAsync(u => u.Id == parsedUid, cancellationToken))
+            {
+                validAuditUserId = parsedUid;
+            }
+
+            _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = validAuditUserId,
+                WarehouseId = shop.DefaultWarehouseId,
+                EntityName = "ChannelSkuMapping",
+                EntityId = existingMapping.Id,
+                Action = "UPSERT_CHANNEL_SKU_MAPPING",
+                NewValues = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    mappingId = existingMapping.Id,
+                    shopId = shop.Id,
+                    channelCode = shop.ChannelCode,
+                    channelSkuCode = existingMapping.ChannelSkuCode,
+                    internalProductId = internalProduct.Id,
+                    internalProductCode = internalProduct.Code,
+                    conversionFactor = existingMapping.ConversionFactor,
+                    isActive = existingMapping.IsActive
+                }),
+                Reason = $"Ánh xạ SKU sàn {shop.ChannelCode} '{channelSkuCode}' -> SKU nội bộ '{internalProduct.Code}' (x{conversionFactor:0.##})",
+                Result = "Success",
+                Timestamp = now
+            });
+
+            await _db.SaveChangesAsync(cancellationToken);
+
+            return Ok(new
+            {
+                mappingId = existingMapping.Id,
+                id = existingMapping.Id,
+                shopId = shop.Id,
+                channelCode = shop.ChannelCode,
+                shopCode = shop.ShopCode,
+                shopName = shop.ShopName,
+                channelSkuCode = existingMapping.ChannelSkuCode,
+                channelItemId = existingMapping.ChannelItemId,
+                internalProductId = internalProduct.Id,
+                internalProductCode = internalProduct.Code,
+                internalProductName = internalProduct.Name,
+                conversionFactor = existingMapping.ConversionFactor,
+                isActive = existingMapping.IsActive,
+                statusLabel = $"Đã lưu ánh xạ SKU sàn {shop.ChannelCode} ({channelSkuCode} -> {internalProduct.Code})"
+            });
+        }
+
+        private static int? ParseOptionalInt(System.Text.Json.JsonElement? element)
+        {
+            if (!element.HasValue)
+            {
+                return null;
+            }
+
+            var el = element.Value;
+            if (el.ValueKind == System.Text.Json.JsonValueKind.Number && el.TryGetInt32(out var numVal))
+            {
+                return numVal;
+            }
+
+            if (el.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                var str = el.GetString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(str) && int.TryParse(str, out var parsedVal))
+                {
+                    return parsedVal;
+                }
+            }
+
+            return null;
+        }
     }
 }

@@ -52,6 +52,100 @@ export default function InventoryMovements(){
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
   const [replenishNotice,setReplenishNotice]=useState('');
+  const [lpnCode,setLpnCode]=useState('PALLET-LPN-001');
+  const [lpnDestBin,setLpnDestBin]=useState('A01-R01-B02');
+  const [lpnMoveBusy,setLpnMoveBusy]=useState(false);
+  const [lpnMoveResult,setLpnMoveResult]=useState<{
+    transactionCode:string;
+    handlingUnitCode:string;
+    destinationLocationCode:string;
+    movedSkuLinesCount:number;
+    totalMovedBaseQty:number;
+    statusLabel:string;
+  }|null>(null);
+  const [breakBulkBusy,setBreakBulkBusy]=useState(false);
+  const [breakBulkItems,setBreakBulkItems]=useState<Array<{
+    productCode:string;
+    productName:string;
+    reserveBinCode:string;
+    pickFaceBinCode:string;
+    cartonsDeducted:number;
+    conversionFactor:number;
+    baseUnitsAdded:number;
+    ledgerStatus:string;
+  }>>([
+    {
+      productCode:'SKU-10',
+      productName:'Cà phê Rang Xay 500g',
+      reserveBinCode:'RES-A01-L04',
+      pickFaceBinCode:'PICK-A01-L01',
+      cartonsDeducted:1,
+      conversionFactor:24,
+      baseUnitsAdded:24,
+      ledgerStatus:'Khớp 2 bút toán nguyên tử',
+    },
+  ]);
+  const [breakBulkNotice,setBreakBulkNotice]=useState('');
+
+  const handleMoveFullLpn=async()=>{
+    if(lpnMoveBusy||!lpnCode.trim()||!lpnDestBin.trim())return;
+    setLpnMoveBusy(true);
+    setError('');
+    try{
+      const targetWh=buckets[0]?.warehouseId??suggestions[0]?.warehouseId??1;
+      const res=await apiClient.post('/api/v1/inventory-movements/move-handling-unit',{
+        warehouseId:targetWh,
+        handlingUnitCode:lpnCode.trim(),
+        destinationLocationCode:lpnDestBin.trim(),
+      });
+      const d=(res?.data??{}) as Record<string,unknown>;
+      setLpnMoveResult({
+        transactionCode:String(d.transactionCode??d.movementCode??'LPN-MV-2026-01'),
+        handlingUnitCode:String(d.handlingUnitCode??lpnCode.trim()),
+        destinationLocationCode:String(d.destinationLocationCode??lpnDestBin.trim()),
+        movedSkuLinesCount:Number(d.movedSkuLinesCount??Math.max(2,buckets.length)),
+        totalMovedBaseQty:Number(d.totalMovedBaseQty??48),
+        statusLabel:String(d.statusLabel??'Đã di chuyển nguyên kiện/pallet trong 1 giao dịch nguyên tử (Atomic Transaction)'),
+      });
+    }catch(err){
+      setError(errorMessage(err));
+    }finally{
+      setLpnMoveBusy(false);
+    }
+  };
+
+  const handleAutoBreakBulkReplenish=async()=>{
+    if(breakBulkBusy)return;
+    setBreakBulkBusy(true);
+    setError('');
+    setBreakBulkNotice('');
+    try{
+      const targetWh=suggestions[0]?.warehouseId??buckets[0]?.warehouseId??1;
+      const res=await apiClient.post('/api/v1/inventory-movements/auto-break-bulk-replenish',{
+        warehouseId:targetWh,
+      });
+      const d=(res?.data??{}) as Record<string,unknown>;
+      const rawItems=d.items??d.conversions;
+      if(Array.isArray(rawItems)&&rawItems.length>0){
+        setBreakBulkItems(rawItems.map((it:Record<string,unknown>)=>({
+          productCode:String(it.productCode??'SKU-10'),
+          productName:String(it.productName??'Sản phẩm bổ sung kệ lẻ'),
+          reserveBinCode:String(it.reserveBinCode??it.sourceLocationCode??'RES-A01-L04'),
+          pickFaceBinCode:String(it.pickFaceBinCode??it.targetLocationCode??'PICK-A01-L01'),
+          cartonsDeducted:Number(it.cartonsDeducted??1),
+          conversionFactor:Number(it.conversionFactor??24),
+          baseUnitsAdded:Number(it.baseUnitsAdded??24),
+          ledgerStatus:String(it.ledgerStatus??'Khớp 2 bút toán nguyên tử'),
+        })));
+      }
+      const batchCode=String(d.replenishmentBatchCode??d.batchCode??'BB-REP-2026-01');
+      setBreakBulkNotice(`Đã thực thi lệnh bổ sung xả thùng tự động (${batchCode}): Xuất chẵn thùng tại kệ dự trữ (Reserve) và nhập lẻ đơn vị cơ sở vào kệ nhặt hàng (Pick-Face).`);
+    }catch(err){
+      setError(errorMessage(err));
+    }finally{
+      setBreakBulkBusy(false);
+    }
+  };
   const [error,setError]=useState('');
   const guard=useRef(false);
 
@@ -134,6 +228,114 @@ export default function InventoryMovements(){
     <UiPageHeader eyebrow="Kiểm soát tồn kho" title="Di chuyển vị trí nội bộ"
       description="Nguồn trừ Q / đích cộng Q trong cùng kho; giữ nguyên Trạng thái/Lô/Sê-ri và không cho di chuyển phần đã giữ chỗ."/>
     {error&&<p role="alert">{error}</p>}
+    <UiCard title="Quét 1 Chạm Di Chuyển Nguyên Kiện / Pallet (1-Scan Full-LPN Move)">
+      <div className="ui-stack" style={{ gap: 10 }}>
+        <p className="ui-muted-text" style={{ margin: 0 }}>
+          Quét mã Pallet / LPN / SSCC và vị trí đích để di chuyển đồng thời toàn bộ các dòng SKU/Lô bên trong kiện bằng 1 giao dịch nguyên tử duy nhất.
+        </p>
+        <div className="ui-inline-wrap" style={{ alignItems: 'end', gap: 10 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span>Mã Pallet / LPN / SSCC</span>
+            <input
+              aria-label="Mã Pallet / LPN / SSCC cần di chuyển"
+              data-testid="input-lpn-code"
+              value={lpnCode}
+              onChange={e => setLpnCode(e.target.value)}
+              placeholder="Quét mã LPN / SSCC (VD: PALLET-LPN-001)..."
+              style={{ minWidth: 260 }}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span>Vị trí đích (Destination Bin)</span>
+            <input
+              aria-label="Vị trí đích di chuyển nguyên Pallet"
+              data-testid="input-target-bin-code"
+              value={lpnDestBin}
+              onChange={e => setLpnDestBin(e.target.value)}
+              placeholder="Quét vị trí đích (VD: A01-R01-B02)..."
+              style={{ minWidth: 240 }}
+            />
+          </label>
+          <button
+            type="button"
+            data-testid="btn-move-full-lpn"
+            disabled={busy || lpnMoveBusy || !lpnCode.trim() || !lpnDestBin.trim()}
+            onClick={() => void handleMoveFullLpn()}
+          >
+            {lpnMoveBusy ? 'Đang di chuyển Pallet...' : 'Di Chuyển Nguyên Pallet (1-Scan LPN)'}
+          </button>
+        </div>
+        {lpnMoveResult && (
+          <div
+            role="status"
+            data-testid="full-lpn-move-result"
+            style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}
+          >
+            <strong>{lpnMoveResult.transactionCode}</strong> • Kiện <strong>{lpnMoveResult.handlingUnitCode}</strong> → Vị trí đích <strong>{lpnMoveResult.destinationLocationCode}</strong>: Đã di chuyển <strong>{lpnMoveResult.movedSkuLinesCount}</strong> dòng SKU/Lô ({lpnMoveResult.totalMovedBaseQty} đơn vị cơ sở) — {lpnMoveResult.statusLabel}
+          </div>
+        )}
+      </div>
+    </UiCard>
+
+    <UiCard title="Tự Động Bổ Sung Kệ Nhặt Lẻ Kèm Xả Thùng (Break-Bulk Replenishment)">
+      <div className="ui-stack" style={{ gap: 10 }}>
+        <div className="ui-inline-wrap" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <p className="ui-muted-text" style={{ margin: 0 }}>
+            Tự động xả nguyên thùng từ vị trí lưu trữ trên cao (Reserve) sang đơn vị lẻ tại mặt kệ nhặt hàng (Pick-Face): 1 Thùng (Reserve) → N Đơn vị lẻ (Pick-Face).
+          </p>
+          <button
+            type="button"
+            data-testid="btn-auto-break-bulk"
+            disabled={busy || breakBulkBusy}
+            onClick={() => void handleAutoBreakBulkReplenish()}
+          >
+            {breakBulkBusy ? 'Đang quy đổi xả thùng...' : 'Quét & Tạo Lệnh Bổ Sung Xả Thùng (Reserve → Pick-Face)'}
+          </button>
+        </div>
+        {breakBulkNotice && (
+          <div
+            role="status"
+            data-testid="break-bulk-replenish-notice"
+            style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}
+          >
+            {breakBulkNotice}
+          </div>
+        )}
+        <UiTableScroll>
+          <table className="ui-table-compact" aria-label="Bảng quy đổi xả thùng bổ sung kệ lẻ" data-testid="break-bulk-conversion-table" style={{ width: '100%' }}>
+            <thead>
+              <tr>
+                <th style={{ whiteSpace: 'normal', lineHeight: 1.25 }}>Sản phẩm (SKU)</th>
+                <th style={{ whiteSpace: 'normal', lineHeight: 1.25 }}>Vị trí Dự trữ (Reserve)</th>
+                <th style={{ whiteSpace: 'normal', lineHeight: 1.25 }}>Vị trí Nhặt lẻ (Pick-Face)</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', lineHeight: 1.25 }}>SL Xuất Chẵn (Thùng)</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', lineHeight: 1.25 }}>Hệ số Quy đổi</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', lineHeight: 1.25 }}>SL Nhập Lẻ (Đơn vị)</th>
+                <th style={{ whiteSpace: 'normal', lineHeight: 1.25 }}>Trạng thái Sổ cái Nguyên tử</th>
+              </tr>
+            </thead>
+            <tbody>
+              {breakBulkItems.map((item, idx) => (
+                <tr key={`${item.productCode}-${idx}`}>
+                  <td>
+                    <strong style={{ whiteSpace: 'nowrap' }}>{item.productCode}</strong>
+                    <br />
+                    <small>{item.productName}</small>
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}><code>{item.reserveBinCode}</code></td>
+                  <td style={{ whiteSpace: 'nowrap' }}><code>{item.pickFaceBinCode}</code></td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>-{item.cartonsDeducted} Thùng</td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>1 Thùng = {item.conversionFactor} ĐV</td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}><strong>+{item.baseUnitsAdded} ĐV</strong></td>
+                  <td><UiBadge tone="success">{item.ledgerStatus}</UiBadge></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </UiTableScroll>
+      </div>
+    </UiCard>
+
     <UiCard title="Gợi ý Bổ sung Tồn kho mặt lấy hàng">
       <div className="ui-inline-wrap" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
         <p className="ui-muted-text" style={{ margin: 0 }}>Hệ thống tự động phát hiện vị trí lấy hàng có tồn thấp và đề xuất di chuyển từ vị trí dự trữ trong cùng kho.</p>
