@@ -519,15 +519,15 @@ export default function PackingSessions(){
               <div style={{ marginTop: 6, fontSize: 11.5, fontWeight: 500, color: '#1e293b', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 4, fontVariantNumeric: 'tabular-nums' }}>
                 <span>Kích thước thùng: <strong>{cartonRecommendation.lengthCm}×{cartonRecommendation.widthCm}×{cartonRecommendation.heightCm} cm</strong></span>
                 <span>Tổng thể tích hàng: <strong>{cartonRecommendation.totalItemsVolumeM3} m³</strong> ({cartonRecommendation.volumeFillRatePercent}% lấp đầy)</span>
-                <span>Trọng lượng thực (Gross): <strong>{cartonRecommendation.grossWeightKg} kg</strong></span>
-                <span>Quy đổi ĐVVC (DIM L×W×H/6000): <strong>{cartonRecommendation.dimWeightKg} kg</strong></span>
+                <span>Trọng lượng thực tế: <strong>{cartonRecommendation.grossWeightKg} kg</strong></span>
+                <span>Trọng lượng quy đổi (D×R×C / 6000): <strong>{cartonRecommendation.dimWeightKg} kg</strong></span>
               </div>
               {cartonRecommendation.dimWeightKg > cartonRecommendation.grossWeightKg && (
                 <div
                   data-testid="dim-weight-warning-badge"
                   style={{ marginTop: 6, padding: '4px 8px', borderRadius: 6, background: '#fffbeb', border: '1px solid #f59e0b', color: '#92400e', fontSize: 11.5, fontWeight: 700 }}
                 >
-                  ⚠️ Cảnh báo Cước Quy Đổi (DIM Weight &gt; Trọng lượng thực)
+                  ⚠️ Cảnh báo Cước Quy Đổi (Trọng lượng quy đổi &gt; Trọng lượng thực tế)
                 </div>
               )}
             </div>
@@ -578,7 +578,7 @@ export default function PackingSessions(){
                 onClick={() => void handleRecommendCarton3D(cartonRecommendation.recommendedCartonCode)}
                 style={{ fontSize: 11.5, padding: '4px 8px' }}
               >
-                {cartonRecommendBusy ? 'Đang tính 3D...' : 'Tính Toán Gợi Ý Thùng 3D & Cước Quy Đổi (DIM)'}
+                {cartonRecommendBusy ? 'Đang tính 3D...' : 'Tính Toán Gợi Ý Thùng 3D & Trọng Lượng Quy Đổi'}
               </button>
             </div>
           </div>
@@ -586,7 +586,7 @@ export default function PackingSessions(){
           <div style={{ padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
               <strong style={{ fontSize: 13, color: '#0f172a', whiteSpace: 'nowrap' }}>Bước 3: Ghi Hình Đóng Gói SHA-256</strong>
-              <UiBadge tone="success">CAM-PACK-01 • Watermark</UiBadge>
+              <UiBadge tone="success">CAM-PACK-01 • Đóng dấu Thời gian</UiBadge>
             </div>
             <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.45 }}>
               <div>Mốc thời gian quét: <strong>{unifiedScanTimestamp}</strong> • Vận đơn: <strong>{videoAwbCode || 'SPXVN058291042'}</strong></div>
@@ -612,7 +612,7 @@ export default function PackingSessions(){
                 disabled={!!busy || governanceBusy}
                 onClick={() => void handleToggleWebrtcCamera()}
               >
-                Bật Camera Bàn Đóng Gói (WebRTC Watermark)
+                Bật Camera Bàn Đóng Gói (Đóng dấu Thời gian Thực)
               </button>
             <button
               type="button"

@@ -4055,6 +4055,22 @@ BEGIN
     (1, @claim48hReturnId, {lotProduct.Id}, {receivingLocation.Id}, {storageBin.Id}, 1, 420000, N'DAMAGED_PACKAGING', N'REPACK_REQUIRED', NULL, 0);
 END;
 
+IF OBJECT_ID(N'dbo.CustomerReturns', N'U') IS NOT NULL
+BEGIN
+    UPDATE dbo.CustomerReturns
+    SET ReturnReason = REPLACE(ReturnReason, N'chua kiểm định', N'chưa kiểm định')
+    WHERE ReturnReason LIKE N'%chua kiểm định%';
+END;
+
+UPDATE dbo.AuditLogs
+SET Reason = REPLACE(Reason, N'chua kiểm định', N'chưa kiểm định'),
+    NewValues = REPLACE(NewValues, N'chua kiểm định', N'chưa kiểm định')
+WHERE Reason LIKE N'%chua kiểm định%' OR NewValues LIKE N'%chua kiểm định%';
+
+UPDATE dbo.ImportReceipts
+SET Note = REPLACE(Note, N'chua kiểm định', N'chưa kiểm định')
+WHERE Note LIKE N'%chua kiểm định%';
+
 DELETE FROM dbo.StocktakeAdjustmentProposals WHERE TenantId = 1;
 INSERT INTO dbo.StocktakeAdjustmentProposals (TenantId, ProposalCode, WarehouseId, StocktakeId, ProductId, LocationId, ReasonCode, SystemQuantity, CountedQuantity, DeltaQuantity, UnitCost, VariancePct, VarianceValue, IsAutoApproved, Status, CreatedBy, CreatedAtUtc, ApprovedBy, ApprovedAtUtc, Note)
 VALUES

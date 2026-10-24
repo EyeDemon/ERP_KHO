@@ -2443,3 +2443,48 @@ Thực hiện nghiêm ngặt theo **Quy tắc Điều phối 4 Bước ("Phân c
 <!-- slide -->
 ![3PL Daily Storage Occupancy Snapshot & Billing Desktop — Wave 56 (`/partner-debts`: Đối soát & Chốt Snapshot Lưu Kho 3PL Hàng Ngày theo `Pallet-Day / CBM-Day / Bin-Day` hiển thị `Chủ hàng Mặc định (Tự doanh & 3PL Chính)`, `2 SKU`, `4 Bin`, `2,08 m³`, `1,73 Pallet`, `51.140 VND/ngày`, `1.534.200 VND/tháng` và hóa đơn `AR-3PL-20261021`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave56-3pl-storage-snapshot-desktop.png)
 ````
+
+---
+
+## 58. Nghiệm thu Thực thi Phẫu thuật `Wave 58` — Khóa Sổ Tinh Chỉnh 100% Zero-Defect Trên 6 Màn Hình (`[W58-01] → [W58-05]` — Baseline `commit 078d7d0`)
+
+### 58.1. Ma trận Điều phối 2 Subagents & Phân vùng Độc quyền File (`Zero File Overlap`)
+
+| Chặng | Subagent | Vai trò & Nhiệm vụ Độc quyền (`[W58-01] → [W58-05]`) | File Handoff | Trạng thái |
+| :--- | :--- | :--- | :--- | :---: |
+| **Đợt 1 (Backend API & QA Seed — `[W58-01, W58-02]`)** | [`Subagent 1A`](conversation://afc2f112-342d-4ad0-ad06-942866c3ad4e) | **Backend (`[W58-01, W58-02]`):** Trong [`InventoryMovementService.cs`](file:///d:/ERP_KHO/ERP.Infrastructure/Services/InventoryMovementService.cs#L670-L745) và [`InventoryMovementsController.cs`](file:///d:/ERP_KHO/ERP.Api/Controllers/InventoryMovementsController.cs#L65-L155): định dạng `totalMovedQty` với `:0.##` (triệt tiêu `,0000`), ưu tiên `PALLET-LPN-001` $\rightarrow$ `BIN-A01-03` (`2 dòng tồn kho, tổng 14 đơn vị cơ sở`), xử lý idempotent khi kiện đã ở vị trí đích, đồng bộ `AutoBreakBulkReplenishAsync` sang `QA-E2E-001` (`Thùng linh kiện điện tử QA-01`), `BIN-A01-03` $\rightarrow$ `BIN-A01-01`, `"Khớp 2 bút toán (-1 Thùng / +24 ĐV)"`. Trong [`ImportReceiptsController.cs`](file:///d:/ERP_KHO/ERP.Api/Controllers/ImportReceiptsController.cs#L47-L50) và [`tools/ERP.QaSeed/Program.cs`](file:///d:/ERP_KHO/tools/ERP.QaSeed/Program.cs#L4030-L4075): chuẩn hóa `"chưa kiểm định"` cho `RMA-RTS-OVERDUE-09D` trên cả 3 SQL Server instances | [`HANDOFF_SUBAGENT_1A.md`](file:///C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/HANDOFF_SUBAGENT_1A.md) | **HOÀN TẤT 100%** |
+| **Đợt 1 (Frontend Tinh chỉnh 6 Màn hình & Vitest — `[W58-01] → [W58-05]`)** | [`Subagent 2A`](conversation://ab44579d-c7b7-4dfa-9647-6dac9760e23e) | **Frontend (`[W58-01] → [W58-05]`):** (1) [`InventoryMovements.tsx`](file:///d:/ERP_KHO/frontend/src/pages/InventoryMovements.tsx#L50-L335): mặc định `lpnDestBin = 'BIN-A01-03'`, gộp thông báo `full-lpn-move-result` thành 1 câu chuẩn không có `,0000`, đồng bộ `QA-E2E-001` / `BIN-A01-03` / `BIN-A01-01` / `"Khớp 2 bút toán (-1 Thùng / +24 ĐV)"` và xóa toàn bộ từ tiếng Anh thừa trong ngoặc; (2) [`ImportReceipts.tsx`](file:///d:/ERP_KHO/frontend/src/pages/ImportReceipts.tsx#L235-L265): chuẩn hóa dấu tiếng Việt `"chưa kiểm định"`; (3) [`PickingTasks.tsx`](file:///d:/ERP_KHO/frontend/src/pages/PickingTasks.tsx#L680-L745): đổi mã mặc định Put-to-Wall sang `'QA-E2E-001'` và Việt hóa 100% tiêu đề/nhãn/nút (`"Tường Chia Chọn Đa Đơn & Giỏ Nhặt Cụm (SLOT-01..SLOT-08)"`); (4) [`Stocktakes.tsx`](file:///d:/ERP_KHO/frontend/src/pages/Stocktakes.tsx#L760-L795): mặc định chọn `'QA-E2E-001'` trong `<select aria-label="Sản phẩm điều chỉnh">`; (5) [`PackingSessions.tsx`](file:///d:/ERP_KHO/frontend/src/pages/PackingSessions.tsx#L515-L625) & [`PartnerDebts.tsx`](file:///d:/ERP_KHO/frontend/src/pages/PartnerDebts.tsx#L355-L415): Việt hóa 100% nhãn trọng lượng quy đổi, camera bàn đóng gói và bảng số dư lưu kho 3PL hàng ngày | [`HANDOFF_SUBAGENT_2A.md`](file:///C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/HANDOFF_SUBAGENT_2A.md) | **HOÀN TẤT 100%** |
+
+---
+
+### 58.2. Kết quả Nghiệm thu 5 Cổng Chất lượng (`Gate 1 → Gate 5` — Wave 58 `ZERO-DEFECT POLISH & AUDIT CLOSURE`)
+
+1. **Gate 1 — Encoding, Clean Architecture & Solution Release Build (`task-15245`, `task-15263`)**:
+   - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-encoding.ps1` → **`Exit Code 0`** (`0` lỗi encoding, 100% UTF-8 hợp lệ).
+   - `dotnet build ERP.slnx -c Release --no-restore` → **`0 Warning(s), 0 Error(s)`**.
+   - `MigrationSnapshotParityTests` → **`3 / 3 PASS`** (`0` bảng loại trừ).
+2. **Gate 2 — Full Backend API & Real SQL Server Integration Suites (`task-15251`, `task-15263` — Không dùng `--filter`)**:
+   - `dotnet run --project tools/ERP.SqlIntegrationHarness/ERP.SqlIntegrationHarness.csproj -c Release --no-build` → **`651 / 651 PASS`** (`0 Failed, 0 Skipped`, chạy trên SQL Server thật `ERP_KHO_Integration_20261024_140355_c49d3dd7`).
+   - `dotnet test ERP.Api.Tests/ERP.Api.Tests.csproj -c Release --no-build` → **`515 / 515 PASS`** (`0 Failed, 0 Skipped`).
+   - Post-Harness `ERP.QaSeed --apply` → **`3 / 3` SQL Server instances (`localhost`, `.\SQLEXPRESS`, `(localdb)\MSSQLLocalDB`) seeded (`Exit Code 0`)**.
+   - **Tổng cộng Gate 2**: **`515 + 651 = 1.166 / 1.166` bài kiểm thử Backend & SQL Server PASS tuyệt đối (`100%`)**.
+3. **Gate 3 — Frontend Production Build & Full Vitest (`task-15247`, `task-15271`)**:
+   - `npm --prefix frontend run build` → **`Exit Code 0`** (`1,711 modules transformed`).
+   - `npm --prefix frontend test -- --run --test-timeout=15000` → **`70 / 70` test files, `397 / 397` tests PASS (`0 Failed, 0 Skipped`)**.
+   - **Tổng hợp toàn hệ thống (`Gate 2 + Gate 3`)**: **`515 + 651 + 397 = 1.563 / 1.563` bài kiểm thử tự động PASS tuyệt đối (`100%`)**.
+4. **Gate 4 — Live Browser QA & Kiểm định Pixel-by-Pixel 6 Ảnh chụp (`gate4-wave58-*.png`)**:
+   - Đã kiểm chứng trực tiếp trên trình duyệt thật `1440x900` kết nối `http://localhost:5173` + `http://localhost:5260` trên cơ sở dữ liệu `ERP_KHO` (`0px` tràn ngang trên cả 6 màn hình, `0` lỗi PageError, 100% Tiếng Việt chuẩn kho vận, toàn bộ 5 phát hiện `[W58-01] → [W58-05]` đã được khóa sổ sạch 100%):
+
+````carousel
+![1-Scan Full-LPN Move & Break-Bulk Replenishment Desktop — Wave 58 (`/inventory-movements`: `PALLET-LPN-001 -> BIN-A01-03` hiển thị 1 câu thông báo duy nhất `2 dòng tồn kho, tổng 14 đơn vị cơ sở` không còn `,0000`, và bảng Bổ Sung Kệ Nhặt Lẻ hiển thị `QA-E2E-001`, `BIN-A01-03 -> BIN-A01-01`, `Khớp 2 bút toán (-1 Thùng / +24 ĐV)` 100% Tiếng Việt)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave58-lpn-move-breakbulk-desktop.png)
+<!-- slide -->
+![RMA Return Aging > 7 Days & 48h Dispute Countdown Desktop — Wave 58 (`/import-receipts`: Dòng `RMA-RTS-OVERDUE-09D` hiển thị chuẩn dấu tiếng Việt `Hoàn trả RTS quá hạn 7 ngày chưa kiểm định phân loại`, `9 ngày`, `Quá hạn > 7 ngày chưa về kho`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave58-rma-aging-7d-desktop.png)
+<!-- slide -->
+![Put-to-Wall 8-Slot Sortation & S-Shape Picking Desktop — Wave 58 (`/picking-tasks`: Thẻ `Tường Chia Chọn Đa Đơn & Giỏ Nhặt Cụm (SLOT-01..SLOT-08)` hiển thị ô nhập mặc định `QA-E2E-001` khớp với `SLOT-01..SLOT-08` và 100% Tiếng Việt)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave58-picking-put-to-wall-desktop.png)
+<!-- slide -->
+![Stocktakes Auto-Approval & Canonical Product Selector Desktop — Wave 58 (`/stocktakes`: Dropdown `Sản phẩm điều chỉnh` mặc định chọn `QA-E2E-001 — Thùng linh kiện điện tử QA-01` đồng bộ với bảng Đánh giá Tự động Duyệt Chênh lệch Nhỏ `< 1% & <= 500.000đ`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave58-stocktakes-auto-approval-desktop.png)
+<!-- slide -->
+![3D Cartonization & Real-Time Watermark Packing Station Desktop — Wave 58 (`/packing-sessions`: Hiển thị `Trọng lượng thực tế: 1.15 kg`, `Trọng lượng quy đổi (D×R×C / 6000): 1.5 kg`, `⚠️ Cảnh báo Cước Quy Đổi (Trọng lượng quy đổi > Trọng lượng thực tế)`, `Tính Toán Gợi Ý Thùng 3D & Trọng Lượng Quy Đổi` và `Bật Camera Bàn Đóng Gói (Đóng dấu Thời gian Thực)`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave58-packing-3d-carton-desktop.png)
+<!-- slide -->
+![3PL Daily Storage Occupancy Snapshot & Billing Desktop — Wave 58 (`/partner-debts`: Thẻ `Đối Soát & Chốt Số Dư Lưu Kho 3PL Hàng Ngày (Theo Pallet • Thể tích m³ • Vị trí kệ)`, huy hiệu `Định mức tính phí: Ngày-Pallet • Ngày-m³ • Ngày-Vị trí kệ` và các cột `SỐ MẶT HÀNG`, `SỐ VỊ TRÍ KỆ CHIẾM CHỖ`, `TỔNG THỂ TÍCH (M³)` 100% Tiếng Việt)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave58-3pl-storage-snapshot-desktop.png)
+````

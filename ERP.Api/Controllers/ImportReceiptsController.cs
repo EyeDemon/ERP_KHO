@@ -44,6 +44,11 @@ namespace ERP.Api.Controllers
             return !string.IsNullOrEmpty(userIdStr) && int.TryParse(userIdStr, out userId);
         }
 
+        private static string NormalizeVietnameseDiacritics(string? text) =>
+            string.IsNullOrWhiteSpace(text)
+                ? string.Empty
+                : text.Replace("chua kiểm định", "chưa kiểm định", StringComparison.OrdinalIgnoreCase);
+
         [HttpPost]
         [IdempotentCommand("ImportReceipt.Create")]
         [PermissionAuthorize(AppPermissions.ReceiptCreate)]
@@ -262,12 +267,13 @@ namespace ERP.Api.Controllers
                     out var uid) ? uid : (int?)null;
 
                 var targetWhId = warehouseId ?? accessibleIds?.FirstOrDefault() ?? 1;
+                var normalizedIntakeReason = NormalizeVietnameseDiacritics(request?.ReasonCode?.Trim());
                 var customerReturn = new ERP.Domain.Entities.CustomerReturn
                 {
                     ReturnCode = rmaInspectionCode,
                     WarehouseId = targetWhId,
                     TrackingNumber = string.IsNullOrWhiteSpace(request?.ReturnReference) ? rmaReferenceCode : request.ReturnReference.Trim(),
-                    ReturnReason = string.IsNullOrWhiteSpace(request?.ReasonCode) ? "RMA_INSPECTION" : request.ReasonCode.Trim(),
+                    ReturnReason = string.IsNullOrWhiteSpace(normalizedIntakeReason) ? "RMA_INSPECTION" : normalizedIntakeReason,
                     Status = "QUARANTINED",
                     CreatedBy = actorUserId ?? 1,
                     CreatedAtUtc = now
@@ -395,7 +401,7 @@ namespace ERP.Api.Controllers
                     NewValues = rmaInspectionCode,
                     Reason = string.IsNullOrWhiteSpace(request?.ReasonCode)
                         ? $"Tiếp nhận kiểm định RMA ({pendingQcOrRmaReceiptsCount} phiếu chờ QC/RMA, {quarantineBucketCount} vị trí biệt trữ)"
-                        : request.ReasonCode.Trim(),
+                        : NormalizeVietnameseDiacritics(request.ReasonCode.Trim())!,
                     Result = "Success",
                     Timestamp = now
                 });
@@ -409,7 +415,7 @@ namespace ERP.Api.Controllers
                 rmaInspectionCode,
                 rmaReferenceCode,
                 returnReference = request?.ReturnReference ?? string.Empty,
-                reasonCode = request?.ReasonCode ?? string.Empty,
+                reasonCode = NormalizeVietnameseDiacritics(request?.ReasonCode) ?? string.Empty,
                 quarantineBucketCount,
                 pendingQcOrRmaReceiptsCount,
                 openStocktakesCount,
@@ -495,7 +501,7 @@ namespace ERP.Api.Controllers
                     r.ExportReceiptId,
                     r.TrackingNumber,
                     r.OrderNumber,
-                    r.ReturnReason,
+                    ReturnReason = NormalizeVietnameseDiacritics(r.ReturnReason),
                     r.Status,
                     r.CreatedBy,
                     r.CreatedAtUtc,
@@ -869,7 +875,7 @@ namespace ERP.Api.Controllers
                     {
                         ReturnCode = dispositionCode,
                         WarehouseId = warehouseId ?? accessibleIds?.FirstOrDefault() ?? 1,
-                        ReturnReason = string.IsNullOrWhiteSpace(request?.ReasonCode) ? rawAction : request.ReasonCode.Trim(),
+                        ReturnReason = string.IsNullOrWhiteSpace(request?.ReasonCode) ? rawAction : NormalizeVietnameseDiacritics(request.ReasonCode.Trim()),
                         Status = resolvedReturnStatus,
                         CreatedBy = actorUserId ?? 1,
                         CreatedAtUtc = now,
@@ -896,7 +902,9 @@ namespace ERP.Api.Controllers
                     dispReturn.Status = resolvedReturnStatus;
                     dispReturn.CompletedAtUtc = now;
                     if (!string.IsNullOrWhiteSpace(request?.ReasonCode))
-                        dispReturn.ReturnReason = request.ReasonCode.Trim();
+                        dispReturn.ReturnReason = NormalizeVietnameseDiacritics(request.ReasonCode.Trim());
+                    else if (!string.IsNullOrWhiteSpace(dispReturn.ReturnReason))
+                        dispReturn.ReturnReason = NormalizeVietnameseDiacritics(dispReturn.ReturnReason);
 
                     var existingLine = resolvedProductId.HasValue
                         ? dispReturn.Lines.FirstOrDefault(l => l.ProductId == resolvedProductId.Value) ?? dispReturn.Lines.FirstOrDefault()

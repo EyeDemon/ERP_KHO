@@ -158,11 +158,11 @@ describe('Picking workbench',()=>{
 
     fireEvent.change(view.getByLabelText('Quét mã SKU chia vào ô Put-to-Wall'),{target:{value:'SKU-1001'}});
     fireEvent.change(view.getByLabelText('Chọn ô chia hàng Put-to-Wall'),{target:{value:'SLOT-01'}});
-    fireEvent.click(view.getByTestId('btn-confirm-put-to-wall'));
+    fireEvent.click(view.getByTestId('btn-confirm-put-to-wall-sort'));
 
     const notice=await view.findByTestId('put-to-wall-sort-notice');
     expect(notice.textContent).toContain('SLOT-01');
     expect(notice.textContent).toContain('SKU-1001');
-    expect(notice.textContent).toContain('Put-to-Wall');
+    expect(notice.textContent).toContain('Tường Chia Chọn Đa Đơn');
   });
 });

@@ -180,7 +180,9 @@ describe('Packing workbench',()=>{
     fireEvent.click(view.getByTestId('btn-recommend-carton-3d'));
     expect(await view.findByTestId('dim-weight-warning-badge')).toBeTruthy();
     expect(view.getByTestId('unified-carton-suggestion').textContent).toContain('Thùng Tiêu chuẩn M (30x25x20cm)');
-    expect(view.getByTestId('unified-carton-suggestion').textContent).toContain('Cảnh báo Cước Quy Đổi');
+    expect(view.getByTestId('unified-carton-suggestion').textContent).toContain('Trọng lượng thực tế:');
+    expect(view.getByTestId('unified-carton-suggestion').textContent).toContain('Trọng lượng quy đổi (D×R×C / 6000):');
+    expect(view.getByTestId('unified-carton-suggestion').textContent).toContain('Cảnh báo Cước Quy Đổi (Trọng lượng quy đổi > Trọng lượng thực tế)');
 
     const modeSelect=view.getByTestId('select-kitting-vas-mode');
     fireEvent.change(modeSelect,{target:{value:'DEKIT_DISASSEMBLE'}});

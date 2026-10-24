@@ -84,7 +84,7 @@ export default function PickingTasks(){
     slotCode:`SLOT-0${i+1}`,
     toteCode:`TOTE-0${i+1}`,
     orderCode:`SO-2026-010${i+1}`,
-    productCode:i%2===0?'SKU-1001':'SKU-1002',
+    productCode:i%2===0?'QA-E2E-001':'QA-LOT-002',
     sortedQty:i<2?4:i===2?2:0,
     requiredQty:4,
     status:i<2?'COMPLETED':i===2?'SORTING':'WAITING',
@@ -98,7 +98,7 @@ export default function PickingTasks(){
     requiredQty:number;
     status:string;
   }>>(defaultPutToWallSlots);
-  const [sortScanSku,setSortScanSku]=useState('SKU-1001');
+  const [sortScanSku,setSortScanSku]=useState('QA-E2E-001');
   const [sortTargetSlot,setSortTargetSlot]=useState('SLOT-03');
   const [sortQtyInput,setSortQtyInput]=useState('2');
   const [sortBusy,setSortBusy]=useState(false);
@@ -155,22 +155,22 @@ export default function PickingTasks(){
       const qty=Math.max(1,Number(sortQtyInput)||1);
       const res=await apiClient.post(`/api/v1/picking-tasks/${taskId}/put-to-wall-sort`,{
         slotCode:sortTargetSlot,
-        productBarcode:sortScanSku.trim()||'SKU-1001',
+        productBarcode:sortScanSku.trim()||'QA-E2E-001',
         quantity:qty,
       });
       const d=(res?.data??{}) as Record<string,unknown>;
-      const confirmedSlot=String(d.slotCode??sortTargetSlot);
+      const confirmedSlot=String(d.slotCode??d.sortedSlotCode??sortTargetSlot);
       setPutToWallSlots(prev=>prev.map(s=>{
         if(s.slotCode!==confirmedSlot)return s;
-        const nextSorted=Math.min(s.requiredQty,Number(d.sortedQty??(s.sortedQty+qty)));
+        const nextSorted=Math.min(s.requiredQty,Number(d.sortedQty??d.slotSortedTotal??(s.sortedQty+qty)));
         return {
           ...s,
-          productCode:String(d.productCode??(sortScanSku.trim()||s.productCode)),
+          productCode:String(d.productCode??d.skuCode??(sortScanSku.trim()||s.productCode)),
           sortedQty:nextSorted,
           status:nextSorted>=s.requiredQty?'COMPLETED':'SORTING',
         };
       }));
-      setSortNotice(`Đã xác nhận chia ${qty} ĐV (${sortScanSku.trim()||'SKU-1001'}) vào ô ${confirmedSlot} trên Tường Chia Chọn Đa Đơn (Put-to-Wall).`);
+      setSortNotice(`Đã xác nhận chia ${qty} ĐV (${sortScanSku.trim()||'QA-E2E-001'}) vào ô ${confirmedSlot} trên Tường Chia Chọn Đa Đơn.`);
     }catch(err){
       setError(failureMessage(err));
     }finally{
@@ -681,21 +681,21 @@ export default function PickingTasks(){
         </UiCard>}
       </div>
 
-      <UiCard title="Tường Chia Chọn Đa Đơn & Giỏ Nhặt Cụm (Put-to-Wall / Cluster Tote Sortation SLOT-01..SLOT-08)">
+      <UiCard title="Tường Chia Chọn Đa Đơn & Giỏ Nhặt Cụm (SLOT-01..SLOT-08)">
         <div className="ui-stack" style={{ gap: 10 }}>
           <div className="ui-inline-wrap" style={{ alignItems: 'end', gap: 10 }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span>Quét mã SKU từ Giỏ nhặt cụm</span>
+              <span>Quét mã mặt hàng từ Giỏ nhặt cụm</span>
               <input
                 aria-label="Quét mã SKU chia vào ô Put-to-Wall"
                 value={sortScanSku}
                 onChange={e => setSortScanSku(e.target.value)}
-                placeholder="Quét mã SKU (VD: SKU-1001)..."
+                placeholder="Quét mã mặt hàng (VD: QA-E2E-001)..."
                 style={{ minWidth: 220 }}
               />
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span>Ô chia hàng / Giỏ Tote đích</span>
+              <span>Ô chia hàng / Giỏ đích</span>
               <select
                 aria-label="Chọn ô chia hàng Put-to-Wall"
                 value={sortTargetSlot}
@@ -722,11 +722,11 @@ export default function PickingTasks(){
             </label>
             <button
               type="button"
-              data-testid="btn-confirm-put-to-wall"
+              data-testid="btn-confirm-put-to-wall-sort"
               disabled={!!busy || governanceBusy || sortBusy}
               onClick={() => void handleConfirmPutToWallSort()}
             >
-              {sortBusy ? 'Đang chia ô...' : 'Xác Nhận Quét Chia Hàng Vào Ô (Put-to-Wall)'}
+              {sortBusy ? 'Đang chia ô...' : 'Xác Nhận Quét Chia Hàng Vào Ô'}
             </button>
           </div>
           {sortNotice && (

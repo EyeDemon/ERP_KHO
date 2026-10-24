@@ -240,9 +240,9 @@ export default function PartnerDebts() {
       } else {
         await loadStorageSnapshots();
       }
-      setMessage('Đã chốt Snapshot lưu kho 3PL hàng ngày (Pallet-Day / CBM-Day / Bin-Day) và cập nhật phí lũy kế tháng.');
+      setMessage('Đã chốt Số Dư Lưu Kho 3PL hàng ngày (Theo Pallet • Thể tích m³ • Vị trí kệ) và cập nhật phí lũy kế tháng.');
     } catch (e: any) {
-      setError(e?.response?.data?.message || 'Không thể chốt Snapshot lưu kho 3PL hôm nay.');
+      setError(e?.response?.data?.message || 'Không thể chốt Số Dư Lưu Kho 3PL hôm nay.');
     } finally {
       setSnapshotBusy(false);
     }
@@ -361,12 +361,12 @@ export default function PartnerDebts() {
       </UiCard>
 
       <UiCard
-        title="Đối Soát & Chốt Snapshot Lưu Kho 3PL Hàng Ngày (Pallet-Day / CBM-Day / Bin-Day)"
+        title="Đối Soát & Chốt Số Dư Lưu Kho 3PL Hàng Ngày (Theo Pallet • Thể tích m³ • Vị trí kệ)"
         subtitle="Tổng hợp sản lượng chiếm chỗ thực tế theo Chủ hàng để tính phí lưu kho tự động cuối ngày và lũy kế tháng"
       >
         <div className="ui-inline-wrap" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <div className="ui-inline-wrap" style={{ gap: 8 }}>
-            <UiBadge tone="success">Định mức tính phí: Pallet-Day • CBM-Day • Bin-Day</UiBadge>
+            <UiBadge tone="success">Định mức tính phí: Ngày-Pallet • Ngày-m³ • Ngày-Vị trí kệ</UiBadge>
             <UiBadge>{`Số chủ hàng đang lưu kho: ${storageSnapshots.length}`}</UiBadge>
           </div>
           <div className="ui-inline-wrap" style={{ gap: 8 }}>
@@ -376,7 +376,7 @@ export default function PartnerDebts() {
               disabled={snapshotBusy}
               onClick={() => void handleCapture3plSnapshot()}
             >
-              {snapshotBusy ? 'Đang chốt Snapshot...' : 'Chốt Snapshot Lưu Kho Hôm Nay'}
+              {snapshotBusy ? 'Đang chốt số dư...' : 'Chốt Số Dư Lưu Kho Hôm Nay'}
             </button>
             <button
               type="button"
@@ -384,7 +384,7 @@ export default function PartnerDebts() {
               disabled={snapshotBusy}
               onClick={() => void loadStorageSnapshots()}
             >
-              Tải lại Snapshot 3PL
+              Tải lại Số Dư Lưu Kho 3PL
             </button>
           </div>
         </div>
@@ -395,9 +395,9 @@ export default function PartnerDebts() {
               <tr>
                 <th>Chủ hàng</th>
                 <th>Kho</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số SKU</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số vị trí kệ chiếm chỗ (Bin)</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tổng thể tích (CBM)</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số mặt hàng</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số vị trí kệ chiếm chỗ</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tổng thể tích (m³)</th>
                 <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số Pallet quy đổi</th>
                 <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Phí lưu kho ước tính / ngày</th>
                 <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Phí lưu kho lũy kế tháng</th>
@@ -407,7 +407,7 @@ export default function PartnerDebts() {
               {storageSnapshots.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="ui-empty-cell">
-                    Chưa có bản ghi Snapshot lưu kho 3PL trong ngày — Nhấn &ldquo;Chốt Snapshot Lưu Kho Hôm Nay&rdquo; để ghi nhận.
+                    Chưa có bản ghi Số Dư Lưu Kho 3PL trong ngày — Nhấn &ldquo;Chốt Số Dư Lưu Kho Hôm Nay&rdquo; để ghi nhận.
                   </td>
                 </tr>
               ) : (

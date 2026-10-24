@@ -246,7 +246,7 @@ const ImportReceipts = () => {
               returnCode: String(r.returnCode ?? r.rmaCode ?? `RMA-2026-008${idx + 1}`),
               trackingCode: String(r.trackingNumber ?? r.trackingCode ?? r.awbCode ?? 'GHN-RTS-889901'),
               orderCode: String(r.orderNumber ?? r.orderCode ?? r.sourceOrderCode ?? 'SO-2026-0881'),
-              returnReason: String(r.returnReason ?? r.reason ?? 'Hoàn trả sàn TMĐT'),
+              returnReason: String(r.returnReason ?? r.reason ?? 'Hoàn trả sàn TMĐT').replace(/chua kiểm định/gi, 'chưa kiểm định'),
               returnAgingDays: aging,
               isOverdueInTransit: overdue,
               disputeRemainingHours: Number(r.disputeRemainingHours ?? 18),

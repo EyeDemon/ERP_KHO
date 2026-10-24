@@ -74,7 +74,7 @@ describe('InventoryMovements',()=>{
   it('executes 1-scan full-LPN pallet move and auto break-bulk replenishment with carton-to-base conversion',async()=>{
     permissionState.granted.add('inventory_movement.create');
     vi.mocked(apiClient.post).mockImplementation(async(url:string)=>{
-      if(url==='/api/v1/inventory/movements/move-handling-unit'){
+      if(url==='/api/v1/inventory-movements/move-handling-unit'||url==='/api/v1/inventory/movements/move-handling-unit'){
         return {
           data:{
             handlingUnitId:50,
@@ -86,7 +86,7 @@ describe('InventoryMovements',()=>{
           }
         } as never;
       }
-      if(url==='/api/v1/inventory/movements/auto-break-bulk-replenish'){
+      if(url==='/api/v1/inventory-movements/auto-break-bulk-replenish'||url==='/api/v1/inventory/movements/auto-break-bulk-replenish'){
         return {
           data:{
             executedImmediately:true,
@@ -130,6 +130,6 @@ describe('InventoryMovements',()=>{
     const bbTable=await view.findByTestId('break-bulk-conversion-table');
     expect(bbTable.textContent).toContain('1 Thùng = 24 ĐV');
     expect(bbTable.textContent).toContain('+24 ĐV');
-    expect(bbTable.textContent).toContain('Khớp 2 bút toán nguyên tử');
+    expect(bbTable.textContent).toContain('Khớp 2 bút toán (-1 Thùng / +24 ĐV)');
   });
 });

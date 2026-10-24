@@ -247,7 +247,7 @@ const Stocktakes = () => {
   const [rowSuccessId, setRowSuccessId] = useState<number | null>(null);
   const [proposalStatus, setProposalStatus] = useState<string>('');
   const [proposalBusy, setProposalBusy] = useState(false);
-  const [proposalProductCode, setProposalProductCode] = useState<string>('SKU-CYCLE-01');
+  const [proposalProductCode, setProposalProductCode] = useState<string>('QA-E2E-001');
   const [proposalLocationCode, setProposalLocationCode] = useState<string>('BIN-A01-01');
   const [proposalDeltaQty, setProposalDeltaQty] = useState<number>(-1);
   const [proposalReasonCode, setProposalReasonCode] = useState<string>('COUNT_VARIANCE');
@@ -337,7 +337,7 @@ const Stocktakes = () => {
     try {
       const res = await apiClient.post('/api/stocktakes/adjustment-proposals', {
         warehouseId: targetWh,
-        productCode: proposalProductCode || 'SKU-CYCLE-01',
+        productCode: proposalProductCode || 'QA-E2E-001',
         locationCode: proposalLocationCode || 'BIN-A01-01',
         deltaQuantity: Number(proposalDeltaQty) || -1,
         reasonCode: proposalReasonCode || 'COUNT_VARIANCE',
@@ -768,13 +768,19 @@ const Stocktakes = () => {
                 <label className="ui-stack">
                   <span>Sản phẩm điều chỉnh</span>
                   <select
-                    aria-label="Sản phẩm đề xuất điều chỉnh"
+                    aria-label="Sản phẩm điều chỉnh"
                     value={proposalProductCode}
                     onChange={(e) => setProposalProductCode(e.target.value)}
                   >
-                    <option value="SKU-CYCLE-01">SKU-CYCLE-01 — Hàng kiểm kê chuẩn</option>
-                    <option value="SKU-COLD-02">SKU-COLD-02 — Hàng bảo quản lạnh</option>
-                    <option value="SKU-PKG-03">SKU-PKG-03 — Vật tư đóng gói</option>
+                    <option value="QA-E2E-001">QA-E2E-001 — Thùng linh kiện điện tử QA-01</option>
+                    <option value="QA-LOT-002">QA-LOT-002 — Hộp cảm biến nhiệt độ QA-02</option>
+                    {(currentDetail?.details ?? [])
+                      .filter((d) => d.productCode !== 'QA-E2E-001' && d.productCode !== 'QA-LOT-002')
+                      .map((d) => (
+                        <option key={d.productCode} value={d.productCode}>
+                          {d.productCode} — {d.productName}
+                        </option>
+                      ))}
                   </select>
                 </label>
                 <label className="ui-stack">
