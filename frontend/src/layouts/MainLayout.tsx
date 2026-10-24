@@ -66,6 +66,7 @@ const productionIcons: Record<string, LucideIcon> = {
   '/picking-tasks': ClipboardCheck,
   '/packing-sessions': PackageCheck,
   '/shipments': Truck,
+  '/handover-manifests': Truck,
   '/backorders': ShoppingCart,
   '/inventory': Boxes,
   '/inventory-locks': Lock,
@@ -75,6 +76,10 @@ const productionIcons: Record<string, LucideIcon> = {
   '/inventory-reconciliation': Scale,
   '/stocktakes': ClipboardCheck,
   '/stock-transfers': Repeat2,
+  '/cod-reconciliation': Scale,
+  '/cost-valuation': Scale,
+  '/onboarding-wizard': CheckCircle,
+  '/saas-billing': Shield,
   '/approvals': CheckCircle,
   '/permissions': Shield,
 };
@@ -89,6 +94,22 @@ const MainLayout = () => {
   const [identityState, setIdentityState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [diagCopiedNotice, setDiagCopiedNotice] = useState('');
+  const [complexityMode, setComplexityMode] = useState<'FULL' | 'EXPRESS'>(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage.getItem('wmsComplexityMode') === 'EXPRESS' ? 'EXPRESS' : 'FULL';
+    }
+    return 'FULL';
+  });
+
+  const toggleComplexityMode = () => {
+    setComplexityMode((current) => {
+      const next = current === 'FULL' ? 'EXPRESS' : 'FULL';
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem('wmsComplexityMode', next);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     let active = true;
@@ -137,6 +158,9 @@ const MainLayout = () => {
 
   const showStocktakes = demoRuntime || canViewStocktakes();
   const canShowProductionItem = (item: ProductionNavItem) => {
+    if (complexityMode === 'EXPRESS' && item.expressMode === false && pathname !== item.path) {
+      return false;
+    }
     if (item.path === '/backorders') return hasPermission('backorder.read') || hasPermission('sales_order.read');
     if (item.permission) return hasPermission(item.permission);
     if (item.access === 'stocktake') return showStocktakes;
@@ -230,6 +254,26 @@ const MainLayout = () => {
           </div>
 
           <div className="topbar-actions">
+            <button
+              type="button"
+              data-testid="wms-complexity-mode-toggle"
+              onClick={toggleComplexityMode}
+              title="Chuyển đổi giữa Chế độ Rút gọn (Express) và Chế độ Đầy đủ (Full WMS)"
+              style={{
+                fontSize: 12,
+                padding: '4px 10px',
+                whiteSpace: 'nowrap',
+                borderRadius: 6,
+                border: complexityMode === 'EXPRESS' ? '1px solid #0284c7' : '1px solid #cbd5e1',
+                background: complexityMode === 'EXPRESS' ? '#f0f9ff' : '#f8fafc',
+                color: '#0f172a',
+                fontWeight: 600,
+              }}
+            >
+              {complexityMode === 'EXPRESS'
+                ? '⚡ Chế độ Rút gọn (Express)'
+                : '🏭 Chế độ Đầy đủ (Full WMS)'}
+            </button>
             <button
               type="button"
               data-testid="btn-copy-zalo-diagnostics"

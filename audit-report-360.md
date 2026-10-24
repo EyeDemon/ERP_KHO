@@ -1,0 +1,24 @@
+# BÁO CÁO KIỂM TOÁN 360 ĐỘ & NGHIỆM THU KIẾN TRÚC ĐÍCH `ERP_KHO v3.0` (`WAVE 54`)
+
+- **Ngày hoàn tất:** `2026-10-24`
+- **Baseline trước nâng cấp:** `commit cf1659c` (Wave 53)
+- **Trạng thái nghiệm thu:** **`100% PASS` trên cả 5 Cổng Chất lượng (`Gate 1 → Gate 5`)**
+- **Tổng số bài kiểm thử tự động:** **`1.549 / 1.549 PASS` (`508` `ERP.Api.Tests` + `651` `ERP.SqlIntegrationHarness` + `390` `Vitest`)**
+
+---
+
+## 1. Bảng Đối chiếu Đóng Kín 100% Hạng mục Critical (`A1 → A10`) & Architectural (`B1 → B15`)
+
+| Mã | Hạng mục Kiểm toán | Tọa độ Giải pháp (`File:Line`) | Kết quả Kiểm chứng |
+| :--- | :--- | :--- | :---: |
+| **`A1`** | Hợp nhất `RefreshGrainHash()` & `ComputeCanonicalGrainHash()` 9 chiều SHA-256 (`-1` sentinel) | [`ERP.Domain/Entities/InventoryStock.cs:L127-L172`](file:///d:/ERP_KHO/ERP.Domain/Entities/InventoryStock.cs#L127-L172), [`20261023120000_Wave54TargetArchitectureV3SchemaPrecisionAndStocktakeEnum.cs:L70-L93`](file:///d:/ERP_KHO/ERP.Infrastructure/Migrations/20261023120000_Wave54TargetArchitectureV3SchemaPrecisionAndStocktakeEnum.cs#L70-L93) | **PASS (`Wave54_GrainHash_*` & `Wave44_CanonicalGrainHash_*`)** |
+| **`A2`** | Xóa toàn bộ nhánh `if (_db == null) return Ok(...)` giả trong `ExportReceiptsController` | [`ERP.Api/Controllers/ExportReceiptsController.cs:L30-L43`](file:///d:/ERP_KHO/ERP.Api/Controllers/ExportReceiptsController.cs#L30-L43) | **PASS (`0` nhánh `_db == null`)** |
+| **`A3`** | Xóa fallback `.OrderBy(u => u.Id).First()` trong `ResolveValidAuditUserIdAsync` | [`ERP.Api/Controllers/ExportReceiptsController.cs:L45-L66`](file:///d:/ERP_KHO/ERP.Api/Controllers/ExportReceiptsController.cs#L45-L66), [`HandoverManifestService.cs:L43-L61`](file:///d:/ERP_KHO/ERP.Infrastructure/Services/HandoverManifestService.cs#L43-L61) | **PASS (`UnauthorizedAccessException` khi thiếu user hợp lệ)** |
+| **`A4`** | Chuyển logic trừ tồn/bàn giao khỏi Controller sang `HandoverManifestService` | [`ERP.Infrastructure/Services/HandoverManifestService.cs:L226-L385`](file:///d:/ERP_KHO/ERP.Infrastructure/Services/HandoverManifestService.cs#L226-L385) | **PASS (`Wave54_ExportReceiptsAndManifest_*`)** |
+| **`A5`** | Tạo `ShipmentFinancialLedgerConfiguration` & `StocktakeAdjustmentProposalConfiguration` chuẩn `decimal(18,4)` | [`ShipmentFinancialLedgerConfiguration.cs`](file:///d:/ERP_KHO/ERP.Infrastructure/Persistence/Configurations/ShipmentFinancialLedgerConfiguration.cs), [`StocktakeAdjustmentProposalConfiguration.cs`](file:///d:/ERP_KHO/ERP.Infrastructure/Persistence/Configurations/StocktakeAdjustmentProposalConfiguration.cs) | **PASS (`Wave54_ShipmentFinancialLedgerAndStocktakeProposal_*`)** |
+| **`A6`** | Bổ sung `RowVersion` (`IsRowVersion().IsConcurrencyToken()`) cho `Warehouse`, `Stocktake`, `ShipmentFinancialLedger`, `StocktakeAdjustmentProposal` | [`WarehouseConfiguration.cs:L24-L28`](file:///d:/ERP_KHO/ERP.Infrastructure/Persistence/Configurations/WarehouseConfiguration.cs#L24-L28), [`StocktakeConfiguration.cs:L20-L24`](file:///d:/ERP_KHO/ERP.Infrastructure/Persistence/Configurations/StocktakeConfiguration.cs#L20-L24) | **PASS (`MigrationSnapshotParityTests` `3/3`)** |
+| **`A7`** | Xóa biển số xe `"51C-888.99"` và tên tài xế `"Bưu tá lấy hàng"` cứng | [`HandoverManifestService.cs:L140-L152`](file:///d:/ERP_KHO/ERP.Infrastructure/Services/HandoverManifestService.cs#L140-L152), [`HandoverManifests.tsx`](file:///d:/ERP_KHO/frontend/src/pages/HandoverManifests.tsx) | **PASS** |
+| **`A8`** | Nâng cấp `System.Security.Cryptography.Pkcs` lên `9.0.11`, xóa sạch `NU1903` | `ERP.Infrastructure.csproj`, `ERP.Api.csproj`, `ERP.*.Tests.csproj` | **PASS (`0 Warning(s), 0 Error(s)`)** |
+| **`A9`** | Thay thông báo đối soát COD cứng ở `Dashboard.tsx` bằng số liệu động từ API | [`Dashboard.tsx:L388-L396`](file:///d:/ERP_KHO/frontend/src/pages/Dashboard.tsx#L388-L396), [`CodReconciliation.tsx`](file:///d:/ERP_KHO/frontend/src/pages/CodReconciliation.tsx) | **PASS** |
+| **`A10`** | Đổi quyền `ImportOpeningBalance` sang `inventory.opening_balance.import` / `inventory.write` | [`AppPermissions.cs:L60-L61`](file:///d:/ERP_KHO/ERP.Api/Authorization/AppPermissions.cs#L60-L61), [`DataImportsController.cs:L36`](file:///d:/ERP_KHO/ERP.Api/Controllers/DataImportsController.cs#L36) | **PASS** |
+| **`B1..B15`** | Tách `StocktakeStatus` enum, `TransitionTo()` guards, `422 Unprocessable Entity`, tách 3 Backend Controllers & 5 Frontend Pages, Sidebar 6 nhóm + `Express/Full WMS`, `PermissionRoute` + `React.lazy`, Trạm đóng gói 1 màn hình, S-shape + FEFO Alternate Bins, Directed Putaway, MAC Preview | [`StocktakeStatus.cs`](file:///d:/ERP_KHO/ERP.Domain/Enums/StocktakeStatus.cs), [`GlobalExceptionHandlingMiddleware.cs`](file:///d:/ERP_KHO/ERP.Api/Middleware/GlobalExceptionHandlingMiddleware.cs), [`AppRoutes.tsx`](file:///d:/ERP_KHO/frontend/src/routes/AppRoutes.tsx), [`MainLayout.tsx`](file:///d:/ERP_KHO/frontend/src/layouts/MainLayout.tsx) | **PASS (`1.549/1.549` tests)** |

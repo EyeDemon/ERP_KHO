@@ -10,16 +10,51 @@ namespace ERP.Api.Authorization;
 public sealed class PermissionAuthorizeAttribute : TypeFilterAttribute
 {
     public string Permission { get; }
+    public IReadOnlyList<string> Permissions { get; }
+
     public PermissionAuthorizeAttribute(string permission) : base(typeof(PermissionAuthorizationFilter))
     {
         Permission = permission;
+        Permissions = [permission];
         Arguments = [permission];
+        Order = int.MinValue;
+    }
+
+    public PermissionAuthorizeAttribute(string permission, params string[] additionalPermissions) : base(typeof(PermissionAuthorizationFilter))
+    {
+        Permission = permission;
+        var all = new List<string> { permission };
+        if (additionalPermissions is { Length: > 0 })
+        {
+            foreach (var p in additionalPermissions)
+            {
+                if (!string.IsNullOrWhiteSpace(p) && !all.Contains(p, StringComparer.Ordinal))
+                    all.Add(p);
+            }
+        }
+        Permissions = all;
+        Arguments = all.Count == 1 ? [permission] : [all.ToArray()];
         Order = int.MinValue;
     }
 }
 
-public sealed class PermissionAuthorizationFilter(ErpKhoDbContext db, string permission) : IAsyncAuthorizationFilter, IOrderedFilter
+public sealed class PermissionAuthorizationFilter : IAsyncAuthorizationFilter, IOrderedFilter
 {
+    private readonly ErpKhoDbContext db;
+    private readonly string[] _permissions;
+
+    public PermissionAuthorizationFilter(ErpKhoDbContext db, string permission)
+    {
+        this.db = db;
+        _permissions = [permission];
+    }
+
+    public PermissionAuthorizationFilter(ErpKhoDbContext db, string[] permissions)
+    {
+        this.db = db;
+        _permissions = permissions is { Length: > 0 } ? permissions : [];
+    }
+
     public int Order => int.MinValue;
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
@@ -28,7 +63,7 @@ public sealed class PermissionAuthorizationFilter(ErpKhoDbContext db, string per
         try
         {
             var user = await db.Users.AsNoTracking().Where(u => u.Id == userId)
-                .Select(u => new { u.IsActive, u.LockoutEnd, RoleName = u.Role.RoleName, Allowed = u.Role.Permissions.Any(rp => rp.Permission.Code == permission) })
+                .Select(u => new { u.IsActive, u.LockoutEnd, RoleName = u.Role.RoleName, Allowed = u.Role.Permissions.Any(rp => _permissions.Contains(rp.Permission.Code)) })
                 .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
             if (user is null || !user.IsActive || user.LockoutEnd > DateTime.UtcNow)
             {

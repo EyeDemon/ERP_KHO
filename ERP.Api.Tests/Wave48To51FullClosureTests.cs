@@ -949,4 +949,486 @@ public class Wave48To51FullClosureTests
             errDoc.RootElement.GetProperty("errorCode").GetString().Should().Be("IMPERSONATION_READ_ONLY_ENFORCED");
         }
     }
+
+    [Fact]
+    public void Wave54_GrainHash_RefreshAndComputeCanonical_ProduceIdentical32ByteSha256Hash()
+    {
+        var stock = new InventoryStock
+        {
+            TenantId = 1,
+            WarehouseId = 2,
+            LocationId = 10,
+            ProductId = 50,
+            LotId = null,
+            SerialId = null,
+            HandlingUnitId = null,
+            Status = InventoryStatus.Available,
+            OwnerId = null
+        };
+
+        stock.RefreshGrainHash();
+        var computed = InventoryStock.ComputeCanonicalGrainHash(
+            tenantId: 1,
+            warehouseId: 2,
+            locationId: 10,
+            productId: 50,
+            lotId: null,
+            serialId: null,
+            handlingUnitId: null,
+            status: InventoryStatus.Available,
+            ownerId: null);
+
+        stock.GrainHash.Should().NotBeNull();
+        stock.GrainHash!.Length.Should().Be(32);
+        computed.Length.Should().Be(32);
+        stock.GrainHash.SequenceEqual(computed).Should().BeTrue();
+
+        var differentLocationHash = InventoryStock.ComputeCanonicalGrainHash(
+            tenantId: 1,
+            warehouseId: 2,
+            locationId: 11,
+            productId: 50,
+            lotId: null,
+            serialId: null,
+            handlingUnitId: null,
+            status: InventoryStatus.Available,
+            ownerId: null);
+        var differentOwnerHash = InventoryStock.ComputeCanonicalGrainHash(
+            tenantId: 1,
+            warehouseId: 2,
+            locationId: 10,
+            productId: 50,
+            lotId: null,
+            serialId: null,
+            handlingUnitId: null,
+            status: InventoryStatus.Available,
+            ownerId: 99);
+
+        stock.GrainHash.SequenceEqual(differentLocationHash).Should().BeFalse();
+        stock.GrainHash.SequenceEqual(differentOwnerHash).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Wave54_ExportReceiptsAndManifest_NoNullDbFake_RequiresAuthActor_DispatchesViaDomainServiceWithLedgerAndOutbox()
+    {
+        var exportServiceMock = new Mock<IExportReceiptService>();
+        Action nullDbAct = () => _ = new HandoverManifestService(null!, exportServiceMock.Object);
+        nullDbAct.Should().Throw<InvalidOperationException>();
+
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase($"W54_Manifest_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ErpKhoDbContext(options);
+
+        db.Users.Add(new User
+        {
+            Id = 7,
+            TenantId = 1,
+            Username = "manifest_actor",
+            PasswordHash = "HASH",
+            FullName = "Nhân Viên Bàn Giao",
+            RoleId = 1,
+            IsActive = true
+        });
+        db.Warehouses.Add(new Warehouse { Id = 1, Code = "WH-W54", Name = "Kho Bàn Giao W54", IsActive = true });
+        db.Products.Add(new Product
+        {
+            Id = 101,
+            Code = "SKU-W54-101",
+            Name = "Sản Phẩm Xuất Bàn Giao",
+            UnitId = 1,
+            MovingAverageCost = 80000m,
+            IsActive = true
+        });
+        db.InventoryStocks.Add(new InventoryStock
+        {
+            Id = 1,
+            TenantId = 1,
+            WarehouseId = 1,
+            ProductId = 101,
+            Status = InventoryStatus.Available,
+            Quantity = 20m,
+            ReservedQuantity = 5m,
+            AllocatedQuantity = 5m,
+            MovingAverageCost = 80000m
+        });
+        db.ExportReceipts.Add(new ExportReceipt
+        {
+            Id = 501,
+            Code = "PXK-W54-501",
+            WarehouseId = 1,
+            Status = ReceiptStatus.Approved,
+            TrackingNumber = "GHN-W54-501",
+            CarrierCode = "GHN",
+            CreatedBy = 7,
+            CreatedAt = DateTime.UtcNow,
+            Details =
+            [
+                new ExportReceiptDetail
+                {
+                    Id = 5001,
+                    ExportReceiptId = 501,
+                    ProductId = 101,
+                    Quantity = 5m,
+                    UnitPrice = 150000m
+                }
+            ]
+        });
+        await db.SaveChangesAsync();
+
+        var service = new HandoverManifestService(db, exportServiceMock.Object);
+
+        // Authenticated request without valid actorUserId must throw UnauthorizedAccessException
+        Func<Task> unauthAct = async () => await service.ScanHandoverAwbAsync(
+            manifestIdRoute: null,
+            request: new ScanHandoverAwbInputDto(null, 1, "GHN", "GHN-W54-501", 501, "51C-888.99", "Nguyễn Văn Tài", "0909123456"),
+            actorUserId: null,
+            isAuthenticated: true);
+        await unauthAct.Should().ThrowAsync<UnauthorizedAccessException>();
+
+        // Valid authenticated actor scans and seals manifest -> dispatches receipt, deducts stock, records ledger, outbox, and audit log
+        var scanRes = await service.ScanHandoverAwbAsync(
+            manifestIdRoute: null,
+            request: new ScanHandoverAwbInputDto(null, 1, "GHN", "GHN-W54-501", 501, "51C-888.99", "Nguyễn Văn Tài", "0909123456"),
+            actorUserId: 7,
+            isAuthenticated: true);
+        scanRes.StatusCode.Should().Be(200);
+        using var scanDoc = JsonSerializer.SerializeToDocument(scanRes.Payload);
+        var manifestId = scanDoc.RootElement.GetProperty("manifestId").GetInt32();
+
+        var sealRes = await service.SealHandoverManifestAsync(
+            id: manifestId,
+            request: new SealHandoverManifestInputDto("Nguyễn Văn Tài", "0909123456", "51C-888.99", null),
+            actorUserId: 7,
+            isAuthenticated: true);
+        sealRes.StatusCode.Should().Be(200);
+
+        exportServiceMock.Verify(x => x.DispatchAsync(501, 7), Times.Once);
+
+        var updatedManifest = await db.HandoverManifests.SingleAsync(m => m.Id == manifestId);
+        updatedManifest.Status.Should().Be("SEALED");
+
+        var updatedReceipt = await db.ExportReceipts.SingleAsync(r => r.Id == 501);
+        updatedReceipt.Status.Should().Be(ReceiptStatus.Dispatched);
+
+        var updatedStock = await db.InventoryStocks.SingleAsync(s => s.Id == 1);
+        updatedStock.Quantity.Should().Be(15m);
+        updatedStock.ReservedQuantity.Should().Be(0m);
+        updatedStock.AllocatedQuantity.Should().Be(0m);
+
+        var ledgerTx = await db.InventoryTransactions.SingleAsync(t => t.ReferenceType == "ExportReceipt" && t.ReferenceId == 501);
+        ledgerTx.Quantity.Should().Be(-5m);
+        ledgerTx.UnitCost.Should().Be(80000m);
+
+        (await db.IntegrationOutboxMessages.AnyAsync(o => o.AggregateType == "ExportReceipt" && o.AggregateId == 501 && o.EventType == "ExportReceiptDispatched")).Should().BeTrue();
+        (await db.AuditLogs.AnyAsync(a => a.EntityName == "HandoverManifest" && a.EntityId == manifestId && a.Action == "HandoverManifest.Seal")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Wave54_ShipmentFinancialLedgerAndStocktakeProposal_HaveExplicitPrecisionAndRowVersion()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase($"W54_Precision_{Guid.NewGuid():N}")
+            .Options;
+        await using var db = new ErpKhoDbContext(options);
+
+        var shipmentLedgerType = db.Model.FindEntityType(typeof(ShipmentFinancialLedger));
+        shipmentLedgerType.Should().NotBeNull();
+        foreach (var prop in shipmentLedgerType!.GetProperties().Where(p => p.ClrType == typeof(decimal) || p.ClrType == typeof(decimal?)))
+        {
+            prop.GetPrecision().Should().Be(18, $"ShipmentFinancialLedger.{prop.Name} must have precision 18");
+            prop.GetScale().Should().Be(4, $"ShipmentFinancialLedger.{prop.Name} must have scale 4");
+        }
+        var shipmentRowVersion = shipmentLedgerType.FindProperty(nameof(ShipmentFinancialLedger.RowVersion));
+        shipmentRowVersion.Should().NotBeNull();
+        shipmentRowVersion!.IsConcurrencyToken.Should().BeTrue();
+
+        var proposalType = db.Model.FindEntityType(typeof(StocktakeAdjustmentProposal));
+        proposalType.Should().NotBeNull();
+        foreach (var prop in proposalType!.GetProperties().Where(p => p.ClrType == typeof(decimal) || p.ClrType == typeof(decimal?)))
+        {
+            prop.GetPrecision().Should().Be(18, $"StocktakeAdjustmentProposal.{prop.Name} must have precision 18");
+            prop.GetScale().Should().Be(4, $"StocktakeAdjustmentProposal.{prop.Name} must have scale 4");
+        }
+        var proposalRowVersion = proposalType.FindProperty(nameof(StocktakeAdjustmentProposal.RowVersion));
+        proposalRowVersion.Should().NotBeNull();
+        proposalRowVersion!.IsConcurrencyToken.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Wave54_StocktakeStatus_DedicatedEnumAndDomainTransitionGuards_WorkCorrectly()
+    {
+        typeof(Stocktake).GetProperty(nameof(Stocktake.Status))!.PropertyType.Should().Be(typeof(StocktakeStatus));
+
+        var stocktake = new Stocktake
+        {
+            Id = 10,
+            Code = "ST-W54-010",
+            WarehouseId = 1,
+            Status = StocktakeStatus.Draft,
+            CreatedBy = 1
+        };
+
+        stocktake.TransitionTo(StocktakeStatus.Approved, actorUserId: 9);
+        stocktake.Status.Should().Be(StocktakeStatus.Approved);
+        stocktake.ApprovedBy.Should().Be(9);
+        stocktake.ApprovedAt.Should().NotBeNull();
+
+        Action invalidBackwardTransition = () => stocktake.TransitionTo(StocktakeStatus.Draft, actorUserId: 9);
+        var ex = invalidBackwardTransition.Should().Throw<ERP.Domain.Exceptions.ConflictException>().Which;
+        ex.ErrorCode.Should().Be("DOC_INVALID_STATE_TRANSITION");
+
+        var unprocessable = new ERP.Domain.Exceptions.UnprocessableDomainException(
+            "Chuyển trạng thái không hợp lệ",
+            "DOC_INVALID_STATE_TRANSITION");
+        unprocessable.ErrorCode.Should().Be("DOC_INVALID_STATE_TRANSITION");
+    }
+
+    [Fact]
+    public async Task Wave54_SplitControllers_HandoverManifests_DataImports_SaasBilling_WorkOnCanonicalV1Routes()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase($"W54_SplitCtrl_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ErpKhoDbContext(options);
+
+        db.Warehouses.Add(new Warehouse { Id = 1, Code = "WH-01", Name = "Kho Chính", IsActive = true });
+        db.WarehouseLocations.Add(new WarehouseLocation
+        {
+            Id = 10,
+            WarehouseId = 1,
+            Code = "A-01-01",
+            Name = "Kệ A1",
+            IsActive = true,
+            IsPickable = true
+        });
+        db.Products.Add(new Product
+        {
+            Id = 201,
+            Code = "SKU-SPLIT-201",
+            Name = "Sản Phẩm Kiểm Thử Split Controller",
+            UnitId = 1,
+            MovingAverageCost = 50000m,
+            IsActive = true
+        });
+        db.ExportReceipts.Add(new ExportReceipt
+        {
+            Id = 301,
+            Code = "PXK-SPLIT-301",
+            WarehouseId = 1,
+            Status = ReceiptStatus.Approved,
+            TrackingNumber = "GHN-SPLIT-301",
+            CarrierCode = "GHN",
+            CreatedBy = 1,
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var exportServiceMock = new Mock<IExportReceiptService>();
+
+        // 1. HandoverManifestsController
+        var handoverCtrl = new HandoverManifestsController(null, db, exportServiceMock.Object);
+        var scanRes = await handoverCtrl.ScanHandoverAwb(
+            manifestIdRoute: null,
+            request: new ExportReceiptsController.ScanHandoverAwbRequest(
+                ManifestId: null,
+                WarehouseId: 1,
+                CarrierCode: "GHN",
+                TrackingNumber: "GHN-SPLIT-301",
+                ExportReceiptId: 301,
+                VehiclePlate: "51D-123.45",
+                DriverName: "Trần Văn Giao",
+                DriverPhone: "0912345678"),
+            cancellationToken: default);
+        scanRes.Should().BeOfType<OkObjectResult>();
+
+        var listRes = await handoverCtrl.GetHandoverManifests(1, "GHN", default);
+        using var listDoc = JsonSerializer.SerializeToDocument(listRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        listDoc.RootElement.GetProperty("totalCount").GetInt32().Should().Be(1);
+
+        // 2. DataImportsController
+        var dataImportsCtrl = new DataImportsController(exportServiceMock.Object, db);
+        var tplRes = dataImportsCtrl.GetDataImportTemplates().Should().BeOfType<OkObjectResult>().Subject;
+        using var tplDoc = JsonSerializer.SerializeToDocument(tplRes.Value);
+        tplDoc.RootElement.GetProperty("templates").GetArrayLength().Should().BeGreaterThan(0);
+
+        var importRes = await dataImportsCtrl.ImportOpeningBalance(
+            new ExportReceiptsController.ImportOpeningBalanceRequest(
+                WarehouseId: 1,
+                Items:
+                [
+                    new ExportReceiptsController.OpeningBalanceItemRequest(
+                        ProductCode: "SKU-SPLIT-201",
+                        LocationCode: "A-01-01",
+                        Quantity: 25m,
+                        UnitCost: 60000m,
+                        LotNumber: null,
+                        ExpiryDate: null)
+                ]),
+            default,
+            null);
+        importRes.Should().BeOfType<OkObjectResult>();
+        (await db.InventoryStocks.SingleAsync(s => s.ProductId == 201)).Quantity.Should().Be(25m);
+
+        // 3. SaasBillingController
+        var saasBillingCtrl = new SaasBillingController(db);
+        var subRes = await saasBillingCtrl.GetSubscription(null, null, default);
+        subRes.Should().BeOfType<OkObjectResult>();
+
+        var qrRes = await saasBillingCtrl.GenerateVietQrInvoice(
+            new PermissionsController.CreateVietQrInvoiceRequest(PlanCode: "GROWTH", AmountVnd: 1490000m),
+            default);
+        using var qrDoc = JsonSerializer.SerializeToDocument(qrRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        qrDoc.RootElement.GetProperty("planCode").GetString().Should().Be("GROWTH");
+    }
+
+    [Fact]
+    public async Task Wave54_PickingPathSort_And_AlternateBinSuggestion_ReturnSortedPickableBins()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase($"W54_AltBins_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ErpKhoDbContext(options);
+
+        var today = DateTime.UtcNow.Date;
+        var prod = new Product { Id = 10, Code = "SKU-FEFO-10", Name = "Sữa Tươi FEFO", UnitId = 1, IsActive = true };
+        var locExcluded = new WarehouseLocation { Id = 101, WarehouseId = 1, Code = "A-01-01", Name = "Kệ Gốc Thiếu Hàng", IsActive = true, IsBlocked = false, IsPickable = true };
+        var locFefo2 = new WarehouseLocation { Id = 102, WarehouseId = 1, Code = "B-02-02", Name = "Kệ FEFO Xa Hơn", IsActive = true, IsBlocked = false, IsPickable = true };
+        var locFefo1 = new WarehouseLocation { Id = 103, WarehouseId = 1, Code = "A-02-01", Name = "Kệ FEFO Gần Nhất", IsActive = true, IsBlocked = false, IsPickable = true };
+        var locExpired = new WarehouseLocation { Id = 104, WarehouseId = 1, Code = "A-01-02", Name = "Kệ Hàng Hết Hạn", IsActive = true, IsBlocked = false, IsPickable = true };
+
+        var lotSoon = new InventoryLot { Id = 201, ProductId = 10, LotNumber = "LOT-SOON", ExpiryDate = today.AddDays(5) };
+        var lotLater = new InventoryLot { Id = 202, ProductId = 10, LotNumber = "LOT-LATER", ExpiryDate = today.AddDays(30) };
+        var lotExpired = new InventoryLot { Id = 203, ProductId = 10, LotNumber = "LOT-EXPIRED", ExpiryDate = today.AddDays(-1) };
+
+        db.Products.Add(prod);
+        db.WarehouseLocations.AddRange(locExcluded, locFefo2, locFefo1, locExpired);
+        db.InventoryLots.AddRange(lotSoon, lotLater, lotExpired);
+        db.InventoryStocks.AddRange(
+            new InventoryStock { Id = 1, WarehouseId = 1, ProductId = 10, Product = prod, LocationId = 101, Location = locExcluded, LotId = 201, Lot = lotSoon, Status = InventoryStatus.Available, Quantity = 10m },
+            new InventoryStock { Id = 2, WarehouseId = 1, ProductId = 10, Product = prod, LocationId = 102, Location = locFefo2, LotId = 202, Lot = lotLater, Status = InventoryStatus.Available, Quantity = 20m },
+            new InventoryStock { Id = 3, WarehouseId = 1, ProductId = 10, Product = prod, LocationId = 103, Location = locFefo1, LotId = 201, Lot = lotSoon, Status = InventoryStatus.Available, Quantity = 15m },
+            new InventoryStock { Id = 4, WarehouseId = 1, ProductId = 10, Product = prod, LocationId = 104, Location = locExpired, LotId = 203, Lot = lotExpired, Status = InventoryStatus.Available, Quantity = 50m });
+        await db.SaveChangesAsync();
+
+        var pickingServiceMock = new Mock<IPickingService>();
+        pickingServiceMock
+            .Setup(x => x.GetAsync(77, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PickingTaskDto
+            {
+                Id = 77,
+                TaskCode = "PICK-W54-077",
+                WarehouseId = 1,
+                Status = "InProgress",
+                Lines =
+                [
+                    new PickingTaskLineDto
+                    {
+                        Id = 701,
+                        ProductId = 10,
+                        ProductCode = "SKU-FEFO-10",
+                        SourceLocationId = 101,
+                        RequestedQuantity = 10m,
+                        PickedQuantity = 2m,
+                        RemainingQuantity = 8m
+                    }
+                ]
+            });
+
+        var controller = new PickingTasksController(pickingServiceMock.Object, db);
+        var res = await controller.GetAlternateBins(77, productId: 10, excludeLocationId: 101, cancellationToken: default);
+        using var doc = JsonSerializer.SerializeToDocument(res.Should().BeOfType<OkObjectResult>().Subject.Value);
+
+        doc.RootElement.GetProperty("totalCandidates").GetInt32().Should().Be(2);
+        var bins = doc.RootElement.GetProperty("alternateBins");
+        bins.GetArrayLength().Should().Be(2);
+
+        // First candidate must be LOT-SOON (expires in 5 days) at location A-02-01 (103)
+        bins[0].GetProperty("locationId").GetInt32().Should().Be(103);
+        bins[0].GetProperty("locationCode").GetString().Should().Be("A-02-01");
+        bins[0].GetProperty("lotNumber").GetString().Should().Be("LOT-SOON");
+        bins[0].GetProperty("availableQuantity").GetDecimal().Should().Be(15m);
+
+        // Second candidate must be LOT-LATER (expires in 30 days) at location B-02-02 (102)
+        bins[1].GetProperty("locationId").GetInt32().Should().Be(102);
+        bins[1].GetProperty("locationCode").GetString().Should().Be("B-02-02");
+        bins[1].GetProperty("lotNumber").GetString().Should().Be("LOT-LATER");
+        bins[1].GetProperty("availableQuantity").GetDecimal().Should().Be(20m);
+    }
+
+    [Fact]
+    public async Task Wave54_ImportReceiptMacPreview_CalculatesExactWeightedAverageDelta()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase($"W54_MacPreview_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ErpKhoDbContext(options);
+
+        var prod = new Product
+        {
+            Id = 301,
+            Code = "SKU-MAC-301",
+            Name = "Hạt Điều Rang Muối",
+            UnitId = 1,
+            MovingAverageCost = 100000m,
+            IsActive = true
+        };
+        db.Products.Add(prod);
+        db.InventoryStocks.Add(new InventoryStock
+        {
+            Id = 1,
+            WarehouseId = 1,
+            ProductId = 301,
+            Status = InventoryStatus.Available,
+            Quantity = 10m,
+            MovingAverageCost = 100000m
+        });
+        db.ImportReceipts.Add(new ImportReceipt
+        {
+            Id = 901,
+            Code = "PNK-W54-901",
+            WarehouseId = 1,
+            Status = ReceiptStatus.ReadyToPost,
+            CreatedBy = 1,
+            CreatedAt = DateTime.UtcNow,
+            Details =
+            [
+                new ImportReceiptDetail
+                {
+                    Id = 9001,
+                    ImportReceiptId = 901,
+                    ProductId = 301,
+                    Product = prod,
+                    Quantity = 10m,
+                    BaseExpectedQuantity = 10m,
+                    BaseAcceptedQuantity = 10m,
+                    ConversionFactor = 1m,
+                    UnitPrice = 150000m
+                }
+            ]
+        });
+        await db.SaveChangesAsync();
+
+        var controller = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, null, db);
+        var res = await controller.GetMacPreview(901, default);
+        using var doc = JsonSerializer.SerializeToDocument(res.Should().BeOfType<OkObjectResult>().Subject.Value);
+
+        doc.RootElement.GetProperty("importReceiptId").GetInt32().Should().Be(901);
+        doc.RootElement.GetProperty("costHiddenByRbac").GetBoolean().Should().BeFalse();
+
+        var line = doc.RootElement.GetProperty("lines")[0];
+        line.GetProperty("oldQuantity").GetDecimal().Should().Be(10m);
+        line.GetProperty("oldMovingAverageCost").GetDecimal().Should().Be(100000m);
+        line.GetProperty("incomingQuantity").GetDecimal().Should().Be(10m);
+        line.GetProperty("receiptUnitCost").GetDecimal().Should().Be(150000m);
+        line.GetProperty("projectedTotalQuantity").GetDecimal().Should().Be(20m);
+        line.GetProperty("projectedMovingAverageCost").GetDecimal().Should().Be(125000m);
+        line.GetProperty("macDelta").GetDecimal().Should().Be(25000m);
+        line.GetProperty("macDeltaPct").GetDecimal().Should().Be(25.00m);
+        line.GetProperty("projectedInventoryValuation").GetDecimal().Should().Be(2500000m);
+    }
 }

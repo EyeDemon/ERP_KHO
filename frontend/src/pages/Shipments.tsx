@@ -32,12 +32,12 @@ type DockAppointment = {
 };
 
 const statusLabels:Record<string,string>={
-  Draft:'Nháp',Ready:'Sẵn sàng',Staging:'Đang staging',Loading:'Đang loading',Loaded:'Đã load',
+  Draft:'Nháp',Ready:'Sẵn sàng',Staging:'Đang tập kết ra cửa xuất',Loading:'Đang xếp hàng lên xe',Loaded:'Đã xếp lên xe',
   Dispatched:'Đã dispatch',InTransit:'Đang vận chuyển',Delivered:'Đã giao',DeliveryFailed:'Giao thất bại',
   ReturnToWarehouse:'Đang trả về kho',Completed:'Hoàn tất',Cancelled:'Đã hủy',
 };
 const huLabels:Record<string,string>={
-  InUse:'Đang đóng gói',Closed:'Đã đóng',Staged:'Đã staging',Loaded:'Đã load',Shipped:'Đã ship',
+  InUse:'Đang đóng gói',Closed:'Đã đóng',Staged:'Đã tập kết ra cửa xuất',Loaded:'Đã xếp lên xe',Shipped:'Đã xuất giao',
 };
 const huTypeLabels:Record<string,string>={
   Carton:'Thùng carton',Pallet:'Pallet',Tote:'Khay nhựa (Tote)',Box:'Hộp',
@@ -335,7 +335,7 @@ export default function Shipments(){
         </div>}
 
         {selected.status==='Staging'&&canLoad&&<div className="ui-subcard ui-stack">
-          <div className="ui-subcard-title">Bắt đầu Loading</div>
+          <div className="ui-subcard-title">Bắt đầu xếp hàng lên xe</div>
           <div className="ui-inline-wrap">
             <label>Outbound appointment IN_SERVICE
               <select aria-label="Outbound appointment loading" value={appointmentId} onChange={e=>setAppointmentId(e.target.value)}>
@@ -348,7 +348,7 @@ export default function Shipments(){
             <button type="button" disabled={!!busy||!appointmentId} onClick={()=>void mutate(
               'shipment-start-loading-'+selected.id,'/api/shipments/'+selected.id+'/start-loading',
               {dockAppointmentId:Number(appointmentId),rowVersion:selected.rowVersion}
-            )}>Bắt đầu Loading</button>
+            )}>Bắt đầu xếp hàng lên xe</button>
           </div>
         </div>}
 
@@ -375,7 +375,7 @@ export default function Shipments(){
             <button type="button" disabled={!!busy||selected.loadedHandlingUnitCount!==selected.handlingUnitCount} onClick={()=>void mutate(
               'shipment-complete-loading-'+selected.id,'/api/shipments/'+selected.id+'/complete-loading',
               {sealNumber:seal||undefined,rowVersion:selected.rowVersion}
-            )}>Xác nhận LOADED</button>
+            )}>Xác nhận đã xếp lên xe</button>
           </div>
         </div>}
 

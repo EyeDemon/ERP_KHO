@@ -2422,7 +2422,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         {
             Code = "STK-QA-000",
             WarehouseId = primaryWarehouse.Id,
-            Status = ReceiptStatus.Approved,
+            Status = StocktakeStatus.Approved,
             Note = "Kiểm kê định kỳ đợt 1 đã phê duyệt tại kệ BIN-A01-01",
             CreatedBy = qaManagerUser.Id,
             CreatedAt = DateTime.UtcNow.AddDays(-2).AddHours(-2),
@@ -2456,7 +2456,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     else
     {
         approvedStocktake.WarehouseId = primaryWarehouse.Id;
-        approvedStocktake.Status = ReceiptStatus.Approved;
+        approvedStocktake.Status = StocktakeStatus.Approved;
         approvedStocktake.CreatedBy = qaManagerUser.Id;
         approvedStocktake.CreatedAt = DateTime.UtcNow.AddDays(-2).AddHours(-2);
         approvedStocktake.ApprovedBy = qaAdmin.Id;
@@ -2503,7 +2503,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         {
             Code = "STK-QA-001",
             WarehouseId = primaryWarehouse.Id,
-            Status = ReceiptStatus.Draft,
+            Status = StocktakeStatus.Draft,
             Note = "Kiểm kê định kỳ kệ lưu trữ BIN-A01-01",
             CreatedBy = qaManagerUser.Id,
             CreatedAt = DateTime.UtcNow.AddHours(-2),
@@ -2536,7 +2536,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     {
         stocktake.Code = "STK-QA-001";
         stocktake.WarehouseId = primaryWarehouse.Id;
-        stocktake.Status = ReceiptStatus.Draft;
+        stocktake.Status = StocktakeStatus.Draft;
         stocktake.CreatedBy = qaManagerUser.Id;
         stocktake.Note = "Kiểm kê định kỳ kệ lưu trữ BIN-A01-01";
         var line1 = stocktake.Details.FirstOrDefault(d => d.ProductId == product.Id);

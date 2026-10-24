@@ -689,7 +689,7 @@ public sealed class Wave10FullWarehouseMixedStormSqlTests
                 {
                     Code = $"ST-W10-1-{suffix}",
                     WarehouseId = wh1Id,
-                    Status = ReceiptStatus.Draft,
+                    Status = StocktakeStatus.Draft,
                     CreatedBy = makerId,
                     CreatedAt = DateTime.UtcNow,
                     Details =
@@ -714,7 +714,7 @@ public sealed class Wave10FullWarehouseMixedStormSqlTests
                 {
                     Code = $"ST-W10-2-{suffix}",
                     WarehouseId = wh1Id,
-                    Status = ReceiptStatus.Draft,
+                    Status = StocktakeStatus.Draft,
                     CreatedBy = makerId,
                     CreatedAt = DateTime.UtcNow,
                     Details =

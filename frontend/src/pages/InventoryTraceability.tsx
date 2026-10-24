@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useInRouterContext, useLocation } from 'react-router-dom';
 import apiClient from '../services/apiClient';
 import { getTraceabilityWarehouses, type TraceabilityWarehouse } from '../services/traceabilityWarehouses';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbarField } from '../ui/ProductionUi';
@@ -122,6 +122,7 @@ const tone=(x:Event):'neutral'|'success'|'warning'|'danger'=>
   x.transactionType==='Reversal'?'warning':x.isReversed?'neutral':'success';
 
 export default function InventoryTraceability(){
+  const inRouter=useInRouterContext();
   // Read URL state from the router so navigation between two reversal links
   // updates the existing screen rather than reusing stale form/query data.
   const location=useLocation();
@@ -334,6 +335,44 @@ export default function InventoryTraceability(){
   return <UiPage>
     <UiPageHeader eyebrow="Kiểm soát tồn kho" title="Truy vết & phả hệ tồn kho"
       description="Xem toàn bộ nhóm tồn của một kho được phép, hoặc truy theo sản phẩm, lô, sê-ri và chứng từ. Dòng thời gian sổ cái giữ nguyên lịch sử bất biến."/>
+    <div
+      data-testid="reconciliation-traceability-tabs"
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 12,
+        padding: 6,
+        borderRadius: 10,
+        background: '#f1f5f9',
+        border: '1px solid #cbd5e1',
+      }}
+    >
+      {[
+        { to: '/inventory-reconciliation', label: 'Tab 1: Đối chiếu Tồn kho & Hàng đợi Outbox (/inventory-reconciliation)', testId: 'tab-inventory-reconciliation', active: false },
+        { to: '/inventory-traceability', label: 'Tab 2: Truy vết & Phả hệ Lô / Sê-ri (/inventory-traceability)', testId: 'tab-inventory-traceability', active: true },
+      ].map((tab) => {
+        const style: React.CSSProperties = {
+          padding: '8px 14px',
+          borderRadius: 8,
+          fontWeight: 700,
+          fontSize: 13,
+          textDecoration: 'none',
+          background: tab.active ? '#0f172a' : '#ffffff',
+          color: tab.active ? '#ffffff' : '#334155',
+          border: tab.active ? '1px solid #0f172a' : '1px solid #cbd5e1',
+        };
+        return inRouter ? (
+          <Link key={tab.to} to={tab.to} data-testid={tab.testId} aria-current={tab.active ? 'page' : undefined} style={style}>
+            {tab.label}
+          </Link>
+        ) : (
+          <a key={tab.to} href={tab.to} data-testid={tab.testId} aria-current={tab.active ? 'page' : undefined} style={style}>
+            {tab.label}
+          </a>
+        );
+      })}
+    </div>
     {requestError&&<p role="alert">{requestError}</p>}
     <UiCard title="Điều kiện truy vết">
       <form onSubmit={search} noValidate className="ui-form-grid" style={{gridTemplateColumns:'repeat(4, minmax(0, 1fr))',gap:10,alignItems:'end',maxWidth:'100%'}} aria-busy={loading}>

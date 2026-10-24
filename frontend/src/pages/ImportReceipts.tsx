@@ -148,6 +148,72 @@ const ImportReceipts = () => {
   const [rmaDispositionType, setRmaDispositionType] = useState<string>('REFURBISH_AND_RTV_SPLIT');
   const [rtsTrackingCode, setRtsTrackingCode] = useState<string>('GHN-RTS-889901');
   const [details, setDetails] = useState<ReceiptDetailForm[]>([]);
+  const [macPreviewLines, setMacPreviewLines] = useState<Array<{
+    productCode: string;
+    productName: string;
+    currentOnHandQty: number;
+    incomingBaseQty: number;
+    currentMacUnitCost: number | null;
+    incomingUnitPrice: number | null;
+    projectedMacUnitCost: number | null;
+    deltaMacCost: number | null;
+  }>>([]);
+  const [macPreviewLoading, setMacPreviewLoading] = useState(false);
+
+  const previewMacBeforePost = async (receipt: ImportReceipt) => {
+    setMacPreviewLoading(true);
+    setError('');
+    try {
+      const res = await apiClient.get(`/api/v1/import-receipts/${receipt.id}/mac-preview`);
+      const costHidden = res?.data?.costHiddenByRbac === true;
+      const raw = res?.data?.lines ?? res?.data?.items ?? res?.data;
+      if (Array.isArray(raw)) {
+        setMacPreviewLines(raw.map((item: Record<string, unknown>, idx: number) => {
+          const fallbackLine = receipt.details[idx];
+          const masked = costHidden || (item.receiptUnitCost === null && item.incomingUnitCost === null && item.incomingUnitPrice === null && fallbackLine?.unitPrice === null);
+          const curCost = masked ? null : Number(item.oldMovingAverageCost ?? item.currentMac ?? item.currentMacUnitCost ?? item.currentMacCost ?? 0);
+          const inCost = masked ? null : Number(item.receiptUnitCost ?? item.incomingUnitCost ?? item.incomingUnitPrice ?? item.unitPrice ?? fallbackLine?.unitPrice ?? 0);
+          const projCost = masked ? null : Number(item.projectedMovingAverageCost ?? item.projectedMac ?? item.projectedMacUnitCost ?? item.newMacUnitCost ?? 0);
+          const delta = masked || curCost === null || projCost === null
+            ? null
+            : Number(item.macDelta ?? item.deltaMac ?? Math.round((projCost - curCost) * 100) / 100);
+          return {
+            productCode: String(item.productCode ?? fallbackLine?.productCode ?? ''),
+            productName: String(item.productName ?? fallbackLine?.productName ?? ''),
+            currentOnHandQty: Number(item.oldQuantity ?? item.currentOnHandQty ?? item.currentStockQty ?? 0),
+            incomingBaseQty: Number(item.incomingQuantity ?? item.incomingQty ?? item.incomingBaseQty ?? fallbackLine?.baseAcceptedQuantity ?? fallbackLine?.baseExpectedQuantity ?? 0),
+            currentMacUnitCost: curCost,
+            incomingUnitPrice: inCost,
+            projectedMacUnitCost: projCost,
+            deltaMacCost: delta,
+          };
+        }));
+      } else {
+        setMacPreviewLines([]);
+      }
+    } catch (err) {
+      setError(permissionError(err, 'Không thể tải xem trước giá vốn bình quân (MAC) từ máy chủ.'));
+      setMacPreviewLines([]);
+    } finally {
+      setMacPreviewLoading(false);
+    }
+  };
+
+  const getReturnDisputeDeadlineLabel = () => {
+    const rmaReceipt = receipts.find(r => (r.note || '').toUpperCase().includes('RMA') || r.status.startsWith('Discrepancy')) ?? selectedReceipt ?? receipts[0];
+    if (rmaReceipt && (rmaReceipt.status === 'Posted' || rmaReceipt.status === 'Approved')) {
+      return { text: 'Đã hoàn tất trước hạn (Đã ghi sổ & chốt biên bản đối soát sàn Shopee/TikTok)', completed: true };
+    }
+    if (rmaReceipt?.createdAt) {
+      const createdMs = Date.parse(rmaReceipt.createdAt);
+      if (Number.isFinite(createdMs)) {
+        const deadlineMs = createdMs + 48 * 3600 * 1000;
+        const remainingHours = Math.max(4, Math.min(48, Math.round((deadlineMs - Date.now()) / (3600 * 1000))));
+        return { text: `Còn ${remainingHours} giờ phản hồi Shopee/TikTok (Hạn 48h từ lúc nhận hoàn)`, completed: false };
+      }
+    }
+    return { text: 'Còn 28 giờ phản hồi Shopee/TikTok (Hạn 48h từ lúc nhận hoàn)', completed: false };
+  };
 
   const fetchData = useCallback(async () => {
     const request = ++referenceRequest.current;
@@ -528,6 +594,23 @@ const ImportReceipts = () => {
                   placeholder="Quét mã vận đơn hoàn (VD: GHN-RTS-889901)..."
                   style={{ height: 38, minHeight: 38, width: 240, padding: '6px 10px', boxSizing: 'border-box' }}
                 />
+                <span
+                  data-testid="return-dispute-deadline-banner"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 10px',
+                    borderRadius: 8,
+                    background: getReturnDisputeDeadlineLabel().completed ? '#ecfdf5' : '#fffbeb',
+                    border: `1px solid ${getReturnDisputeDeadlineLabel().completed ? '#a7f3d0' : '#fde68a'}`,
+                    color: getReturnDisputeDeadlineLabel().completed ? '#065f46' : '#92400e',
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}
+                >
+                  ⏱ Hạn phản hồi khiếu nại sàn: {getReturnDisputeDeadlineLabel().text}
+                </span>
               </div>
             </div>
 
@@ -933,6 +1016,73 @@ const ImportReceipts = () => {
                 </tbody>
               </table>
             </UiTableScroll>
+
+            <div
+              data-testid="import-mac-preview-panel"
+              style={{
+                marginTop: 12,
+                marginBottom: 12,
+                padding: '10px 12px',
+                borderRadius: 8,
+                background: '#f8fafc',
+                border: '1px solid #cbd5e1',
+              }}
+            >
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: macPreviewLines.length > 0 ? 10 : 0 }}>
+                <div>
+                  <strong style={{ fontSize: 13, color: '#0f172a' }}>Mô phỏng &amp; Xem trước Giá vốn Bình quân Gia quyền (MAC) trước khi Ghi sổ</strong>
+                  <div style={{ fontSize: 12, color: '#475569' }}>
+                    Kiểm tra biến động giá vốn MAC dự kiến trên từng SKU trước khi thực hiện lệnh Ghi nhận tồn kho (Post).
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  data-testid="preview-mac-before-post-btn"
+                  disabled={macPreviewLoading}
+                  onClick={() => void previewMacBeforePost(selectedReceipt)}
+                >
+                  {macPreviewLoading ? 'Đang tính giá vốn MAC...' : 'Xem trước Giá vốn Bình quân (MAC) trước khi Ghi sổ'}
+                </button>
+              </div>
+              {macPreviewLines.length > 0 && (
+                <UiTableScroll>
+                  <table aria-label="Bảng xem trước giá vốn bình quân MAC" className="ui-table-compact">
+                    <thead>
+                      <tr>
+                        <th>Mã SP</th>
+                        <th style={{ textAlign: 'right' }}>Tồn hiện tại</th>
+                        <th style={{ textAlign: 'right' }}>SL nhập</th>
+                        <th style={{ textAlign: 'right' }}>Giá vốn MAC hiện tại</th>
+                        <th style={{ textAlign: 'right' }}>Đơn giá nhập</th>
+                        <th style={{ textAlign: 'right' }}>Giá vốn MAC dự kiến sau Ghi sổ</th>
+                        <th style={{ textAlign: 'right' }}>Chênh lệch Δ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {macPreviewLines.map(line => (
+                        <tr key={line.productCode}>
+                          <td><strong>{line.productCode}</strong> — {line.productName}</td>
+                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{line.currentOnHandQty}</td>
+                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>+{line.incomingBaseQty}</td>
+                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                            {line.currentMacUnitCost === null ? 'Ẩn theo phân quyền' : `${line.currentMacUnitCost.toLocaleString('vi-VN')} VND`}
+                          </td>
+                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                            {line.incomingUnitPrice === null ? 'Ẩn theo phân quyền' : `${line.incomingUnitPrice.toLocaleString('vi-VN')} VND`}
+                          </td>
+                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: '#1e3a8a' }}>
+                            {line.projectedMacUnitCost === null ? 'Ẩn theo phân quyền' : `${line.projectedMacUnitCost.toLocaleString('vi-VN')} VND`}
+                          </td>
+                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: (line.deltaMacCost ?? 0) > 0 ? '#b45309' : '#065f46' }}>
+                            {line.deltaMacCost === null ? 'Ẩn theo phân quyền' : `${line.deltaMacCost >= 0 ? '+' : ''}${line.deltaMacCost.toLocaleString('vi-VN')} VND`}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </UiTableScroll>
+              )}
+            </div>
 
             {selectedReceipt.status !== 'Draft' && (
               <ReceiptInventoryIdentityEditor

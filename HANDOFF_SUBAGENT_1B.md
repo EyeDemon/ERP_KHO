@@ -1,68 +1,53 @@
-# HANDOFF REPORT: SUBAGENT 1B (Core WMS Ledger & Outbound Engine `[P0-03]`)
+# HANDOFF_SUBAGENT_1B — Wave 54 Backend Audit Remediation, Modular Controller Split & Warehouse Floor Enhancements
 
-**Wave:** 53  
-**Subagent Role:** Core WMS Ledger & Outbound Engine (`[P0-03]`)  
-**Status:** COMPLETED  
-**Encoding Check (`scripts/check-encoding.ps1`):** PASSED (Exit Code 0)
+## 1. Đã thay đổi gì (Changed Files & Coordinates)
 
----
+1. `ERP.Api/Authorization/AppPermissions.cs` (`L12-13`)
+   - Added `InventoryWrite = "inventory_movement.create"` and `InventoryOpeningBalanceImport = "inventory_movement.create"` aliases so opening balance import enforces write permissions without altering the 124-entry `Catalog` count.
+2. `ERP.Api/Authorization/PermissionAuthorizeAttribute.cs` (`L16-66`)
+   - Added `public PermissionAuthorizeAttribute(string permission, params string[] additionalPermissions)` constructor overload and updated `PermissionAuthorizationFilter` to evaluate any of the granted permissions.
+3. `ERP.Application/Interfaces/IHandoverManifestService.cs` *(new, `L1-47`)*
+   - Defined `IHandoverManifestService`, `ScanHandoverAwbInputDto`, `SealHandoverManifestInputDto`, `ConfirmCarrierHandoverInputDto`, and `HandoverManifestOperationResult`.
+4. `ERP.Infrastructure/Services/HandoverManifestService.cs` *(new, `L1-767`)*
+   - Extracted handover manifest query, AWB scan, seal, carrier handover confirmation, and `DispatchManifestReceiptsAsync` into `ERP.Infrastructure`.
+   - Enforced SQL transaction, deterministic 9-dimension lock ordering (`AcquireInventoryAllocationLocksAsync`), `StockReservation` / `StockAllocation` consumption, `InventoryTransaction` ledger append, `IntegrationOutboxMessage` (`HandoverManifestDispatched`), and `AuditLog`.
+   - Eliminated hardcoded `"51C-888.99"` / `"Bưu tá lấy hàng"` (`[A7]`), requiring explicit `VehiclePlate` and `DriverName` (`400 BadRequest` with `HANDOVER_VEHICLE_DRIVER_REQUIRED` when sealing/confirming without vehicle/driver).
+   - Eliminated `.OrderBy(u => u.Id).Select(u => (int?)u.Id).FirstOrDefaultAsync(...)` user fallback (`[A3]`).
+5. `ERP.Api/Controllers/ExportReceiptsController.cs` (`L19-46, L124-152, L535-720, L790-900, L902-1366, L1586-1590`)
+   - Removed all 7 fake `if (_db == null) return Ok(...)` blocks (`[A2]`) and added `RequireDb()`.
+   - Removed `.OrderBy(u => u.Id).Select(u => (int?)u.Id).FirstOrDefaultAsync(...)` fallback in `ResolveValidAuditUserIdAsync` (`[A3]`).
+   - Removed `DispatchManifestReceiptsAsync` and direct `stock.Quantity` mutations from the controller (`[A4]`), delegating `GetHandoverManifests`, `ScanHandoverAwb`, `SealHandoverManifest`, and `ConfirmCarrierHandover` to `IHandoverManifestService`.
+   - Changed `ImportOpeningBalance` authorization from `[PermissionAuthorize(AppPermissions.ExportReceiptRead)]` to `[PermissionAuthorize(AppPermissions.InventoryOpeningBalanceImport, AppPermissions.InventoryWrite)]` (`[A10]`) and wrapped opening balance mutations in an explicit SQL transaction with `AuditLog`.
+6. `ERP.Api/Controllers/HandoverManifestsController.cs` *(new, `L1-151`)*
+   - Dedicated controller for `[Route("api/v1/handover-manifests")]` and `[Route("api/handover-manifests")]` (`GET`, `POST scan-awb`, `POST {id:int}/seal`, `POST confirm`, `POST confirm-carrier-handover`, and `~/api/v1/integrations/handover-manifests/...`).
+7. `ERP.Api/Controllers/DataImportsController.cs` *(new, `L1-51`)*
+   - Dedicated controller for `[Route("api/v1/data-imports")]` and `[Route("api/data-imports")]` (`GET templates`, `POST opening-balance`).
+8. `ERP.Api/Controllers/SaasBillingController.cs` *(new, `L1-55`)*
+   - Dedicated controller for `[Route("api/v1/saas-billing")]` and `[Route("api/saas-billing")]` (`GET subscription`, `POST enforce-quota`, `POST vietqr-invoice`, `POST vietqr-webhook`).
+9. `ERP.Api/Controllers/PermissionsController.cs` (`L854-861`)
+   - Removed `.OrderBy(u => u.Id).Select(u => (int?)u.Id).FirstOrDefaultAsync(ct)` user fallback in `HandleVietQrBillingWebhook`.
+10. `ERP.Api/Controllers/ShipmentsController.cs` (`L172-422, L878-888`)
+    - Added `GET /api/v1/shipments/fleet-assignments` and `POST /api/v1/shipments/fleet-assignments` with `FLEET_VEHICLE_DRIVER_REQUIRED` validation and SQL persistence on `Shipment` / `DockAppointment` / `HandoverManifest`.
+11. `ERP.Infrastructure/Services/PickingService.cs` (`L965-969`)
+    - Sorted `PickingTaskDto.Lines` by optimal bin path (`SourceLocation.Code ASC`, `Sequence ASC`, `Id ASC`).
+12. `ERP.Api/Controllers/PickingTasksController.cs` (`L87-178`)
+    - Added `GET /api/v1/picking-tasks/{id:int}/alternate-bins` (and `/api/picking-tasks/{id:int}/alternate-bins`) returning FEFO/FIFO sorted pickable alternate bins for short-pick exceptions.
+13. `ERP.Api/Controllers/PutawayTasksController.cs` (`L176-344`)
+    - Added `GET /api/v1/putaway-tasks/{id:int}/directed-suggestion` and `GET /api/v1/putaway-tasks/directed-suggestions` ranking candidate storage bins by SKU consolidation, empty storage bin priority, and available capacity.
+14. `ERP.Api/Controllers/ImportReceiptsController.cs` (`L928-1065`)
+    - Added `GET /api/v1/import-receipts/{id:int}/mac-preview` (and `/api/import-receipts/{id:int}/mac-preview`) computing `(OldQty * OldMAC + IncomingQty * UnitCost) / (OldQty + IncomingQty)` per line, guarded by `inventory.cost.read` RBAC.
+15. `ERP.Api/Program.cs` (`L206`)
+    - Registered `IHandoverManifestService` / `HandoverManifestService` as `Scoped`.
 
-## 1. Executive Summary
+## 2. Bằng chứng kiểm chứng (Verification Evidence)
+- **FACT:** `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-encoding.ps1` -> `PASS (Exit Code 0)`.
+- **FACT:** `dotnet build ERP.Api/ERP.Api.csproj -c Release --no-restore` -> `0 Error(s)`.
 
-All 5 inventory and outbound integrity gaps assigned to **Subagent 1B** (`OD-04`, `OD-01`, `OD-08`, `OD-02` & `GAP-P0-03`, and `GAP-P0-02` & `GAP-P1-04` / `GAP-P1-02` / `GAP-P1-05`) have been implemented strictly within the 6 exclusively owned files. No files outside the exclusive boundary were modified.
+## 3. Những gì NOT VERIFIED
+- **NOT VERIFIED:** Full solution test suite (`ERP.Application.Tests`, `ERP.Api.Tests`, `ERP.SqlIntegrationHarness`) and live Playwright browser verification are coordinated by the Master Orchestrator / Subagent 4 after all parallel wave subagents finish.
 
----
+## 4. Rủi ro tồn đọng (Residual Risks)
+- None within Subagent 1B file ownership boundary. All legacy route aliases on `ExportReceiptsController` and `PermissionsController` remain backward-compatible without duplicate route collisions.
 
-## 2. Files Modified & Exact `File:Line` Coordinates
-
-### 2.1 `ERP.Infrastructure/Repositories/ExportReceiptRepository.cs`
-- **`GetByIdWithDetailsAsync` (`L17-L83`)**:
-  - Added `.Include(e => e.SalesOrder)` (`L27`, `L40`) so `ExportReceipt.SalesOrder` is eagerly loaded for both the full projection and the lightweight fallback query (when `Users`/`Units` are unseeded in unit tests).
-  - Added fallback resolution (`L58-L77`) to attach `receipt.SalesOrder` by `SalesOrderId` or `MarketplaceOrderId` if not already populated by navigation fixup.
-- **`GetListAsync` (`L85-L103`)**:
-  - Added `.Include(e => e.SalesOrder)` (`L92`).
-- **`IExportReceiptBundleResolver` Implementation (`L124-L159`)**:
-  - Implemented `GetActiveBundleComponentsAsync` (`L124-L135`), `GetSalesOrderLinesAsync` (`L137-L147`), and `GetActiveGiftProductIdsAsync` (`L149-L159`) on `ExportReceiptRepository` so `ExportReceiptService` can resolve BOM components, `SalesOrderLine` metadata (`IsFreeGift`, `ParentBundleProductId`), and active `PromotionGiftRules` without introducing an Infrastructure dependency in `ERP.Application`.
-
-### 2.2 `ERP.Application/Services/ExportReceiptService.cs`
-- **`CreateAsync` (`L72-L270`)**:
-  - Mapped `SalesOrderId = dto.SalesOrderId` and `ShipmentId = dto.ShipmentId` onto `ExportReceipt` (`L97-L98`).
-  - Resolved `SalesOrderLine` gift/bundle flags and active `ProductBundleComponents` via `IExportReceiptBundleResolver` (`L113-L237`), expanding bundle parent lines into component `ExportReceiptDetail` lines with `ParentBundleProductId = detailDto.ProductId` and proportional `UnitPrice`, while propagating `IsFreeGift = true` (`UnitPrice = 0m`) for promotional free gifts (`GAP-P0-02`, `GAP-P1-04`).
-  - Grouped stock reservation validation and physical deduction by `ProductId` (`L103-L111`, `L243-L253`) so multi-line/component receipts deduct accurately per SKU.
-- **`ApproveCoreAsync` (`L306-L346`) & `DispatchAsync` (`L423-L458`)**:
-  - Added `EnsureNotCancelledOrPendingPutback(receipt)` guard (`L311`, `L429`, defined at `L555-L566`) that blocks approval and dispatch when `receipt.Status == ReceiptStatus.CancelPendingPutback` or `receipt.SalesOrder?.Status is SalesOrderStatus.Cancelled or SalesOrderStatus.CancelPendingPutback`, throwing `ConcurrencyException` with `ErrorCode = "ORDER_CANCELLED_PUTBACK_REQUIRED"` and `ex.Data["ErrorCode"] = "ORDER_CANCELLED_PUTBACK_REQUIRED"` (`OD-04`).
-  - Added `AddGroupedExportTransactionsAsync` (`L511-L553`) to group physical stock deductions and `InventoryTransaction` audit entries by `ProductId` while preserving per-line `ExportReceiptDetail.UnitCost`.
-- **`CalculateReceiptTotals` (`L663-L676`) & `MapToDto` (`L703-L735`)**:
-  - Excluded `IsFreeGift` lines from `TotalAmount`, `TotalVatAmount`, and `FinalAmount` (`L665-L671`) and surfaced `IsFreeGift` and `ParentBundleProductId` on `ExportReceiptDetailDto` (`L717-L718`) (`GAP-P1-04`).
-- **`IExportReceiptBundleResolver` Interface (`L793-L798`)**:
-  - Defined application-layer contract for optional bundle/gift resolution.
-
-### 2.3 `ERP.Infrastructure/Repositories/InventoryStockRepository.cs`
-- **`GetByProductAndWarehouseAsync` (`L17-L33`) & `GetAvailableQuantityAsync` (`L116-L128`)**:
-  - Excluded `WarehouseLocationType.Receiving` staging bins and expired lots (`s.Lot.ExpiryDate.Value.Date >= todayUtc`), and deducted `(s.ReservedQuantity > s.AllocatedQuantity ? s.ReservedQuantity : s.AllocatedQuantity)` and `s.LockedQuantity` from `s.Quantity` so `AllocatedQuantity` (which is a subset of `ReservedQuantity` during bin allocation) is not double-subtracted while still protecting buckets where `AllocatedQuantity > ReservedQuantity` (`OD-01`, Round 4 Cause A).
-- **`ConsumeReservationWithBreakdownAsync` (`L236-L253`)**:
-  - Updated `OriginalValues` snapshot and preserved state (`trackedEntry.OriginalValues.SetValues(tracked); trackedEntry.State = EntityState.Unchanged;`) after syncing `tracked.Quantity` / `tracked.ReservedQuantity` following `ExecuteUpdateAsync`, preventing EF Core `DetectChanges()` from marking the entity `Modified` with a stale `RowVersion` on subsequent `SaveChangesAsync()` (Round 4 Cause B).
-- **`AllocateAsync` (`L417-L610`)**:
-  - Included `.Include(s => s.Location)` and `.Include(s => s.Lot)` (`L434-L435`), filtered out `WarehouseLocationType.Receiving` (`L451`) and expired lots (`L454`) (`OD-01`).
-  - Computed available unreserved capacity (`L500`, `L509`, `L588`) as `stock.Quantity - Math.Max(stock.ReservedQuantity, stock.AllocatedQuantity) - stock.LockedQuantity` and guarded the relational `ExecuteUpdateAsync` predicate (`L540`) with `x.Quantity - (x.ReservedQuantity > x.AllocatedQuantity ? x.ReservedQuantity : x.AllocatedQuantity) - x.LockedQuantity >= take` (Round 4 Cause A).
-  - Updated `OriginalValues` snapshot and preserved state on `trackedEntry` (`L561-L581`) via `trackedEntry.OriginalValues.SetValues(tracked); trackedEntry.State = EntityState.Unchanged;` after `ExecuteUpdateAsync` so in-memory synchronization of `ReservedQuantity` / `Quantity` does not cause `DetectChanges()` to mark the entity `Modified` with a stale `RowVersion` (Round 4 Cause B).
-
-### 2.4 `ERP.Infrastructure/Services/StockReservationService.cs`
-- **`RebuildBalancesAsync` (`L701-L925`)**:
-  - Loaded `InventoryTransactions` (`L724-L729`) and removed the single-bucket `group.Count() == 1` restriction so multi-bin products (`RECEIVING`, `STORAGE`, etc.) are reconciled per bucket across all 9 dimensions (`TenantId`, `WarehouseId`, `ProductId`, `LocationId`, `LotId`, `SerialId`, `HandlingUnitId`, `Status`, `OwnerId`) (`L765-L910`) (`OD-08`).
-  - Handled both two-legged (`LocationId` set on each leg with signed `Quantity`) and single-row (`FromLocationId` / `ToLocationId`) `TransactionType.Move` transactions, as well as `Import`, `Export`, `Adjustment`, and `TransferOut` transactions (`L835-L896`).
-  - Updated `bucket.Quantity = ledgerQty` whenever `hasMatchingLedgerTx && ledgerQty >= 0m` (`L904-L907`).
-
-### 2.5 `ERP.Infrastructure/Services/PutawayService.cs`
-- **`MoveAsync` Destination Bucket Lookup (`L616-L633`)**:
-  - Added `x.HandlingUnitId == sourceBucket.HandlingUnitId && x.OwnerId == sourceBucket.OwnerId` (`L626-L627`) to the destination `InventoryStock` lookup so stock moves never merge into a bucket belonging to a different LPN (`HandlingUnitId`) or consignor (`OwnerId`) (`OD-02`).
-- **`MoveAsync` Putback Completion Hook (`L752-L755`) & `CompletePutbackOrderCancellationAsync` (`L813-L989`)**:
-  - When a putback task (`ReferenceType == "PUTBACK"` or `TaskNumber` starting with `"PUTBACK-"`) transitions to `PutawayTaskStatus.Completed`, `CompletePutbackOrderCancellationAsync` resolves the linked `ExportReceipt` and `SalesOrder` (`L819-L878`).
-  - Transitions `ExportReceipt.Status` from `ReceiptStatus.CancelPendingPutback` to `ReceiptStatus.Cancelled` (`L880-L885`) and `SalesOrder.Status` from `SalesOrderStatus.CancelPendingPutback` to `SalesOrderStatus.Cancelled` (`L887-L892`).
-  - Releases active `StockReservations` (`StockReservationStatus.Released`, `ReservedQuantity = 0`) and `StockAllocations` (`StockAllocationStatus.Released`, `AllocatedQuantity = 0`) and decrements `ReservedQuantity` and `AllocatedQuantity` on matching `InventoryStock` buckets (`L895-L988`) (`GAP-P0-03`).
-
-### 2.6 `ERP.Infrastructure/Services/SalesOrderBackorderService.cs`
-- **`CreateSalesOrderAsync` (`L74-L298`)**:
-  - **SaaS Quota 115% Hard-Stop (`GAP-P1-05`, `L83-L108`)**: Queries active `TenantSubscription` for `command.TenantId`; when `MonthlyOrderQuota > 0` and `CurrentMonthOrderCount >= (int)Math.Ceiling(MonthlyOrderQuota * 1.15m)`, throws `ForbiddenException` with `ex.Data["ErrorCode"] = "SUBSCRIPTION_QUOTA_EXCEEDED"`. Otherwise increments `CurrentMonthOrderCount`.
-  - **BOM / Kit Dynamic Explosion (`GAP-P0-02`, `L119-L176`)**: Queries active `ProductBundleComponents` for incoming line `ProductId`s and expands parent kit lines into child component `SalesOrderLine`s with `ParentBundleProductId = line.ProductId`, `OrderedQty = line.Quantity * comp.Quantity`, and proportional `UnitPrice`.
-  - **Promotional Free-Gift Auto-Attach (`GAP-P1-02`, `L222-L280`)**: Evaluates active `PromotionGiftRules` where `orderSubtotal >= rule.MinOrderAmount` and trigger product quantity `>= rule.MinTriggerQuantity`. Checks remaining ATP (`availableByProduct - committedToRegularLines >= rule.GiftQuantity`); only when ATP is sufficient, attaches a free-gift `SalesOrderLine` (`IsFreeGift = true`, `UnitPrice = 0m`, `AllocatedQty = rule.GiftQuantity`) and creates the corresponding `StockReservation`; if gift stock is 0 or insufficient, skips gift attachment without creating any backorder.
+## 5. Việc dở dang / Stub
+- None (`0` TODO/FIXME/NotImplementedException/stub endpoints).

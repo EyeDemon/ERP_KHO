@@ -73,7 +73,7 @@ namespace ERP.Api.Controllers
             {
                 var tenantId = _db.CurrentTenantId > 0 ? _db.CurrentTenantId : 1;
                 var stQuery = _db.Stocktakes.AsNoTracking()
-                    .Where(s => s.Status == ReceiptStatus.Draft);
+                    .Where(s => s.Status == StocktakeStatus.Draft);
                 var lockQuery = _db.InventoryLocks.AsNoTracking()
                     .Where(l => l.Status == InventoryLockStatus.Active && l.LockType == InventoryLockType.CountFreeze);
                 if (warehouseId.HasValue)
@@ -215,8 +215,8 @@ namespace ERP.Api.Controllers
                     lockQuery = lockQuery.Where(l => accessibleIds.Contains(l.WarehouseId));
                 }
 
-                openStocktakesCount = await stQuery.CountAsync(s => s.Status == ReceiptStatus.Draft, cancellationToken);
-                approvedStocktakesCount = await stQuery.CountAsync(s => s.Status == ReceiptStatus.Approved || s.Status == ReceiptStatus.Posted, cancellationToken);
+                openStocktakesCount = await stQuery.CountAsync(s => s.Status == StocktakeStatus.Draft, cancellationToken);
+                approvedStocktakesCount = await stQuery.CountAsync(s => s.Status == StocktakeStatus.Approved || s.Status == StocktakeStatus.Posted, cancellationToken);
                 activeCountFreezeLocksCount = await lockQuery.CountAsync(cancellationToken);
             }
 

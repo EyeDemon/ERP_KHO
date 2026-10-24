@@ -1028,7 +1028,7 @@ public sealed class Wave8ParallelConcurrencySqlTests
                 {
                     Code = $"ST-R5-{suffix}",
                     WarehouseId = wh1Id,
-                    Status = ReceiptStatus.Draft,
+                    Status = StocktakeStatus.Draft,
                     CreatedBy = makerId,
                     CreatedAt = DateTime.UtcNow,
                     Details =

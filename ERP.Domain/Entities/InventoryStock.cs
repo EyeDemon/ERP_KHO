@@ -126,12 +126,32 @@ public class InventoryStock : ITenantEntity
 
     public void RefreshGrainHash()
     {
-        var lotPart = (LotId is > 0 ? LotId : Lot?.Id is > 0 ? Lot.Id : null)?.ToString()
-            ?? (Lot is not null && !string.IsNullOrWhiteSpace(Lot.LotNumber) ? $"LOT:{Lot.LotNumber}" : "-1");
-        var serialPart = (SerialId is > 0 ? SerialId : Serial?.Id is > 0 ? Serial.Id : null)?.ToString()
-            ?? (Serial is not null && !string.IsNullOrWhiteSpace(Serial.SerialNumber) ? $"SER:{Serial.SerialNumber}" : "-1");
-        var canonical = $"{TenantId}|{WarehouseId}|{ProductId}|{(int)Status}|{LocationId ?? -1}|{lotPart}|{serialPart}|{HandlingUnitId ?? -1}|{OwnerId ?? -1}";
-        GrainHash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(canonical));
+        var resolvedLotId = LotId is > 0 ? LotId : (Lot?.Id is > 0 ? Lot.Id : null);
+        var resolvedSerialId = SerialId is > 0 ? SerialId : (Serial?.Id is > 0 ? Serial.Id : null);
+        if ((resolvedLotId is null && Lot is not null && !string.IsNullOrWhiteSpace(Lot.LotNumber))
+            || (resolvedSerialId is null && Serial is not null && !string.IsNullOrWhiteSpace(Serial.SerialNumber)))
+        {
+            var lotPart = resolvedLotId?.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ?? (Lot is not null && !string.IsNullOrWhiteSpace(Lot.LotNumber) ? $"LOT:{Lot.LotNumber}" : "-1");
+            var serialPart = resolvedSerialId?.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ?? (Serial is not null && !string.IsNullOrWhiteSpace(Serial.SerialNumber) ? $"SER:{Serial.SerialNumber}" : "-1");
+            var canonical = string.Create(
+                System.Globalization.CultureInfo.InvariantCulture,
+                $"{TenantId}|{WarehouseId}|{(LocationId is > 0 ? LocationId.Value : -1)}|{ProductId}|{lotPart}|{serialPart}|{(HandlingUnitId is > 0 ? HandlingUnitId.Value : -1)}|{(int)Status}|{(OwnerId is > 0 ? OwnerId.Value : -1)}");
+            GrainHash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(canonical));
+            return;
+        }
+
+        GrainHash = ComputeCanonicalGrainHash(
+            TenantId,
+            WarehouseId,
+            LocationId,
+            ProductId,
+            resolvedLotId,
+            resolvedSerialId,
+            HandlingUnitId,
+            Status,
+            OwnerId);
     }
 
     public static byte[] ComputeCanonicalGrainHash(
@@ -147,7 +167,7 @@ public class InventoryStock : ITenantEntity
     {
         var canonicalKey = string.Create(
             System.Globalization.CultureInfo.InvariantCulture,
-            $"{tenantId}|{warehouseId}|{locationId ?? 0}|{productId}|{lotId ?? 0}|{serialId ?? 0}|{handlingUnitId ?? 0}|{(int)status}|{ownerId ?? 0}");
+            $"{tenantId}|{warehouseId}|{(locationId is > 0 ? locationId.Value : -1)}|{productId}|{(lotId is > 0 ? lotId.Value : -1)}|{(serialId is > 0 ? serialId.Value : -1)}|{(handlingUnitId is > 0 ? handlingUnitId.Value : -1)}|{(int)status}|{(ownerId is > 0 ? ownerId.Value : -1)}");
         return System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(canonicalKey));
     }
 

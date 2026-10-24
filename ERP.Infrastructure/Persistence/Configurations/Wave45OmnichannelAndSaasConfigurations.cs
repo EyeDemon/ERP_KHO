@@ -145,37 +145,6 @@ public sealed class SaasBillingInvoiceConfiguration : IEntityTypeConfiguration<S
     }
 }
 
-public sealed class ShipmentFinancialLedgerConfiguration : IEntityTypeConfiguration<ShipmentFinancialLedger>
-{
-    public void Configure(EntityTypeBuilder<ShipmentFinancialLedger> builder)
-    {
-        builder.ToTable("ShipmentFinancialLedgers");
-        builder.HasKey(x => x.Id);
-        builder.Property(x => x.CarrierCode).HasMaxLength(32).IsRequired();
-        builder.Property(x => x.TrackingNumber).HasMaxLength(64).IsRequired();
-        builder.Property(x => x.ExpectedCodAmount).HasPrecision(19, 4);
-        builder.Property(x => x.ActualCodCollected).HasPrecision(19, 4);
-        builder.Property(x => x.EstimatedShippingFee).HasPrecision(19, 4);
-        builder.Property(x => x.ActualShippingFee).HasPrecision(19, 4);
-        builder.Property(x => x.PlatformCommissionFee).HasPrecision(19, 4);
-        builder.Property(x => x.ReturnFee).HasPrecision(19, 4);
-        builder.Property(x => x.NetPayoutAmount).HasPrecision(19, 4);
-        builder.Property(x => x.FeeOverchargeVariance).HasPrecision(19, 4);
-        builder.Property(x => x.ReconciliationStatus).HasMaxLength(32).IsRequired();
-        builder.HasIndex(x => new { x.TenantId, x.TrackingNumber })
-               .IsUnique()
-               .HasDatabaseName("UX_ShipmentFinancialLedgers_TenantId_TrackingNumber");
-        builder.HasOne(x => x.ExportReceipt)
-               .WithMany()
-               .HasForeignKey(x => x.ExportReceiptId)
-               .OnDelete(DeleteBehavior.NoAction);
-        builder.HasOne(x => x.Shipment)
-               .WithMany()
-               .HasForeignKey(x => x.ShipmentId)
-               .OnDelete(DeleteBehavior.NoAction);
-    }
-}
-
 public sealed class VnAdministrativeUnitConfiguration : IEntityTypeConfiguration<VnAdministrativeUnit>
 {
     public void Configure(EntityTypeBuilder<VnAdministrativeUnit> builder)
@@ -346,44 +315,6 @@ public sealed class CustomerReturnLineConfiguration : IEntityTypeConfiguration<C
         builder.HasOne<Product>()
                .WithMany()
                .HasForeignKey(x => x.PackagingProductId)
-               .OnDelete(DeleteBehavior.NoAction);
-    }
-}
-
-public sealed class StocktakeAdjustmentProposalConfiguration : IEntityTypeConfiguration<StocktakeAdjustmentProposal>
-{
-    public void Configure(EntityTypeBuilder<StocktakeAdjustmentProposal> builder)
-    {
-        builder.ToTable("StocktakeAdjustmentProposals");
-        builder.HasKey(x => x.Id);
-        builder.Property(x => x.ProposalCode).HasMaxLength(64).IsRequired();
-        builder.Property(x => x.ReasonCode).HasMaxLength(32).IsRequired();
-        builder.Property(x => x.SystemQuantity).HasPrecision(18, 4);
-        builder.Property(x => x.CountedQuantity).HasPrecision(18, 4);
-        builder.Property(x => x.DeltaQuantity).HasPrecision(18, 4);
-        builder.Property(x => x.UnitCost).HasPrecision(18, 4);
-        builder.Property(x => x.VariancePct).HasPrecision(18, 4);
-        builder.Property(x => x.VarianceValue).HasPrecision(18, 2);
-        builder.Property(x => x.Status).HasMaxLength(32).IsRequired();
-        builder.Property(x => x.Note).HasMaxLength(500);
-        builder.HasIndex(x => new { x.TenantId, x.ProposalCode })
-               .IsUnique()
-               .HasDatabaseName("UX_StocktakeAdjustmentProposals_TenantId_ProposalCode");
-        builder.HasOne<Warehouse>()
-               .WithMany()
-               .HasForeignKey(x => x.WarehouseId)
-               .OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne<Stocktake>()
-               .WithMany()
-               .HasForeignKey(x => x.StocktakeId)
-               .OnDelete(DeleteBehavior.NoAction);
-        builder.HasOne<Product>()
-               .WithMany()
-               .HasForeignKey(x => x.ProductId)
-               .OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne<WarehouseLocation>()
-               .WithMany()
-               .HasForeignKey(x => x.LocationId)
                .OnDelete(DeleteBehavior.NoAction);
     }
 }

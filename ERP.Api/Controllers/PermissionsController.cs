@@ -851,11 +851,14 @@ public sealed class PermissionsController(
                 sub.UpdatedAtUtc = now;
             }
 
-            var validAuditUserId = await db.Users
-                .AsNoTracking()
-                .OrderBy(u => u.Id)
-                .Select(u => (int?)u.Id)
-                .FirstOrDefaultAsync(ct);
+            int? validAuditUserId = null;
+            if (int.TryParse(
+                    User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? User?.FindFirstValue("Id"),
+                    out var uid) &&
+                await db.Users.AsNoTracking().AnyAsync(u => u.Id == uid, ct))
+            {
+                validAuditUserId = uid;
+            }
 
             db.AuditLogs.Add(new AuditLog
             {
@@ -882,6 +885,31 @@ public sealed class PermissionsController(
             writeBlocked = false,
             paidAtUtc = now,
             statusLabel = $"Đã xác nhận thanh toán VietQR — Mở khóa tức thì gói {targetPlan} ({newQuota:N0} đơn/tháng)"
+        });
+    }
+
+    [HttpGet("onboarding-wizard/status"), PermissionAuthorize(AppPermissions.PermissionRead)]
+    public async Task<IActionResult> GetOnboardingWizardStatus(CancellationToken ct = default)
+    {
+        var hasWarehouse = await db.Warehouses.AsNoTracking().AnyAsync(w => w.IsActive, ct);
+        var hasLocations = await db.WarehouseLocations.AsNoTracking().AnyAsync(l => l.IsActive, ct);
+        var hasProducts = await db.Products.AsNoTracking().AnyAsync(p => p.IsActive, ct);
+        var hasStock = await db.InventoryStocks.AsNoTracking().AnyAsync(s => s.Quantity > 0m, ct);
+        var hasShopOrExport = await db.MarketplaceShops.AsNoTracking().AnyAsync(ct)
+                              || await db.ExportReceipts.AsNoTracking().AnyAsync(ct);
+
+        var step1 = hasWarehouse && hasLocations;
+        var step2 = hasProducts;
+        var step3 = hasStock;
+        var step4 = hasShopOrExport;
+        var step5 = step1 && step2 && step3 && step4;
+
+        var completedSteps = (step1 ? 1 : 0) + (step2 ? 1 : 0) + (step3 ? 1 : 0) + (step4 ? 1 : 0) + (step5 ? 1 : 0);
+        return Ok(new
+        {
+            completedSteps,
+            totalSteps = 5,
+            statusText = completedSteps >= 5 ? "Hoàn tất 5/5 bước chuẩn hóa" : $"Đã hoàn thành {completedSteps}/5 bước thiết lập"
         });
     }
 

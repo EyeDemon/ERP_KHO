@@ -203,6 +203,7 @@ builder.Services.AddScoped<ERP.Infrastructure.Services.SalesOrderBackorderServic
 builder.Services.AddScoped<ERP.Application.Interfaces.ISalesOrderBackorderService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.SalesOrderBackorderService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IApprovalWorkflowService, ERP.Infrastructure.Services.ApprovalWorkflowService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IReceivingDiscrepancyService, ERP.Infrastructure.Services.ReceivingDiscrepancyService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IHandoverManifestService, ERP.Infrastructure.Services.HandoverManifestService>();
 builder.Services.AddScoped<ERP.Infrastructure.Services.PutawayService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IPutawayService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PutawayService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IReceiptPutawayIntegration>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PutawayService>());

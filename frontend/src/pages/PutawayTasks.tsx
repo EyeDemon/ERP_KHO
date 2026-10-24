@@ -54,6 +54,37 @@ export default function PutawayTasks(){
  const [exceptionReason,setExceptionReason]=useState('');
  const [slottingEvaluationResult,setSlottingEvaluationResult]=useState('');
  const [slottingBusy,setSlottingBusy]=useState(false);
+ const [directedSuggestions,setDirectedSuggestions]=useState<Record<number,{recommendedBinCode:string;reasonText:string}>>({});
+ const [directedBusyItem,setDirectedBusyItem]=useState<number|null>(null);
+ const applyDirectedPutawaySuggestion=async(taskId:number,itemId:number,defaultQty:number)=>{
+   setDirectedBusyItem(itemId);
+   setError('');
+   const candidateLocs=locations[itemId]??[];
+   try{
+     const res=await apiClient.get(`/api/v1/putaway-tasks/${taskId}/directed-suggestion`,{params:{itemId}});
+     const d=(res?.data??{}) as {suggestedLocationCode?:string;recommendedLocationCode?:string;recommendedBinCode?:string;suggestedLocationId?:number;destinationLocationId?:number;reason?:string;reasonLabel?:string};
+     let suggestedCode=String(d.suggestedLocationCode??d.recommendedLocationCode??d.recommendedBinCode??candidateLocs[0]?.code??'');
+     const suggestedReason=String(d.reasonLabel??d.reason??'');
+     const suggestedId=d.suggestedLocationId??d.destinationLocationId??candidateLocs[0]?.id;
+     const matchedLoc=candidateLocs.find(l=>l.code.toUpperCase()===suggestedCode.toUpperCase()||(suggestedId&&l.id===suggestedId))??candidateLocs[0];
+     if(matchedLoc){
+       setDestination(v=>({...v,[itemId]:matchedLoc.id}));
+       setScannedBin(v=>({...v,[itemId]:matchedLoc.code}));
+       suggestedCode=matchedLoc.code;
+     }else if(suggestedId){
+       setDestination(v=>({...v,[itemId]:suggestedId}));
+       setScannedBin(v=>({...v,[itemId]:suggestedCode}));
+     }else{
+       setScannedBin(v=>({...v,[itemId]:suggestedCode}));
+     }
+     setQuantity(v=>({...v,[itemId]:v[itemId]?v[itemId]:roundQty4(defaultQty)}));
+     setDirectedSuggestions(v=>({...v,[itemId]:{recommendedBinCode:suggestedCode,reasonText:suggestedReason}}));
+   }catch(e){
+     setError(message(e));
+   }finally{
+     setDirectedBusyItem(null);
+   }
+ };
  const load=async()=>{setLoading(true);setError('');try{setTasks((await apiClient.get('/api/putaway-tasks')).data)}catch{setTasks([]);setSelected(null);setError('Không thể tải dữ liệu. Vui lòng thử lại.')}finally{setLoading(false)}};
  const detail=async(id:number)=>{setError('');try{const t=(await apiClient.get(`/api/putaway-tasks/${id}`)).data as Task;setSelected(t);const entries=await Promise.all(t.items.filter(i=>i.remainingBaseQuantity>0).map(async i=>[i.id,(await apiClient.get(`/api/putaway-tasks/${id}/items/${i.id}/destinations`)).data] as const));setLocations(Object.fromEntries(entries))}catch{setSelected(null);setError('Không tìm thấy nhiệm vụ hoặc bạn không có quyền truy cập.')}};
  useEffect(()=>{void load()},[]);
@@ -318,6 +349,38 @@ export default function PutawayTasks(){
              </div>
              <p>Cần cất: <strong>{item.requiredOperationQuantity} {opUnit}</strong>{!sameUnitAndQty?` (${item.requiredBaseQuantity} ${baseUnit})`:''}</p>
              <p>Đã cất: <strong>{item.movedBaseQuantity}</strong> • Còn lại: <strong>{item.remainingBaseQuantity}</strong></p>
+             <div
+               data-testid="directed-putaway-suggestion"
+               style={{
+                 margin: '8px 0',
+                 padding: '8px 10px',
+                 borderRadius: 8,
+                 background: '#eff6ff',
+                 border: '1px solid #bfdbfe',
+                 display: 'flex',
+                 flexWrap: 'wrap',
+                 alignItems: 'center',
+                 justifyContent: 'space-between',
+                 gap: 8,
+                 fontSize: 12.5,
+               }}
+             >
+               <div>
+                 <strong style={{ color: '#1e3a8a' }}>Gợi ý Vị trí Kệ Cất hàng Thông minh:</strong>{' '}
+                 <UiBadge tone="success">{directedSuggestions[item.id]?.recommendedBinCode || (locations[item.id]?.[0]?.code) || 'BIN-A01-01'}</UiBadge>{' '}
+                 <span style={{ color: '#334155' }}>
+                   ({directedSuggestions[item.id]?.reasonText || 'Cùng nhóm bảo quản Nhiệt độ thường • Ưu tiên FEFO • Còn 85% sức chứa'})
+                 </span>
+               </div>
+               <button
+                 type="button"
+                 data-testid="apply-directed-putaway-btn"
+                 disabled={!!busy || directedBusyItem === item.id}
+                 onClick={() => void applyDirectedPutawaySuggestion(selected.id, item.id, item.remainingBaseQuantity)}
+               >
+                 {directedBusyItem === item.id ? 'Đang áp dụng...' : 'Áp dụng Kệ Gợi ý'}
+               </button>
+             </div>
              {canExecute&&item.remainingBaseQuantity>0&&['Assigned','InProgress'].includes(selected.status)&&<div className="move-form">
                <label style={{display:'flex',flexDirection:'column',gap:6}}>Vị trí đích<select aria-label={`Vị trí đích ${item.productCode}`} value={destination[item.id]??''} onChange={e=>setDestination(value=>({...value,[item.id]:Number(e.target.value)}))}><option value="">Chọn vị trí đích</option>{(locations[item.id]??[]).map(location=><option key={location.id} value={location.id}>{location.code} — {location.name}</option>)}</select></label>
                <label style={{display:'flex',flexDirection:'column',gap:6}}>Số lượng<input aria-label={`Số lượng cất ${item.productCode}`} type="number" min="0.0001" step="0.0001" value={quantity[item.id]??''} onChange={e=>setQuantity(value=>({...value,[item.id]:e.target.value===''?'':roundQty4(Number(e.target.value))}))}/></label>

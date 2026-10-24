@@ -220,7 +220,7 @@ namespace ERP.Api.Controllers
                                 r.Status != ERP.Domain.Enums.ReceiptStatus.Approved &&
                                 r.Status != ERP.Domain.Enums.ReceiptStatus.Cancelled);
                 var stocktakeQuery = _db.Stocktakes.AsNoTracking()
-                    .Where(s => s.Status == ERP.Domain.Enums.ReceiptStatus.Draft);
+                    .Where(s => s.Status == ERP.Domain.Enums.StocktakeStatus.Draft);
                 var lockQuery = _db.InventoryLocks.AsNoTracking()
                     .Where(l => l.Status == ERP.Domain.Enums.InventoryLockStatus.Active &&
                                 l.LockType == ERP.Domain.Enums.InventoryLockType.CountFreeze);
@@ -923,6 +923,144 @@ namespace ERP.Api.Controllers
         {
             var result = await _importReceiptService.GetByIdAsync(id);
             return Ok(result);
+        }
+
+        private bool CanReadInventoryCost()
+        {
+            if (User != null && User.Claims.Any())
+            {
+                if (User.Claims.Any(c =>
+                    (string.Equals(c.Type, "permission", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(c.Type, "permissions", StringComparison.OrdinalIgnoreCase)) &&
+                    string.Equals(c.Value, AppPermissions.InventoryCostRead, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return true;
+                }
+
+                if (User.IsInRole(AppRoles.WarehouseStaff) || User.IsInRole(AppRoles.Viewer))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        [HttpGet("{id:int}/mac-preview")]
+        [PermissionAuthorize(AppPermissions.ReceiptRead, AppPermissions.InventoryCostRead)]
+        public async Task<IActionResult> GetMacPreview(int id, CancellationToken cancellationToken = default)
+        {
+            if (!CanReadInventoryCost())
+            {
+                return StatusCode(403, new
+                {
+                    code = "COST_READ_FORBIDDEN",
+                    errorCode = "COST_READ_FORBIDDEN",
+                    costHiddenByRbac = true,
+                    message = "Bạn không có quyền xem dữ liệu giá vốn bình quân gia quyền (inventory.cost.read)."
+                });
+            }
+
+            if (_db == null)
+            {
+                var dto = await _importReceiptService.GetByIdAsync(id);
+                return Ok(new
+                {
+                    importReceiptId = dto.Id,
+                    importReceiptCode = dto.Code,
+                    warehouseId = dto.WarehouseId,
+                    status = dto.Status,
+                    formula = "(OldQty * OldMAC + IncomingQty * UnitCost) / (OldQty + IncomingQty)",
+                    costHiddenByRbac = false,
+                    lines = Array.Empty<object>(),
+                    items = Array.Empty<object>(),
+                    statusLabel = "Đã tính toán bản xem trước giá vốn bình quân gia quyền (MAC Preview)"
+                });
+            }
+
+            var receipt = await _db.ImportReceipts
+                .AsNoTracking()
+                .Include(r => r.Details)
+                    .ThenInclude(d => d.Product)
+                .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+
+            if (receipt == null)
+            {
+                return NotFound(new { code = "NOT_FOUND", errorCode = "NOT_FOUND", message = $"Không tìm thấy phiếu nhập kho #{id}." });
+            }
+
+            if (_warehouseAccess != null)
+            {
+                await _warehouseAccess.EnsureWarehouseAccessAsync(receipt.WarehouseId, cancellationToken);
+            }
+
+            var productIds = receipt.Details.Select(d => d.ProductId).Distinct().ToList();
+            var existingStocks = await _db.InventoryStocks
+                .AsNoTracking()
+                .Where(s => s.WarehouseId == receipt.WarehouseId && productIds.Contains(s.ProductId))
+                .ToListAsync(cancellationToken);
+
+            var lines = receipt.Details.OrderBy(d => d.Id).Select(d =>
+            {
+                var productStocks = existingStocks.Where(s => s.ProductId == d.ProductId).ToList();
+                var oldQty = Math.Max(0m, productStocks.Sum(s => s.Quantity));
+                var oldMac = productStocks.FirstOrDefault(s => s.MovingAverageCost > 0m)?.MovingAverageCost
+                             ?? d.Product?.MovingAverageCost
+                             ?? 0m;
+                var incomingBaseQty = d.BaseAcceptedQuantity > 0m
+                    ? d.BaseAcceptedQuantity
+                    : (d.BaseReceivedQuantity > 0m
+                        ? d.BaseReceivedQuantity
+                        : (d.BaseExpectedQuantity > 0m ? d.BaseExpectedQuantity : d.Quantity * (d.ConversionFactor > 0m ? d.ConversionFactor : 1m)));
+                if (incomingBaseQty <= 0m)
+                {
+                    incomingBaseQty = d.Quantity;
+                }
+                var conversionFactor = d.ConversionFactor > 0m ? d.ConversionFactor : 1m;
+                var receiptBaseUnitCost = d.UnitPrice > 0m
+                    ? decimal.Round(d.UnitPrice / conversionFactor, 4)
+                    : oldMac;
+                var projectedTotalQty = oldQty + incomingBaseQty;
+                var projectedMac = projectedTotalQty > 0m
+                    ? decimal.Round(((oldQty * oldMac) + (incomingBaseQty * receiptBaseUnitCost)) / projectedTotalQty, 4)
+                    : receiptBaseUnitCost;
+                var macDelta = decimal.Round(projectedMac - oldMac, 4);
+                var macDeltaPct = oldMac > 0m
+                    ? decimal.Round((macDelta * 100m) / oldMac, 2)
+                    : 0m;
+
+                return new
+                {
+                    detailId = d.Id,
+                    productId = d.ProductId,
+                    productCode = d.Product?.Code ?? $"SKU-{d.ProductId}",
+                    productName = d.Product?.Name ?? string.Empty,
+                    oldQuantity = oldQty,
+                    oldMovingAverageCost = oldMac,
+                    incomingQuantity = incomingBaseQty,
+                    receiptUnitCost = receiptBaseUnitCost,
+                    projectedTotalQuantity = projectedTotalQty,
+                    projectedMovingAverageCost = projectedMac,
+                    macDelta,
+                    macDeltaPct,
+                    projectedInventoryValuation = decimal.Round(projectedTotalQty * projectedMac, 2)
+                };
+            }).ToList();
+
+            return Ok(new
+            {
+                importReceiptId = receipt.Id,
+                importReceiptCode = receipt.Code,
+                warehouseId = receipt.WarehouseId,
+                status = receipt.Status.ToString(),
+                formula = "(OldQty * OldMAC + IncomingQty * UnitCost) / (OldQty + IncomingQty)",
+                costHiddenByRbac = false,
+                totalIncomingLines = lines.Count,
+                totalProjectedValuation = lines.Sum(x => x.projectedInventoryValuation),
+                lines,
+                items = lines,
+                statusLabel = $"Đã tính toán bản xem trước giá vốn bình quân gia quyền (MAC) cho {lines.Count} dòng hàng"
+            });
         }
 
         [HttpGet("{id:int}/discrepancies"), PermissionAuthorize(AppPermissions.DiscrepancyRead)]

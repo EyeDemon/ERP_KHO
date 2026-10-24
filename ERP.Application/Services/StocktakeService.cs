@@ -98,7 +98,7 @@ namespace ERP.Application.Services
             {
                 Code = code,
                 WarehouseId = dto.WarehouseId,
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 CreatedBy = createdByUserId,
                 CreatedAt = DateTime.UtcNow,
                 Note = normalizedNote,
@@ -126,7 +126,7 @@ namespace ERP.Application.Services
                     EntityName = "Stocktake",
                     EntityId = stocktake.Id,
                     WarehouseId = stocktake.WarehouseId,
-                    OldValues = $"Status: {ReceiptStatus.Draft}",
+                    OldValues = $"Status: {StocktakeStatus.Draft}",
                     Result = "Success",
                     Severity = "Information",
                     Timestamp = DateTime.UtcNow,
@@ -158,7 +158,7 @@ namespace ERP.Application.Services
 
                     Security.ApprovalSafetyGuard.EnsureDifferentChecker(stocktake.CreatedBy, approvedByUserId);
 
-                    if (stocktake.Status != ReceiptStatus.Draft)
+                    if (stocktake.Status != StocktakeStatus.Draft)
                     {
                         var stateConflict = new BusinessRuleException("Chỉ có thể duyệt phiếu ở trạng thái nháp");
                         stateConflict.Data["HttpStatusCode"] = 409;
@@ -166,7 +166,7 @@ namespace ERP.Application.Services
                         throw stateConflict;
                     }
 
-                    stocktake.Status = ReceiptStatus.Approved;
+                    stocktake.TransitionTo(StocktakeStatus.Approved, approvedByUserId, DateTime.UtcNow);
                     stocktake.ApprovedBy = approvedByUserId;
                     stocktake.ApprovedAt = DateTime.UtcNow;
 
@@ -443,7 +443,7 @@ namespace ERP.Application.Services
                         EntityName = "Stocktake",
                         EntityId = stocktake.Id,
                         WarehouseId = stocktake.WarehouseId,
-                        OldValues = $"Status: {ReceiptStatus.Draft}",
+                        OldValues = $"Status: {StocktakeStatus.Draft}",
                         Result = "Success",
                         Severity = "Information",
                         Timestamp = DateTime.UtcNow,
@@ -490,7 +490,7 @@ namespace ERP.Application.Services
                 throw new NotFoundException($"Không tìm thấy phiếu kiểm kê id {stocktakeId}");
             if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(stocktake.WarehouseId);
 
-            if (stocktake.Status != ReceiptStatus.Draft)
+            if (stocktake.Status != StocktakeStatus.Draft)
                 throw new BusinessRuleException("Chỉ có thể cập nhật chi tiết phiếu ở trạng thái nháp");
 
             var detail = stocktake.Details.FirstOrDefault(d => d.Id == detailId);
@@ -501,7 +501,7 @@ namespace ERP.Application.Services
             if (decimalPlaces is >= 0 and <= 4 && decimal.Round(dto.ActualQuantity, decimalPlaces.Value) != dto.ActualQuantity)
                 throw new BusinessRuleException($"Số lượng kiểm đếm thực tế vượt quá {decimalPlaces.Value} chữ số thập phân của đơn vị tính cơ sở.");
 
-            var isBlindDraft = IsBlindStocktake(stocktake.Note) && stocktake.Status == ReceiptStatus.Draft;
+            var isBlindDraft = IsBlindStocktake(stocktake.Note) && stocktake.Status == StocktakeStatus.Draft;
             var oldActualQuantity = detail.ActualQuantity;
             await _unitOfWork.BeginTransactionAsync();
             try
@@ -554,7 +554,7 @@ namespace ERP.Application.Services
 
         public static DTOs.StocktakeResponseDto MapToDto(Stocktake stocktake)
         {
-            var maskBlindSnapshot = stocktake.Status == ReceiptStatus.Draft && IsBlindStocktake(stocktake.Note);
+            var maskBlindSnapshot = stocktake.Status == StocktakeStatus.Draft && IsBlindStocktake(stocktake.Note);
             return new DTOs.StocktakeResponseDto
             {
                 Id = stocktake.Id,
@@ -606,7 +606,7 @@ namespace ERP.Application.Services
                 throw new NotFoundException($"Không tìm thấy phiếu kiểm kê id {stocktakeId}");
             if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(stocktake.WarehouseId);
 
-            if (stocktake.Status != ReceiptStatus.Draft)
+            if (stocktake.Status != StocktakeStatus.Draft)
                 throw new BusinessRuleException("Chỉ có thể yêu cầu đếm lại chi tiết phiếu ở trạng thái nháp");
 
             var detail = stocktake.Details.FirstOrDefault(d => d.Id == detailId);

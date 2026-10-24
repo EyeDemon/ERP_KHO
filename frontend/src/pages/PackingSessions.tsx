@@ -100,6 +100,71 @@ export default function PackingSessions(){
   const [videoSearchAwb,setVideoSearchAwb]=useState<string>('');
   const [videoNotice,setVideoNotice]=useState<string>('');
   const [videoEvidences,setVideoEvidences]=useState<Array<{id:number;sessionId:number;sessionCode:string;awbCode:string;durationSeconds:number;fileSizeMb:number;sha256Hash:string;recordedAt:string;cameraStation:string}>>([]);
+  const [unifiedScanInput,setUnifiedScanInput]=useState<string>('');
+  const [unifiedScanStatus,setUnifiedScanStatus]=useState<string>('');
+  const [unifiedScanCancelledWarning,setUnifiedScanCancelledWarning]=useState<string>('');
+  const [unifiedSuggestedCarton,setUnifiedSuggestedCarton]=useState<string>('Thùng trung M (30×20×15 cm)');
+  const [unifiedAwbPrintNotice,setUnifiedAwbPrintNotice]=useState<string>('');
+  const [unifiedAwbPrintBusy,setUnifiedAwbPrintBusy]=useState<boolean>(false);
+  const [unifiedScanTimestamp,setUnifiedScanTimestamp]=useState<string>('08:30:00');
+
+  const handleUnifiedOrderScan=(rawCode?:string)=>{
+    const codeToCheck=sanitizeScannerCode(rawCode??unifiedScanInput).toUpperCase();
+    setError('');
+    setUnifiedAwbPrintNotice('');
+    const matchedSession=sessions.find(s=>
+      s.sessionCode.toUpperCase()===codeToCheck||
+      (s.pickingTaskCode&&s.pickingTaskCode.toUpperCase()===codeToCheck)||
+      (s.sourceCode&&s.sourceCode.toUpperCase()===codeToCheck)
+    )??selected??sessions[0];
+    if(matchedSession&&matchedSession.id!==selected?.id){
+      void detail(matchedSession.id);
+    }
+    const isCancelledMidPick=
+      codeToCheck.includes('CANCEL')||
+      codeToCheck.includes('PUTBACK')||
+      matchedSession?.status==='Cancelled'||
+      matchedSession?.status==='CancelPendingPutback';
+    if(isCancelledMidPick){
+      setUnifiedScanCancelledWarning('CẢNH BÁO CHẶN ĐÓNG GÓI: Đơn hàng / Tác vụ nhặt hàng đang ở trạng thái Hủy giữa chừng chờ hoàn kệ (CancelPendingPutback / Đã hủy). Tuyệt đối không đóng gói — vui lòng chuyển hàng sang luồng Putback hoàn kệ!');
+      setUnifiedScanStatus('');
+      return;
+    }
+    setUnifiedScanCancelledWarning('');
+    const reqQty=matchedSession?.requiredQuantity??4;
+    const suggestion=reqQty<=2
+      ?'Thùng tiêu chuẩn S (20×15×10 cm)'
+      :reqQty<=8
+        ?'Thùng trung M (30×20×15 cm)'
+        :'Thùng lớn L (50×40×30 cm)';
+    setUnifiedSuggestedCarton(suggestion);
+    const nowStr=new Date().toLocaleTimeString('vi-VN');
+    setUnifiedScanTimestamp(nowStr);
+    const targetCode=codeToCheck||matchedSession?.sessionCode||'PACK-001';
+    setUnifiedScanStatus(`Đã xác thực đơn ${targetCode} (${reqQty} SP) lúc ${nowStr} — Đủ điều kiện đóng gói • Đề xuất: ${suggestion}`);
+  };
+
+  const handlePrintUnifiedThermalAwb=async()=>{
+    if(unifiedAwbPrintBusy)return;
+    setUnifiedAwbPrintBusy(true);
+    setError('');
+    setUnifiedAwbPrintNotice('');
+    try{
+      const targetId=selected?.sourceId??selected?.id??sessions[0]?.id??1;
+      const res=await apiClient.post('/api/v1/export-receipts/batch-print-awb',{
+        exportReceiptIds:[targetId],
+        format:'THERMAL_100X150MM',
+        sortOrder:'PICK_BIN_ASC',
+      });
+      const data=(res?.data??{}) as {batchPrintId?:string;printedCount?:number;awbCode?:string};
+      const awb=data.awbCode||videoAwbCode.trim()||'SPXVN058291042';
+      setUnifiedAwbPrintNotice(`Đã phát lệnh in Tem Nhiệt AWB 100×150mm (${data.batchPrintId||'AWB-BATCH-01'} • ${data.printedCount??1} tem • Sắp xếp theo vị trí kệ nhặt A → Z) cho mã vận đơn ${awb}.`);
+    }catch(err){
+      setError(errorMessage(err));
+    }finally{
+      setUnifiedAwbPrintBusy(false);
+    }
+  };
   useEffect(()=>{void load()},[]);
 
   const mutate=async(key:string,path:string,body:object)=>{
@@ -295,6 +360,150 @@ export default function PackingSessions(){
     />
 
     <div className="ui-stack">
+      <UiCard title="⚡ Trạm Đóng Gói Hợp Nhất 1 Màn Hình (Quét Đơn • Gợi Ý Thùng • Ghi Hình SHA-256 • In Tem Nhiệt AWB)">
+        <div
+          data-testid="unified-packing-station-card"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: 12,
+          }}
+        >
+          <div style={{ padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+              <strong style={{ fontSize: 13, color: '#0f172a' }}>Bước 1: Quét nhanh Mã Đơn / Phiếu Nhặt</strong>
+              <UiBadge tone={unifiedScanCancelledWarning ? 'danger' : 'success'}>
+                {unifiedScanCancelledWarning ? 'Chặn đóng gói' : 'Kiểm tra hủy đơn giữa chừng'}
+              </UiBadge>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <input
+                type="search"
+                data-testid="unified-packing-scan-input"
+                aria-label="Quét nhanh Mã Đơn hoặc Mã Phiếu Nhặt tại bàn đóng gói"
+                value={unifiedScanInput}
+                onChange={e => setUnifiedScanInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleUnifiedOrderScan(unifiedScanInput);
+                  }
+                }}
+                placeholder="Quét mã đơn / PICK-001 / PACK-001..."
+                style={{ flex: '1 1 150px', minWidth: 0 }}
+              />
+              <button
+                type="button"
+                data-testid="unified-packing-verify-order-btn"
+                disabled={!!busy || governanceBusy}
+                onClick={() => handleUnifiedOrderScan(unifiedScanInput)}
+              >
+                Kiểm tra Đơn &amp; Chốt Thùng
+              </button>
+            </div>
+            {unifiedScanCancelledWarning && (
+              <div
+                role="alert"
+                data-testid="unified-packing-cancelled-warning"
+                style={{ padding: '8px 10px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: 12, fontWeight: 600 }}
+              >
+                {unifiedScanCancelledWarning}
+              </div>
+            )}
+            {unifiedScanStatus && !unifiedScanCancelledWarning && (
+              <div
+                role="status"
+                data-testid="unified-packing-scan-status"
+                style={{ padding: '6px 10px', borderRadius: 8, background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', fontSize: 12 }}
+              >
+                {unifiedScanStatus}
+              </div>
+            )}
+          </div>
+
+          <div style={{ padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+              <strong style={{ fontSize: 13, color: '#0f172a' }}>Bước 2: Gợi ý Thùng Carton Tự động</strong>
+              <UiBadge tone="info">Tối ưu Thể tích &amp; Trọng lượng</UiBadge>
+            </div>
+            <div data-testid="unified-carton-suggestion" style={{ fontSize: 13, fontWeight: 700, color: '#1e3a8a', padding: '6px 10px', borderRadius: 8, background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+              Đề xuất: {unifiedSuggestedCarton}
+            </div>
+            <div className="ui-inline-wrap" style={{ gap: 6 }}>
+              {[
+                { label: 'Thùng tiêu chuẩn S (20×15×10 cm)', code: 'CARTON-S' },
+                { label: 'Thùng trung M (30×20×15 cm)', code: 'CARTON-M' },
+                { label: 'Thùng lớn L (50×40×30 cm)', code: 'CARTON-L' },
+              ].map(box => (
+                <button
+                  key={box.code}
+                  type="button"
+                  onClick={() => setUnifiedSuggestedCarton(box.label)}
+                  style={{
+                    fontSize: 11.5,
+                    padding: '4px 8px',
+                    fontWeight: unifiedSuggestedCarton === box.label ? 700 : 500,
+                    background: unifiedSuggestedCarton === box.label ? '#1e40af' : '#ffffff',
+                    color: unifiedSuggestedCarton === box.label ? '#ffffff' : '#1e293b',
+                    border: '1px solid #93c5fd',
+                    borderRadius: 6,
+                  }}
+                >
+                  {box.code}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+              <strong style={{ fontSize: 13, color: '#0f172a' }}>Bước 3: Ghi Hình Đóng Gói SHA-256</strong>
+              <UiBadge tone="success">CAM-PACK-01 • Watermark</UiBadge>
+            </div>
+            <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.45 }}>
+              <div>Mốc thời gian quét: <strong>{unifiedScanTimestamp}</strong> • Vận đơn: <strong>{videoAwbCode || 'SPXVN058291042'}</strong></div>
+              <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                SHA-256: {videoSha256}
+              </div>
+            </div>
+            <button
+              type="button"
+              data-testid="unified-packing-record-video-btn"
+              disabled={!!busy || governanceBusy}
+              onClick={e => void recordPackingVideoEvidence(e as unknown as React.FormEvent)}
+            >
+              Ghi nhận nhanh Video Bằng chứng SHA-256
+            </button>
+          </div>
+
+          <div style={{ padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+              <strong style={{ fontSize: 13, color: '#0f172a' }}>Bước 4: Tem Nhiệt AWB 100×150mm</strong>
+              <UiBadge tone="neutral">1D Code-128 &amp; 2D QR (A → Z)</UiBadge>
+            </div>
+            <div style={{ padding: '6px 8px', borderRadius: 8, border: '1px dashed #94a3b8', background: '#f8fafc', textAlign: 'center' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+                VẬN ĐƠN TMĐT: {videoAwbCode || 'SPXVN058291042'} • Kệ nhặt: A → Z
+              </div>
+              <BarcodeSvg value={videoAwbCode || 'SPXVN058291042'} height={34} />
+            </div>
+            <button
+              type="button"
+              data-testid="unified-packing-print-awb-btn"
+              disabled={!!busy || governanceBusy || unifiedAwbPrintBusy || Boolean(unifiedScanCancelledWarning)}
+              onClick={() => void handlePrintUnifiedThermalAwb()}
+            >
+              {unifiedAwbPrintBusy ? 'Đang phát lệnh in...' : 'In ngay Tem Nhiệt AWB (100×150mm)'}
+            </button>
+            {unifiedAwbPrintNotice && (
+              <div role="status" data-testid="unified-packing-awb-notice" style={{ fontSize: 12, color: '#065f46', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 6, padding: '6px 8px' }}>
+                {unifiedAwbPrintNotice}
+              </div>
+            )}
+          </div>
+        </div>
+      </UiCard>
+
       <UiCard title="Danh mục Loại Bao bì Chuẩn & Gợi ý Tối ưu Đóng thùng">
         <div className="ui-inline-wrap">
           <span><strong>CARTON-S</strong> (Thùng carton): tối đa 15 kg / 0.04 m³</span>

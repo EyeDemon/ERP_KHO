@@ -962,7 +962,11 @@ public sealed class PickingService(
             StartedAt = summary.StartedAt,
             CompletedAt = summary.CompletedAt,
             RowVersion = Convert.ToBase64String(task.RowVersion),
-            Lines = task.Lines.OrderBy(x => x.Sequence).Select(x => new PickingTaskLineDto
+            Lines = task.Lines
+                .OrderBy(x => (x.SourceLocation?.Code ?? string.Empty).Trim(), StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Sequence)
+                .ThenBy(x => x.Id)
+                .Select(x => new PickingTaskLineDto
             {
                 Id = x.Id,
                 AllocationId = x.AllocationId,

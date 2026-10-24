@@ -57,7 +57,7 @@ public sealed class ApprovalWorkflowService(
             .Select(x => new QueueRow { Type = "ExportReceipt", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.WarehouseId, WarehouseName = x.Warehouse.Name, DestinationWarehouseId = null, DestinationWarehouseName = null, TotalQuantity = x.Details.Sum(d => d.Quantity), QcCompleted = false });
         var transfers = context.StockTransfers.AsNoTracking().Where(x => x.Status == StockTransferStatus.Draft && allowed.Contains(x.SourceWarehouseId) && allowed.Contains(x.DestinationWarehouseId))
             .Select(x => new QueueRow { Type = "StockTransfer", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.SourceWarehouseId, WarehouseName = x.SourceWarehouse.Name, DestinationWarehouseId = x.DestinationWarehouseId, DestinationWarehouseName = x.DestinationWarehouse.Name, TotalQuantity = x.Details.Sum(d => d.RequestedQuantity), QcCompleted = false });
-        var stocktakes = context.Stocktakes.AsNoTracking().Where(x => x.Status == ReceiptStatus.Draft && allowed.Contains(x.WarehouseId))
+        var stocktakes = context.Stocktakes.AsNoTracking().Where(x => x.Status == StocktakeStatus.Draft && allowed.Contains(x.WarehouseId))
             .Select(x => new QueueRow { Type = "Stocktake", Id = x.Id, Code = x.Code, CreatorId = x.CreatedBy, CreatorName = x.CreatedByUser.FullName ?? x.CreatedByUser.Username, CreatedAt = x.CreatedAt, WarehouseId = x.WarehouseId, WarehouseName = x.Warehouse.Name, DestinationWarehouseId = null, DestinationWarehouseName = null, TotalQuantity = x.Note != null && x.Note.Contains("[BLIND]") ? x.Details.Sum(d => d.ActualQuantity ?? 0m) : x.Details.Sum(d => d.ActualQuantity ?? d.SystemQuantity), QcCompleted = false });
         var query = imports.Where(_ => inboundRead).Concat(exports.Where(_ => outboundRead)).Concat(transfers.Where(_ => legacy)).Concat(stocktakes.Where(_ => legacy));
         if (!string.IsNullOrWhiteSpace(request.DocumentType)) query = query.Where(x => x.Type == request.DocumentType.Trim());
@@ -185,7 +185,7 @@ public sealed class ApprovalWorkflowService(
             var x = await context.Stocktakes.AsNoTracking().Include(x => x.Warehouse).Include(x => x.CreatedByUser).Include(x => x.Details).ThenInclude(x => x.Product).ThenInclude(x => x.Unit)
                 .SingleOrDefaultAsync(x => x.Id == id && allowed.Contains(x.WarehouseId), cancellationToken) ?? throw new NotFoundException("Không tìm thấy chứng từ.");
             summary = DetailSummary(documentType, x.Id, x.Code, x.Status.ToString(), x.CreatedBy, x.CreatedByUser.FullName ?? x.CreatedByUser.Username, x.CreatedAt, x.WarehouseId, x.Warehouse.Name, null, null);
-            var isBlindDraft = x.Status == ReceiptStatus.Draft && x.Note != null && x.Note.Contains("[BLIND]", StringComparison.OrdinalIgnoreCase);
+            var isBlindDraft = x.Status == StocktakeStatus.Draft && x.Note != null && x.Note.Contains("[BLIND]", StringComparison.OrdinalIgnoreCase);
             note = x.Note; lines = x.Details.Select(d => DetailLine(d.Product, isBlindDraft ? (d.ActualQuantity ?? 0m) : (d.ActualQuantity ?? d.SystemQuantity))).ToList();
         }
         else if (documentType == "StockTransfer")
@@ -234,7 +234,7 @@ public sealed class ApprovalWorkflowService(
                     [ReceiptStatus.Received, ReceiptStatus.QcCompleted, ReceiptStatus.ReadyToPost],
                     cancellationToken),
                 "ExportReceipt" => await RejectReceiptAsync(documentType, id, reason, context.ExportReceipts, [ReceiptStatus.Draft], cancellationToken),
-                "Stocktake" => await RejectReceiptAsync(documentType, id, reason, context.Stocktakes, [ReceiptStatus.Draft], cancellationToken),
+                "Stocktake" => await RejectStocktakeAsync(id, reason, cancellationToken),
                 "StockTransfer" => await RejectTransferAsync(id, reason, cancellationToken),
                 _ => throw new BusinessRuleException("Loại chứng từ không hợp lệ.")
             };
@@ -336,6 +336,36 @@ public sealed class ApprovalWorkflowService(
                 }
             }
         }
+    }
+
+    private async Task<ApprovalActionResult> RejectStocktakeAsync(int id, string reason, CancellationToken token)
+    {
+        var entity = await context.Stocktakes.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, token) ?? throw new NotFoundException("Không tìm thấy chứng từ.");
+        await warehouseAuthorization.EnsureWarehouseAccessAsync(entity.WarehouseId, token);
+        ApprovalSafetyGuard.EnsureDifferentChecker(entity.CreatedBy, currentUser.UserId);
+        int affected;
+        if (context.Database.IsRelational())
+        {
+            affected = await context.Stocktakes.Where(x => x.Id == id && x.Status == StocktakeStatus.Draft)
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, StocktakeStatus.Cancelled), token);
+        }
+        else
+        {
+            var tracked = await context.Stocktakes.SingleOrDefaultAsync(x => x.Id == id && x.Status == StocktakeStatus.Draft, token);
+            if (tracked is not null)
+            {
+                tracked.Status = StocktakeStatus.Cancelled;
+                affected = 1;
+            }
+            else
+            {
+                affected = 0;
+            }
+        }
+        if (affected != 1) throw new ConcurrencyException("Chứng từ không còn ở trạng thái chờ duyệt.");
+        context.AuditLogs.Add(CreateAudit("Stocktake", id, entity.Code, entity.CreatedBy, entity.WarehouseId, null, reason, ReceiptStatus.Draft));
+        await context.SaveChangesAsync(token);
+        return Result("Stocktake", id, entity.Code);
     }
 
     private async Task<ApprovalActionResult> RejectTransferAsync(int id, string reason, CancellationToken token)

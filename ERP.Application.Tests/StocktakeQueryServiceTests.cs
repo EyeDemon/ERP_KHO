@@ -74,7 +74,7 @@ namespace ERP.Application.Tests
                 WarehouseId = 1, 
                 CreatedBy = 1, 
                 ApprovedBy = 2,
-                Status = ReceiptStatus.Approved,
+                Status = StocktakeStatus.Approved,
                 Note = "Test note",
                 CreatedAt = new DateTime(2026, 1, 1),
                 ApprovedAt = new DateTime(2026, 1, 2)
@@ -102,7 +102,7 @@ namespace ERP.Application.Tests
             Assert.Equal("W1", result.WarehouseName);
             Assert.Equal("Creator", result.CreatedByName);
             Assert.Equal("Approver", result.ApprovedByName);
-            Assert.Equal(ReceiptStatus.Approved, result.Status);
+            Assert.Equal(StocktakeStatus.Approved, result.Status);
             
             var detail = result.Details.First();
             Assert.Equal("P1", detail.ProductCode);
@@ -165,7 +165,7 @@ namespace ERP.Application.Tests
                 Id = 20,
                 Code = "ST-BLIND",
                 WarehouseId = 1,
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 Note = "[BLIND] Kiểm kê mù định kỳ",
                 CreatedBy = 1,
                 CreatedAt = DateTime.UtcNow,

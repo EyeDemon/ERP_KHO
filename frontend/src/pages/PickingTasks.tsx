@@ -78,6 +78,33 @@ export default function PickingTasks(){
     voicePickToLight:string;
   }|null>(null);
   const [fefoCutoffBanner,setFefoCutoffBanner]=useState('');
+  const [alternateBinsByLine,setAlternateBinsByLine]=useState<Record<number,Array<{locationCode:string;lotNumber:string;expiryDate:string;availableQty:number}>>>({});
+  const [alternateBinsLoadingLine,setAlternateBinsLoadingLine]=useState<number|null>(null);
+
+  const suggestAlternateBins=async(taskId:number,lineId:number,productId:number,_currentLocation:string)=>{
+    setAlternateBinsLoadingLine(lineId);
+    setError('');
+    try{
+      const res=await apiClient.get(`/api/v1/picking-tasks/${taskId}/alternate-bins`,{
+        params:{taskLineId:lineId,productId},
+      });
+      const raw=res?.data?.items??res?.data?.alternateBins??res?.data;
+      const list=Array.isArray(raw)
+        ?raw.map((b:Record<string,unknown>)=>({
+            locationCode:String(b.locationCode??b.binCode??''),
+            lotNumber:String(b.lotNumber??b.lotCode??''),
+            expiryDate:String(b.expiryDate??''),
+            availableQty:Number(b.availableQty??b.availableQuantity??0),
+          }))
+        :[];
+      setAlternateBinsByLine(prev=>({...prev,[lineId]:list}));
+    }catch(err){
+      setError(failureMessage(err));
+      setAlternateBinsByLine(prev=>({...prev,[lineId]:[]}));
+    }finally{
+      setAlternateBinsLoadingLine(null);
+    }
+  };
   const [governanceBusy,setGovernanceBusy]=useState(false);
   const lock=useRef(new Set<string>());
   const canAssign=usePermission('picking.assign');
@@ -436,12 +463,86 @@ export default function PickingTasks(){
         </div>
 
         <div className="ui-stack">
-          {(selected.lines??[]).map(line=><div className="ui-subcard" key={line.id}>
+          <div
+            data-testid="s-shape-pick-route-banner"
+            style={{
+              padding: '8px 12px',
+              borderRadius: 8,
+              background: '#eff6ff',
+              border: '1px solid #bfdbfe',
+              color: '#1e3a8a',
+              fontSize: 12.5,
+              fontWeight: 600,
+            }}
+          >
+            🧭 Lộ trình nhặt hàng tối ưu hình chữ S (Dãy → Kệ → Tầng → Ô: A → Z)
+          </div>
+          {[...(selected.lines??[])].sort((a,b)=>(a.sourceLocationCode||'').localeCompare(b.sourceLocationCode||'')).map(line=><div className="ui-subcard" key={line.id}>
             <div className="ui-subcard-title">{line.productCode} — {line.productName}</div>
             <div className="ui-inline-wrap">
               <UiBadge tone={tone(line.status)}>{lineStates[line.status]??line.status}</UiBadge>
               <UiBadge>Vị trí: {line.sourceLocationCode}</UiBadge>
               <span>Đã lấy <strong>{line.pickedQuantity}</strong> / {line.requestedQuantity} • Còn {line.remainingQuantity}</span>
+              <button
+                type="button"
+                data-testid="suggest-alternate-bin-btn"
+                disabled={!!busy || alternateBinsLoadingLine === line.id}
+                onClick={() => void suggestAlternateBins(selected.id, line.id, line.productId, line.sourceLocationCode)}
+              >
+                {alternateBinsLoadingLine === line.id ? 'Đang tìm kệ FEFO...' : 'Gợi ý Kệ Thay thế (FEFO)'}
+              </button>
+            {alternateBinsByLine[line.id] && alternateBinsByLine[line.id].length > 0 && (
+              <div
+                data-testid={`alternate-fefo-bins-${line.id}`}
+                style={{
+                  marginTop: 8,
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6,
+                }}
+              >
+                <strong style={{ fontSize: 12, color: '#0f172a' }}>Danh sách Kệ Thay thế Ưu tiên FEFO có Tồn Khả dụng:</strong>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {alternateBinsByLine[line.id].map(alt => (
+                    <div
+                      key={`${alt.locationCode}-${alt.lotNumber}`}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        background: '#ffffff',
+                        border: '1px solid #93c5fd',
+                        fontSize: 12,
+                      }}
+                    >
+                      <span>
+                        <strong>{alt.locationCode}</strong> • Lô: {alt.lotNumber} • HSD: {alt.expiryDate} • Tồn: <strong>{alt.availableQty}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setScan(v => ({
+                            ...v,
+                            [line.id]: {
+                              ...(v[line.id] ?? { product: line.productCode, quantity: String(line.remainingQuantity) }),
+                              location: alt.locationCode,
+                            },
+                          }));
+                        }}
+                      >
+                        Chọn kệ thay thế
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             </div>
 
             {canExecute&&selected.status==='InProgress'&&['Open','InProgress'].includes(line.status)&&line.remainingQuantity>0&&

@@ -123,7 +123,7 @@ namespace ERP.Infrastructure.Queries
                 await _warehouseAuthorization.EnsureWarehouseAccessAsync(stocktake.WarehouseId);
             }
 
-            var isBlindDraft = stocktake.Status == ERP.Domain.Enums.ReceiptStatus.Draft &&
+            var isBlindDraft = stocktake.Status == ERP.Domain.Enums.StocktakeStatus.Draft &&
                 !string.IsNullOrWhiteSpace(stocktake.Note) &&
                 stocktake.Note.TrimStart().StartsWith("[BLIND]", System.StringComparison.OrdinalIgnoreCase);
 

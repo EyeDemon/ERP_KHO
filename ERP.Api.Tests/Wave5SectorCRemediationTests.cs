@@ -728,7 +728,7 @@ public sealed class Wave5SectorCRemediationTests
             CreatedBy = 10,
             CreatedByUser = creator,
             CreatedAt = DateTime.UtcNow.AddMinutes(-30),
-            Status = ReceiptStatus.Draft,
+            Status = StocktakeStatus.Draft,
             Note = "[BLIND] Cycle count",
             Details =
             [

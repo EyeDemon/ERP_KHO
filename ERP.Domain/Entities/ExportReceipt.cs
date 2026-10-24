@@ -1,5 +1,6 @@
 using ERP.Domain.Common;
 using ERP.Domain.Enums;
+using ERP.Domain.Exceptions;
 
 namespace ERP.Domain.Entities;
 
@@ -38,6 +39,47 @@ public class ExportReceipt : ITenantEntity
     public string? EInvoiceNumber { get; set; }
     public string? BuyerTaxCode { get; set; }
     public byte[] RowVersion { get; set; } = [0, 0, 0, 0, 0, 0, 0, 1];
+
+    public void TransitionTo(ReceiptStatus targetStatus, int? actorUserId = null, DateTime? timestampUtc = null)
+    {
+        var isValid = (Status, targetStatus) switch
+        {
+            (ReceiptStatus.Draft, ReceiptStatus.Approved) => true,
+            (ReceiptStatus.Draft, ReceiptStatus.Cancelled) => true,
+            (ReceiptStatus.Approved, ReceiptStatus.Dispatched) => true,
+            (ReceiptStatus.Approved, ReceiptStatus.Posted) => true,
+            (ReceiptStatus.Approved, ReceiptStatus.CancelPendingPutback) => true,
+            (ReceiptStatus.Approved, ReceiptStatus.Cancelled) => true,
+            (ReceiptStatus.CancelPendingPutback, ReceiptStatus.Cancelled) => true,
+            _ => false
+        };
+
+        if (!isValid)
+        {
+            throw new ConflictException(
+                $"Chuyển trạng thái phiếu xuất kho từ '{Status}' sang '{targetStatus}' không hợp lệ.",
+                "DOC_INVALID_STATE_TRANSITION");
+        }
+
+        Status = targetStatus;
+        var now = timestampUtc ?? DateTime.UtcNow;
+        if (targetStatus == ReceiptStatus.Approved)
+        {
+            if (actorUserId.HasValue)
+            {
+                ApprovedBy = actorUserId.Value;
+            }
+            ApprovedAt = now;
+        }
+        else if (targetStatus is ReceiptStatus.Dispatched or ReceiptStatus.Posted)
+        {
+            if (actorUserId.HasValue)
+            {
+                DispatchedBy = actorUserId.Value;
+            }
+            DispatchedAt = now;
+        }
+    }
 
     // Navigation
     public Warehouse Warehouse { get; set; } = null!;

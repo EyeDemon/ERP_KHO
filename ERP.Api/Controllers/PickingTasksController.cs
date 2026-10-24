@@ -84,6 +84,98 @@ public sealed class PickingTasksController(
         return Ok(waves);
     }
 
+    [HttpGet("{id:int}/alternate-bins")]
+    [PermissionAuthorize(AppPermissions.PickingRead)]
+    public async Task<IActionResult> GetAlternateBins(
+        int id,
+        [FromQuery] int? productId = null,
+        [FromQuery] int? excludeLocationId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var task = await service.GetAsync(id, cancellationToken);
+        if (warehouseAccess != null)
+        {
+            await warehouseAccess.EnsureWarehouseAccessAsync(task.WarehouseId, cancellationToken);
+        }
+
+        if (db == null)
+        {
+            return Ok(new
+            {
+                pickingTaskId = task.Id,
+                taskCode = task.TaskCode,
+                warehouseId = task.WarehouseId,
+                alternateBins = Array.Empty<object>(),
+                statusLabel = "Đã tra cứu kệ thay thế khả dụng cho ngoại lệ thiếu hàng (Short-Pick)"
+            });
+        }
+
+        var targetProductIds = productId.HasValue && productId.Value > 0
+            ? new List<int> { productId.Value }
+            : task.Lines.Select(l => l.ProductId).Distinct().ToList();
+
+        var excludedLocationIds = excludeLocationId.HasValue && excludeLocationId.Value > 0
+            ? new HashSet<int> { excludeLocationId.Value }
+            : task.Lines.Where(l => l.RemainingQuantity > 0).Select(l => l.SourceLocationId).ToHashSet();
+
+        var today = DateTime.UtcNow.Date;
+        var candidateStocks = await db.InventoryStocks
+            .AsNoTracking()
+            .Include(s => s.Location)
+            .Include(s => s.Lot)
+            .Include(s => s.Product)
+            .Where(s => s.WarehouseId == task.WarehouseId &&
+                        targetProductIds.Contains(s.ProductId) &&
+                        s.Status == InventoryStatus.Available &&
+                        s.LocationId != null &&
+                        !excludedLocationIds.Contains(s.LocationId.Value) &&
+                        s.Location != null &&
+                        s.Location.IsActive &&
+                        !s.Location.IsBlocked &&
+                        s.Location.IsPickable &&
+                        (s.Lot == null || !s.Lot.ExpiryDate.HasValue || s.Lot.ExpiryDate.Value >= today) &&
+                        (s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity) > 0m)
+            .ToListAsync(cancellationToken);
+
+        var alternateBins = candidateStocks
+            .OrderBy(s => s.Lot?.ExpiryDate ?? DateTime.MaxValue)
+            .ThenBy(s => s.Location?.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ThenByDescending(s => s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity)
+            .Select(s =>
+            {
+                var availableQty = Math.Max(0m, s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity);
+                return new
+                {
+                    stockId = s.Id,
+                    productId = s.ProductId,
+                    productCode = s.Product?.Code ?? $"SKU-{s.ProductId}",
+                    productName = s.Product?.Name ?? string.Empty,
+                    locationId = s.LocationId!.Value,
+                    locationCode = s.Location?.Code ?? string.Empty,
+                    locationName = s.Location?.Name ?? string.Empty,
+                    lotId = s.LotId,
+                    lotNumber = s.Lot?.LotNumber,
+                    expiryDate = s.Lot?.ExpiryDate,
+                    onHandQuantity = s.Quantity,
+                    availableQuantity = availableQty,
+                    fefoPriorityRank = s.Lot?.ExpiryDate.HasValue == true ? "FEFO_LOT" : "FIFO_STANDARD"
+                };
+            })
+            .ToList();
+
+        return Ok(new
+        {
+            pickingTaskId = task.Id,
+            taskCode = task.TaskCode,
+            warehouseId = task.WarehouseId,
+            excludedLocationIds,
+            totalCandidates = alternateBins.Count,
+            alternateBins,
+            items = alternateBins,
+            statusLabel = $"Đã tìm thấy {alternateBins.Count} vị trí kệ thay thế khả dụng theo chuẩn FEFO/FIFO"
+        });
+    }
+
     public sealed record ReleasePickingWaveRequest(
         int? WarehouseId = null,
         string? PickingType = null,

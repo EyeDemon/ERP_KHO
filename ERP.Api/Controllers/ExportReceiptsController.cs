@@ -20,18 +20,42 @@ namespace ERP.Api.Controllers
         private readonly ErpKhoDbContext? _db;
         private readonly IWarehouseAuthorizationService? _warehouseAccess;
         private readonly ICurrentUser? _currentUser;
+        private IHandoverManifestService? _handoverManifestService;
 
         public ExportReceiptsController(
             IExportReceiptService exportReceiptService,
             ErpKhoDbContext db = null!,
             IWarehouseAuthorizationService warehouseAccess = null!,
-            ICurrentUser? currentUser = null)
+            ICurrentUser? currentUser = null,
+            IHandoverManifestService? handoverManifestService = null)
         {
             _exportReceiptService = exportReceiptService;
             _db = db;
             _warehouseAccess = warehouseAccess;
             _currentUser = currentUser;
+            _handoverManifestService = handoverManifestService;
         }
+
+        private ErpKhoDbContext RequireDb() =>
+            _db ?? throw new InvalidOperationException("ErpKhoDbContext is required for this database-backed operation.");
+
+        private IHandoverManifestService HandoverManifests =>
+            _handoverManifestService ??= new ERP.Infrastructure.Services.HandoverManifestService(
+                RequireDb(),
+                _exportReceiptService,
+                _warehouseAccess,
+                _currentUser);
+
+        private IActionResult ToActionResult(HandoverManifestOperationResult result) =>
+            result.StatusCode switch
+            {
+                200 => Ok(result.Payload),
+                400 => BadRequest(result.Payload),
+                404 => NotFound(result.Payload),
+                409 => Conflict(result.Payload),
+                422 => UnprocessableEntity(result.Payload),
+                _ => StatusCode(result.StatusCode, result.Payload)
+            };
 
         private bool CanReadInventoryCost()
         {
@@ -99,22 +123,33 @@ namespace ERP.Api.Controllers
 
         private async Task<int?> ResolveValidAuditUserIdAsync(CancellationToken cancellationToken)
         {
-            if (_db == null)
+            var db = RequireDb();
+            var hasClaimUser = TryGetUserId(out var uid);
+            if (!hasClaimUser && _currentUser?.UserId is > 0)
             {
-                return null;
+                uid = _currentUser.UserId;
+                hasClaimUser = true;
             }
 
-            if (TryGetUserId(out var uid) &&
-                await _db.Users.AsNoTracking().AnyAsync(u => u.Id == uid, cancellationToken))
+            if (hasClaimUser && uid > 0)
             {
-                return uid;
+                if (await db.Users.AsNoTracking().AnyAsync(u => u.Id == uid, cancellationToken))
+                {
+                    return uid;
+                }
+
+                if (!db.Database.IsRelational() && !await db.Users.AsNoTracking().AnyAsync(cancellationToken))
+                {
+                    return uid;
+                }
             }
 
-            return await _db.Users
-                .AsNoTracking()
-                .OrderBy(u => u.Id)
-                .Select(u => (int?)u.Id)
-                .FirstOrDefaultAsync(cancellationToken);
+            if (User?.Identity?.IsAuthenticated == true && !hasClaimUser)
+            {
+                throw new UnauthorizedAccessException("Không xác định được người dùng hợp lệ cho nhật ký kiểm toán.");
+            }
+
+            return null;
         }
 
         [HttpGet]
@@ -506,27 +541,14 @@ namespace ERP.Api.Controllers
                 return Forbid();
 
             var now = DateTime.UtcNow;
-            var actorUserId = TryGetUserId(out var uid) ? uid : 1;
-
-            if (_db == null)
-            {
-                return Ok(new
-                {
-                    awbBatchCode = $"AWB-BATCH-{now:yyyyMMddHHmmss}",
-                    paperSize = "100x150mm",
-                    printedCount = 0,
-                    duplicatePrintBlocked = true,
-                    labels = Array.Empty<object>(),
-                    items = Array.Empty<object>()
-                });
-            }
+            var db = RequireDb();
 
             if (request?.WarehouseId.HasValue == true && _warehouseAccess != null)
             {
                 await _warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
             }
 
-            var query = _db.ExportReceipts
+            var query = db.ExportReceipts
                 .Include(r => r.Details)
                     .ThenInclude(d => d.Product)
                 .Where(r => r.Status != ERP.Domain.Enums.ReceiptStatus.Cancelled &&
@@ -577,7 +599,7 @@ namespace ERP.Api.Controllers
             }
 
             var warehouseIds = receipts.Select(r => r.WarehouseId).Distinct().ToList();
-            var locationsByWh = await _db.WarehouseLocations
+            var locationsByWh = await db.WarehouseLocations
                 .AsNoTracking()
                 .Where(l => warehouseIds.Contains(l.WarehouseId) && l.IsActive)
                 .OrderBy(l => l.Code)
@@ -675,7 +697,7 @@ namespace ERP.Api.Controllers
                     labelHtml
                 });
 
-                _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+                db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
                 {
                     UserId = validAuditUserId,
                     WarehouseId = r.WarehouseId,
@@ -691,7 +713,7 @@ namespace ERP.Api.Controllers
                 });
             }
 
-            await _db.SaveChangesAsync(cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
             var batchCode = $"AWB-BATCH-{now:yyyyMMdd-HHmmss}";
             var printHtmlDocument = $@"<!DOCTYPE html>
 <html lang=""vi""><head><meta charset=""utf-8""/><title>{batchCode} - Thermal AWB 100x150mm</title>
@@ -773,8 +795,6 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 .Replace(")", "\\)");
         }
 
-        [HttpGet("~/api/v1/handover-manifests")]
-        [HttpGet("~/api/handover-manifests")]
         [HttpGet("handover-manifests")]
         [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
         public async Task<IActionResult> GetHandoverManifests(
@@ -782,65 +802,11 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
             [FromQuery] string? carrierCode = null,
             CancellationToken cancellationToken = default)
         {
-            if (_db == null)
-            {
-                return Ok(new { totalCount = 0, items = Array.Empty<object>() });
-            }
-
-            if (warehouseId.HasValue && _warehouseAccess != null)
-            {
-                await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
-            }
-
-            var query = _db.HandoverManifests
-                .AsNoTracking()
-                .Include(m => m.Lines)
-                .AsQueryable();
-
-            if (warehouseId.HasValue)
-            {
-                query = query.Where(m => m.WarehouseId == warehouseId.Value);
-            }
-            if (!string.IsNullOrWhiteSpace(carrierCode))
-            {
-                var carrier = carrierCode.Trim().ToUpperInvariant();
-                query = query.Where(m => m.CarrierCode == carrier);
-            }
-
-            var manifests = await query.OrderByDescending(m => m.Id).ToListAsync(cancellationToken);
-            return Ok(new
-            {
-                totalCount = manifests.Count,
-                items = manifests.Select(m => new
-                {
-                    m.Id,
-                    m.ManifestCode,
-                    m.WarehouseId,
-                    m.CarrierCode,
-                    m.VehiclePlate,
-                    m.DriverName,
-                    m.DriverPhone,
-                    m.Status,
-                    m.TotalPackages,
-                    m.CreatedAtUtc,
-                    m.SealedAtUtc,
-                    lines = m.Lines.Select(l => new
-                    {
-                        l.Id,
-                        l.ExportReceiptId,
-                        l.TrackingNumber,
-                        l.MarketplaceOrderId,
-                        l.ScannedAtUtc
-                    })
-                }),
-                statusLabel = "Đã tải danh sách biên bản bàn giao bưu tá điện tử"
-            });
+            var result = await HandoverManifests.GetHandoverManifestsAsync(warehouseId, carrierCode, cancellationToken);
+            return ToActionResult(result);
         }
 
-        [HttpPost("~/api/v1/handover-manifests/scan-awb")]
-        [HttpPost("~/api/handover-manifests/scan-awb")]
         [HttpPost("handover-manifests/scan-awb")]
-        [HttpPost("~/api/v1/integrations/handover-manifests/{manifestIdRoute:int}/scan")]
         [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
         [IdempotentCommand("HandoverManifest.ScanAwb")]
         public async Task<IActionResult> ScanHandoverAwb(
@@ -851,311 +817,27 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
             if (User?.IsInRole(AppRoles.Viewer) == true)
                 return Forbid();
 
-            if (_db == null)
-            {
-                return Ok(new { status = "SCANNED" });
-            }
-
-            var now = DateTime.UtcNow;
-            var actorUserId = TryGetUserId(out var uid) ? uid : 1;
-            var manifestId = manifestIdRoute ?? request?.ManifestId;
-
-            ERP.Domain.Entities.ExportReceipt? receipt = null;
-            if (request?.ExportReceiptId is > 0)
-            {
-                receipt = await _db.ExportReceipts.FirstOrDefaultAsync(r => r.Id == request.ExportReceiptId.Value, cancellationToken);
-            }
-            else if (!string.IsNullOrWhiteSpace(request?.TrackingNumber))
-            {
-                var tracking = request.TrackingNumber.Trim();
-                receipt = await _db.ExportReceipts.FirstOrDefaultAsync(r => r.TrackingNumber == tracking || r.Code == tracking, cancellationToken);
-            }
-            else
-            {
-                receipt = await _db.ExportReceipts
-                    .Where(r => r.Status != ERP.Domain.Enums.ReceiptStatus.Cancelled && r.Status != ERP.Domain.Enums.ReceiptStatus.CancelPendingPutback)
-                    .OrderByDescending(r => r.Id)
-                    .FirstOrDefaultAsync(cancellationToken);
-            }
-
-            var trackingNumber = !string.IsNullOrWhiteSpace(request?.TrackingNumber)
-                ? request.TrackingNumber.Trim()
-                : (receipt?.TrackingNumber ?? $"VN{now:yyMMdd}{receipt?.Id ?? 1:D6}");
-
-            if (receipt != null)
-            {
-                if (_warehouseAccess != null)
-                {
-                    await _warehouseAccess.EnsureWarehouseAccessAsync(receipt.WarehouseId, cancellationToken);
-                }
-
-                var linkedOrderCancelled = receipt.SalesOrderId.HasValue && await _db.SalesOrders
-                    .AsNoTracking()
-                    .AnyAsync(o => o.Id == receipt.SalesOrderId.Value &&
-                                   (o.Status == ERP.Domain.Enums.SalesOrderStatus.Cancelled ||
-                                    o.Status == ERP.Domain.Enums.SalesOrderStatus.CancelPendingPutback),
-                              cancellationToken);
-
-                if (receipt.Status == ERP.Domain.Enums.ReceiptStatus.Cancelled ||
-                    receipt.Status == ERP.Domain.Enums.ReceiptStatus.CancelPendingPutback ||
-                    linkedOrderCancelled)
-                {
-                    return Conflict(new
-                    {
-                        code = "ORDER_CANCELLED_PUTBACK_REQUIRED",
-                        errorCode = "ORDER_CANCELLED_PUTBACK_REQUIRED",
-                        trackingNumber,
-                        exportReceiptId = receipt.Id,
-                        receiptStatus = receipt.Status.ToString(),
-                        message = "CẢNH BÁO CHẶN CỔNG: Đơn hàng đã bị khách hủy trên sàn hoặc đang chờ cất trả kệ (CancelPendingPutback). Tuyệt đối không giao kiện này cho bưu tá!"
-                    });
-                }
-            }
-
-            var duplicateLine = await _db.HandoverManifestLines
-                .AsNoTracking()
-                .AnyAsync(l => l.TrackingNumber == trackingNumber, cancellationToken);
-            if (duplicateLine)
-            {
-                return Conflict(new
-                {
-                    code = "DUPLICATE_AWB_SCAN",
-                    errorCode = "DUPLICATE_AWB_SCAN",
-                    trackingNumber,
-                    message = $"Mã vận đơn '{trackingNumber}' đã được quét trong biên bản bàn giao trước đó."
-                });
-            }
-
-            ERP.Domain.Entities.HandoverManifest? manifest = null;
-            if (manifestId is > 0)
-            {
-                manifest = await _db.HandoverManifests
-                    .Include(m => m.Lines)
-                    .FirstOrDefaultAsync(m => m.Id == manifestId.Value, cancellationToken);
-                if (manifest != null && manifest.Status == "SEALED")
-                {
-                    return Conflict(new
-                    {
-                        code = "MANIFEST_ALREADY_SEALED",
-                        errorCode = "MANIFEST_ALREADY_SEALED",
-                        manifestId = manifest.Id,
-                        message = "Biên bản bàn giao đã niêm phong (SEALED), không thể quét thêm vận đơn."
-                    });
-                }
-            }
-
-            var carrierCode = !string.IsNullOrWhiteSpace(request?.CarrierCode)
-                ? request.CarrierCode.Trim().ToUpperInvariant()
-                : (receipt?.CarrierCode ?? "GHN");
-            var targetWarehouseId = request?.WarehouseId ?? receipt?.WarehouseId ?? 1;
-
-            if (manifest == null)
-            {
-                manifest = await _db.HandoverManifests
-                    .Include(m => m.Lines)
-                    .FirstOrDefaultAsync(m => m.WarehouseId == targetWarehouseId && m.CarrierCode == carrierCode && m.Status == "OPEN", cancellationToken);
-            }
-
-            if (manifest == null)
-            {
-                manifest = new ERP.Domain.Entities.HandoverManifest
-                {
-                    ManifestCode = $"HND-{carrierCode}-{now:yyyyMMdd-HHmmss}",
-                    WarehouseId = targetWarehouseId,
-                    CarrierCode = carrierCode,
-                    VehiclePlate = request?.VehiclePlate ?? "51C-888.99",
-                    DriverName = request?.DriverName ?? "Bưu tá lấy hàng",
-                    DriverPhone = request?.DriverPhone ?? "0909123456",
-                    Status = "OPEN",
-                    TotalPackages = 0,
-                    CreatedBy = actorUserId,
-                    CreatedAtUtc = now
-                };
-                _db.HandoverManifests.Add(manifest);
-                await _db.SaveChangesAsync(cancellationToken);
-            }
-
-            var targetReceiptId = receipt?.Id ?? 0;
-            if (targetReceiptId == 0)
-            {
-                targetReceiptId = await _db.ExportReceipts.AsNoTracking().OrderBy(r => r.Id).Select(r => r.Id).FirstOrDefaultAsync(cancellationToken);
-            }
-
-            if (receipt != null && string.IsNullOrWhiteSpace(receipt.TrackingNumber))
-            {
-                receipt.TrackingNumber = trackingNumber;
-                receipt.CarrierCode ??= carrierCode;
-            }
-
-            var line = new ERP.Domain.Entities.HandoverManifestLine
-            {
-                ManifestId = manifest.Id,
-                ExportReceiptId = targetReceiptId,
-                TrackingNumber = trackingNumber,
-                MarketplaceOrderId = receipt?.MarketplaceOrderId,
-                ScannedBy = actorUserId,
-                ScannedAtUtc = now
-            };
-            _db.HandoverManifestLines.Add(line);
-            manifest.TotalPackages = Math.Max(1, manifest.Lines.Count);
-            await _db.SaveChangesAsync(cancellationToken);
-
-            return Ok(new
-            {
-                manifestId = manifest.Id,
-                manifestCode = manifest.ManifestCode,
-                carrierCode = manifest.CarrierCode,
-                status = manifest.Status,
-                totalPackages = manifest.TotalPackages,
-                scannedTrackingNumber = trackingNumber,
-                exportReceiptId = targetReceiptId,
-                scannedAtUtc = now,
-                statusLabel = $"Đã quét vận đơn {trackingNumber} vào biên bản bàn giao {manifest.ManifestCode}"
-            });
+            var actorUserId = TryGetUserId(out var uid) ? (int?)uid : null;
+            var result = await HandoverManifests.ScanHandoverAwbAsync(
+                manifestIdRoute,
+                request == null
+                    ? null
+                    : new ScanHandoverAwbInputDto(
+                        request.ManifestId,
+                        request.WarehouseId,
+                        request.CarrierCode,
+                        request.TrackingNumber,
+                        request.ExportReceiptId,
+                        request.VehiclePlate,
+                        request.DriverName,
+                        request.DriverPhone),
+                actorUserId,
+                User?.Identity?.IsAuthenticated == true,
+                cancellationToken);
+            return ToActionResult(result);
         }
 
-        private async Task<IActionResult?> DispatchManifestReceiptsAsync(
-            List<ERP.Domain.Entities.ExportReceipt> receipts,
-            int actorUserId,
-            DateTime now,
-            CancellationToken cancellationToken)
-        {
-            if (_db == null || receipts.Count == 0)
-            {
-                return null;
-            }
-
-            foreach (var receipt in receipts)
-            {
-                var linkedOrderCancelled = receipt.SalesOrderId.HasValue && await _db.SalesOrders
-                    .AsNoTracking()
-                    .AnyAsync(o => o.Id == receipt.SalesOrderId.Value &&
-                                   (o.Status == ERP.Domain.Enums.SalesOrderStatus.Cancelled ||
-                                    o.Status == ERP.Domain.Enums.SalesOrderStatus.CancelPendingPutback),
-                              cancellationToken);
-
-                if (receipt.Status == ERP.Domain.Enums.ReceiptStatus.Cancelled ||
-                    receipt.Status == ERP.Domain.Enums.ReceiptStatus.CancelPendingPutback ||
-                    linkedOrderCancelled)
-                {
-                    return Conflict(new
-                    {
-                        code = "ORDER_CANCELLED_PUTBACK_REQUIRED",
-                        errorCode = "ORDER_CANCELLED_PUTBACK_REQUIRED",
-                        exportReceiptId = receipt.Id,
-                        exportReceiptCode = receipt.Code,
-                        trackingNumber = receipt.TrackingNumber,
-                        message = "Đơn hàng đã hủy hoặc đang chờ hoàn kệ (Putback), không thể bàn giao vận chuyển."
-                    });
-                }
-            }
-
-            foreach (var receipt in receipts.Where(r => r.Status == ERP.Domain.Enums.ReceiptStatus.Approved))
-            {
-                try
-                {
-                    await _exportReceiptService.DispatchAsync(receipt.Id, actorUserId);
-                }
-                catch (ERP.Application.Exceptions.BusinessRuleException ex)
-                {
-                    return Conflict(new
-                    {
-                        code = "ORDER_CANCELLED_PUTBACK_REQUIRED",
-                        errorCode = "ORDER_CANCELLED_PUTBACK_REQUIRED",
-                        exportReceiptId = receipt.Id,
-                        message = ex.Message
-                    });
-                }
-
-                var refreshed = await _db.ExportReceipts
-                    .Include(r => r.Details)
-                    .FirstOrDefaultAsync(r => r.Id == receipt.Id, cancellationToken);
-
-                if (refreshed != null && refreshed.Status != ERP.Domain.Enums.ReceiptStatus.Dispatched)
-                {
-                    var productIds = refreshed.Details.Select(d => d.ProductId).Distinct().ToList();
-                    if (productIds.Count > 0)
-                    {
-                        await _db.AcquireInventoryAllocationLocksAsync(refreshed.WarehouseId, productIds, cancellationToken);
-                    }
-
-                    foreach (var detail in refreshed.Details)
-                    {
-                        var stocks = await _db.InventoryStocks
-                            .Where(s => s.WarehouseId == refreshed.WarehouseId &&
-                                        s.ProductId == detail.ProductId &&
-                                        s.Status == ERP.Domain.Enums.InventoryStatus.Available)
-                            .OrderByDescending(s => s.Quantity)
-                            .ToListAsync(cancellationToken);
-
-                        var remainingToDeduct = detail.Quantity;
-                        decimal unitCostSnapshot = 0m;
-                        foreach (var stock in stocks)
-                        {
-                            if (remainingToDeduct <= 0m) break;
-                            unitCostSnapshot = stock.MovingAverageCost;
-                            var deduct = Math.Min(stock.Quantity, remainingToDeduct);
-                            if (deduct <= 0m) deduct = remainingToDeduct;
-                            stock.Quantity = Math.Max(0m, stock.Quantity - deduct);
-                            if (stock.ReservedQuantity > 0m)
-                            {
-                                stock.ReservedQuantity = Math.Max(0m, stock.ReservedQuantity - deduct);
-                            }
-                            if (stock.AllocatedQuantity > 0m)
-                            {
-                                stock.AllocatedQuantity = Math.Max(0m, stock.AllocatedQuantity - deduct);
-                            }
-                            stock.LastUpdated = now;
-                            remainingToDeduct -= deduct;
-                        }
-
-                        var reservations = await _db.StockReservations
-                            .Include(r => r.Allocations)
-                            .Where(r => r.WarehouseId == refreshed.WarehouseId &&
-                                        r.ProductId == detail.ProductId &&
-                                        r.Status == ERP.Domain.Enums.StockReservationStatus.Active &&
-                                        ((r.SourceType == "ExportReceipt" && r.SourceId == refreshed.Id) ||
-                                         (refreshed.SalesOrderId.HasValue && r.SourceType == "SalesOrder" && r.SourceId == refreshed.SalesOrderId.Value)))
-                            .ToListAsync(cancellationToken);
-
-                        foreach (var res in reservations)
-                        {
-                            res.Status = ERP.Domain.Enums.StockReservationStatus.Consumed;
-                            res.ConsumedQuantity = res.Quantity;
-                            foreach (var alloc in res.Allocations)
-                            {
-                                alloc.Status = ERP.Domain.Enums.StockAllocationStatus.Picked;
-                            }
-                        }
-
-                        _db.InventoryTransactions.Add(new ERP.Domain.Entities.InventoryTransaction
-                        {
-                            ProductId = detail.ProductId,
-                            WarehouseId = refreshed.WarehouseId,
-                            TransactionType = ERP.Domain.Enums.TransactionType.Export,
-                            Quantity = -detail.Quantity,
-                            UnitCost = unitCostSnapshot,
-                            ReferenceId = refreshed.Id,
-                            ReferenceType = "ExportReceipt",
-                            CreatedBy = actorUserId,
-                            TransactionDate = now,
-                            Note = $"Xuất kho bàn giao vận chuyển phiếu {refreshed.Code}"
-                        });
-                    }
-
-                    refreshed.Status = ERP.Domain.Enums.ReceiptStatus.Dispatched;
-                    refreshed.DispatchedAt = now;
-                    await _db.SaveChangesAsync(cancellationToken);
-                }
-            }
-
-            return null;
-        }
-
-        [HttpPost("~/api/v1/handover-manifests/{id:int}/seal")]
-        [HttpPost("~/api/handover-manifests/{id:int}/seal")]
         [HttpPost("handover-manifests/{id:int}/seal")]
-        [HttpPost("~/api/v1/integrations/handover-manifests/{id:int}/seal")]
         [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
         [IdempotentCommand("HandoverManifest.Seal")]
         public async Task<IActionResult> SealHandoverManifest(
@@ -1166,89 +848,20 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
             if (User?.IsInRole(AppRoles.Viewer) == true)
                 return Forbid();
 
-            if (_db == null)
-            {
-                return Ok(new { id, status = "SEALED" });
-            }
-
-            var manifest = await _db.HandoverManifests
-                .Include(m => m.Lines)
-                .FirstOrDefaultAsync(m => m.Id == id, cancellationToken);
-
-            if (manifest == null)
-            {
-                return NotFound(new { code = "NOT_FOUND", message = $"Không tìm thấy biên bản bàn giao #{id}." });
-            }
-
-            if (_warehouseAccess != null)
-            {
-                await _warehouseAccess.EnsureWarehouseAccessAsync(manifest.WarehouseId, cancellationToken);
-            }
-
-            var now = DateTime.UtcNow;
-            var actorUserId = TryGetUserId(out var uid) ? uid : 1;
-
-            var lineReceiptIds = manifest.Lines.Where(l => l.ExportReceiptId > 0).Select(l => l.ExportReceiptId).Distinct().ToList();
-            var lineTrackings = manifest.Lines.Where(l => !string.IsNullOrWhiteSpace(l.TrackingNumber)).Select(l => l.TrackingNumber).Distinct().ToList();
-            var manifestReceipts = await _db.ExportReceipts
-                .Include(r => r.Details)
-                .Where(r => lineReceiptIds.Contains(r.Id) || (r.TrackingNumber != null && lineTrackings.Contains(r.TrackingNumber)))
-                .ToListAsync(cancellationToken);
-
-            var dispatchConflict = await DispatchManifestReceiptsAsync(manifestReceipts, actorUserId, now, cancellationToken);
-            if (dispatchConflict != null)
-            {
-                return dispatchConflict;
-            }
-
-            manifest.Status = "SEALED";
-            manifest.SealedBy = actorUserId;
-            manifest.SealedAtUtc = now;
-            manifest.TotalPackages = manifest.Lines.Count;
-            if (!string.IsNullOrWhiteSpace(request?.DriverName))
-                manifest.DriverName = request.DriverName.Trim();
-            if (!string.IsNullOrWhiteSpace(request?.DriverPhone))
-                manifest.DriverPhone = request.DriverPhone.Trim();
-            if (!string.IsNullOrWhiteSpace(request?.VehiclePlate))
-                manifest.VehiclePlate = request.VehiclePlate.Trim();
-
-            var digitalSignatureHash = !string.IsNullOrWhiteSpace(request?.DigitalSignatureHash)
-                ? request.DigitalSignatureHash.Trim()
-                : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
-                    System.Text.Encoding.UTF8.GetBytes($"{manifest.ManifestCode}:{manifest.TotalPackages}:{now:O}")));
-
-            var validSealAuditUserId = await ResolveValidAuditUserIdAsync(cancellationToken);
-            _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
-            {
-                UserId = validSealAuditUserId,
-                WarehouseId = manifest.WarehouseId,
-                EntityName = "HandoverManifest",
-                EntityId = manifest.Id,
-                Action = "HandoverManifest.Seal",
-                NewValues = $"Status=SEALED; TotalPackages={manifest.TotalPackages}; Driver={manifest.DriverName}",
-                Reason = $"Niêm phong biên bản bàn giao bưu tá {manifest.ManifestCode} ({manifest.TotalPackages} kiện)",
-                Result = "Success",
-                Timestamp = now
-            });
-
-            await _db.SaveChangesAsync(cancellationToken);
-
-            return Ok(new
-            {
-                manifest.Id,
-                manifest.ManifestCode,
-                manifest.WarehouseId,
-                manifest.CarrierCode,
-                manifest.Status,
-                manifest.TotalPackages,
-                manifest.DriverName,
-                manifest.DriverPhone,
-                manifest.VehiclePlate,
-                manifest.SealedAtUtc,
-                digitalSignatureHash,
-                dispatchedReceiptIds = manifestReceipts.Select(r => r.Id).ToList(),
-                statusLabel = $"Đã niêm phong biên bản bàn giao {manifest.ManifestCode} ({manifest.TotalPackages} kiện)"
-            });
+            var actorUserId = TryGetUserId(out var uid) ? (int?)uid : null;
+            var result = await HandoverManifests.SealHandoverManifestAsync(
+                id,
+                request == null
+                    ? null
+                    : new SealHandoverManifestInputDto(
+                        request.DriverName,
+                        request.DriverPhone,
+                        request.VehiclePlate,
+                        request.DigitalSignatureHash),
+                actorUserId,
+                User?.Identity?.IsAuthenticated == true,
+                cancellationToken);
+            return ToActionResult(result);
         }
 
         public sealed record ConfirmCarrierHandoverRequest(
@@ -1272,174 +885,23 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
             if (User?.IsInRole(AppRoles.Viewer) == true)
                 return Forbid();
 
-            var now = DateTime.UtcNow;
-            var actorUserId = TryGetUserId(out var uid) ? uid : 1;
-            var carrierCode = string.IsNullOrWhiteSpace(request?.CarrierCode) ? "GHN" : request.CarrierCode.Trim().ToUpperInvariant();
-            var trackingNumbers = request?.TrackingNumbers is { Count: > 0 }
-                ? request.TrackingNumbers.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
-                : new List<string>();
-
-            if (_db == null)
-            {
-                return Ok(new
-                {
-                    manifestCode = $"HND-{carrierCode}-{now:yyyyMMdd}",
-                    carrierCode,
-                    status = "SEALED",
-                    totalPackages = trackingNumbers.Count,
-                    trackingNumbers,
-                    sealedAtUtc = now,
-                    statusLabel = $"Đã chốt biên bản bàn giao bưu tá điện tử ({trackingNumbers.Count} kiện)"
-                });
-            }
-
-            var targetWarehouseId = request?.WarehouseId ?? await _db.Warehouses.AsNoTracking().OrderBy(w => w.Id).Select(w => w.Id).FirstOrDefaultAsync(cancellationToken);
-            if (targetWarehouseId <= 0) targetWarehouseId = 1;
-
-            if (_warehouseAccess != null && request?.WarehouseId.HasValue == true)
-            {
-                await _warehouseAccess.EnsureWarehouseAccessAsync(targetWarehouseId, cancellationToken);
-            }
-
-            ERP.Domain.Entities.HandoverManifest? manifest = null;
-            if (request?.ManifestId is > 0)
-            {
-                manifest = await _db.HandoverManifests
-                    .Include(m => m.Lines)
-                    .FirstOrDefaultAsync(m => m.Id == request.ManifestId.Value, cancellationToken);
-            }
-            manifest ??= await _db.HandoverManifests
-                .Include(m => m.Lines)
-                .OrderByDescending(m => m.Id)
-                .FirstOrDefaultAsync(m => m.WarehouseId == targetWarehouseId && m.CarrierCode == carrierCode, cancellationToken)
-                ?? await _db.HandoverManifests
-                    .Include(m => m.Lines)
-                    .OrderByDescending(m => m.Id)
-                    .FirstOrDefaultAsync(cancellationToken);
-
-            var explicitReceiptIds = request?.ExportReceiptIds ?? new List<int>();
-            var matchedReceipts = await _db.ExportReceipts
-                .Include(r => r.Details)
-                .Where(r => explicitReceiptIds.Contains(r.Id) ||
-                            (r.TrackingNumber != null && trackingNumbers.Contains(r.TrackingNumber)) ||
-                            trackingNumbers.Contains(r.Code))
-                .ToListAsync(cancellationToken);
-
-            if (manifest != null && manifest.Lines.Count > 0)
-            {
-                var manifestLineReceiptIds = manifest.Lines.Where(l => l.ExportReceiptId > 0).Select(l => l.ExportReceiptId).Distinct().ToList();
-                var manifestLineTrackings = manifest.Lines.Where(l => !string.IsNullOrWhiteSpace(l.TrackingNumber)).Select(l => l.TrackingNumber).Distinct().ToList();
-                var fromManifest = await _db.ExportReceipts
-                    .Include(r => r.Details)
-                    .Where(r => manifestLineReceiptIds.Contains(r.Id) ||
-                                (r.TrackingNumber != null && manifestLineTrackings.Contains(r.TrackingNumber)))
-                    .ToListAsync(cancellationToken);
-                foreach (var r in fromManifest)
-                {
-                    if (matchedReceipts.All(x => x.Id != r.Id))
-                    {
-                        matchedReceipts.Add(r);
-                    }
-                }
-            }
-
-            if (matchedReceipts.Count == 0 && request?.WarehouseId.HasValue == true)
-            {
-                matchedReceipts = await _db.ExportReceipts
-                    .Include(r => r.Details)
-                    .Where(r => r.WarehouseId == targetWarehouseId &&
-                                r.Status == ERP.Domain.Enums.ReceiptStatus.Approved)
-                    .OrderByDescending(r => r.Id)
-                    .ToListAsync(cancellationToken);
-            }
-
-            var dispatchConflict = await DispatchManifestReceiptsAsync(matchedReceipts, actorUserId, now, cancellationToken);
-            if (dispatchConflict != null)
-            {
-                return dispatchConflict;
-            }
-
-            var defaultReceiptId = matchedReceipts.FirstOrDefault()?.Id ?? await _db.ExportReceipts
-                .AsNoTracking()
-                .Where(r => r.Status != ERP.Domain.Enums.ReceiptStatus.Cancelled && r.Status != ERP.Domain.Enums.ReceiptStatus.CancelPendingPutback)
-                .OrderByDescending(r => r.Id)
-                .Select(r => r.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (trackingNumbers.Count == 0 && matchedReceipts.Count > 0)
-            {
-                trackingNumbers = matchedReceipts
-                    .Select(r => !string.IsNullOrWhiteSpace(r.TrackingNumber) ? r.TrackingNumber! : r.Code)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-            }
-
-            if (manifest == null)
-            {
-                manifest = new ERP.Domain.Entities.HandoverManifest
-                {
-                    ManifestCode = $"HND-{carrierCode}-{now:yyyyMMdd-HHmmss}",
-                    WarehouseId = targetWarehouseId,
-                    CarrierCode = carrierCode,
-                    VehiclePlate = request?.VehiclePlate ?? "51C-888.99",
-                    DriverName = request?.DriverName ?? "Bưu tá lấy hàng",
-                    DriverPhone = request?.DriverPhone ?? "0909123456",
-                    Status = "SEALED",
-                    TotalPackages = Math.Max(1, trackingNumbers.Count),
-                    CreatedBy = actorUserId,
-                    CreatedAtUtc = now,
-                    SealedBy = actorUserId,
-                    SealedAtUtc = now
-                };
-                _db.HandoverManifests.Add(manifest);
-                await _db.SaveChangesAsync(cancellationToken);
-            }
-
-            foreach (var tracking in trackingNumbers)
-            {
-                var exists = await _db.HandoverManifestLines
-                    .AsNoTracking()
-                    .AnyAsync(l => l.TrackingNumber == tracking, cancellationToken);
-                if (!exists && defaultReceiptId > 0)
-                {
-                    var matchedForTracking = matchedReceipts.FirstOrDefault(r =>
-                        string.Equals(r.TrackingNumber, tracking, StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(r.Code, tracking, StringComparison.OrdinalIgnoreCase));
-                    _db.HandoverManifestLines.Add(new ERP.Domain.Entities.HandoverManifestLine
-                    {
-                        ManifestId = manifest.Id,
-                        ExportReceiptId = matchedForTracking?.Id ?? defaultReceiptId,
-                        TrackingNumber = tracking,
-                        ScannedBy = actorUserId,
-                        ScannedAtUtc = now
-                    });
-                }
-            }
-
-            manifest.Status = "SEALED";
-            manifest.SealedBy ??= actorUserId;
-            manifest.SealedAtUtc ??= now;
-            manifest.TotalPackages = Math.Max(manifest.Lines.Count, trackingNumbers.Count);
-
-            await _db.SaveChangesAsync(cancellationToken);
-
-            return Ok(new
-            {
-                manifest.Id,
-                manifest.ManifestCode,
-                manifest.WarehouseId,
-                manifest.CarrierCode,
-                manifest.Status,
-                manifest.TotalPackages,
-                manifest.DriverName,
-                manifest.DriverPhone,
-                manifest.VehiclePlate,
-                manifest.SealedAtUtc,
-                trackingNumbers,
-                dispatchedCount = matchedReceipts.Count(r => r.Status == ERP.Domain.Enums.ReceiptStatus.Dispatched),
-                dispatchedReceiptIds = matchedReceipts.Where(r => r.Status == ERP.Domain.Enums.ReceiptStatus.Dispatched).Select(r => r.Id).ToList(),
-                statusLabel = $"Đã chốt & niêm phong biên bản bàn giao bưu tá điện tử {manifest.ManifestCode} ({manifest.TotalPackages} kiện)"
-            });
+            var actorUserId = TryGetUserId(out var uid) ? (int?)uid : null;
+            var result = await HandoverManifests.ConfirmCarrierHandoverAsync(
+                request == null
+                    ? null
+                    : new ConfirmCarrierHandoverInputDto(
+                        request.WarehouseId,
+                        request.CarrierCode,
+                        request.TrackingNumbers,
+                        request.VehiclePlate,
+                        request.DriverName,
+                        request.DriverPhone,
+                        request.ManifestId,
+                        request.ExportReceiptIds),
+                actorUserId,
+                User?.Identity?.IsAuthenticated == true,
+                cancellationToken);
+            return ToActionResult(result);
         }
 
         [HttpGet("~/api/v1/carriers/address-mappings")]
@@ -1453,21 +915,10 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
             [FromQuery] string? ward = null,
             CancellationToken cancellationToken = default)
         {
-            if (_db == null)
-            {
-                return Ok(new
-                {
-                    administrativeModel = "VN_2_TIER_2025_2026",
-                    matched = false,
-                    persistedUnitsCount = 0,
-                    units = Array.Empty<object>(),
-                    carrierMappings = Array.Empty<object>()
-                });
-            }
+            var db = RequireDb();
+            await ShipmentsController.EnsureVnAdministrativeSeededAsync(db, cancellationToken);
 
-            await ShipmentsController.EnsureVnAdministrativeSeededAsync(_db, cancellationToken);
-
-            var allUnits = await _db.VnAdministrativeUnits
+            var allUnits = await db.VnAdministrativeUnits
                 .AsNoTracking()
                 .Include(u => u.CarrierMappings)
                 .Where(u => u.IsActive)
@@ -1507,7 +958,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
             var matched = matchedUnits.Count > 0;
             var primaryUnit = matchedUnits.FirstOrDefault() ?? allUnits.FirstOrDefault();
             var unitIds = matchedUnits.Select(u => u.Id).ToHashSet();
-            var dbMappings = await _db.CarrierLocationMappings
+            var dbMappings = await db.CarrierLocationMappings
                 .AsNoTracking()
                 .Where(m => unitIds.Count == 0 || unitIds.Contains(m.AdministrativeUnitId))
                 .ToListAsync(cancellationToken);
@@ -1570,42 +1021,40 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
             });
         }
 
-        [HttpGet("~/api/v1/data-imports/templates")]
-        [HttpGet("~/api/data-imports/templates")]
         [HttpGet("data-imports/templates")]
         [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
         public IActionResult GetDataImportTemplates()
         {
-            return Ok(new
-            {
-                templates = new[]
-                {
-                    new
-                    {
-                        templateCode = "OPENING_BALANCE_EXCEL",
-                        templateName = "Mẫu Excel Nhập Tồn Kho Đầu Kỳ & Giá Vốn Bình Quân (MAC)",
-                        downloadUrl = "/api/v1/import-templates/opening-balance",
-                        requiredColumns = new[] { "ProductCode", "LocationCode", "Quantity", "UnitCost", "LotNumber", "ExpiryDate" }
-                    },
-                    new
-                    {
-                        templateCode = "PRODUCT_MASTER_EXCEL",
-                        templateName = "Mẫu Excel Danh Mục Sản Phẩm & Quy Đổi ĐVT",
-                        downloadUrl = "/api/v1/import-templates/products",
-                        requiredColumns = new[] { "ProductCode", "ProductName", "BaseUomCode", "Barcode", "MovingAverageCost" }
-                    }
-                },
-                statusLabel = "Đã tải danh mục biểu mẫu nhập liệu Excel đầu kỳ chuẩn"
-            });
+            return Ok(BuildDataImportTemplatesPayload());
         }
 
-        [HttpPost("~/api/v1/data-imports/opening-balance")]
-        [HttpPost("~/api/data-imports/opening-balance")]
+        internal static object BuildDataImportTemplatesPayload() => new
+        {
+            templates = new[]
+            {
+                new
+                {
+                    templateCode = "OPENING_BALANCE_EXCEL",
+                    templateName = "Mẫu Excel Nhập Tồn Kho Đầu Kỳ & Giá Vốn Bình Quân (MAC)",
+                    downloadUrl = "/api/v1/import-templates/opening-balance",
+                    requiredColumns = new[] { "ProductCode", "LocationCode", "Quantity", "UnitCost", "LotNumber", "ExpiryDate" }
+                },
+                new
+                {
+                    templateCode = "PRODUCT_MASTER_EXCEL",
+                    templateName = "Mẫu Excel Danh Mục Sản Phẩm & Quy Đổi ĐVT",
+                    downloadUrl = "/api/v1/import-templates/products",
+                    requiredColumns = new[] { "ProductCode", "ProductName", "BaseUomCode", "Barcode", "MovingAverageCost" }
+                }
+            },
+            statusLabel = "Đã tải danh mục biểu mẫu nhập liệu Excel đầu kỳ chuẩn"
+        };
+
         [HttpPost("data-imports/opening-balance")]
         [HttpPost("~/api/v1/inventory/opening-balances/import")]
         [HttpPost("~/api/v1/inventory/opening-balance-import")]
         [HttpPost("~/api/inventory/opening-balance-import")]
-        [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
+        [PermissionAuthorize(AppPermissions.InventoryOpeningBalanceImport, AppPermissions.InventoryWrite)]
         [IdempotentCommand("Inventory.ImportOpeningBalance")]
         public async Task<IActionResult> ImportOpeningBalance(
             [ModelBinder(BinderType = typeof(FlexibleBodyOrFormModelBinder))] ImportOpeningBalanceRequest? request = null,
@@ -1615,14 +1064,11 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
             if (User?.IsInRole(AppRoles.Viewer) == true)
                 return Forbid();
 
-            if (_db == null)
-            {
-                return Ok(new { importedCount = 0 });
-            }
-
+            var db = RequireDb();
             var now = DateTime.UtcNow;
-            var actorUserId = TryGetUserId(out var uid) ? uid : 1;
-            var warehouseId = request?.WarehouseId ?? await _db.Warehouses.AsNoTracking().OrderBy(w => w.Id).Select(w => w.Id).FirstOrDefaultAsync(cancellationToken);
+            var validAuditUserId = await ResolveValidAuditUserIdAsync(cancellationToken);
+            var actorUserId = validAuditUserId ?? (TryGetUserId(out var uid) ? uid : 1);
+            var warehouseId = request?.WarehouseId ?? await db.Warehouses.AsNoTracking().OrderBy(w => w.Id).Select(w => w.Id).FirstOrDefaultAsync(cancellationToken);
             if (warehouseId <= 0) warehouseId = 1;
 
             if (warehouseId > 0 && _warehouseAccess != null)
@@ -1694,7 +1140,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 });
             }
 
-            var defaultLocId = request?.LocationId ?? await _db.WarehouseLocations
+            var defaultLocId = request?.LocationId ?? await db.WarehouseLocations
                 .AsNoTracking()
                 .Where(l => l.WarehouseId == warehouseId && l.IsActive)
                 .OrderBy(l => l.Id)
@@ -1716,12 +1162,12 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 ERP.Domain.Entities.Product? product = null;
                 if (item.ProductId is > 0)
                 {
-                    product = await _db.Products.FirstOrDefaultAsync(p => p.Id == item.ProductId.Value, cancellationToken);
+                    product = await db.Products.FirstOrDefaultAsync(p => p.Id == item.ProductId.Value, cancellationToken);
                 }
                 else if (!string.IsNullOrWhiteSpace(item.ProductCode))
                 {
                     var pCode = item.ProductCode.Trim();
-                    product = await _db.Products.FirstOrDefaultAsync(p => p.Code == pCode, cancellationToken);
+                    product = await db.Products.FirstOrDefaultAsync(p => p.Code == pCode, cancellationToken);
                 }
 
                 if (product == null)
@@ -1739,10 +1185,14 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 resolvedProducts.Add((item, product));
             }
 
+            await using var sqlTx = db.Database.CurrentTransaction == null && db.Database.IsRelational()
+                ? await db.Database.BeginTransactionAsync(cancellationToken)
+                : null;
+
             var lockProductIds = resolvedProducts.Select(x => x.Product.Id).Distinct().ToList();
             if (lockProductIds.Count > 0)
             {
-                await _db.AcquireInventoryAllocationLocksAsync(warehouseId, lockProductIds, cancellationToken);
+                await db.AcquireInventoryAllocationLocksAsync(warehouseId, lockProductIds, cancellationToken);
             }
 
             var importedItems = new List<object>();
@@ -1754,7 +1204,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 if ((!locId.HasValue || locId <= 0) && !string.IsNullOrWhiteSpace(item.LocationCode))
                 {
                     var codeNorm = item.LocationCode.Trim().ToUpperInvariant();
-                    var locationEntity = await _db.WarehouseLocations
+                    var locationEntity = await db.WarehouseLocations
                         .FirstOrDefaultAsync(l => l.WarehouseId == warehouseId && l.Code == codeNorm, cancellationToken);
                     if (locationEntity == null)
                     {
@@ -1768,8 +1218,8 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                             IsPickable = true,
                             IsReceivable = true
                         };
-                        _db.WarehouseLocations.Add(locationEntity);
-                        await _db.SaveChangesAsync(cancellationToken);
+                        db.WarehouseLocations.Add(locationEntity);
+                        await db.SaveChangesAsync(cancellationToken);
                     }
                     locId = locationEntity.Id;
                     resolvedLocationCode = locationEntity.Code;
@@ -1780,7 +1230,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 if (!string.IsNullOrWhiteSpace(item.LotNumber))
                 {
                     var lotNo = item.LotNumber.Trim().ToUpperInvariant();
-                    var lotEntity = await _db.InventoryLots
+                    var lotEntity = await db.InventoryLots
                         .FirstOrDefaultAsync(l => l.ProductId == product.Id && l.LotNumber == lotNo, cancellationToken);
                     if (lotEntity == null)
                     {
@@ -1792,8 +1242,8 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                             ExpiryDate = item.ExpiryDate ?? now.Date.AddYears(2),
                             CreatedAt = now
                         };
-                        _db.InventoryLots.Add(lotEntity);
-                        await _db.SaveChangesAsync(cancellationToken);
+                        db.InventoryLots.Add(lotEntity);
+                        await db.SaveChangesAsync(cancellationToken);
                     }
                     else if (item.ExpiryDate.HasValue)
                     {
@@ -1802,7 +1252,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                     lotId = lotEntity.Id;
                 }
 
-                var stock = await _db.InventoryStocks.FirstOrDefaultAsync(
+                var stock = await db.InventoryStocks.FirstOrDefaultAsync(
                     s => s.WarehouseId == warehouseId &&
                          s.ProductId == product.Id &&
                          s.LocationId == locId &&
@@ -1829,7 +1279,7 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                         MovingAverageCost = item.UnitCost,
                         LastUpdated = now
                     };
-                    _db.InventoryStocks.Add(stock);
+                    db.InventoryStocks.Add(stock);
                 }
                 else
                 {
@@ -1859,9 +1309,9 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                     TransactionDate = now,
                     Note = $"Nhập tồn kho đầu kỳ ({item.Quantity:0.##} x {item.UnitCost:0.##}đ)"
                 };
-                _db.InventoryTransactions.Add(tx);
+                db.InventoryTransactions.Add(tx);
 
-                _db.IntegrationOutboxMessages.Add(new ERP.Domain.Entities.IntegrationOutboxMessage
+                db.IntegrationOutboxMessages.Add(new ERP.Domain.Entities.IntegrationOutboxMessage
                 {
                     EventId = $"OPN-VAL-{warehouseId}-{product.Id}-{now.Ticks}",
                     EventType = "InventoryValuationPosted",
@@ -1901,7 +1351,23 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 });
             }
 
-            await _db.SaveChangesAsync(cancellationToken);
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = validAuditUserId,
+                WarehouseId = warehouseId,
+                EntityName = "InventoryStock",
+                Action = "Inventory.ImportOpeningBalance",
+                NewValues = $"ImportedCount={importedItems.Count}",
+                Reason = $"Nạp tồn kho đầu kỳ ({importedItems.Count} dòng)",
+                Result = "Success",
+                Timestamp = now
+            });
+
+            await db.SaveChangesAsync(cancellationToken);
+            if (sqlTx != null)
+            {
+                await sqlTx.CommitAsync(cancellationToken);
+            }
 
             return Ok(new
             {
@@ -2128,9 +1594,9 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                     }
                 }
             }
-            catch
+            catch (System.Text.Json.JsonException)
             {
-                // Allow null when request body is empty or not JSON
+                bindingContext.ModelState.TryAddModelError(bindingContext.ModelName, "Payload JSON không hợp lệ.");
             }
 
             bindingContext.Result = Microsoft.AspNetCore.Mvc.ModelBinding.ModelBindingResult.Success(null);

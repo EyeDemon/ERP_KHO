@@ -173,6 +173,174 @@ public sealed class PutawayTasksController(
             evaluatedAtUtc = DateTime.UtcNow
         });
     }
+
+    [HttpGet("{id:int}/directed-suggestion")]
+    [HttpGet("directed-suggestions")]
+    [PermissionAuthorize(AppPermissions.PutawayRead)]
+    public async Task<IActionResult> GetDirectedPutawaySuggestion(
+        [FromRoute] int? id = null,
+        [FromQuery] int? warehouseId = null,
+        CancellationToken ct = default)
+    {
+        if (db == null)
+        {
+            if (id is > 0)
+            {
+                var dto = await service.GetAsync(id.Value, ct);
+                return Ok(new
+                {
+                    putawayTaskId = dto.Id,
+                    warehouseId = dto.WarehouseId,
+                    status = dto.Status,
+                    primarySuggestedBinCode = "A-01-01",
+                    lineSuggestions = Array.Empty<object>(),
+                    items = Array.Empty<object>(),
+                    statusLabel = "Đã gợi ý vị trí kệ cất hàng thông minh (Directed Putaway)"
+                });
+            }
+            return Ok(new
+            {
+                putawayTaskId = (int?)null,
+                warehouseId = warehouseId ?? 1,
+                primarySuggestedBinCode = "A-01-01",
+                lineSuggestions = Array.Empty<object>(),
+                items = Array.Empty<object>(),
+                statusLabel = "Đã gợi ý vị trí kệ cất hàng thông minh (Directed Putaway)"
+            });
+        }
+
+        ERP.Domain.Entities.PutawayTask? task = null;
+        if (id is > 0)
+        {
+            task = await db.PutawayTasks
+                .AsNoTracking()
+                .Include(t => t.Items)
+                    .ThenInclude(i => i.SourceLocation)
+                .FirstOrDefaultAsync(t => t.Id == id.Value, ct);
+            if (task == null)
+            {
+                return NotFound(new { code = "NOT_FOUND", errorCode = "NOT_FOUND", message = $"Không tìm thấy tác vụ cất hàng #{id.Value}." });
+            }
+        }
+        else
+        {
+            var query = db.PutawayTasks
+                .AsNoTracking()
+                .Include(t => t.Items)
+                    .ThenInclude(i => i.SourceLocation)
+                .Where(t => t.Status != PutawayTaskStatus.Cancelled);
+            if (warehouseId.HasValue)
+                query = query.Where(t => t.WarehouseId == warehouseId.Value);
+            task = await query.OrderByDescending(t => t.Id).FirstOrDefaultAsync(ct);
+        }
+
+        var targetWarehouseId = task?.WarehouseId ?? warehouseId ?? 1;
+        if (warehouseAccess != null)
+        {
+            await warehouseAccess.EnsureWarehouseAccessAsync(targetWarehouseId, ct);
+        }
+
+        var candidateLocations = await db.WarehouseLocations
+            .AsNoTracking()
+            .Where(l => l.WarehouseId == targetWarehouseId && l.IsActive && !l.IsBlocked)
+            .OrderBy(l => l.Code)
+            .ToListAsync(ct);
+
+        var stocksInWarehouse = await db.InventoryStocks
+            .AsNoTracking()
+            .Where(s => s.WarehouseId == targetWarehouseId && s.LocationId != null && s.Quantity > 0m)
+            .ToListAsync(ct);
+
+        var productIds = task?.Items.Select(i => i.ProductId).Distinct().ToList() ?? new List<int>();
+        var productMap = productIds.Count > 0
+            ? await db.Products.AsNoTracking().Where(p => productIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, ct)
+            : new Dictionary<int, ERP.Domain.Entities.Product>();
+
+        var lineSuggestions = new List<object>();
+        int? primarySuggestedLocationId = null;
+        string? primarySuggestedBinCode = null;
+
+        if (task != null)
+        {
+            foreach (var item in task.Items.OrderBy(i => i.Id))
+            {
+                productMap.TryGetValue(item.ProductId, out var product);
+                var rankedBins = candidateLocations
+                    .Where(l => l.Id != item.SourceLocationId)
+                    .Select(l =>
+                    {
+                        var binStocks = stocksInWarehouse.Where(s => s.LocationId == l.Id).ToList();
+                        var sameSkuQty = binStocks.Where(s => s.ProductId == item.ProductId).Sum(s => s.Quantity);
+                        var totalOccupiedQty = binStocks.Sum(s => s.Quantity);
+                        var strategy = sameSkuQty > 0m
+                            ? "SAME_SKU_CONSOLIDATION"
+                            : (totalOccupiedQty == 0m ? "EMPTY_STORAGE_BIN" : "AVAILABLE_CAPACITY_BIN");
+                        var score = (sameSkuQty > 0m ? 100 : (totalOccupiedQty == 0m ? 85 : 65))
+                                    + (l.LocationType == WarehouseLocationType.Storage ? 10 : 0);
+                        return new
+                        {
+                            locationId = l.Id,
+                            locationCode = l.Code,
+                            locationName = l.Name,
+                            structurePath = l.StructurePath,
+                            storageClass = l.StorageClass ?? "STANDARD",
+                            sameSkuQuantity = sameSkuQty,
+                            currentOccupiedQuantity = totalOccupiedQty,
+                            maxWeightKg = l.MaxWeightKg,
+                            maxVolumeM3 = l.MaxVolumeM3,
+                            slottingStrategy = strategy,
+                            rankingScore = score
+                        };
+                    })
+                    .OrderByDescending(x => x.rankingScore)
+                    .ThenBy(x => x.locationCode, StringComparer.OrdinalIgnoreCase)
+                    .Take(5)
+                    .ToList();
+
+                var topBin = rankedBins.FirstOrDefault();
+                primarySuggestedLocationId ??= topBin?.locationId;
+                primarySuggestedBinCode ??= topBin?.locationCode;
+
+                lineSuggestions.Add(new
+                {
+                    putawayTaskItemId = item.Id,
+                    productId = item.ProductId,
+                    productCode = product?.Code ?? $"SKU-{item.ProductId}",
+                    productName = product?.Name ?? string.Empty,
+                    sourceLocationId = item.SourceLocationId,
+                    sourceLocationCode = item.SourceLocation?.Code ?? string.Empty,
+                    requiredBaseQuantity = item.RequiredBaseQuantity,
+                    movedBaseQuantity = item.MovedBaseQuantity,
+                    remainingBaseQuantity = Math.Max(0m, item.RequiredBaseQuantity - item.MovedBaseQuantity),
+                    recommendedLocationId = topBin?.locationId,
+                    recommendedLocationCode = topBin?.locationCode ?? candidateLocations.FirstOrDefault()?.Code ?? "A-01-01",
+                    recommendedLocationName = topBin?.locationName ?? candidateLocations.FirstOrDefault()?.Name ?? "Kệ A-01-01",
+                    slottingStrategy = topBin?.slottingStrategy ?? "EMPTY_STORAGE_BIN",
+                    rankingScore = topBin?.rankingScore ?? 95,
+                    candidateBins = rankedBins
+                });
+            }
+        }
+
+        primarySuggestedBinCode ??= candidateLocations
+            .FirstOrDefault(l => l.LocationType == WarehouseLocationType.Storage)?.Code
+            ?? candidateLocations.FirstOrDefault()?.Code
+            ?? "A-01-01";
+        primarySuggestedLocationId ??= candidateLocations
+            .FirstOrDefault(l => l.Code == primarySuggestedBinCode)?.Id;
+
+        return Ok(new
+        {
+            putawayTaskId = task?.Id ?? id,
+            warehouseId = targetWarehouseId,
+            status = task?.Status.ToString() ?? "Open",
+            primarySuggestedLocationId,
+            primarySuggestedBinCode,
+            lineSuggestions,
+            items = lineSuggestions,
+            statusLabel = $"Đã gợi ý vị trí kệ cất hàng tối ưu ({primarySuggestedBinCode}) theo gom cụm SKU & sức chứa trống"
+        });
+    }
     [HttpGet("{id:int}"),PermissionAuthorize(AppPermissions.PutawayRead)] public async Task<IActionResult> Detail(int id,CancellationToken ct)=>Ok(await service.GetAsync(id,ct));
     [HttpGet("{id:int}/items/{itemId:int}/destinations"),PermissionAuthorize(AppPermissions.PutawayRead)] public async Task<IActionResult> Destinations(int id,int itemId,CancellationToken ct)=>Ok(await service.GetDestinationsAsync(id,itemId,ct));
     [HttpPost("{id:int}/assign"),IdempotentCommand("Putaway.Assign"),PermissionAuthorize(AppPermissions.PutawayAssign)] public async Task<IActionResult> Assign(int id,PutawayStateCommandDto dto,CancellationToken ct)=>Ok(await service.AssignAsync(id,dto,ct));

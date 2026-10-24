@@ -1,4 +1,5 @@
 using ERP.Domain.Common;
+using ERP.Domain.Exceptions;
 
 namespace ERP.Domain.Entities;
 
@@ -18,6 +19,36 @@ public class HandoverManifest : ITenantEntity
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public int? SealedBy { get; set; }
     public DateTime? SealedAtUtc { get; set; }
+
+    public void Seal(string driverName, string vehiclePlate, DateTime utcNow, int? sealedBy = null)
+    {
+        if (string.Equals(Status, "SEALED", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ConflictException(
+                "Biên bản bàn giao đã niêm phong (SEALED), không thể niêm phong lại.",
+                "MANIFEST_ALREADY_SEALED");
+        }
+
+        if (string.IsNullOrWhiteSpace(driverName) || string.IsNullOrWhiteSpace(vehiclePlate))
+        {
+            throw new ConflictException(
+                "Vui lòng nhập đầy đủ Biển số xe (VehiclePlate) và Tên tài xế/bưu tá (DriverName) trước khi niêm phong biên bản bàn giao.",
+                "HANDOVER_VEHICLE_DRIVER_REQUIRED");
+        }
+
+        DriverName = driverName.Trim();
+        VehiclePlate = vehiclePlate.Trim();
+        Status = "SEALED";
+        SealedAtUtc = utcNow;
+        if (sealedBy.HasValue)
+        {
+            SealedBy = sealedBy.Value;
+        }
+        if (Lines.Count > 0)
+        {
+            TotalPackages = Lines.Count;
+        }
+    }
 
     public Warehouse? Warehouse { get; set; }
     public ICollection<HandoverManifestLine> Lines { get; set; } = new List<HandoverManifestLine>();

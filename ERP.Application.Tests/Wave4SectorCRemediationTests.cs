@@ -622,7 +622,7 @@ public sealed class Wave4SectorCRemediationTests
             .Which.Data["ErrorCode"].Should().Be("HU_CONTENT_MISMATCH");
 
         // Valid LotNumber with zero-width char succeeds
-        await service.PackAsync(1, new PackIntoHandlingUnitDto
+        var afterPack = await service.PackAsync(1, new PackIntoHandlingUnitDto
         {
             HandlingUnitId = 1,
             PickingTaskLineId = 1,
@@ -633,19 +633,19 @@ public sealed class Wave4SectorCRemediationTests
         });
 
         // Nest open/in-use child into parent, then attempt to close parent while child is still InUse -> rejected
-        await service.NestHandlingUnitAsync(1, 1, new NestHandlingUnitDto
+        var afterNest = await service.NestHandlingUnitAsync(1, 1, new NestHandlingUnitDto
         {
             ParentHandlingUnitId = 2,
-            RowVersion = EncodedVer
+            RowVersion = afterPack.RowVersion ?? EncodedVer
         });
-        var closeParentWithOpenChild = () => service.CloseHandlingUnitAsync(1, 2, new PackingStateCommandDto { RowVersion = EncodedVer });
+        var closeParentWithOpenChild = () => service.CloseHandlingUnitAsync(1, 2, new PackingStateCommandDto { RowVersion = afterNest.RowVersion ?? EncodedVer });
         (await closeParentWithOpenChild.Should().ThrowAsync<BusinessRuleException>())
             .Which.Data["ErrorCode"].Should().Be("HU_CLOSED");
 
         // Close child first, then close parent, then attempt to unnest child from closed parent -> rejected
-        await service.CloseHandlingUnitAsync(1, 1, new PackingStateCommandDto { RowVersion = EncodedVer });
-        await service.CloseHandlingUnitAsync(1, 2, new PackingStateCommandDto { RowVersion = EncodedVer });
-        var unnestFromClosedParent = () => service.UnnestHandlingUnitAsync(1, 1, new PackingStateCommandDto { RowVersion = EncodedVer });
+        var afterCloseChild = await service.CloseHandlingUnitAsync(1, 1, new PackingStateCommandDto { RowVersion = afterNest.RowVersion ?? EncodedVer });
+        var afterCloseParent = await service.CloseHandlingUnitAsync(1, 2, new PackingStateCommandDto { RowVersion = afterCloseChild.RowVersion ?? EncodedVer });
+        var unnestFromClosedParent = () => service.UnnestHandlingUnitAsync(1, 1, new PackingStateCommandDto { RowVersion = afterCloseParent.RowVersion ?? EncodedVer });
         (await unnestFromClosedParent.Should().ThrowAsync<BusinessRuleException>())
             .Which.Data["ErrorCode"].Should().Be("HU_CLOSED");
     }

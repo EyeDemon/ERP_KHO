@@ -175,7 +175,7 @@ public sealed class MultiTenantIsolationSqlTests
                 {
                     Code = sharedStCode,
                     WarehouseId = wh1.Id,
-                    Status = ReceiptStatus.Draft,
+                    Status = StocktakeStatus.Draft,
                     CreatedBy = user.Id,
                     CreatedAt = DateTime.UtcNow
                 };

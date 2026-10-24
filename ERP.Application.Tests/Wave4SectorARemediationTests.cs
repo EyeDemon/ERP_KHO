@@ -44,7 +44,7 @@ public sealed class Wave4SectorARemediationTests : IDisposable
             Id = 10,
             Code = "KK-01",
             WarehouseId = 1,
-            Status = ReceiptStatus.Draft,
+            Status = StocktakeStatus.Draft,
             CreatedBy = 100,
             Details =
             [
@@ -93,7 +93,7 @@ public sealed class Wave4SectorARemediationTests : IDisposable
             .Where(ex => Equals(ex.Data["HttpStatusCode"], 409));
 
         // Reset status to Draft after simulated failure in in-memory object
-        stocktake.Status = ReceiptStatus.Draft;
+        stocktake.Status = StocktakeStatus.Draft;
 
         // Recount refreshes SystemQuantity to 90 and resets ActualQuantity
         await service.RecountStocktakeDetailAsync(10, 101, "Giao dịch xuất chen ngang", userId: 200);
@@ -104,7 +104,7 @@ public sealed class Wave4SectorARemediationTests : IDisposable
         await service.UpdateStocktakeDetailAsync(10, 101, new UpdateStocktakeDetailDto { ActualQuantity = 88m, Note = "Đã đếm lại" });
         await service.ApproveStocktakeAsync(10, approvedByUserId: 200);
 
-        stocktake.Status.Should().Be(ReceiptStatus.Approved);
+        stocktake.Status.Should().Be(StocktakeStatus.Approved);
         liveStock.Quantity.Should().Be(88m);
     }
 
@@ -122,7 +122,7 @@ public sealed class Wave4SectorARemediationTests : IDisposable
         {
             Id = 20,
             WarehouseId = 1,
-            Status = ReceiptStatus.Draft,
+            Status = StocktakeStatus.Draft,
             Details =
             [
                 new StocktakeDetail

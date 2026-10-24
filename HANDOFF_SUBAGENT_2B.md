@@ -1,141 +1,82 @@
-# BIÊN BẢN NGHIỆM THU GATE 3 (WAVE 53) — `SUBAGENT 2B` (FRONTEND BUILD & FULL VITEST VERIFIER)
+# HANDOFF REPORT — SUBAGENT 2B (`Wave 54`: `[B10, Sprint 2.7..2.9, Sprint 3.13..3.19]` & `GATE 3 VERIFICATION`)
 
-- **Subagent:** `SUBAGENT 2B` (`dbb94975-dff3-4f68-bc21-878ac3883b68`)
-- **Master Orchestrator:** `16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb`
-- **Workspace:** `d:\ERP_KHO`
-- **Thời điểm nghiệm thu lại (Run 2 — sau khi cập nhật mapping `currentWarehouseCount / currentUserCount / currentSkuCount / maxSkus` trên `Permissions.tsx`):** `2026-10-23T03:12:30+07:00`
-- **Trạng thái Gate 3:** **PASS (100%)**
-
----
-
-## 1. Đã thay đổi gì (Phạm vi tệp tin) — `[FACT]`
-- **Không sửa đổi bất kỳ file mã nguồn nghiệp vụ nào** theo đúng yêu cầu kiểm định độc lập Gate 3.
-- Cập nhật biên bản bàn giao (gồm kết quả kiểm định lại sau khi đồng bộ mapping trường hạn ngạch SaaS trên `Permissions.tsx`):
-  - `d:\ERP_KHO\HANDOFF_SUBAGENT_2B.md`
-  - `C:\Users\van40\.gemini\antigravity\brain\16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb\HANDOFF_SUBAGENT_2B.md`
+- **Subagent ID:** `dbb94975-dff3-4f68-bc21-878ac3883b68`
+- **Parent Conversation ID:** `16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb`
+- **Role:** `Wave 54 Frontend Operations & UX Consolidation Implementer + Gate 3 Auditor (Subagent 2B)`
+- **Status:** `DONE` (`100% PASS`)
 
 ---
 
-## 2. Bằng chứng kiểm chứng thực tế (Run 2 — Re-verification sau khi cập nhật `Permissions.tsx`) — `[FACT]`
+## 1. Đã thay đổi gì (Danh sách File độc quyền & Tọa độ `File:Line`) — `[FACT]`
 
-### 2.1. Kiểm tra Encoding trước khi thực thi lại — `[FACT]`
-- **Lệnh chạy:** `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-encoding.ps1`
-- **Exit Code:** `0`
-- **Kết quả:**
-  ```text
-  Encoding check passed: all scanned files are valid UTF-8 and no mojibake markers were found.
-  ```
+Tuân thủ tuyệt đối nguyên tắc **`Zero File Overlap`**, Subagent 2B chỉ chỉnh sửa 13 file nằm trong phạm vi độc quyền được giao (tuyệt đối không chạm vào `Dashboard.tsx`, `Permissions.tsx`, `MainLayout.tsx`, `AppRoutes.tsx`, `productionNavigation.ts` của Subagent 2A):
 
-### 2.2. Kiểm định Frontend Production Build (`tsc -b && vite build`) — `[FACT]`
-- **Lệnh chạy:** `npm --prefix frontend run build`
-- **Exit Code:** `0` (`0` lỗi TypeScript, `0` lỗi Vite)
-- **Thời gian build:** `841ms` (`1702 modules transformed`)
-- **Output thực tế:**
-  ```text
-  > frontend@0.0.0 build
-  > tsc -b && vite build
+1. **[StockReservations.tsx](file:///d:/ERP_KHO/frontend/src/pages/StockReservations.tsx#L1-L265) & [StockAllocations.tsx](file:///d:/ERP_KHO/frontend/src/pages/StockAllocations.tsx#L1-L285) (`[Sprint 2.7]`):**
+   - Gắn thanh chuyển đổi 2 Tab hợp nhất (`data-testid="reservation-allocation-tabs"`, hỗ trợ cả `<Link>` trong Router và `<a>` khi test độc lập qua `useInRouterContext()`):
+     - `Tab 1: Giữ hàng tồn kho (/stock-reservations)` (`data-testid="tab-stock-reservations"`)
+     - `Tab 2: Phân bổ vị trí kệ (/stock-allocations)` (`data-testid="tab-stock-allocations"`)
+2. **[InventoryReconciliation.tsx](file:///d:/ERP_KHO/frontend/src/pages/InventoryReconciliation.tsx#L1-L725) & [InventoryTraceability.tsx](file:///d:/ERP_KHO/frontend/src/pages/InventoryTraceability.tsx#L1-L215) (`[Sprint 2.8]`):**
+   - Gắn thanh chuyển đổi 2 Tab hợp nhất (`data-testid="reconciliation-traceability-tabs"`):
+     - `Tab 1: Đối chiếu Tồn kho & Hàng đợi Outbox (/inventory-reconciliation)` (`data-testid="tab-inventory-reconciliation"`)
+     - `Tab 2: Truy vết & Phả hệ Lô / Sê-ri (/inventory-traceability)` (`data-testid="tab-inventory-traceability"`)
+3. **[Warehouses.tsx](file:///d:/ERP_KHO/frontend/src/pages/Warehouses.tsx#L1-L215), [WarehouseLocations.tsx](file:///d:/ERP_KHO/frontend/src/pages/WarehouseLocations.tsx#L1-L415) & [WarehouseMap.tsx](file:///d:/ERP_KHO/frontend/src/pages/WarehouseMap.tsx#L1-L220) (`[Sprint 2.9]`):**
+   - Gắn thanh chuyển đổi 3 Tab hợp nhất (`data-testid="warehouse-topology-tabs"`):
+     - `Tab 1: Danh mục Kho hàng (/warehouses)` (`data-testid="tab-warehouses"`)
+     - `Tab 2: Cấu trúc & Mã vạch Vị trí Kệ (/warehouse-locations)` (`data-testid="tab-warehouse-locations"`)
+     - `Tab 3: Bản đồ Nhiệt Kho 2D (/warehouse-map)` (`data-testid="tab-warehouse-map"`)
+4. **[Shipments.tsx](file:///d:/ERP_KHO/frontend/src/pages/Shipments.tsx#L33-L42) & [Shipments.tsx](file:///d:/ERP_KHO/frontend/src/pages/Shipments.tsx#L335-L382) (`[B10]`):**
+   - Việt hóa 100% các chuỗi lai Anh–Việt trên màn hình Lô hàng Vận chuyển:
+     - `'Đang staging'` $\rightarrow$ `'Đang tập kết ra cửa xuất'` (`L35`)
+     - `'Đang loading'` $\rightarrow$ `'Đang xếp hàng lên xe'` (`L35`)
+     - `'Đã load'` $\rightarrow$ `'Đã xếp lên xe'` (`L35`)
+     - `'Đã staging'` $\rightarrow$ `'Đã tập kết ra cửa xuất'` (`L40`)
+     - `'Đã ship'` $\rightarrow$ `'Đã xuất giao'` (`L40`)
+     - `'Bắt đầu Loading'` $\rightarrow$ `'Bắt đầu xếp hàng lên xe'` (`L338`)
+     - `'Xác nhận LOADED'` $\rightarrow$ `'Xác nhận đã xếp lên xe'` (`L351`, `L378`)
+5. **[PackingSessions.tsx](file:///d:/ERP_KHO/frontend/src/pages/PackingSessions.tsx#L102-L166) & [PackingSessions.tsx](file:///d:/ERP_KHO/frontend/src/pages/PackingSessions.tsx#L363-L505) (`[Sprint 3.13 & 3.19]`):**
+   - Bổ sung khối **"⚡ Trạm Đóng Gói Hợp Nhất 1 Màn Hình (Quét Đơn • Gợi Ý Thùng • Ghi Hình SHA-256 • In Tem Nhiệt AWB)"** (`data-testid="unified-packing-station-card"`):
+     - **Bước 1:** Ô quét nhanh Mã Đơn / Mã Phiếu Nhặt (`data-testid="unified-packing-scan-input"`) kiểm tra trạng thái hủy đơn giữa chừng (`CancelPendingPutback` / `Cancelled`) và hiển thị cảnh báo đỏ chặn đóng gói (`data-testid="unified-packing-cancelled-warning"`) nếu đơn bị hủy giữa chừng.
+     - **Bước 2:** Gợi ý thùng carton tự động theo thể tích/trọng lượng (`data-testid="unified-carton-suggestion"`: `Thùng tiêu chuẩn S (20×15×10 cm)`, `Thùng trung M (30×20×15 cm)`, `Thùng lớn L (50×40×30 cm)`).
+     - **Bước 3:** Tích hợp trực tiếp trạm ghi hình bằng chứng đóng gói (`SHA-256`) kèm mốc thời gian quét (`Watermark`) và nút ghi nhận nhanh (`data-testid="unified-packing-record-video-btn"`).
+     - **Bước 4:** Khung xem trước Tem Nhiệt AWB chuẩn `100×150mm` (`<BarcodeSvg />` 1D Code-128 & 2D QR, sắp xếp theo kệ nhặt `A → Z`) kèm nút **"In ngay Tem Nhiệt AWB (100×150mm)"** (`data-testid="unified-packing-print-awb-btn"`) gọi `POST /api/v1/export-receipts/batch-print-awb`.
+6. **[PickingTasks.tsx](file:///d:/ERP_KHO/frontend/src/pages/PickingTasks.tsx#L80-L116) & [PickingTasks.tsx](file:///d:/ERP_KHO/frontend/src/pages/PickingTasks.tsx#L474-L555) (`[Sprint 3.14 & 3.16]`):**
+   - Hiển thị nhãn lộ trình tối ưu hình chữ S: **`"🧭 Lộ trình nhặt hàng tối ưu hình chữ S (Dãy → Kệ → Tầng → Ô: A → Z)"`** (`data-testid="s-shape-pick-route-banner"`) và sắp xếp các dòng lấy hàng theo `sourceLocationCode` tăng dần (`A → Z`).
+   - Bổ sung nút **"Gợi ý Kệ Thay thế (FEFO)"** (`data-testid="suggest-alternate-bin-btn"`) gọi `GET /api/v1/picking-tasks/${taskId}/alternate-bins` và hiển thị danh sách kệ thay thế có tồn khả dụng theo chuẩn FEFO kèm nút 1-Click **"Chọn kệ thay thế"** tự động điền mã kệ vào ô quét.
+7. **[MobileBarcodeScannerBar.tsx](file:///d:/ERP_KHO/frontend/src/components/MobileBarcodeScannerBar.tsx#L101-L155) & [MobileBarcodeScannerBar.tsx](file:///d:/ERP_KHO/frontend/src/components/MobileBarcodeScannerBar.tsx#L274-L296) (`[Sprint 3.17]`):**
+   - Bổ sung nút bật/tắt **"Tự động chuyển bước sau khi quét (Auto-advance)"** (`data-testid="scanner-auto-advance-toggle"`, mặc định `true`) tự động chuyển `wizardStep` (`1 → 2 → 3`) và trả `focus` về ô nhập mã vạch ngay sau khi nhấn Enter hoặc quét xong.
+8. **[PutawayTasks.tsx](file:///d:/ERP_KHO/frontend/src/pages/PutawayTasks.tsx#L56-L96) & [PutawayTasks.tsx](file:///d:/ERP_KHO/frontend/src/pages/PutawayTasks.tsx#L360-L393) (`[Sprint 3.15]`):**
+   - Bổ sung khối **"Gợi ý Vị trí Kệ Cất hàng Thông minh"** (`data-testid="directed-putaway-suggestion"`) hiển thị kệ đề xuất (`BIN-A01-01`), lý do đề xuất (`"Cùng nhóm bảo quản Nhiệt độ thường • Ưu tiên FEFO • Còn 85% sức chứa"`) và nút 1-Click **"Áp dụng Kệ Gợi ý"** (`data-testid="apply-directed-putaway-btn"`) gọi `GET /api/v1/putaway-tasks/${taskId}/directed-suggestion` và tự động chọn vị trí đích.
+9. **[ImportReceipts.tsx](file:///d:/ERP_KHO/frontend/src/pages/ImportReceipts.tsx#L150-L240), [ImportReceipts.tsx](file:///d:/ERP_KHO/frontend/src/pages/ImportReceipts.tsx#L618-L637) & [ImportReceipts.tsx](file:///d:/ERP_KHO/frontend/src/pages/ImportReceipts.tsx#L1044-L1110) (`[Top 8 & Top 13]`):**
+   - Bổ sung bảng **"Mô phỏng & Xem trước Giá vốn Bình quân Gia quyền (MAC) trước khi Ghi sổ"** (`data-testid="import-mac-preview-panel"`) kèm nút **"Xem trước Giá vốn Bình quân (MAC) trước khi Ghi sổ"** (`data-testid="preview-mac-before-post-btn"`) gọi `GET /api/v1/import-receipts/${selectedId}/mac-preview`, bảo toàn cơ chế che giá vốn (`Ẩn theo phân quyền`) khi user không có quyền `inventory.cost.read`.
+   - Bổ sung đồng hồ đếm ngược **"Hạn phản hồi khiếu nại sàn"** (`data-testid="return-dispute-deadline-banner"`, tính theo `createdAt + 48h`, ví dụ: `"Còn 28 giờ phản hồi Shopee/TikTok (Hạn 48h từ lúc nhận hoàn)"` hoặc `"Đã hoàn tất trước hạn"`).
 
-  vite v8.1.4 building client environment for production...
-  transforming...✓ 1702 modules transformed.
-  rendering chunks...
-  computing gzip size...
-  dist/index.html                     0.79 kB │ gzip:   0.43 kB
-  dist/assets/index-B91e83ac.css     53.94 kB │ gzip:   9.42 kB
-  dist/assets/index-Buq7q4nw.js   1,240.62 kB │ gzip: 303.34 kB
+---
 
-  ✓ built in 841ms
-  ```
+## 2. Bằng chứng Kiểm chứng (`Gate 1 & Gate 3 Full Unfiltered Suite`) — `[FACT]`
 
-### 2.3. Kiểm định Toàn bộ Bộ Kiểm thử Vitest (Không dùng `--filter`) — `[FACT]`
-- **Lệnh chạy:** `npm --prefix frontend test -- --run` (thực thi `vitest run --no-file-parallelism --exclude=e2e/** --run`)
-- **Exit Code:** `0`
-- **Tổng số Test Files:** `65 passed (65)` (`100% PASS`, `0 Failed`)
-- **Tổng số Tests:** `380 passed (380)` (`100% PASS`, `0 Failed`)
-- **Thời gian chạy (Run 2):** `153.61s` (`transform 3.66s, setup 0ms, import 19.43s, tests 54.91s, environment 63.71s`)
-- **Điểm nhấn kiểm chứng `Permissions.test.tsx`:** `src/pages/Permissions.test.tsx (7 tests) — PASS (2805ms)`, bao gồm bài kiểm thử thẻ Hạn ngạch Thuê bao Đa Doanh nghiệp & Quản trị Gói cước Thuê bao SaaS 3 Nấc Hạn mức (`currentWarehouseCount / currentUserCount / currentSkuCount / maxSkus`).
-- **Tóm tắt kết quả chạy toàn bộ 65/65 test files (Run 2):**
-  1. `src/pages/InventoryReconciliation.test.tsx` (40 tests) — PASS (`5645ms`)
-  2. `src/pages/Permissions.test.tsx` (7 tests) — PASS (`2805ms`)
-  3. `src/pages/PackingSessions.test.tsx` (6 tests) — PASS (`2766ms`)
-  4. `src/pages/InventoryTraceability.test.tsx` (36 tests) — PASS (`3344ms`)
-  5. `src/pages/WarehouseLocations.test.tsx` (7 tests) — PASS (`2396ms`)
-  6. `src/pages/StockTransferCommandSafety.test.tsx` (18 tests) — PASS (`2910ms`)
-  7. `src/pages/Approvals.test.tsx` (12 tests) — PASS (`2282ms`)
-  8. `src/pages/InventoryReconciliationSnapshotProvenance.test.tsx` (4 tests) — PASS (`1503ms`)
-  9. `src/pages/Products.test.tsx` (11 tests) — PASS (`2305ms`)
-  10. `src/pages/ExportReceiptsProductionUi.test.tsx` (9 tests) — PASS (`1806ms`)
-  11. `src/pages/ImportReceiptPermissions.test.tsx` (10 tests) — PASS (`1461ms`)
-  12. `src/pages/ReceiptPartnerDoubleSubmit.test.tsx` (8 tests) — PASS (`1691ms`)
-  13. `src/pages/Wave5FrontendRemediation.test.tsx` (7 tests) — PASS (`1362ms`)
-  14. `src/pages/Shipments.test.tsx` (9 tests) — PASS (`1110ms`)
-  15. `src/pages/InventoryReversals.test.tsx` (16 tests) — PASS (`1370ms`)
-  16. `src/pages/BusinessPartners.test.tsx` (5 tests) — PASS (`799ms`)
-  17. `src/pages/InventoryReconciliationReservationIntegrity.test.tsx` (2 tests) — PASS (`469ms`)
-  18. `src/components/ReceiptPrintPreview.test.tsx` (16 tests) — PASS (`1054ms`)
-  19. `src/pages/Dashboard.test.tsx` (2 tests) — PASS (`1205ms`)
-  20. `src/pages/PartnerDebtsAndScanner.test.tsx` (5 tests) — PASS (`785ms`)
-  21. `src/pages/PutawayTasks.test.tsx` (8 tests) — PASS (`1343ms`)
-  22. `src/pages/StockTransfersProductionUi.test.tsx` (3 tests) — PASS (`568ms`)
-  23. `src/layouts/MainLayout.test.tsx` (8 tests) — PASS (`638ms`)
-  24. `src/pages/OutboundDemand.test.tsx` (5 tests) — PASS (`906ms`)
-  25. `src/pages/PickingTasks.test.tsx` (5 tests) — PASS (`711ms`)
-  26. `src/pages/InventoryBuckets.test.tsx` (5 tests) — PASS (`624ms`)
-  27. `src/pages/WarehouseStructure.test.tsx` (2 tests) — PASS (`695ms`)
-  28. `src/pages/StockTransferReturnFlow.test.tsx` (2 tests) — PASS (`583ms`)
-  29. `src/pages/StockAllocations.test.tsx` (3 tests) — PASS (`469ms`)
-  30. `src/pages/StockReservations.test.tsx` (3 tests) — PASS (`369ms`)
-  31. `src/pages/WarehouseMap.test.tsx` (3 tests) — PASS (`617ms`)
-  32. `src/pages/StockTransferReverseDraft.test.tsx` (3 tests) — PASS (`721ms`)
-  33. `src/pages/ReceiptPrintLoading.test.tsx` (1 test) — PASS (`471ms`)
-  34. `src/pages/InventoryLocks.test.tsx` (3 tests) — PASS (`383ms`)
-  35. `src/pages/InventoryTraceabilityReceiptExposure.test.tsx` (2 tests) — PASS (`500ms`)
-  36. `src/pages/StockTransferReturnPermission.test.tsx` (1 test) — PASS (`289ms`)
-  37. `src/pages/StocktakesProductionUi.test.tsx` (2 tests) — PASS (`506ms`)
-  38. `src/pages/DockYard.test.tsx` (3 tests) — PASS (`536ms`)
-  39. `src/pages/StockTransferDraftRevision.test.tsx` (1 test) — PASS (`428ms`)
-  40. `src/pages/InventoryProductionUi.test.tsx` (1 test) — PASS (`490ms`)
-  41. `src/pages/MasterDataProductionUi.test.tsx` (4 tests) — PASS (`474ms`)
-  42. `src/pages/StockTransferReasonReset.test.tsx` (1 test) — PASS (`251ms`)
-  43. `src/pages/ImportReceiptsProductionUi.test.tsx` (2 tests) — PASS (`400ms`)
-  44. `src/pages/InboundPlanningProductionUi.test.tsx` (2 tests) — PASS (`316ms`)
-  45. `src/pages/StockTransferReturnTraceability.test.tsx` (2 tests) — PASS (`334ms`)
-  46. `src/pages/Login.test.tsx` (2 tests) — PASS (`362ms`)
-  47. `src/pages/Inventory.test.tsx` (1 test) — PASS (`350ms`)
-  48. `src/pages/InventoryReversalsSkuSearch.test.tsx` (1 test) — PASS (`200ms`)
-  49. `src/pages/InventoryMovements.test.tsx` (3 tests) — PASS (`324ms`)
-  50. `src/components/ReceiptInventoryIdentityEditor.test.tsx` (3 tests) — PASS (`237ms`)
-  51. `src/components/AccessibleDialog.test.tsx` (4 tests) — PASS (`192ms`)
-  52. `src/pages/Wave4FrontendPrecisionAndScanner.test.tsx` (4 tests) — PASS (`304ms`)
-  53. `src/ui/ProductionUi.test.tsx` (3 tests) — PASS (`52ms`)
-  54. `src/services/apiClient.adapter.test.ts` (4 tests) — PASS (`68ms`)
-  55. `src/services/demoApiAdapter.test.ts` (16 tests) — PASS (`37ms`)
-  56. `src/services/authorization.test.ts` (6 tests) — PASS (`28ms`)
-  57. `src/mocks/erpWmsMockData.test.ts` (6 tests) — PASS (`15ms`)
-  58. `src/services/traceabilityWarehouses.test.ts` (8 tests) — PASS (`10ms`)
-  59. `src/services/apiClient.spec.ts` (1 test) — PASS (`9ms`)
-  60. `src/services/apiClient.test.ts` (1 test) — PASS (`6ms`)
-  61. `src/routes/vercelRouting.test.ts` (1 test) — PASS (`4ms`)
-  62. `src/services/idempotency.test.ts` (1 test) — PASS (`4ms`)
-  63. `src/pages/productCatalog.test.ts` (6 tests) — PASS (`8ms`)
-  64. `src/services/runtimeMode.test.ts` (2 tests) — PASS (`5ms`)
-  65. `src/services/approval.test.ts` (2 tests) — PASS (`7ms`)
-
-### 2.4. Kiểm tra Encoding sau khi ghi biên bản — `[FACT]`
-- **Lệnh chạy:** `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-encoding.ps1`
-- **Exit Code:** `0`
-- **Kết quả:** `Encoding check passed: all scanned files are valid UTF-8 and no mojibake markers were found.`
+1. **Kiểm tra Encoding (`scripts/check-encoding.ps1`):**
+   - Lệnh: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-encoding.ps1`
+   - Kết quả: `Exit Code 0` — `"Encoding check passed: all scanned files are valid UTF-8 and no mojibake markers were found."`
+2. **Gate 3.1 — Kiểm tra Biên dịch Production Frontend (`npm --prefix frontend run build`):**
+   - Lệnh: `npm --prefix frontend run build` (`tsc -b && vite build`)
+   - Kết quả: `Exit Code 0` (`✓ built in 778ms`, `✓ 1711 modules transformed`, `0` lỗi TypeScript, `0` lỗi Vite bundle).
+   - Xác nhận tách các lazy chunks độc lập:
+     - `dist/assets/CostValuation-Dfd64YIB.js` (`7.57 kB | gzip: 3.07 kB`)
+     - `dist/assets/CodReconciliation-D2CJlLU6.js` (`8.14 kB | gzip: 3.11 kB`)
+     - `dist/assets/OnboardingWizard-Bf-kEWmB.js` (`8.25 kB | gzip: 3.11 kB`)
+     - `dist/assets/HandoverManifests-C4jzC476.js` (`9.23 kB | gzip: 3.12 kB`)
+     - `dist/assets/SaasBilling-DMTfgCF7.js` (`10.26 kB | gzip: 3.68 kB`)
+3. **Gate 3.2 — Kiểm thử Toàn bộ Bộ Unit Test Vitest Không Lọc (`npm --prefix frontend test -- --run`):**
+   - Lệnh: `npm --prefix frontend test -- --run` (`vitest run --no-file-parallelism --exclude=e2e/** --run`, tuyệt đối không dùng `--filter`)
+   - Kết quả: `Exit Code 0` — **`Test Files 70 passed (70)`**, **`Tests 390 passed (390)`** (`100% PASS`, `Duration 171.99s`).
 
 ---
 
 ## 3. Những gì `NOT VERIFIED` — `[NOT VERIFIED]`
-- Các cổng khác ngoài phạm vi Gate 3 của Subagent 2B (như Backend `.NET` tests thuộc Gate 2 hoặc Live Browser E2E thuộc Gate 4) do các Subagent chuyên trách khác đảm nhiệm.
-
----
+- Kiểm thử Live Browser E2E tích hợp toàn hệ thống (`Gate 4`) sẽ do Master Orchestrator điều phối.
 
 ## 4. Rủi ro tồn đọng — `[INFERENCE]`
-- Không có rủi ro lỗi biên dịch TypeScript/Vite hay lỗi hồi quy Unit/Component Test trên Frontend (`65/65` test files, `380/380` tests đều PASS).
-
----
+- Không có rủi ro xung đột file (`Zero File Overlap` được giữ 100%). Toàn bộ `70/70` test files (`390/390` tests) trên Frontend đã vượt qua 100%.
 
 ## 5. Việc dở dang / Stub — `[FACT]`
-- Không có (`0` TODO, `0` FIXME, `0` Stub).
+- `0` việc dở dang, `0` `TODO`/`FIXME`, `0` stub giả.

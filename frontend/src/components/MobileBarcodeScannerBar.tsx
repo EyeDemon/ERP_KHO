@@ -99,6 +99,8 @@ export function MobileBarcodeScannerBar({
   const [lastResolved, setLastResolved] = useState<ResolvedBarcodeResult | null>(null);
   const [parsedGs1, setParsedGs1] = useState<ParsedGs1Data | null>(null);
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
+  const [autoAdvance, setAutoAdvance] = useState(true);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<number | null>(null);
@@ -144,7 +146,10 @@ export function MobileBarcodeScannerBar({
         }
       }
       await onScan(clean, resolved);
-      setWizardStep(prev => (gs1 ? 3 : prev === 1 ? 2 : 3));
+      if (autoAdvance) {
+        setWizardStep(prev => (gs1 ? 3 : prev === 1 ? 2 : 3));
+        queueMicrotask(() => inputRef.current?.focus());
+      }
       setInput('');
     } finally {
       setBusy(false);
@@ -270,6 +275,15 @@ export function MobileBarcodeScannerBar({
             </div>
           );
         })}
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 'auto', cursor: 'pointer', fontWeight: 600, color: '#0f172a' }}>
+          <input
+            type="checkbox"
+            data-testid="scanner-auto-advance-toggle"
+            checked={autoAdvance}
+            onChange={e => setAutoAdvance(e.target.checked)}
+          />
+          <span>Tự động chuyển bước sau khi quét (Auto-advance)</span>
+        </label>
       </div>
       <div
         className="ui-inline-wrap"
@@ -278,6 +292,7 @@ export function MobileBarcodeScannerBar({
         <label style={{ flex: '1 1 240px', display: 'grid', gap: 4, minWidth: 0 }}>
           <span>{label}</span>
           <input
+            ref={inputRef}
             type="search"
             aria-label={label}
             value={input}

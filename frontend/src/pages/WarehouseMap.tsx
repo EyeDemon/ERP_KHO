@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useInRouterContext } from 'react-router-dom';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import {
@@ -98,6 +99,7 @@ const errorMessage = (failure: unknown, fallback: string) => {
 };
 
 const WarehouseMap = () => {
+  const inRouter = useInRouterContext();
   const canManage = usePermission('location.manage');
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehouseId, setWarehouseId] = useState(0);
@@ -276,6 +278,45 @@ const WarehouseMap = () => {
         <UiMetric value={criticalCount} label="Điểm cần chú ý" />
       </UiMetricGrid>
 
+      <div
+        data-testid="warehouse-topology-tabs"
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 8,
+          marginBottom: 12,
+          padding: 6,
+          borderRadius: 10,
+          background: '#f1f5f9',
+          border: '1px solid #cbd5e1',
+        }}
+      >
+        {[
+          { to: '/warehouses', label: 'Tab 1: Danh mục Kho hàng (/warehouses)', testId: 'tab-warehouses', active: false },
+          { to: '/warehouse-locations', label: 'Tab 2: Cấu trúc & Mã vạch Vị trí Kệ (/warehouse-locations)', testId: 'tab-warehouse-locations', active: false },
+          { to: '/warehouse-map', label: 'Tab 3: Bản đồ Nhiệt Kho 2D (/warehouse-map)', testId: 'tab-warehouse-map', active: true },
+        ].map((tab) => {
+          const style: React.CSSProperties = {
+            padding: '8px 14px',
+            borderRadius: 8,
+            fontWeight: 700,
+            fontSize: 13,
+            textDecoration: 'none',
+            background: tab.active ? '#0f172a' : '#ffffff',
+            color: tab.active ? '#ffffff' : '#334155',
+            border: tab.active ? '1px solid #0f172a' : '1px solid #cbd5e1',
+          };
+          return inRouter ? (
+            <Link key={tab.to} to={tab.to} data-testid={tab.testId} aria-current={tab.active ? 'page' : undefined} style={style}>
+              {tab.label}
+            </Link>
+          ) : (
+            <a key={tab.to} href={tab.to} data-testid={tab.testId} aria-current={tab.active ? 'page' : undefined} style={style}>
+              {tab.label}
+            </a>
+          );
+        })}
+      </div>
       <UiCard title="Tổng quan Mật độ Sơ đồ Không gian Kho">
         <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, maxWidth: '100%' }}>
           <div>

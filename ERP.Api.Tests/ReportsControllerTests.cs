@@ -2600,7 +2600,7 @@ namespace ERP.Api.Tests
                 Id = 1,
                 Code = "ST-W33-01",
                 WarehouseId = 1,
-                Status = ERP.Domain.Enums.ReceiptStatus.Draft,
+                Status = ERP.Domain.Enums.StocktakeStatus.Draft,
                 CreatedBy = 1,
                 CreatedAt = DateTime.UtcNow.AddHours(-30)
             });
@@ -3073,7 +3073,7 @@ namespace ERP.Api.Tests
                 Code = "ST-W35-01",
                 WarehouseId = 1,
                 Warehouse = wh,
-                Status = ERP.Domain.Enums.ReceiptStatus.Draft,
+                Status = ERP.Domain.Enums.StocktakeStatus.Draft,
                 CreatedBy = 11,
                 CreatedByUser = uStaff,
                 ApprovedBy = 10,

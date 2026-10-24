@@ -54,7 +54,7 @@ namespace ERP.Application.Tests
             var stocktake = new Stocktake 
             { 
                 Id = 1, 
-                Status = ReceiptStatus.Draft, 
+                Status = StocktakeStatus.Draft, 
                 Details = new List<StocktakeDetail> { detail } 
             };
 

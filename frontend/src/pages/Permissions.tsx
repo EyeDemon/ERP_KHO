@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import apiClient from '../services/apiClient';
 import { beginPermissionRefresh, setCurrentPermissions, usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
@@ -672,6 +673,32 @@ export default function Permissions() {
     {loading ? <p role="status">Đang tải quyền truy cập...</p> : <>
       {(catalog.length > 0 || roles.length > 0) && (
         <UiCard title="Hạn ngạch Thuê bao Đa Doanh nghiệp & Xác thực Đa yếu tố">
+          <div
+            data-testid="permissions-saas-billing-banner"
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 8,
+              padding: '8px 12px',
+              marginBottom: 12,
+              borderRadius: 8,
+              border: '1px solid #bae6fd',
+              background: '#f0f9ff',
+            }}
+          >
+            <span style={{ fontSize: 13, color: '#0369a1', fontWeight: 600 }}>
+              Trung tâm Quản trị Gói cước Thuê bao SaaS 3 Nấc &amp; Gia hạn Tự động VietQR đã có màn hình chuyên biệt.
+            </span>
+            <Link
+              to="/saas-billing"
+              data-testid="link-open-saas-billing"
+              style={{ fontSize: 13, fontWeight: 700, color: '#0284c7', textDecoration: 'none' }}
+            >
+              Mở Quản trị Gói cước SaaS &amp; VietQR →
+            </Link>
+          </div>
           <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 14 }}>
             <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc' }}>
               <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Gói thuê bao doanh nghiệp</div>

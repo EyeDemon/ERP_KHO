@@ -1,24 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, Boxes, ClipboardCheck, PackageSearch, Warehouse } from 'lucide-react';
-import { mockInventoryBalances, mockProducts, mockWarehouses, mockWorkCenters } from '../mocks/erpWmsMockData';
-import { demoReconciliationRows } from '../mocks/inventoryReconciliationDemo';
 import { productionNavigation } from '../config/productionNavigation';
 import apiClient from '../services/apiClient';
 import { canViewApprovals, canViewStocktakes, hasPermission, usePermissionSet } from '../services/authorization';
 import { isReadOnlyDemoRuntime } from '../services/runtimeMode';
-import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
+import DashboardMetrics from '../components/dashboard/DashboardMetrics';
+import DashboardRecentActivity, { type DashboardRecentActivityItem } from '../components/dashboard/DashboardRecentActivity';
+import DashboardExceptionAlerts, {
+  type DashboardOperationalExceptionItem,
+  type DashboardWarehouseTaskItem,
+} from '../components/dashboard/DashboardExceptionAlerts';
+import DashboardQuickActions from '../components/dashboard/DashboardQuickActions';
 import './Dashboard.css';
-
-type RecentActivity = {
-  id: number;
-  action: string;
-  entityName: string;
-  entityId: number;
-  warehouseId?: number | null; warehouseName?: string | null; referenceCode?: string | null;
-  result?: string | null;
-  timestamp: string;
-};
 
 type OperationalDashboardSummary = {
   warehouseCount: number;
@@ -30,27 +25,7 @@ type OperationalDashboardSummary = {
   openPutawayCount: number;
   openOutboundCount: number;
   openTransferCount: number;
-  recentActivities: RecentActivity[];
-};
-
-type WarehouseTaskItem = {
-  taskType: string;
-  code: string;
-  warehouseId: number;
-  warehouseName: string;
-  status: string;
-  priority: string;
-  createdAt: string;
-  route: string;
-};
-
-type OperationalExceptionItem = {
-  category: string;
-  code: string;
-  warehouseName: string;
-  severity: string;
-  summary: string;
-  route: string;
+  recentActivities: DashboardRecentActivityItem[];
 };
 
 type GlobalSearchResultItem = {
@@ -222,8 +197,8 @@ const entityNameLabel = (entityName: string) => ({
 const Dashboard = () => {
   const demoRuntime = isReadOnlyDemoRuntime();
   const [liveSummary, setLiveSummary] = useState<OperationalDashboardSummary | null>(null);
-  const [liveTasks, setLiveTasks] = useState<WarehouseTaskItem[]>([]);
-  const [liveExceptions, setLiveExceptions] = useState<OperationalExceptionItem[]>([]);
+  const [liveTasks, setLiveTasks] = useState<DashboardWarehouseTaskItem[]>([]);
+  const [liveExceptions, setLiveExceptions] = useState<DashboardOperationalExceptionItem[]>([]);
   const [acknowledgedCodes, setAcknowledgedCodes] = useState<string[]>([]);
   const [acknowledgingCode, setAcknowledgingCode] = useState<string | null>(null);
   const [controlTower, setControlTower] = useState<MultiWarehouseControlTowerDto | null>(null);
@@ -285,8 +260,8 @@ const Dashboard = () => {
     };
     Promise.all([
       apiClient.get<OperationalDashboardSummary>('/api/Reports/operational-dashboard'),
-      apiClient.get<WarehouseTaskItem[]>('/api/Reports/warehouse-tasks').catch(captureAuxError({ data: [] as WarehouseTaskItem[] }, 'Không thể tải danh sách tác vụ kho.')),
-      apiClient.get<OperationalExceptionItem[]>('/api/Reports/operational-exceptions').catch(captureAuxError({ data: [] as OperationalExceptionItem[] }, 'Không thể tải danh sách ngoại lệ vận hành.')),
+      apiClient.get<DashboardWarehouseTaskItem[]>('/api/Reports/warehouse-tasks').catch(captureAuxError({ data: [] as DashboardWarehouseTaskItem[] }, 'Không thể tải danh sách tác vụ kho.')),
+      apiClient.get<DashboardOperationalExceptionItem[]>('/api/Reports/operational-exceptions').catch(captureAuxError({ data: [] as DashboardOperationalExceptionItem[] }, 'Không thể tải danh sách ngoại lệ vận hành.')),
       apiClient.get<MultiWarehouseControlTowerDto>('/api/Reports/multi-warehouse-control-tower').catch(captureAuxError(null, 'Không thể tải dữ liệu tháp điều hành đa kho.')),
     ])
       .then(([summaryRes, tasksRes, exRes, towerRes]) => {
@@ -383,11 +358,7 @@ const Dashboard = () => {
     return true;
   };
 
-  const operationalRecords = ['inbound', 'outbound', 'inventory-control', 'transfer-replenishment']
-    .flatMap((key) => mockWorkCenters[key]?.records ?? []);
-  const mismatchCount = demoRuntime
-    ? demoReconciliationRows.filter((row) => row.status !== 'Match').length
-    : (liveSummary?.invalidStockCount ?? 0);
+  const mismatchCount = liveSummary?.invalidStockCount ?? 0;
 
   const filteredTasks = taskTypeFilter
     ? liveTasks.filter((t) => t.taskType === taskTypeFilter)
@@ -462,58 +433,23 @@ const Dashboard = () => {
         </UiCard>
       )}
 
-      <UiMetricGrid>
-        <UiMetric
-          value={demoRuntime ? mockWarehouses.length : (liveSummary ? liveSummary.warehouseCount : '—')}
-          label={demoRuntime ? 'Kho trong bộ dữ liệu mẫu' : 'Kho đang hoạt động'}
-        />
-        <UiMetric
-          value={demoRuntime ? mockProducts.length : (liveSummary ? liveSummary.productCount : '—')}
-          label={demoRuntime ? 'Sản phẩm trong bộ dữ liệu mẫu' : 'Sản phẩm đang quản lý'}
-        />
-        <UiMetric
-          value={demoRuntime ? mockInventoryBalances.length : (liveSummary ? liveSummary.inventoryBucketCount : '—')}
-          label={demoRuntime ? 'Dòng tồn kho mẫu' : 'Nhóm tồn kho dương'}
-        />
-        <article className={'ui-metric' + (mismatchCount > 0 ? ' dashboard-metric-warning' : '')}>
-          <strong>{demoRuntime ? mismatchCount : (liveSummary ? liveSummary.openTaskCount : '—')}</strong>
-          <span>{demoRuntime ? 'Chênh lệch đối chiếu mẫu' : 'Phiếu / tác vụ đang mở'}</span>
-        </article>
-      </UiMetricGrid>
+      <DashboardMetrics
+        demoRuntime={demoRuntime}
+        warehouseCount={liveSummary ? liveSummary.warehouseCount : (demoRuntime ? 0 : '—')}
+        productCount={liveSummary ? liveSummary.productCount : (demoRuntime ? 0 : '—')}
+        inventoryBucketCount={liveSummary ? liveSummary.inventoryBucketCount : (demoRuntime ? 0 : '—')}
+        openTaskOrMismatchCount={demoRuntime ? mismatchCount : (liveSummary ? liveSummary.openTaskCount : '—')}
+        mismatchCount={mismatchCount}
+        ownerFinance={ownerFinance}
+        formatCurrencyVnd={formatCurrencyVnd}
+      />
 
       <UiCard
         title="Báo cáo Lợi nhuận Gộp Ước tính Chủ Shop, Đối soát Tiền Thu Hộ (COD) & Đồng bộ Tồn kho Đa Sàn"
         subtitle="Tổng hợp doanh thu thực xuất, giá vốn bình quân gia quyền, đối soát công nợ COD 3 chiều và tiến trình 5 bước khởi tạo kho nhanh"
       >
         <div className="ui-stack" style={{ gap: 12 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-            <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
-              <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Doanh thu đơn đã xuất (Doanh thu thuần)</div>
-              <strong style={{ fontSize: 15, color: '#0f172a' }}>{formatCurrencyVnd(ownerFinance.netRevenue)}</strong>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Đã trừ đơn hoàn &amp; đơn hủy sàn</div>
-            </div>
-            <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
-              <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Giá vốn hàng bán bình quân</div>
-              <strong style={{ fontSize: 15, color: '#0f172a' }}>
-                {ownerFinance.costHiddenByRbac ? 'Ẩn giá vốn theo phân quyền RBAC' : formatCurrencyVnd(ownerFinance.cogsAmount)}
-              </strong>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Bình quân gia quyền di động</div>
-            </div>
-            <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', fontVariantNumeric: 'tabular-nums' }}>
-              <div style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>Lợi nhuận gộp ước tính</div>
-              <strong style={{ fontSize: 15, color: '#065f46' }}>
-                {ownerFinance.costHiddenByRbac
-                  ? 'Ẩn theo phân quyền RBAC'
-                  : `${formatCurrencyVnd(ownerFinance.grossProfit)} • Biên lãi gộp ${String(ownerFinance.grossMarginPct).replace('.', ',')}%`}
-              </strong>
-              <div style={{ fontSize: 12, color: '#047857', marginTop: 2 }}>Vốn tồn đọng &gt; 60 ngày: 0 đ • Hàng cận hạn &lt; 30 ngày: 0 lô</div>
-            </div>
-            <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #fde68a', background: '#fffbeb', fontVariantNumeric: 'tabular-nums' }}>
-              <div style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>Tiền thu hộ COD chờ đối soát</div>
-              <strong style={{ fontSize: 15, color: '#92400e' }}>{`${formatCurrencyVnd(ownerFinance.pendingCodAmount)} • ${ownerFinance.codWarningCount} cảnh báo lệch phí/chậm hoàn`}</strong>
-              <div style={{ fontSize: 12, color: '#b45309', marginTop: 2 }}>{`Thực nhận từ ĐVVC: ${formatCurrencyVnd(ownerFinance.receivedCodAmount)} • Đối soát 3 chiều`}</div>
-            </div>
-          </div>
+          <DashboardQuickActions />
 
           <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#ffffff' }}>
             <div style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a', marginBottom: 8 }}>
@@ -682,12 +618,35 @@ const Dashboard = () => {
                 setLiveError('');
                 setCodReconcileNotice(null);
                 void Promise.resolve(
-                  apiClient.post('/api/v1/reports/cod-reconciliation/verify', {
+                  apiClient.post<Record<string, unknown>>('/api/v1/reports/cod-reconciliation/verify', {
                     reconcileMode: 'THREE_WAY_COD_AND_MARKETPLACE_FEE',
                   }),
                 )
-                  .then(() => {
-                    setCodReconcileNotice('Đã chạy đối soát 3 chiều tiền thu hộ COD & quyết toán phí sàn: Khớp 98,4% vận đơn, phát hiện 3 cảnh báo lệch phí vận chuyển.');
+                  .then((res) => {
+                    const d = (res?.data ?? {}) as Record<string, unknown>;
+                    const items = Array.isArray(d.items) ? d.items : (Array.isArray(d.ledgers) ? d.ledgers : []);
+                    const discrepancyCount = Number(
+                      d.discrepancyCount ??
+                      d.feeDiscrepancyWarnings ??
+                      d.discrepancyWarningCount ??
+                      ownerFinance.codWarningCount ??
+                      0,
+                    );
+                    const totalCount = Number(d.totalShipments ?? d.totalCount ?? items.length);
+                    const matchedCount = Number(
+                      d.matchedShipments ??
+                      d.matchedCount ??
+                      Math.max(0, totalCount - discrepancyCount),
+                    );
+                    const matchRatePct =
+                      d.matchRatePct !== undefined
+                        ? Number(d.matchRatePct)
+                        : totalCount > 0
+                          ? Math.round((matchedCount * 1000) / totalCount) / 10
+                          : 100;
+                    setCodReconcileNotice(
+                      `Đã đối soát ${matchedCount}/${totalCount} vận đơn (${matchRatePct}%), phát hiện ${discrepancyCount} cảnh báo lệch phí/chậm hoàn.`,
+                    );
                   })
                   .catch((err: any) => {
                     setCodReconcileNotice(null);
@@ -720,11 +679,9 @@ const Dashboard = () => {
       <div className="dashboard-grid">
         <UiCard title="Tiếp tục công việc">
           <div className="dashboard-panel-meta">
-            {demoRuntime
-              ? operationalRecords.length + ' bản ghi vận hành mẫu'
-              : liveSummary
-                ? `Phiếu nhập mở: ${liveSummary.openInboundCount} • Cất hàng mở: ${liveSummary.openPutawayCount} • Phiếu xuất mở: ${liveSummary.openOutboundCount} • Điều chuyển mở: ${liveSummary.openTransferCount}`
-                : 'Mở phân hệ nghiệp vụ'}
+            {liveSummary
+              ? `Phiếu nhập mở: ${liveSummary.openInboundCount} • Cất hàng mở: ${liveSummary.openPutawayCount} • Phiếu xuất mở: ${liveSummary.openOutboundCount} • Điều chuyển mở: ${liveSummary.openTransferCount}`
+              : 'Mở phân hệ nghiệp vụ'}
           </div>
           <div className="dashboard-actions">
             {quickLinks.map(({ to, title, detail, icon: Icon }) => (
@@ -808,145 +765,30 @@ const Dashboard = () => {
       )}
 
       {!demoRuntime && (
-        <div className="dashboard-grid">
-          <UiCard title={`Hàng đợi tác vụ kho đang mở • ${filteredTasks.length}`}>
-            <div className="ui-inline-actions">
-              <label>
-                Loại tác vụ:{' '}
-                <select aria-label="Lọc loại tác vụ kho" value={taskTypeFilter} onChange={(e) => setTaskTypeFilter(e.target.value)}>
-                  <option value="">Tất cả tác vụ</option>
-                  <option value="PUTAWAY">Cất hàng</option>
-                  <option value="PICKING">Lấy hàng</option>
-                  <option value="PACKING">Đóng gói</option>
-                  <option value="INBOUND_RECEIPT">Phiếu nhập nháp</option>
-                  <option value="STOCKTAKE">Kiểm kê nháp</option>
-                  <option value="DOCK_YARD">Lịch hẹn cửa nhận / bãi xe</option>
-                </select>
-              </label>
-            </div>
-            {filteredTasks.length === 0 ? (
-              <p className="ui-muted-text">Không có tác vụ kho đang mở theo bộ lọc hiện tại.</p>
-            ) : (
-              <UiTableScroll>
-                <table className="ui-table-compact" aria-label="Hàng đợi tác vụ kho đang mở">
-                  <thead>
-                    <tr>
-                      <th>Loại</th>
-                      <th>Mã phiếu/nhiệm vụ</th>
-                      <th>Kho</th>
-                      <th>Trạng thái</th>
-                      <th>Ưu tiên</th>
-                      <th style={{ whiteSpace: 'nowrap' }}>Xử lý</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredTasks.slice(0, 12).map((task, idx) => (
-                      <tr key={`${task.taskType}-${task.code}-${idx}`}>
-                        <td><UiBadge>{taskTypeLabel(task.taskType)}</UiBadge></td>
-                        <td style={{ whiteSpace: 'nowrap' }}><strong>{task.code}</strong></td>
-                        <td>{task.warehouseName}</td>
-                        <td>{taskStatusLabel(task.status)}</td>
-                        <td>
-                          <UiBadge tone={task.priority === 'HIGH' ? 'danger' : 'neutral'}>
-                            {priorityLabel(task.priority)}
-                          </UiBadge>
-                        </td>
-                        <td style={{ whiteSpace: 'nowrap' }}><Link to={task.route}>Thực thi →</Link></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </UiTableScroll>
-            )}
-          </UiCard>
-
-          <UiCard title={`Trung tâm ngoại lệ vận hành • ${liveExceptions.length}`}>
-            {liveExceptions.length === 0 ? (
-              <p className="ui-muted-text">Không có ngoại lệ vận hành mở trong phạm vi kho được phép.</p>
-            ) : (
-              <UiTableScroll>
-                <table className="ui-table-compact" aria-label="Trung tâm ngoại lệ vận hành" style={{ width: '100%' }}>
-                  <thead>
-                    <tr>
-                      <th>Phân loại</th>
-                      <th>Mã</th>
-                      <th>Kho</th>
-                      <th>Mức độ</th>
-                      <th>Chi tiết ngoại lệ</th>
-                      <th style={{ whiteSpace: 'nowrap' }}>Xử lý</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {liveExceptions.slice(0, 12).map((ex, idx) => (
-                      <tr key={`${ex.category}-${ex.code}-${idx}`}>
-                        <td style={{ whiteSpace: 'nowrap' }}><UiBadge tone="warning">{exceptionCategoryLabel(ex.category)}</UiBadge></td>
-                        <td style={{ whiteSpace: 'nowrap' }}><strong>{ex.code}</strong></td>
-                        <td>{ex.warehouseName}</td>
-                        <td>
-                          <UiBadge tone={ex.severity === 'HIGH' ? 'danger' : 'warning'}>
-                            {severityLabel(ex.severity)}
-                          </UiBadge>
-                        </td>
-                        <td style={{ minWidth: 260 }}>{ex.summary}</td>
-                        <td style={{ whiteSpace: 'nowrap' }}>
-                          <div className="ui-inline-actions" style={{ display: 'inline-flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
-                            <Link to={ex.route} style={{ whiteSpace: 'nowrap' }}>Xử lý →</Link>
-                            {acknowledgedCodes.includes(ex.code) ? (
-                              <UiBadge tone="success">Đã tiếp nhận</UiBadge>
-                            ) : (
-                              <button type="button" disabled={acknowledgingCode === ex.code} onClick={() => void acknowledgeException(ex.code)} style={{ whiteSpace: 'nowrap' }}>
-                                Tiếp nhận xử lý
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </UiTableScroll>
-            )}
-          </UiCard>
-        </div>
+        <DashboardExceptionAlerts
+          filteredTasks={filteredTasks}
+          taskTypeFilter={taskTypeFilter}
+          onTaskTypeFilterChange={setTaskTypeFilter}
+          liveExceptions={liveExceptions}
+          acknowledgedCodes={acknowledgedCodes}
+          acknowledgingCode={acknowledgingCode}
+          onAcknowledgeException={acknowledgeException}
+          taskTypeLabel={taskTypeLabel}
+          taskStatusLabel={taskStatusLabel}
+          priorityLabel={priorityLabel}
+          exceptionCategoryLabel={exceptionCategoryLabel}
+          severityLabel={severityLabel}
+        />
       )}
 
       {!demoRuntime && (
-        <UiCard title="Hoạt động vận hành gần đây">
-          {liveLoading ? (
-            <p role="status">Đang tải nhật ký vận hành...</p>
-          ) : !liveSummary || visibleRecentActivities.length === 0 ? (
-            <p className="ui-muted-text">Chưa có hoạt động vận hành gần đây trong phạm vi kho được phép.</p>
-          ) : (
-            <UiTableScroll>
-              <table className="ui-table-compact" aria-label="Hoạt động vận hành gần đây">
-                <thead>
-                  <tr>
-                    <th>Thời gian</th>
-                    <th>Hành động</th>
-                    <th>Đối tượng</th>
-                    <th>Kho</th>
-                    <th>Kết quả</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleRecentActivities.map((item) => (
-                    <tr key={item.id}>
-                      <td>{new Date(item.timestamp).toLocaleString('vi-VN')}</td>
-                      <td><UiBadge>{actionLabel(item.action)}</UiBadge></td>
-                      <td>{entityNameLabel(item.entityName)}{item.referenceCode && !item.entityName.includes(`(${item.referenceCode})`) ? ` (${item.referenceCode})` : item.entityId ? ` #${item.entityId}` : ''}</td>
-                      <td>{item.warehouseName || (item.warehouseId ? `Kho #${item.warehouseId}` : 'Toàn hệ thống')}</td>
-                      <td>
-                        <UiBadge tone={item.result === 'Success' || !item.result ? 'success' : 'warning'}>
-                          {item.result === 'Success' || !item.result ? 'Thành công' : item.result}
-                        </UiBadge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </UiTableScroll>
-          )}
-        </UiCard>
+        <DashboardRecentActivity
+          liveLoading={liveLoading}
+          hasSummary={Boolean(liveSummary)}
+          activities={visibleRecentActivities}
+          actionLabel={actionLabel}
+          entityNameLabel={entityNameLabel}
+        />
       )}
 
       <UiCard title="Trạng thái môi trường">
@@ -969,4 +811,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-

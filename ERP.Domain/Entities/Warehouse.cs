@@ -12,6 +12,7 @@ public class Warehouse : ITenantEntity
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
+    public byte[] RowVersion { get; set; } = [0, 0, 0, 0, 0, 0, 0, 1];
 
     // Navigation
     public ICollection<InventoryStock> InventoryStocks { get; set; } = new List<InventoryStock>();

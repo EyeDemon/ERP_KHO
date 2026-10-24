@@ -14,6 +14,7 @@ public class StocktakeConfiguration : IEntityTypeConfiguration<Stocktake>
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique().HasDatabaseName("UX_Stocktakes_TenantId_Code");
         builder.Property(x => x.Status).IsConcurrencyToken();
         builder.Property(x => x.Note).HasMaxLength(500);
+        builder.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken();
 
         builder.HasOne(x => x.Warehouse)
                .WithMany(w => w.Stocktakes)

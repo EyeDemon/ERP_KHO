@@ -243,7 +243,7 @@ namespace ERP.Application.Tests
             {
                 Code = "ST-CONC-001",
                 WarehouseId = warehouse.Id,
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 CreatedBy = maker.Id,
             };
             ctx.Stocktakes.Add(stocktake);
@@ -336,7 +336,7 @@ namespace ERP.Application.Tests
 
             using var verifyCtx = CreateContext();
             var finalStocktake = await verifyCtx.Stocktakes.FindAsync(stocktakeId);
-            finalStocktake!.Status.Should().Be(ReceiptStatus.Approved);
+            finalStocktake!.Status.Should().Be(StocktakeStatus.Approved);
 
             var stocks = await verifyCtx.InventoryStocks.ToListAsync();
             stocks.Should().HaveCount(1, "exactly one stock row should exist");
@@ -395,7 +395,7 @@ namespace ERP.Application.Tests
                 using var ctx = CreateContext();
 
                 var finalStocktake = await ctx.Stocktakes.FindAsync(stocktakeId);
-                finalStocktake!.Status.Should().Be(ReceiptStatus.Approved);
+                finalStocktake!.Status.Should().Be(StocktakeStatus.Approved);
 
                 var stocks = await ctx.InventoryStocks.ToListAsync();
                 stocks.Should().HaveCount(stockCount, "no additional stock rows should be created");

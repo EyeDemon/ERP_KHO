@@ -14,5 +14,6 @@ public class WarehouseConfiguration : IEntityTypeConfiguration<Warehouse>
         builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique().HasDatabaseName("UX_Warehouses_TenantId_Code");
         builder.Property(x => x.Name).IsRequired().HasMaxLength(200);
         builder.Property(x => x.Address).HasMaxLength(500);
+        builder.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken();
     }
 }

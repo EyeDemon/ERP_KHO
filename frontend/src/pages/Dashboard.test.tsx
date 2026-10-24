@@ -66,7 +66,19 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
       }
       return { data: [] } as never;
     });
-    post.mockResolvedValue({ data: {} } as never);
+    post.mockImplementation(async (url: string) => {
+      if (url === '/api/v1/reports/cod-reconciliation/verify') {
+        return {
+          data: {
+            totalShipments: 25,
+            matchedShipments: 23,
+            discrepancyCount: 2,
+            matchRatePct: 92,
+          },
+        } as never;
+      }
+      return { data: {} } as never;
+    });
   });
 
   afterEach(cleanup);
@@ -143,7 +155,7 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
     fireEvent.click(view.getByRole('button', { name: 'Chạy Đối soát 3 Chiều Tiền Thu Hộ & Quyết toán Phí Sàn' }));
     expect(
       await view.findByText(
-        'Đã chạy đối soát 3 chiều tiền thu hộ COD & quyết toán phí sàn: Khớp 98,4% vận đơn, phát hiện 3 cảnh báo lệch phí vận chuyển.',
+        'Đã đối soát 23/25 vận đơn (92%), phát hiện 2 cảnh báo lệch phí/chậm hoàn.',
       ),
     ).toBeTruthy();
     expect(post).toHaveBeenCalledWith(

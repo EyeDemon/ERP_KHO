@@ -54,7 +54,7 @@ namespace ERP.Application.Tests
         [Fact]
         public async Task ApproveStocktakeAsync_NotDraft_ThrowsBusinessRuleExceptionAndRollbacks()
         {
-            var stocktake = new Stocktake { Id = 1, Status = ReceiptStatus.Approved };
+            var stocktake = new Stocktake { Id = 1, Status = StocktakeStatus.Approved };
             _mockStocktakeRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(stocktake);
 
             var act = async () => await _service.ApproveStocktakeAsync(1, 99);
@@ -72,7 +72,7 @@ namespace ERP.Application.Tests
             var stocktake = new Stocktake 
             { 
                 Id = 1, 
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 Details = new List<StocktakeDetail> { new StocktakeDetail { ProductId = 1, ActualQuantity = null } }
             };
             _mockStocktakeRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(stocktake);
@@ -93,7 +93,7 @@ namespace ERP.Application.Tests
             { 
                 Id = 1, 
                 WarehouseId = 2,
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 Details = new List<StocktakeDetail> { new StocktakeDetail { ProductId = 1, SystemQuantity = 10, ActualQuantity = 15 } }
             };
             var existingStock = new InventoryStock { ProductId = 1, WarehouseId = 2, Quantity = 10 };
@@ -103,7 +103,7 @@ namespace ERP.Application.Tests
 
             await _service.ApproveStocktakeAsync(1, 99);
 
-            stocktake.Status.Should().Be(ReceiptStatus.Approved);
+            stocktake.Status.Should().Be(StocktakeStatus.Approved);
             stocktake.ApprovedBy.Should().Be(99);
             stocktake.Details.First().DifferenceQuantity.Should().Be(5);
             existingStock.Quantity.Should().Be(15);
@@ -126,7 +126,7 @@ namespace ERP.Application.Tests
             { 
                 Id = 1, 
                 WarehouseId = 2,
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 Details = new List<StocktakeDetail> { new StocktakeDetail { ProductId = 1, SystemQuantity = 10, ActualQuantity = 5 } }
             };
             var existingStock = new InventoryStock { ProductId = 1, WarehouseId = 2, Quantity = 10 };
@@ -136,7 +136,7 @@ namespace ERP.Application.Tests
 
             await _service.ApproveStocktakeAsync(1, 99);
 
-            stocktake.Status.Should().Be(ReceiptStatus.Approved);
+            stocktake.Status.Should().Be(StocktakeStatus.Approved);
             stocktake.ApprovedBy.Should().Be(99);
             stocktake.Details.First().DifferenceQuantity.Should().Be(-5);
             existingStock.Quantity.Should().Be(5);
@@ -159,7 +159,7 @@ namespace ERP.Application.Tests
             { 
                 Id = 1, 
                 WarehouseId = 2,
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 Details = new List<StocktakeDetail> { new StocktakeDetail { ProductId = 1, SystemQuantity = 10, ActualQuantity = 10 } }
             };
             var existingStock = new InventoryStock { ProductId = 1, WarehouseId = 2, Quantity = 10 };
@@ -169,7 +169,7 @@ namespace ERP.Application.Tests
 
             await _service.ApproveStocktakeAsync(1, 99);
 
-            stocktake.Status.Should().Be(ReceiptStatus.Approved);
+            stocktake.Status.Should().Be(StocktakeStatus.Approved);
             stocktake.Details.First().DifferenceQuantity.Should().Be(0);
             
             _mockStockRepo.Verify(x => x.UpdateAsync(It.IsAny<InventoryStock>()), Times.Never);
@@ -186,7 +186,7 @@ namespace ERP.Application.Tests
             {
                 Id = 1,
                 WarehouseId = 2,
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 Details = new List<StocktakeDetail>
                 {
                     new StocktakeDetail { ProductId = 1, SystemQuantity = 10, ActualQuantity = 15 }
@@ -215,7 +215,7 @@ namespace ERP.Application.Tests
             {
                 Id = 1,
                 WarehouseId = 2,
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 Details = new List<StocktakeDetail>
                 {
                     new StocktakeDetail { ProductId = 1, LocationId = 5, SystemQuantity = 10, ActualQuantity = 15 }
@@ -244,7 +244,7 @@ namespace ERP.Application.Tests
             { 
                 Id = 1, 
                 WarehouseId = 2,
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 Details = new List<StocktakeDetail> { new StocktakeDetail { ProductId = 1, SystemQuantity = 10, ActualQuantity = 15 } }
             };
             var existingStock = new InventoryStock { ProductId = 1, WarehouseId = 2, Quantity = 10 };
@@ -294,7 +294,7 @@ namespace ERP.Application.Tests
             capturedStocktake.Code.Length.Should().Be(34);
             capturedStocktake.Code.Length.Should().BeLessThanOrEqualTo(50);
             capturedStocktake.WarehouseId.Should().Be(1);
-            capturedStocktake.Status.Should().Be(ReceiptStatus.Draft);
+            capturedStocktake.Status.Should().Be(StocktakeStatus.Draft);
             capturedStocktake.CreatedBy.Should().Be(99);
             capturedStocktake.Details.Should().HaveCount(2);
 
@@ -379,7 +379,7 @@ namespace ERP.Application.Tests
                 Id = 15,
                 Code = "KK-2026-0015",
                 WarehouseId = 1,
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 Details = new List<StocktakeDetail> { detail }
             };
 
@@ -430,7 +430,7 @@ namespace ERP.Application.Tests
             {
                 Id = 25,
                 WarehouseId = 1,
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 CreatedBy = 10,
                 Details = new List<StocktakeDetail>
                 {

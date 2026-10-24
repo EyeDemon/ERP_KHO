@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link, useInRouterContext } from 'react-router-dom';
 import type { FormEvent } from 'react';
 import apiClient from '../services/apiClient';
 import { isReadOnlyDemoRuntime } from '../services/runtimeMode';
@@ -235,6 +236,7 @@ const isValidReconciliationPage = (
 };
 
 export default function InventoryReconciliation() {
+  const inRouter = useInRouterContext();
   const demoRuntime = isReadOnlyDemoRuntime();
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
   const [warehouseError, setWarehouseError] = useState('');
@@ -741,6 +743,44 @@ export default function InventoryReconciliation() {
           label="Lệch 8 trạng thái trang hiện tại" />}
       </UiMetricGrid>
 
+      <div
+        data-testid="reconciliation-traceability-tabs"
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 8,
+          marginBottom: 12,
+          padding: 6,
+          borderRadius: 10,
+          background: '#f1f5f9',
+          border: '1px solid #cbd5e1',
+        }}
+      >
+        {[
+          { to: '/inventory-reconciliation', label: 'Tab 1: Đối chiếu Tồn kho & Hàng đợi Outbox (/inventory-reconciliation)', testId: 'tab-inventory-reconciliation', active: true },
+          { to: '/inventory-traceability', label: 'Tab 2: Truy vết & Phả hệ Lô / Sê-ri (/inventory-traceability)', testId: 'tab-inventory-traceability', active: false },
+        ].map((tab) => {
+          const style: React.CSSProperties = {
+            padding: '8px 14px',
+            borderRadius: 8,
+            fontWeight: 700,
+            fontSize: 13,
+            textDecoration: 'none',
+            background: tab.active ? '#0f172a' : '#ffffff',
+            color: tab.active ? '#ffffff' : '#334155',
+            border: tab.active ? '1px solid #0f172a' : '1px solid #cbd5e1',
+          };
+          return inRouter ? (
+            <Link key={tab.to} to={tab.to} data-testid={tab.testId} aria-current={tab.active ? 'page' : undefined} style={style}>
+              {tab.label}
+            </Link>
+          ) : (
+            <a key={tab.to} href={tab.to} data-testid={tab.testId} aria-current={tab.active ? 'page' : undefined} style={style}>
+              {tab.label}
+            </a>
+          );
+        })}
+      </div>
       <UiCard title="Tổng quan Đối soát Sổ cái — Số dư — Giữ hàng">
         <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, width: '100%' }}>
           <div>

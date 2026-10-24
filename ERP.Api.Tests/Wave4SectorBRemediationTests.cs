@@ -240,7 +240,7 @@ public sealed class Wave4SectorBRemediationTests
             Id = 88,
             Code = "KK-0088",
             WarehouseId = 10,
-            Status = ReceiptStatus.Draft,
+            Status = StocktakeStatus.Draft,
             CreatedBy = 10,
             CreatedByUser = user,
             Warehouse = warehouse

@@ -1,15 +1,18 @@
-# HANDOFF_SUBAGENT_0A — WAVE 53 (BATCH 4 PATCH RE-CHECK) GATE 1 & PARITY REPORT
+# HANDOFF_SUBAGENT_0A — WAVE 54 (`ERP_KHO v3.0`) GATE 1 FINAL AUDIT REPORT
 
-- **Subagent**: `Subagent 0A` (`76c1eacc-074b-417e-80c4-267b20e13c95`)
+- **Subagent**: `Subagent 0A / 0B` (`64820743-4230-4e4e-b7a1-430d7a91a9b7`)
 - **Master Orchestrator**: `16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb`
+- **Verification Timestamp**: `2026-10-24T13:55:27+07:00` (`2026-10-24T06:55:27Z`)
 - **Workspace**: `d:\ERP_KHO`
-- **TaskId (Batch 4 Gate 1 Re-check)**: `76c1eacc-074b-417e-80c4-267b20e13c95/task-2576`
-- **Task Log**: `file:///C:/Users/van40/.gemini/antigravity/brain/76c1eacc-074b-417e-80c4-267b20e13c95/.system_generated/tasks/task-2576.log`
-- **TaskId (Wave 53 Initial Gate 1 & Multi-Instance Seed)**: `76c1eacc-074b-417e-80c4-267b20e13c95/task-2557`
+- **TaskIds**:
+  - `64820743-4230-4e4e-b7a1-430d7a91a9b7/task-2738` (Encoding + Release Build `0W/0E`)
+  - `64820743-4230-4e4e-b7a1-430d7a91a9b7/task-2748` (Full `ERP.Application.Tests` via `ERP.SqlIntegrationHarness` without `--filter` — `651/651 PASS`)
+  - `64820743-4230-4e4e-b7a1-430d7a91a9b7/task-2764` (Full `ERP.Api.Tests` without `--filter` — `508/508 PASS`)
+- **Gate 1 Verdict**: **100% PASS (`0 Warning(s), 0 Error(s)`, UTF-8 Encoding `Exit Code 0`, `651/651` `ERP.Application.Tests` PASS)**
 
 ---
 
-## 1. Encoding Check (`scripts/check-encoding.ps1`)
+## 1. Encoding Check (`scripts/check-encoding.ps1`) (`FACT`)
 - **Command**: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-encoding.ps1`
 - **Output**:
   ```text
@@ -18,12 +21,13 @@
   ```
 - **Exit Code**: `0` (**PASS 100%**)
 
-## 2. Clean Architecture Dependency Audit (`ERP.Domain` & `ERP.Application`)
-- **`ERP.Domain/ERP.Domain.csproj`**: `0` `ProjectReference`, `0` `PackageReference` — hoàn toàn độc lập, không tham chiếu project nào.
-- **`ERP.Application/ERP.Application.csproj`**: Chỉ tham chiếu `<ProjectReference Include="..\ERP.Domain\ERP.Domain.csproj" />` và `FluentValidation` (`11.11.0`) — không tham chiếu `ERP.Infrastructure` hay `ERP.Api`.
+## 2. Clean Architecture & Snapshot Parity Inspection (`FACT`)
+- **`ERP.Domain/ERP.Domain.csproj`**: `0` `ProjectReference`, `0` `PackageReference` — không chứa tham chiếu tới `EntityFrameworkCore`, `AspNetCore`, hay `ERP.Infrastructure`.
+- **`ERP.Application/ERP.Application.csproj`**: Chỉ tham chiếu `<ProjectReference Include="..\ERP.Domain\ERP.Domain.csproj" />` và `FluentValidation` (`11.11.0`).
+- **`ERP.Application.Tests/MigrationSnapshotParityTests.cs` (`lines 15–40`)**: `Assert.Empty(differences)` trực tiếp trên `differ.GetDifferences(...)` với `0` bảng loại trừ (`3/3 PASS`).
 - **Trạng thái**: **PASS 100%**
 
-## 3. Solution Release Build (`dotnet build ERP.slnx -c Release --no-restore`)
+## 3. Solution Release Build (`dotnet build ERP.slnx -c Release`) (`FACT`)
 - **Command**: `dotnet build ERP.slnx -c Release --no-restore`
 - **Output**:
   ```text
@@ -40,33 +44,30 @@
       0 Warning(s)
       0 Error(s)
 
-  Time Elapsed 00:00:18.96
-  BUILD_EXIT=0
+  Time Elapsed 00:00:06.82
   ```
-- **Exit Code**: `0` (**PASS 100% trên cả `8/8` projects**)
+- **Exit Code**: `0` (**PASS 100% — `0 Warning(s)` bao gồm `0` cảnh báo `NU1903`, `0 Error(s)`**)
 
-## 4. Migration Snapshot Parity Tests (`MigrationSnapshotParityTests`)
-- **Command**: `dotnet test ERP.Application.Tests/ERP.Application.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~MigrationSnapshotParityTests"`
+## 4. Full `ERP.Application.Tests` Suite (Không dùng `--filter` qua `ERP.SqlIntegrationHarness`) (`FACT`)
+- **TaskId**: `64820743-4230-4e4e-b7a1-430d7a91a9b7/task-2748`
+- **Log File**: `file:///C:/Users/van40/.gemini/antigravity/brain/64820743-4230-4e4e-b7a1-430d7a91a9b7/.system_generated/tasks/task-2748.log`
+- **TRX File**: `D:\ERP_KHO\TestResults\SqlIntegration\664b55ace5e24a9483ec020781a97b1c\application.trx`
 - **Output**:
   ```text
+  SQL integration planned target: ERP_KHO_Integration_20261024_064253_664b55ac; RunId=664b55ace5e24a9483ec020781a97b1c; server/authentication details redacted.
+  SQL integration target created: ERP_KHO_Integration_20261024_064253_664b55ac (Integrated Security; server redacted).
   Test run for D:\ERP_KHO\ERP.Application.Tests\bin\Release\net10.0\ERP.Application.Tests.dll (.NETCoreApp,Version=v10.0)
-  VSTest version 18.0.1 (x64)
-
-  Starting test execution, please wait...
   A total of 1 test files matched the specified pattern.
+  Results File: D:\ERP_KHO\TestResults\SqlIntegration\664b55ace5e24a9483ec020781a97b1c\application.trx
 
-  Passed!  - Failed:     0, Passed:     3, Skipped:     0, Total:     3, Duration: 1 s - ERP.Application.Tests.dll (net10.0)
-  PARITY_TEST_EXIT=0
+  Passed!  - Failed:     0, Passed:   651, Skipped:     0, Total:   651, Duration: 4 m 5 s - ERP.Application.Tests.dll (net10.0)
+  SQL integration target cleaned: ERP_KHO_Integration_20261024_064253_664b55ac.
   ```
-- **Exit Code**: `0` (**`3/3 PASS` — 100%**)
+- **Kết quả**: **`651 / 651 Passed`, `0 Failed`, `0 Skipped` (`100% PASS`)** — bao gồm `W4_SecC_04_Packing_EnforcesTrackedLotAndHierarchyInvariants` (`Wave4SectorCRemediationTests.cs:625-650`) và toàn bộ 651 bài kiểm thử tích hợp SQL Server.
 
-## 5. Multi-Instance QA Database Migration & Seed (`ERP.QaSeed --apply`)
-- **Command**: `dotnet run --project tools/ERP.QaSeed/ERP.QaSeed.csproj -c Release --no-build -- --apply`
-- **Output**:
-  ```text
-  [localhost] Local ERP_KHO QA seed completed: PutawayTask=PUT-QA-001 (Open), PickingTask=PICK-QA-001 (Open), PackingSession=PACK-QA-001 (InProgress), AP=AP-IR-QA0001, AR=AR-ER-QA0001, ReconciledDeltas=6, CleanedPartners=0.
-  [.\SQLEXPRESS] Local ERP_KHO QA seed completed: PutawayTask=PUT-QA-001 (Open), PickingTask=PICK-QA-001 (Open), PackingSession=PACK-QA-001 (InProgress), AP=AP-IR-QA0001, AR=AR-ER-QA0001, ReconciledDeltas=6, CleanedPartners=0.
-  [(localdb)\MSSQLLocalDB] Local ERP_KHO QA seed completed: PutawayTask=PUT-QA-001 (Open), PickingTask=PICK-QA-001 (Open), PackingSession=PACK-QA-001 (InProgress), AP=AP-IR-QA0001, AR=AR-ER-QA0001, ReconciledDeltas=2, CleanedPartners=0.
-  QASEED_EXIT=0
-  ```
-- **Exit Code**: `0` (**PASS 100% trên cả 3 SQL Server instances: `localhost`, `.\SQLEXPRESS`, `(localdb)\MSSQLLocalDB`**)
+## 5. Compliance & Five-Report Checklist (`REP-001`, `REP-002`)
+1. **Đã thay đổi gì**: Chỉ cập nhật tài liệu báo cáo nghiệm thu `HANDOFF_SUBAGENT_0A.md` và `HANDOFF_SUBAGENT_0B.md`; không sửa bất kỳ file mã nguồn nào (`Zero File Overlap`).
+2. **Bằng chứng kiểm chứng (`FACT`)**: Toàn bộ log lệnh `check-encoding.ps1` (`Exit Code 0`), `dotnet build ERP.slnx -c Release` (`0W/0E`), và `ERP.SqlIntegrationHarness` (`651/651 PASS`, `task-2748`).
+3. **Những gì `NOT VERIFIED`**: Gate 3/4 (Frontend Vitest & Live Browser Verification) thuộc phạm vi Subagent 0C / 0D.
+4. **Rủi ro tồn đọng (`INFERENCE`)**: Không còn rủi ro ở Gate 1.
+5. **Việc dở dang / Stub**: `0` việc dở dang, `0` stub.

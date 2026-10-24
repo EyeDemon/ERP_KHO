@@ -395,7 +395,7 @@ namespace ERP.Api.Controllers
             var openPackCount = await db.PackingSessions.AsNoTracking()
                 .CountAsync(s => accessibleIds.Contains(s.WarehouseId) && (s.Status == PackingSessionStatus.Open || s.Status == PackingSessionStatus.InProgress), cancellationToken);
             var openStocktakeCount = await db.Stocktakes.AsNoTracking()
-                .CountAsync(s => accessibleIds.Contains(s.WarehouseId) && s.Status == ReceiptStatus.Draft, cancellationToken);
+                .CountAsync(s => accessibleIds.Contains(s.WarehouseId) && s.Status == StocktakeStatus.Draft, cancellationToken);
             var openTransferCount = await db.StockTransfers.AsNoTracking()
                 .CountAsync(t => (accessibleIds.Contains(t.SourceWarehouseId) || accessibleIds.Contains(t.DestinationWarehouseId)) &&
                                  (t.Status == StockTransferStatus.Draft || t.Status == StockTransferStatus.Approved || t.Status == StockTransferStatus.InTransit), cancellationToken);
@@ -1320,7 +1320,7 @@ namespace ERP.Api.Controllers
             tasks.AddRange(draftImports);
 
             var draftStocktakes = await db.Stocktakes.AsNoTracking()
-                .Where(s => scopedIds.Contains(s.WarehouseId) && s.Status == ReceiptStatus.Draft)
+                .Where(s => scopedIds.Contains(s.WarehouseId) && s.Status == StocktakeStatus.Draft)
                 .Select(s => new
                 {
                     taskType = "STOCKTAKE",
@@ -1806,7 +1806,7 @@ namespace ERP.Api.Controllers
             var stocktakeTotalCount = await db.Stocktakes.AsNoTracking()
                 .CountAsync(s => scopedIds.Contains(s.WarehouseId) && s.CreatedAt >= since, cancellationToken);
             var stocktakeApprovedCount = await db.Stocktakes.AsNoTracking()
-                .CountAsync(s => scopedIds.Contains(s.WarehouseId) && s.Status == ReceiptStatus.Approved && s.CreatedAt >= since, cancellationToken);
+                .CountAsync(s => scopedIds.Contains(s.WarehouseId) && s.Status == StocktakeStatus.Approved && s.CreatedAt >= since, cancellationToken);
             var stocktakeDetailsQuery = db.StocktakeDetails.AsNoTracking()
                 .Where(d => scopedIds.Contains(d.Stocktake.WarehouseId) && d.Stocktake.CreatedAt >= since);
             var totalStocktakeLines = await stocktakeDetailsQuery.CountAsync(cancellationToken);

@@ -153,7 +153,7 @@ public sealed class Wave9CrossOperationConcurrencySqlTests
                 {
                     Code = $"ST-W9A-{suffix}",
                     WarehouseId = warehouseId,
-                    Status = ReceiptStatus.Draft,
+                    Status = StocktakeStatus.Draft,
                     CreatedBy = makerId,
                     CreatedAt = DateTime.UtcNow,
                     Details =
@@ -185,7 +185,7 @@ public sealed class Wave9CrossOperationConcurrencySqlTests
                 {
                     Code = $"ST-W9B-{suffix}",
                     WarehouseId = warehouseId,
-                    Status = ReceiptStatus.Draft,
+                    Status = StocktakeStatus.Draft,
                     CreatedBy = makerId,
                     CreatedAt = DateTime.UtcNow,
                     Details =

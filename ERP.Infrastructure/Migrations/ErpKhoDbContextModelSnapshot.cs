@@ -274,6 +274,9 @@ namespace ERP.Infrastructure.Migrations
                     b.HasIndex("EntityName", "WarehouseId", "Timestamp")
                         .HasDatabaseName("IX_AuditLogs_EntityName_WarehouseId_Timestamp");
 
+                    b.HasIndex("TenantId", "Timestamp", "EntityName")
+                        .HasDatabaseName("IX_AuditLogs_TenantId_Timestamp_EntityName");
+
                     b.HasIndex("EntityName", "Action", "EntityId", "Timestamp")
                         .HasDatabaseName("IX_AuditLogs_EntityName_Action_EntityId_Timestamp");
 
@@ -5002,43 +5005,51 @@ namespace ERP.Infrastructure.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<decimal>("ActualCodCollected")
-                        .HasPrecision(19, 4)
-                        .HasColumnType("decimal(19,4)");
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<decimal>("ActualShippingFee")
-                        .HasPrecision(19, 4)
-                        .HasColumnType("decimal(19,4)");
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<string>("CarrierCode")
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<decimal>("CodVariance")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("datetime2");
 
                     b.Property<decimal>("EstimatedShippingFee")
-                        .HasPrecision(19, 4)
-                        .HasColumnType("decimal(19,4)");
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<decimal>("ExpectedCodAmount")
-                        .HasPrecision(19, 4)
-                        .HasColumnType("decimal(19,4)");
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<int?>("ExportReceiptId")
                         .HasColumnType("int");
 
                     b.Property<decimal>("FeeOverchargeVariance")
-                        .HasPrecision(19, 4)
-                        .HasColumnType("decimal(19,4)");
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<decimal>("NetPayoutAmount")
-                        .HasPrecision(19, 4)
-                        .HasColumnType("decimal(19,4)");
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("NetSettlementAmount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<decimal>("PlatformCommissionFee")
-                        .HasPrecision(19, 4)
-                        .HasColumnType("decimal(19,4)");
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<string>("ReconciliationStatus")
                         .IsRequired()
@@ -5046,14 +5057,28 @@ namespace ERP.Infrastructure.Migrations
                         .HasColumnType("nvarchar(32)");
 
                     b.Property<decimal>("ReturnFee")
-                        .HasPrecision(19, 4)
-                        .HasColumnType("decimal(19,4)");
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<decimal>("SellerVoucherAmount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<DateTime?>("SettledAtUtc")
                         .HasColumnType("datetime2");
 
                     b.Property<int?>("ShipmentId")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("ShippingFeeVariance")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<int>("TenantId")
                         .ValueGeneratedOnAdd()
@@ -5073,7 +5098,7 @@ namespace ERP.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "TrackingNumber")
                         .IsUnique()
-                        .HasDatabaseName("UX_ShipmentFinancialLedgers_TenantId_TrackingNumber");
+                        .HasDatabaseName("IX_ShipmentFinancialLedgers_TenantId_TrackingNumber");
 
                     b.ToTable("ShipmentFinancialLedgers", (string)null);
                 });
@@ -5764,6 +5789,12 @@ namespace ERP.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<int>("Status")
                         .IsConcurrencyToken()
                         .HasColumnType("int");
@@ -5842,6 +5873,12 @@ namespace ERP.Infrastructure.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -5867,9 +5904,13 @@ namespace ERP.Infrastructure.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
 
+                    b.Property<decimal>("VarianceQuantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
                     b.Property<decimal>("VarianceValue")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
 
                     b.Property<int>("WarehouseId")
                         .HasColumnType("int");
@@ -6369,6 +6410,12 @@ namespace ERP.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<int>("TenantId")
                         .ValueGeneratedOnAdd()
@@ -8145,12 +8192,12 @@ namespace ERP.Infrastructure.Migrations
                     b.HasOne("ERP.Domain.Entities.ExportReceipt", "ExportReceipt")
                         .WithMany()
                         .HasForeignKey("ExportReceiptId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ERP.Domain.Entities.Shipment", "Shipment")
                         .WithMany()
                         .HasForeignKey("ShipmentId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("ExportReceipt");
 
@@ -8448,27 +8495,35 @@ namespace ERP.Infrastructure.Migrations
 
             modelBuilder.Entity("ERP.Domain.Entities.StocktakeAdjustmentProposal", b =>
                 {
-                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", null)
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", "Location")
                         .WithMany()
                         .HasForeignKey("LocationId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("ERP.Domain.Entities.Product", null)
+                    b.HasOne("ERP.Domain.Entities.Product", "Product")
                         .WithMany()
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("ERP.Domain.Entities.Stocktake", null)
+                    b.HasOne("ERP.Domain.Entities.Stocktake", "Stocktake")
                         .WithMany()
                         .HasForeignKey("StocktakeId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("ERP.Domain.Entities.Warehouse", null)
+                    b.HasOne("ERP.Domain.Entities.Warehouse", "Warehouse")
                         .WithMany()
                         .HasForeignKey("WarehouseId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Location");
+
+                    b.Navigation("Product");
+
+                    b.Navigation("Stocktake");
+
+                    b.Navigation("Warehouse");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.StocktakeDetail", b =>

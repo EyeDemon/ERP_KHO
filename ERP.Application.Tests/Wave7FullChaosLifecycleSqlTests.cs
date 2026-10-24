@@ -1082,7 +1082,7 @@ public sealed class Wave7FullChaosLifecycleSqlTests
                 var approved = await approveStDb.Stocktakes.AsNoTracking()
                     .Include(x => x.Details)
                     .SingleAsync(x => x.Id == stocktakeId);
-                approved.Status.Should().Be(ReceiptStatus.Approved);
+                approved.Status.Should().Be(StocktakeStatus.Approved);
                 approved.Details.Single().DifferenceQuantity.Should().Be(2m);
             }
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link, useInRouterContext } from 'react-router-dom';
 import { RefreshCw, Unlock } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import { currentRole } from '../services/authorization';
@@ -75,6 +76,7 @@ const sourceTypeLabel = (sourceType: string) => ({
 }[sourceType] ?? sourceType);
 
 export default function StockReservations() {
+  const inRouter = useInRouterContext();
   const canOperate = currentRole() !== 'Viewer';
   const [data, setData] = useState<Page>({ items: [], totalRecords: 0, pageIndex: 1, pageSize: 20 });
   const [status, setStatus] = useState('');
@@ -184,6 +186,45 @@ export default function StockReservations() {
           </button>
         ) : undefined}
       />
+
+      <div
+        data-testid="reservation-allocation-tabs"
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 8,
+          marginBottom: 12,
+          padding: 6,
+          borderRadius: 10,
+          background: '#f1f5f9',
+          border: '1px solid #cbd5e1',
+        }}
+      >
+        {[
+          { to: '/stock-reservations', label: 'Tab 1: Giữ hàng tồn kho (/stock-reservations)', testId: 'tab-stock-reservations', active: true },
+          { to: '/stock-allocations', label: 'Tab 2: Phân bổ vị trí kệ (/stock-allocations)', testId: 'tab-stock-allocations', active: false },
+        ].map((tab) => {
+          const style: React.CSSProperties = {
+            padding: '8px 14px',
+            borderRadius: 8,
+            fontWeight: 700,
+            fontSize: 13,
+            textDecoration: 'none',
+            background: tab.active ? '#0f172a' : '#ffffff',
+            color: tab.active ? '#ffffff' : '#334155',
+            border: tab.active ? '1px solid #0f172a' : '1px solid #cbd5e1',
+          };
+          return inRouter ? (
+            <Link key={tab.to} to={tab.to} data-testid={tab.testId} aria-current={tab.active ? 'page' : undefined} style={style}>
+              {tab.label}
+            </Link>
+          ) : (
+            <a key={tab.to} href={tab.to} data-testid={tab.testId} aria-current={tab.active ? 'page' : undefined} style={style}>
+              {tab.label}
+            </a>
+          );
+        })}
+      </div>
 
       {error && <p role="alert">{error}</p>}
 

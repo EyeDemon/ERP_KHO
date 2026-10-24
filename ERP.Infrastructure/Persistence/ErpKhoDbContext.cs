@@ -235,6 +235,8 @@ WHERE TenantId = {tenantId}
         EnforceAppendOnlyInventoryLedger();
         EnforceAppendOnlyLocationMovements();
         EnforceAppendOnlyPartnerDebtLedger();
+        EnforceAppendOnlyShipmentTrackingEvents();
+        EnforceAppendOnlyDockAppointmentEvents();
         EnforceAppendOnlyAuditLogs();
         EnrichAuditLogs();
         EnsureNonSqlServerRowVersions();
@@ -250,6 +252,8 @@ WHERE TenantId = {tenantId}
         EnforceAppendOnlyInventoryLedger();
         EnforceAppendOnlyLocationMovements();
         EnforceAppendOnlyPartnerDebtLedger();
+        EnforceAppendOnlyShipmentTrackingEvents();
+        EnforceAppendOnlyDockAppointmentEvents();
         EnforceAppendOnlyAuditLogs();
         EnrichAuditLogs();
         EnsureNonSqlServerRowVersions();
@@ -700,6 +704,32 @@ WHERE TenantId = {tenantId}
         }
     }
 
+    private void EnforceAppendOnlyShipmentTrackingEvents()
+    {
+        foreach (var entry in ChangeTracker.Entries<ShipmentTrackingEvent>())
+        {
+            if (entry.State == EntityState.Modified || entry.State == EntityState.Deleted)
+            {
+                throw new ERP.Domain.Exceptions.ConflictException(
+                    "ShipmentTrackingEvents is append-only; modifying or deleting shipment tracking events is forbidden.",
+                    "APPEND_ONLY_VIOLATION");
+            }
+        }
+    }
+
+    private void EnforceAppendOnlyDockAppointmentEvents()
+    {
+        foreach (var entry in ChangeTracker.Entries<DockAppointmentEvent>())
+        {
+            if (entry.State == EntityState.Modified || entry.State == EntityState.Deleted)
+            {
+                throw new ERP.Domain.Exceptions.ConflictException(
+                    "DockAppointmentEvents is append-only; modifying or deleting dock appointment events is forbidden.",
+                    "APPEND_ONLY_VIOLATION");
+            }
+        }
+    }
+
     private void EnrichAuditLogs()
     {
         if (_requestMetadata is null) return;
@@ -791,6 +821,11 @@ WHERE TenantId = {tenantId}
                 .IsUnique()
                 .HasDatabaseName("IX_InventoryStocks_Tenant_GrainHash");
         });
+        modelBuilder.Entity<AuditLog>(entity =>
+        {
+            entity.HasIndex(e => new { e.TenantId, e.Timestamp, e.EntityName })
+                .HasDatabaseName("IX_AuditLogs_TenantId_Timestamp_EntityName");
+        });
         if (Database.IsSqlServer())
         {
             modelBuilder.Entity<Permission>().Property(x => x.Code).UseCollation("Latin1_General_100_BIN2");
@@ -853,6 +888,17 @@ WHERE TenantId = {tenantId}
             modelBuilder.Entity<ProductBarcode>().ToTable("ProductBarcodes", t => t.HasCheckConstraint(
                 "CK_ProductBarcodes_Value",
                 "[Value] = LTRIM(RTRIM([Value])) AND [Value] NOT LIKE '%[^-A-Za-z0-9._]%' COLLATE Latin1_General_100_BIN2 AND LEN([Value]) BETWEEN 1 AND 64"));
+        }
+        else
+        {
+            foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+            {
+                var rowVersionProp = entityType.FindProperty("RowVersion");
+                if (rowVersionProp is not null && rowVersionProp.ClrType == typeof(byte[]))
+                {
+                    rowVersionProp.ValueGenerated = Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never;
+                }
+            }
         }
     }
 }
