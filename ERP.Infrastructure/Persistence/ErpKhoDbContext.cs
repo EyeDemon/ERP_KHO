@@ -732,13 +732,20 @@ WHERE TenantId = {tenantId}
 
     private void EnrichAuditLogs()
     {
-        if (_requestMetadata is null) return;
         foreach (var entry in ChangeTracker.Entries<AuditLog>().Where(x => x.State == EntityState.Added))
         {
-            entry.Entity.CorrelationId ??= _requestMetadata.CorrelationId;
-            entry.Entity.IdempotencyKeyHash ??= _requestMetadata.IdempotencyKeyHash;
-            entry.Entity.RequestFingerprint ??= _requestMetadata.RequestFingerprint;
+            if (_requestMetadata is not null)
+            {
+                entry.Entity.CorrelationId ??= _requestMetadata.CorrelationId;
+                entry.Entity.IdempotencyKeyHash ??= _requestMetadata.IdempotencyKeyHash;
+                entry.Entity.RequestFingerprint ??= _requestMetadata.RequestFingerprint;
+            }
             entry.Entity.Result ??= "Success";
+            if (entry.Entity.Result.Length > 32)
+            {
+                entry.Entity.Reason ??= entry.Entity.Result;
+                entry.Entity.Result = "Success";
+            }
         }
     }
 

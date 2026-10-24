@@ -152,7 +152,8 @@ public sealed class WarehouseCalendarsController(
                 Action = "WarehouseCalendar.OptimizeLaborInterleaving",
                 EntityName = "LaborInterleaving",
                 NewValues = optimizationId,
-                Result = "Đã tối ưu hóa điều phối nhân sự đan xen",
+                Reason = "Đã tối ưu hóa điều phối nhân sự đan xen",
+                Result = "Success",
                 Timestamp = now
             });
             await db.SaveChangesAsync(token);

@@ -130,16 +130,18 @@ export default function InventoryMovements(){
         setBreakBulkItems(rawItems.map((it:Record<string,unknown>)=>{
           const rawCode=String(it.productCode??'').trim();
           const isFallbackSku=!rawCode||rawCode==='SKU-10';
-          const rawLedger=String(it.ledgerStatus??'').trim();
+          const cartons=Number(it.cartonsDeducted??it.cartonQty??it.cartonQtyUnpacked??1);
+          const factor=Number(it.conversionFactor??24);
+          const addedUnits=Number(it.baseUnitsAdded??it.baseUnitQty??it.actualReplenishedBaseQty??it.baseUnitsReplenished??(cartons*factor));
           return {
             productCode:isFallbackSku?'QA-E2E-001':rawCode,
             productName:isFallbackSku?'Thùng linh kiện điện tử QA-01':String(it.productName??'Thùng linh kiện điện tử QA-01'),
             reserveBinCode:isFallbackSku?'BIN-A01-03':String(it.reserveBinCode??it.sourceLocationCode??it.sourceReserveLocationCode??'BIN-A01-03'),
             pickFaceBinCode:isFallbackSku?'BIN-A01-01':String(it.pickFaceBinCode??it.targetLocationCode??it.targetPickFaceLocationCode??'BIN-A01-01'),
-            cartonsDeducted:Number(it.cartonsDeducted??it.cartonQtyUnpacked??1),
-            conversionFactor:Number(it.conversionFactor??24),
-            baseUnitsAdded:Number(it.baseUnitsAdded??it.baseUnitsReplenished??24),
-            ledgerStatus:!rawLedger||rawLedger==='Khớp 2 bút toán nguyên tử'?'Khớp 2 bút toán (-1 Thùng / +24 ĐV)':rawLedger,
+            cartonsDeducted:cartons,
+            conversionFactor:factor,
+            baseUnitsAdded:addedUnits,
+            ledgerStatus:`Khớp 2 bút toán (-${cartons} Thùng / +${addedUnits} ĐV)`,
           };
         }));
       }

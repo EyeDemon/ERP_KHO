@@ -255,17 +255,72 @@ const Dashboard = () => {
       }
       return fallback;
     };
+
+    void Promise.resolve(apiClient.get<Record<string, unknown>>('/api/v1/reports/owner-gross-profit'))
+      .then((res) => {
+        if (!active || !res?.data) return;
+        const d = res.data;
+        setOwnerFinance((prev) => ({
+          ...prev,
+          netRevenue: Number(d.grossRevenue ?? d.netRevenue ?? d.totalDispatchedRevenue ?? 0),
+          cogsAmount: Number(d.movingAverageCogs ?? d.totalCogs ?? d.cogsAmount ?? 0),
+          grossProfit: Number(d.netPocketProfit ?? d.estimatedGrossProfit ?? d.grossProfit ?? 0),
+          grossMarginPct: Number(d.netMarginPct ?? d.grossMarginPercent ?? d.grossMarginPct ?? 0),
+          costHiddenByRbac: d.costHiddenByRbac === true,
+        }));
+      })
+      .catch(() => null);
+
+    const applyCodData = (d: Record<string, unknown>) => {
+      setOwnerFinance((prev) => ({
+        ...prev,
+        pendingCodAmount: Number(d.totalExpectedCod ?? d.pendingCodAmount ?? d.totalCodPending ?? 0),
+        receivedCodAmount: Number(d.totalActualCod ?? d.receivedFromCarrierAmount ?? 0),
+        codWarningCount: Number(d.discrepancyCount ?? d.feeDiscrepancyWarnings ?? d.discrepancyWarningCount ?? (Array.isArray(d.discrepancies) ? d.discrepancies.length : 0)),
+      }));
+    };
+
+    void Promise.resolve(apiClient.get<Record<string, unknown>>('/api/v1/reports/cod-shipping-reconciliation'))
+      .then((res) => {
+        if (!active) return;
+        if (res?.data && Object.keys(res.data).length > 0) {
+          applyCodData(res.data);
+          return;
+        }
+        return Promise.resolve(apiClient.get<Record<string, unknown>>('/api/v1/reports/cod-reconciliation'))
+          .then((fallbackRes) => {
+            if (active && fallbackRes?.data) applyCodData(fallbackRes.data);
+          });
+      })
+      .catch(() =>
+        Promise.resolve(apiClient.get<Record<string, unknown>>('/api/v1/reports/cod-reconciliation'))
+          .then((fallbackRes) => {
+            if (active && fallbackRes?.data) applyCodData(fallbackRes.data);
+          })
+          .catch(() => null),
+      );
+
+    void Promise.resolve(apiClient.get<OperationalDashboardSummary>('/api/Reports/operational-dashboard'))
+      .then((summaryRes) => {
+        if (!active) return;
+        if (summaryRes?.data && typeof summaryRes.data.warehouseCount === 'number') {
+          setLiveSummary(summaryRes.data);
+        }
+      })
+      .catch(() => {
+        if (active) setLiveError('Không thể tải số liệu tổng quan trực tiếp.');
+      })
+      .finally(() => {
+        if (active) setLiveLoading(false);
+      });
+
     Promise.all([
-      apiClient.get<OperationalDashboardSummary>('/api/Reports/operational-dashboard'),
       apiClient.get<DashboardWarehouseTaskItem[]>('/api/Reports/warehouse-tasks').catch(captureAuxError({ data: [] as DashboardWarehouseTaskItem[] }, 'Không thể tải danh sách tác vụ kho.')),
       apiClient.get<DashboardOperationalExceptionItem[]>('/api/Reports/operational-exceptions').catch(captureAuxError({ data: [] as DashboardOperationalExceptionItem[] }, 'Không thể tải danh sách ngoại lệ vận hành.')),
       apiClient.get<MultiWarehouseControlTowerDto>('/api/Reports/multi-warehouse-control-tower').catch(captureAuxError(null, 'Không thể tải dữ liệu tháp điều hành đa kho.')),
     ])
-      .then(([summaryRes, tasksRes, exRes, towerRes]) => {
+      .then(([tasksRes, exRes, towerRes]) => {
         if (!active) return;
-        if (summaryRes.data && typeof summaryRes.data.warehouseCount === 'number') {
-          setLiveSummary(summaryRes.data);
-        }
         setLiveTasks(Array.isArray(tasksRes.data) ? tasksRes.data : []);
         setLiveExceptions(Array.isArray(exRes.data) ? exRes.data : []);
         if (towerRes?.data && Array.isArray(towerRes.data.warehouses)) {
@@ -273,53 +328,7 @@ const Dashboard = () => {
         }
         if (auxError) setLiveError(auxError);
       })
-      .catch(() => {
-        if (active) setLiveError('Không thể tải số liệu tổng quan trực tiếp.');
-      })
-      .finally(() => {
-        if (active) setLiveLoading(false);
-        void Promise.resolve(apiClient.get<Record<string, unknown>>('/api/v1/reports/owner-gross-profit'))
-          .then((res) => {
-            if (!active || !res?.data) return;
-            const d = res.data;
-            setOwnerFinance((prev) => ({
-              ...prev,
-              netRevenue: Number(d.grossRevenue ?? d.netRevenue ?? d.totalDispatchedRevenue ?? 0),
-              cogsAmount: Number(d.movingAverageCogs ?? d.totalCogs ?? d.cogsAmount ?? 0),
-              grossProfit: Number(d.netPocketProfit ?? d.estimatedGrossProfit ?? d.grossProfit ?? 0),
-              grossMarginPct: Number(d.netMarginPct ?? d.grossMarginPercent ?? d.grossMarginPct ?? 0),
-              costHiddenByRbac: d.costHiddenByRbac === true,
-            }));
-          })
-          .catch(() => null);
-        const applyCodData = (d: Record<string, unknown>) => {
-          setOwnerFinance((prev) => ({
-            ...prev,
-            pendingCodAmount: Number(d.totalExpectedCod ?? d.pendingCodAmount ?? d.totalCodPending ?? 0),
-            receivedCodAmount: Number(d.totalActualCod ?? d.receivedFromCarrierAmount ?? 0),
-            codWarningCount: Number(d.discrepancyCount ?? d.feeDiscrepancyWarnings ?? d.discrepancyWarningCount ?? (Array.isArray(d.discrepancies) ? d.discrepancies.length : 0)),
-          }));
-        };
-        void Promise.resolve(apiClient.get<Record<string, unknown>>('/api/v1/reports/cod-shipping-reconciliation'))
-          .then((res) => {
-            if (!active) return;
-            if (res?.data && Object.keys(res.data).length > 0) {
-              applyCodData(res.data);
-              return;
-            }
-            return Promise.resolve(apiClient.get<Record<string, unknown>>('/api/v1/reports/cod-reconciliation'))
-              .then((fallbackRes) => {
-                if (active && fallbackRes?.data) applyCodData(fallbackRes.data);
-              });
-          })
-          .catch(() =>
-            Promise.resolve(apiClient.get<Record<string, unknown>>('/api/v1/reports/cod-reconciliation'))
-              .then((fallbackRes) => {
-                if (active && fallbackRes?.data) applyCodData(fallbackRes.data);
-              })
-              .catch(() => null),
-          );
-      });
+      .catch(() => null);
     return () => {
       active = false;
     };

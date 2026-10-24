@@ -288,10 +288,20 @@ const Stocktakes = () => {
     setAutoApprovalBusy(true);
     setError('');
     try {
+      let resolvedId = currentDetail?.id ?? stocktakes[0]?.id;
+      if (!resolvedId) {
+        const listRes = await apiClient.get('/api/stocktakes').catch(() => ({ data: [] as StocktakeSummary[] }));
+        const list = Array.isArray(listRes.data) ? listRes.data : [];
+        if (list.length > 0) {
+          setStocktakes(list);
+          resolvedId = list[0].id;
+        }
+      }
+      const effectiveId = resolvedId ?? targetStocktakeId;
       const res = await apiClient.post<Record<string, unknown>>(
-        `/api/v1/stocktakes/${targetStocktakeId}/evaluate-auto-approval`,
+        `/api/v1/stocktakes/${effectiveId}/evaluate-auto-approval`,
         {
-          stocktakeId: targetStocktakeId,
+          stocktakeId: effectiveId,
           maxVariancePct: 1.0,
           maxVarianceValueVnd: 500000,
         },
@@ -843,7 +853,7 @@ const Stocktakes = () => {
                       fontWeight: 600,
                     }}
                   >
-                    {proposalStatus === 'PENDING_SOD_APPROVAL'
+                    {proposalStatus === 'PENDING_SOD_APPROVAL' || proposalStatus === 'PENDING_APPROVAL'
                       ? 'Trạng thái: Đã tạo đề xuất điều chỉnh tồn kho • Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm'
                       : proposalStatus
                           .replace(

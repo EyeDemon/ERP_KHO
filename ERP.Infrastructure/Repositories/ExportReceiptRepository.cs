@@ -98,7 +98,7 @@ namespace ERP.Infrastructure.Repositories
 
         public async Task<IEnumerable<ExportReceipt>> GetListAsync()
         {
-            var query = _dbSet.AsQueryable();
+            var query = _dbSet.AsNoTracking().AsSplitQuery().AsQueryable();
             if (_warehouseAuthorization is not null)
             {
                 var allowedWarehouseIds = await _warehouseAuthorization.GetAccessibleWarehouseIdsAsync();

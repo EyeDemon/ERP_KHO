@@ -849,9 +849,14 @@ public sealed class InventoryMovementService(
             if (currentPickFaceQty >= minPickFaceThreshold && request?.ProductId is null && planItems.Count > 0)
                 continue;
 
-            var uom = uomConversions.FirstOrDefault(u => u.ProductId == srcStock.ProductId);
-            var conversionFactor = uom?.ConversionFactor is > 1m ? uom.ConversionFactor : 24m;
-            var bulkUomCode = uom?.Unit?.Code ?? "THÙNG";
+            var uom = uomConversions.FirstOrDefault(u => u.ProductId == srcStock.ProductId && u.Unit != null && !string.Equals(u.Unit.Code, "PALLET", StringComparison.OrdinalIgnoreCase))
+                      ?? uomConversions.FirstOrDefault(u => u.ProductId == srcStock.ProductId);
+            var conversionFactor = uom?.ConversionFactor is > 1m && uom.Unit != null && !string.Equals(uom.Unit.Code, "PALLET", StringComparison.OrdinalIgnoreCase)
+                ? uom.ConversionFactor
+                : 24m;
+            var bulkUomCode = uom?.Unit != null && !string.Equals(uom.Unit.Code, "PALLET", StringComparison.OrdinalIgnoreCase)
+                ? uom.Unit.Code
+                : "THÙNG";
             var baseUomCode = srcStock.Product?.Unit?.Code ?? "CÁI";
             var cartonQty = requestedCartons;
             var convertedBaseQty = decimal.Round(cartonQty * conversionFactor, 4);

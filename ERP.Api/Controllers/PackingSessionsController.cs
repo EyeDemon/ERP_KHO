@@ -131,6 +131,7 @@ public sealed class PackingSessionsController(
         decimal? Quantity = null,
         decimal? ComponentRatio = null,
         string? OperationMode = null,
+        string? VasMode = null,
         string? Note = null,
         bool ExecuteStockMutation = false);
 
@@ -170,10 +171,15 @@ public sealed class PackingSessionsController(
         }
 
         var now = DateTime.UtcNow;
-        var rawMode = string.IsNullOrWhiteSpace(request?.OperationMode)
+        var candidateMode = !string.IsNullOrWhiteSpace(request?.OperationMode)
+            ? request.OperationMode
+            : (!string.IsNullOrWhiteSpace(request?.VasMode) ? request.VasMode : request?.VasServiceType);
+        var rawMode = string.IsNullOrWhiteSpace(candidateMode)
             ? "ASSEMBLE_KIT"
-            : request.OperationMode.Trim().ToUpperInvariant();
-        var isDekit = rawMode is "DEKIT_DISASSEMBLE" or "DEKIT" or "DISASSEMBLE";
+            : candidateMode.Trim().ToUpperInvariant();
+        var isDekit = rawMode is "DEKIT_DISASSEMBLE" or "DEKIT" or "DISASSEMBLE"
+                      || string.Equals(request?.VasMode?.Trim(), "DEKIT_DISASSEMBLE", StringComparison.OrdinalIgnoreCase)
+                      || string.Equals(request?.VasServiceType?.Trim(), "DEKIT_DISASSEMBLE", StringComparison.OrdinalIgnoreCase);
         var normalizedMode = isDekit ? "DEKIT_DISASSEMBLE" : "ASSEMBLE_KIT";
 
         var workOrderId = isDekit ? $"DEKIT-VAS-{now:yyyyMMdd-HHmm}" : $"KIT-VAS-{now:yyyyMMdd-HHmm}";
@@ -251,8 +257,10 @@ public sealed class PackingSessionsController(
                     ?? bomComponents.FirstOrDefault()?.ParentProductId
                     ?? resolvedCompId
                     ?? await db.InventoryStocks.AsNoTracking()
-                        .Where(s => s.WarehouseId == targetWarehouseId && s.Status == InventoryStatus.Available && s.Quantity >= kitQty)
-                        .OrderByDescending(s => s.Quantity)
+                        .Where(s => s.WarehouseId == targetWarehouseId &&
+                                    s.Status == InventoryStatus.Available &&
+                                    (s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity) >= kitQty)
+                        .OrderByDescending(s => s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity)
                         .Select(s => (int?)s.ProductId)
                         .FirstOrDefaultAsync(cancellationToken);
 
@@ -619,9 +627,19 @@ public sealed class PackingSessionsController(
             operationMode = normalizedMode,
             warehouseId = targetWarehouseId,
             activeSessionsCount,
+            activePackingSessionsCount = activeSessionsCount,
             handlingUnitsCount,
             kitSkuCode = string.IsNullOrWhiteSpace(request?.KitSkuCode) ? "KIT-BUNDLE-STD" : request.KitSkuCode.Trim(),
-            vasServiceType = resolvedVasType,
+            vasServiceType = isDekit || string.Equals(resolvedVasType, "DEKIT_DISASSEMBLE", StringComparison.OrdinalIgnoreCase)
+                ? "Rã bộ hàng lắp ráp & hoàn nguyên linh kiện về kệ"
+                : (string.Equals(resolvedVasType, "LABELING_SHRINKWRAP_BUNDLE", StringComparison.OrdinalIgnoreCase)
+                    ? "Dán nhãn phụ, bọc màng co & đóng bộ sản phẩm"
+                    : resolvedVasType),
+            serviceScopeLabel = isDekit || string.Equals(resolvedVasType, "DEKIT_DISASSEMBLE", StringComparison.OrdinalIgnoreCase)
+                ? "Rã bộ hàng lắp ráp & hoàn nguyên linh kiện về kệ"
+                : (string.Equals(resolvedVasType, "LABELING_SHRINKWRAP_BUNDLE", StringComparison.OrdinalIgnoreCase)
+                    ? "Dán nhãn phụ, bọc màng co & đóng bộ sản phẩm"
+                    : resolvedVasType),
             componentAllocationStatus = isDekit
                 ? "Đã kiểm tra tồn kho bộ KIT & hoàn nguyên linh kiện về vị trí lưu trữ"
                 : "Đã kiểm tra linh kiện & lô hàng theo chuẩn FEFO",
@@ -630,10 +648,10 @@ public sealed class PackingSessionsController(
                 : "Ghi nhận bút toán xuất linh kiện sang bộ KIT",
             billingHookStatus = "Đã ghi nhận phí dịch vụ gia công kho (VAS)",
             status = isDekit
-                ? "Đã hoàn tất rã bộ (De-kitting) & nhập kho SKU thành phần"
+                ? "Đã hoàn tất rã bộ hàng lắp ráp & nhập kho linh kiện thành phần"
                 : "Đã hoàn tất gia công đóng gói & dán nhãn kiện hàng",
             statusLabel = isDekit
-                ? "Đã hoàn tất rã bộ (De-kitting) & nhập kho SKU thành phần"
+                ? "Đã hoàn tất rã bộ hàng lắp ráp & nhập kho linh kiện thành phần"
                 : "Đã hoàn tất gia công đóng gói & dán nhãn kiện hàng",
             components = componentBreakdown,
             executedStockMutation,
@@ -801,6 +819,18 @@ public sealed class PackingSessionsController(
         int? evidenceId = null;
         if (db != null)
         {
+            int? validAuditUserId = null;
+            var claimUidStr = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                              ?? User?.FindFirst("Id")?.Value;
+            if (int.TryParse(claimUidStr, out var claimUid) && claimUid > 0 &&
+                await db.Users.AsNoTracking().AnyAsync(u => u.Id == claimUid, cancellationToken))
+            {
+                validAuditUserId = claimUid;
+            }
+            var recordedByUserId = validAuditUserId
+                ?? await db.Users.AsNoTracking().OrderBy(u => u.Id).Select(u => (int?)u.Id).FirstOrDefaultAsync(cancellationToken)
+                ?? 1;
+
             var durationSecs = Math.Max(1, (int)(endedAt - startedAt).TotalSeconds);
             var evidenceEntity = new ERP.Domain.Entities.PackingVideoEvidence
             {
@@ -814,7 +844,7 @@ public sealed class PackingSessionsController(
                 DurationSeconds = durationSecs,
                 VideoHashSha256 = videoHashSha256,
                 StorageUrl = storageUrl,
-                RecordedByUserId = 1,
+                RecordedByUserId = recordedByUserId,
                 RecordedAtUtc = now
             };
             db.PackingVideoEvidences.Add(evidenceEntity);
@@ -838,7 +868,7 @@ public sealed class PackingSessionsController(
 
             db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
             {
-                UserId = 1,
+                UserId = validAuditUserId,
                 EntityName = "PackingVideoEvidence",
                 EntityId = resolvedSessionId ?? request?.ExportReceiptId ?? 1,
                 Action = "Packing.RecordVideoEvidence",

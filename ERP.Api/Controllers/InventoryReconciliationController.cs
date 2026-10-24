@@ -37,6 +37,9 @@ namespace ERP.Api.Controllers
         public sealed record RebuildBalancesRequest(int? WarehouseId = null, int? ProductId = null);
 
         [HttpPost("rebuild")]
+        [HttpPost("rebuild-stocks")]
+        [HttpPost("~/api/inventory/reconciliation/rebuild-stocks")]
+        [HttpPost("~/api/v1/inventory/reconciliation/rebuild-stocks")]
         [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
         public async Task<IActionResult> RebuildBalances(
             [FromQuery] int? warehouseId = null,

@@ -334,8 +334,8 @@ export default function PackingSessions(){
           :data.status);
         const scopeLabel=data?.serviceScopeLabel||(!data?.vasServiceType||data.vasServiceType==='LABELING_SHRINKWRAP_BUNDLE'
           ?'Dán nhãn phụ, bọc màng co & đóng bộ sản phẩm'
-          :data.vasServiceType);
-        const modeLabel=kittingVasMode==='DEKIT_DISASSEMBLE'?'Xả bộ hàng lắp ráp sau Sale (DEKIT_DISASSEMBLE)':'Lắp ráp bộ KIT (PRE_KIT / KIT_TO_ORDER)';
+          :(data.vasServiceType==='DEKIT_DISASSEMBLE'?'Rã bộ hàng lắp ráp & hoàn nguyên linh kiện về kệ':data.vasServiceType));
+        const modeLabel=kittingVasMode==='DEKIT_DISASSEMBLE'?'Xả bộ hàng lắp ráp sau chiến dịch khuyến mãi':'Lắp ráp bộ sản phẩm theo đơn hàng';
         setKittingVasResult(`${vasCode} • [${modeLabel}] ${vasLabel} — ${scopeLabel} (${data?.activePackingSessionsCount??0} phiên • ${data?.handlingUnitsCount??0} kiện HU)`);
       }else{
         setKittingVasResult('');
@@ -670,8 +670,8 @@ export default function PackingSessions(){
             onChange={e=>setKittingVasMode(e.target.value as 'PRE_KIT'|'DEKIT_DISASSEMBLE')}
             style={{ minWidth: 260 }}
           >
-            <option value="PRE_KIT">Lắp ráp bộ KIT (PRE_KIT / KIT_TO_ORDER)</option>
-            <option value="DEKIT_DISASSEMBLE">Xả bộ hàng lắp ráp sau Sale (DEKIT_DISASSEMBLE)</option>
+            <option value="PRE_KIT">Lắp ráp bộ sản phẩm theo đơn hàng</option>
+            <option value="DEKIT_DISASSEMBLE">Xả bộ hàng lắp ráp sau chiến dịch khuyến mãi</option>
           </select>
           <button type="button" disabled={!!busy||governanceBusy} onClick={()=>void executeKittingVas()}>Thực thi Đóng bộ / Tách bộ & Dịch vụ Gia tăng</button>
         </div>

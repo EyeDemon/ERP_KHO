@@ -1019,7 +1019,7 @@ public sealed class SalesOrdersController(
 
                 db.IntegrationOutboxMessages.Add(new ERP.Domain.Entities.IntegrationOutboxMessage
                 {
-                    EventId = $"INV-PUSH-{shop.Id}-{mapping.InternalProductId}-{now.Ticks}",
+                    EventId = $"INV-PUSH-{shop.Id}-{mapping.Id}-{mapping.InternalProductId}-{now.Ticks}-{pushedResults.Count + 1}",
                     EventType = "Inventory.AvailableChanged",
                     AggregateType = "ChannelSkuMapping",
                     AggregateId = mapping.InternalProductId,

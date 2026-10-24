@@ -344,9 +344,9 @@ export default function OutboundDemand(){
         ]);
       }
       const modeText=domFulfillmentMode==='SINGLE_WAREHOUSE_MATCH'
-        ?'Giao nguyên đơn từ 1 kho (Single-Warehouse Match)'
-        :'Tách đơn liên kho (Multi-Warehouse Split Plan)';
-      setDomSplitNotice(`Đã phân tích định tuyến DOM (${String(d.evaluationId??'DOM-ATP-2026-01')}) • Chế độ: ${modeText}`);
+        ?'Giao nguyên đơn từ 1 kho'
+        :'Tách đơn liên kho tự động';
+      setDomSplitNotice(`Đã phân tích định tuyến đa kho (${String(d.evaluationId??'DOM-ATP-2026-01')}) • Chế độ: ${modeText}`);
     }catch(err){
       setError(messageOf(err));
     }finally{
@@ -475,11 +475,11 @@ export default function OutboundDemand(){
         )}
       </UiCard>
 
-      <UiCard title="Định Tuyến Đơn Hàng Đa Kho & Đề Xuất Tách Đơn Thông Minh (Smart DOM Order Splitting)">
+      <UiCard title="Định Tuyến Đơn Hàng Đa Kho & Đề Xuất Tách Đơn Thông Minh">
         <div className="ui-stack" data-testid="smart-dom-order-splitting-card" style={{ gap: 10 }}>
           <div className="ui-inline-wrap" style={{ justifyContent: 'space-between', alignItems: 'end', gap: 10 }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span>Chế độ hoàn tất đơn hàng (DOM Fulfillment Mode)</span>
+              <span>Chế độ điều phối hoàn tất đơn hàng đa kho</span>
               <select
                 aria-label="Chế độ định tuyến tách đơn đa kho DOM"
                 data-testid="select-dom-fulfillment-mode"
@@ -487,15 +487,15 @@ export default function OutboundDemand(){
                 onChange={e => setDomFulfillmentMode(e.target.value as 'MULTI_WAREHOUSE_SPLIT' | 'SINGLE_WAREHOUSE_MATCH')}
                 style={{ minWidth: 320 }}
               >
-                <option value="MULTI_WAREHOUSE_SPLIT">Tách đơn liên kho (Multi-Warehouse Split Plan)</option>
-                <option value="SINGLE_WAREHOUSE_MATCH">Giao nguyên đơn từ 1 kho (Single-Warehouse Match)</option>
+                <option value="MULTI_WAREHOUSE_SPLIT">Tách đơn liên kho tự động</option>
+                <option value="SINGLE_WAREHOUSE_MATCH">Giao nguyên đơn từ 1 kho</option>
               </select>
             </label>
             <div className="ui-inline-wrap" style={{ gap: 8 }}>
               <UiBadge tone={domFulfillmentMode === 'MULTI_WAREHOUSE_SPLIT' ? 'warning' : 'success'}>
                 {domFulfillmentMode === 'MULTI_WAREHOUSE_SPLIT'
-                  ? 'Tách đơn liên kho (Multi-Warehouse Split Plan)'
-                  : 'Giao nguyên đơn từ 1 kho (Single-Warehouse Match)'}
+                  ? 'Tách đơn liên kho tự động'
+                  : 'Giao nguyên đơn từ 1 kho'}
               </UiBadge>
               <button
                 type="button"
@@ -503,7 +503,7 @@ export default function OutboundDemand(){
                 disabled={!!busy || governanceBusy || domSplitBusy}
                 onClick={() => void handleEvaluateDomOrderSplitting()}
               >
-                {domSplitBusy ? 'Đang tính phương án tách đơn...' : 'Phân Tích Định Tuyến & Đề Xuất Tách Đơn Liên Kho (DOM)'}
+                {domSplitBusy ? 'Đang tính phương án tách đơn...' : 'Phân Tích Định Tuyến & Đề Xuất Tách Đơn Liên Kho'}
               </button>
             </div>
           </div>
@@ -521,7 +521,7 @@ export default function OutboundDemand(){
               <thead>
                 <tr>
                   <th style={{ whiteSpace: 'nowrap' }}>Mã đơn / Dòng SKU</th>
-                  <th>Kho xuất đề xuất (Fulfillment Node)</th>
+                  <th>Kho xuất đề xuất</th>
                   <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Số lượng phân bổ</th>
                   <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Số kiện tách</th>
                   <th>Phương án Định tuyến</th>

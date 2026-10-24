@@ -457,8 +457,19 @@ namespace ERP.Api.Controllers
                         cancellationToken);
 
                     if (!execResult.Success)
-                        return BadRequest(new { message = execResult.ErrorMessage });
-
+                    {
+                        if (dbProposal != null)
+                        {
+                            dbProposal.IsAutoApproved = false;
+                            dbProposal.Status = "PENDING_APPROVAL";
+                            dbProposal.ApprovedBy = null;
+                            dbProposal.ApprovedAtUtc = null;
+                            await _db.SaveChangesAsync(cancellationToken);
+                        }
+                        autoApproved = false;
+                    }
+                    else
+                    {
                     return Ok(new
                     {
                         id = dbProposal?.Id ?? log.Id,
@@ -484,6 +495,7 @@ namespace ERP.Api.Controllers
                         statusLabel = "Đã phê duyệt & Ghi sổ",
                         createdAtUtc = now
                     });
+                    }
                 }
 
                 return Ok(new

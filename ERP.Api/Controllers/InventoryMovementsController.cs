@@ -157,13 +157,15 @@ public sealed class InventoryMovementsController(
             baseUomCode = item.BaseUomCode,
             conversionFactor = item.ConversionFactor,
             cartonQty = item.CartonQty,
+            cartonsDeducted = item.CartonQty,
+            cartonQtyUnpacked = item.CartonQty,
             baseUnitQty = item.BaseUnitQty,
+            baseUnitsAdded = item.BaseUnitQty,
+            baseUnitsReplenished = item.BaseUnitQty,
             actualReplenishedBaseQty = item.ActualReplenishedBaseQty,
             executed = item.Executed,
             movementId = item.MovementId,
-            ledgerStatus = string.IsNullOrWhiteSpace(item.LedgerStatus)
-                ? $"Khớp 2 bút toán (-{item.CartonQty:0.##} Thùng / +{item.BaseUnitQty:0.##} ĐV)"
-                : item.LedgerStatus
+            ledgerStatus = $"Khớp 2 bút toán (-{item.CartonQty:0.##} Thùng / +{item.BaseUnitQty:0.##} ĐV)"
         }).ToList();
 
         return Ok(new

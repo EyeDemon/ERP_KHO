@@ -752,12 +752,48 @@ public sealed class ShipmentsController(
             .Where(u => u.IsActive)
             .ToListAsync(cancellationToken);
 
-        var matched = units.FirstOrDefault(u =>
-            (!string.IsNullOrWhiteSpace(request?.Ward) && u.WardName.Contains(request.Ward.Trim(), StringComparison.OrdinalIgnoreCase)) ||
-            (!string.IsNullOrWhiteSpace(raw) && string.IsNullOrWhiteSpace(request?.Ward) && (
-                raw.Contains(u.WardName, StringComparison.OrdinalIgnoreCase) ||
-                (u.Keywords != null && u.Keywords.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                    .Any(k => raw.Contains(k.Trim(), StringComparison.OrdinalIgnoreCase))))));
+        static string StripWardPrefix(string wardName) =>
+            wardName.Replace("Phường ", "", StringComparison.OrdinalIgnoreCase)
+                    .Replace("Xã ", "", StringComparison.OrdinalIgnoreCase)
+                    .Replace("Thị trấn ", "", StringComparison.OrdinalIgnoreCase)
+                    .Trim();
+
+        var matched = units
+            .Select(u =>
+            {
+                var score = 0;
+                var coreWard = StripWardPrefix(u.WardName);
+                if (!string.IsNullOrWhiteSpace(request?.Ward) &&
+                    (u.WardName.Contains(request.Ward.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                     (coreWard.Length >= 2 && request.Ward.Contains(coreWard, StringComparison.OrdinalIgnoreCase))))
+                {
+                    score += 100;
+                }
+                if (!string.IsNullOrWhiteSpace(raw) && string.IsNullOrWhiteSpace(request?.Ward))
+                {
+                    if (raw.Contains(u.WardName, StringComparison.OrdinalIgnoreCase))
+                        score += 80;
+                    else if (coreWard.Length >= 3 && raw.Contains(coreWard, StringComparison.OrdinalIgnoreCase))
+                        score += 60;
+
+                    if (raw.Contains(u.DistrictName, StringComparison.OrdinalIgnoreCase))
+                        score += 30;
+
+                    if (!string.IsNullOrWhiteSpace(u.Keywords))
+                    {
+                        var matchedKeywords = u.Keywords.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(k => k.Trim())
+                            .Where(k => k.Length > 0 && raw.Contains(k, StringComparison.OrdinalIgnoreCase))
+                            .ToList();
+                        score += matchedKeywords.Sum(k => k is "hcm" or "tphcm" or "hn" or "ha noi" or "dn" or "hp" or "ct" or "bd" ? 2 : 20);
+                    }
+                }
+                return (Unit: u, Score: score);
+            })
+            .Where(x => x.Score > 0)
+            .OrderByDescending(x => x.Score)
+            .Select(x => x.Unit)
+            .FirstOrDefault();
 
         if (matched == null)
         {

@@ -219,8 +219,9 @@ public sealed class BusinessPartnersController(
                 {
                     receivableInvoiceCode = $"AR-3PL-{now:yyyyMMdd}";
                     var existingInvoice = await db.PartnerDebtInvoices
-                        .FirstOrDefaultAsync(x => x.Code == receivableInvoiceCode, ct);
+                        .FirstOrDefaultAsync(x => x.Code == receivableInvoiceCode || (x.DebtType == ERP.Domain.Enums.PartnerDebtType.AR && x.SourceType == "ThreePlBilling" && x.SourceId == targetPartner.Id), ct);
 
+                    if (existingInvoice != null) { receivableInvoiceCode = existingInvoice.Code; }
                     if (existingInvoice == null)
                     {
                         var newInvoice = new ERP.Domain.Entities.PartnerDebtInvoice

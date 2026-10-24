@@ -102,13 +102,20 @@ namespace ERP.Api.Controllers
             var baseAuditQuery = db.AuditLogs.AsNoTracking()
                 .Where(a => !a.WarehouseId.HasValue || accessibleIds.Contains(a.WarehouseId.Value));
 
-            var filteredAuditRows = await baseAuditQuery
-                .Where(a => !(a.EntityName == "UserSession" &&
-                              (a.Action.Contains("Refresh") || a.Action.Contains("Làm mới"))))
+            var latestAuditCandidates = await baseAuditQuery
+                .OrderByDescending(a => a.Id)
+                .Take(250)
+                .ToListAsync(cancellationToken);
+
+            var filteredAuditRows = latestAuditCandidates
+                .Where(a => !(string.Equals(a.EntityName, "UserSession", StringComparison.OrdinalIgnoreCase) &&
+                              a.Action != null &&
+                              (a.Action.Contains("Refresh", StringComparison.OrdinalIgnoreCase) ||
+                               a.Action.Contains("Làm mới", StringComparison.OrdinalIgnoreCase))))
                 .OrderByDescending(a => a.Timestamp)
                 .ThenByDescending(a => a.Id)
                 .Take(50)
-                .ToListAsync(cancellationToken);
+                .ToList();
 
             static bool IsLoginAuditRow(ERP.Domain.Entities.AuditLog a) =>
                 string.Equals(a.EntityName?.Trim(), "UserSession", StringComparison.OrdinalIgnoreCase)
@@ -131,11 +138,11 @@ namespace ERP.Api.Controllers
 
             if (filteredAuditRows.Count == 0)
             {
-                filteredAuditRows = await baseAuditQuery
+                filteredAuditRows = latestAuditCandidates
                     .OrderByDescending(a => a.Timestamp)
                     .ThenByDescending(a => a.Id)
                     .Take(10)
-                    .ToListAsync(cancellationToken);
+                    .ToList();
             }
 
             var recentAudits = filteredAuditRows
@@ -199,6 +206,16 @@ namespace ERP.Api.Controllers
                 return "Di chuyển vị trí nội bộ";
             if (upper.Contains("PICK"))
                 return "Hoàn tất lấy hàng";
+            if (upper.Contains("DEKIT"))
+                return "Hoàn tất rã bộ hàng lắp ráp";
+            if (upper.Contains("KIT") && upper.Contains("VAS"))
+                return "Đóng bộ hàng khuyến mãi";
+            if (upper.Contains("BREAK_BULK") || upper.Contains("REPLENISH"))
+                return "Xả thùng bổ sung kệ nhặt lẻ";
+            if (upper.Contains("OUTBOX"))
+                return "Đồng bộ lô sự kiện tích hợp";
+            if (upper.Contains("BILLING") || upper.Contains("3PL"))
+                return "Chốt bảng kê cước dịch vụ kho";
             if (upper.Contains("PACK") || upper.Contains("HANDLINGUNIT") || upper.Contains("HU."))
                 return "Đóng gói kiện hàng";
             if (upper.Contains("DISPATCH") && upper.Contains("CROSSDOCK"))
@@ -257,6 +274,10 @@ namespace ERP.Api.Controllers
                 "Product" or "Products" => "Sản phẩm / vật tư",
                 "Warehouse" or "Warehouses" => "Kho vận hành",
                 "WarehouseLocation" or "WarehouseLocations" => "Vị trí lưu kho",
+                "IntegrationOutboxBatch" or "IntegrationOutboxMessage" or "IntegrationOutbox" => "Hàng đợi đồng bộ tích hợp",
+                "ThreePlBillingStatement" or "ThreePlStorageSnapshot" => "Bảng kê phí dịch vụ 3PL",
+                "KittingVas" => "Gia công đóng bộ & tách bộ",
+                "BreakBulkReplenishment" => "Bổ sung kệ nhặt lẻ xả thùng",
                 "UserSession" => "Phiên đăng nhập",
                 _ => string.IsNullOrEmpty(raw) ? "Nghiệp vụ kho" : raw
             };
@@ -294,6 +315,8 @@ namespace ERP.Api.Controllers
                     "StocktakeAdjustmentProposal" => $"ADJ-QA-{id:D3}",
                     "DockAppointment" or "DockAppointments" => $"APPT-QA-{id:D3}",
                     "StockTransfer" or "StockTransfers" => $"TRF-QA-{id:D3}",
+                    "IntegrationOutboxBatch" or "IntegrationOutboxMessage" or "IntegrationOutbox" => $"OUTBOX-QA-{id:D3}",
+                    "ThreePlBillingStatement" or "ThreePlStorageSnapshot" => $"3PL-QA-{id:D3}",
                     _ => null
                 };
             }
@@ -720,7 +743,8 @@ namespace ERP.Api.Controllers
         public sealed record VerifyCodSettlementRequest(
             int? WarehouseId = null,
             string? CarrierCode = null,
-            List<CodSettlementItemRequest>? Items = null);
+            List<CodSettlementItemRequest>? Items = null,
+            string? ReconcileMode = null);
 
         [HttpGet("cod-reconciliation")]
         [HttpGet("cod-shipping-reconciliation")]
@@ -979,6 +1003,27 @@ namespace ERP.Api.Controllers
             else if (request?.Items is { Count: > 0 })
             {
                 inputItems.AddRange(request.Items);
+            }
+            else if (_db != null && !string.IsNullOrWhiteSpace(request?.ReconcileMode))
+            {
+                var existingLedgers = await _db.ShipmentFinancialLedgers
+                    .AsNoTracking()
+                    .OrderByDescending(x => x.Id)
+                    .Take(50)
+                    .ToListAsync(cancellationToken);
+                foreach (var l in existingLedgers)
+                {
+                    inputItems.Add(new CodSettlementItemRequest(
+                        TrackingNumber: l.TrackingNumber,
+                        CarrierCode: l.CarrierCode,
+                        ExportReceiptId: l.ExportReceiptId,
+                        ExpectedCodAmount: l.ExpectedCodAmount,
+                        ActualCodCollected: l.ActualCodCollected,
+                        EstimatedShippingFee: l.EstimatedShippingFee,
+                        ActualShippingFee: l.ActualShippingFee,
+                        PlatformCommissionFee: l.PlatformCommissionFee,
+                        ReturnFee: l.ReturnFee));
+                }
             }
 
             if (inputItems.Count == 0)
@@ -1843,14 +1888,18 @@ namespace ERP.Api.Controllers
 
             var scopedIds = warehouseId.HasValue ? new[] { warehouseId.Value } : accessibleIds.ToArray();
             var today = DateTime.UtcNow.Date;
-            var acknowledgedCodes = (await db.AuditLogs.AsNoTracking()
+            var recentExceptionAudits = await db.AuditLogs.AsNoTracking()
+                .OrderByDescending(a => a.Id)
+                .Take(2000)
+                .Select(a => new { a.EntityName, a.Action, a.WarehouseId, a.OldValues })
+                .ToListAsync(cancellationToken);
+            var acknowledgedCodes = recentExceptionAudits
                 .Where(a => a.EntityName == "OperationalException" &&
                             (a.Action == "ACKNOWLEDGE" || a.Action == "Exception.Acknowledged") &&
                             (!a.WarehouseId.HasValue || scopedIds.Contains(a.WarehouseId.Value)) &&
                             a.OldValues != null)
                 .Select(a => a.OldValues!)
                 .Distinct()
-                .ToListAsync(cancellationToken))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             var putawayEx = await db.PutawayTasks.AsNoTracking()

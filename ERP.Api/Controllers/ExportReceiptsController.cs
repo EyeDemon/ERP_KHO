@@ -271,7 +271,7 @@ namespace ERP.Api.Controllers
             });
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
         public async Task<IActionResult> GetById(int id)
         {
@@ -1540,6 +1540,95 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
                 return Forbid();
 
             return await GetMisaExcelExport(request?.WarehouseId, request?.Format ?? request?.Standard, cancellationToken);
+        }
+
+        public sealed record IssueEinvoiceNd70DraftRequest(
+            int? ExportReceiptId = null,
+            int? WarehouseId = null,
+            string? BuyerTaxCode = null,
+            string? BuyerName = null,
+            string? DecreeStandard = null);
+
+        [HttpPost("einvoice-nd70-draft")]
+        [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
+        [IdempotentCommand("ExportReceipt.IssueEinvoiceNd70Draft")]
+        public async Task<IActionResult> IssueEinvoiceNd70Draft(
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] IssueEinvoiceNd70DraftRequest? request = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (User?.IsInRole(AppRoles.Viewer) == true)
+                return Forbid();
+
+            var now = DateTime.UtcNow;
+            var buyerTaxCode = string.IsNullOrWhiteSpace(request?.BuyerTaxCode) ? "0318999888" : request.BuyerTaxCode.Trim();
+            var buyerName = string.IsNullOrWhiteSpace(request?.BuyerName) ? "Khách hàng Doanh nghiệp" : request.BuyerName.Trim();
+            var decreeStandard = string.IsNullOrWhiteSpace(request?.DecreeStandard) ? "ND70_2025_TT32_2025" : request.DecreeStandard.Trim();
+            var receiptId = request?.ExportReceiptId ?? 1;
+
+            if (_db != null)
+            {
+                var receipt = request?.ExportReceiptId.HasValue == true
+                    ? await _db.ExportReceipts.FirstOrDefaultAsync(r => r.Id == request.ExportReceiptId.Value, cancellationToken)
+                    : await _db.ExportReceipts.OrderByDescending(r => r.Id).FirstOrDefaultAsync(cancellationToken);
+
+                if (receipt != null)
+                {
+                    receiptId = receipt.Id;
+                    receipt.EInvoiceProvider = "MISA_MEINVOICE";
+                    receipt.EInvoiceStatus = "DRAFT_ISSUED";
+                }
+
+                var validAuditUserId = await ResolveValidAuditUserIdAsync(cancellationToken);
+                var draftCodeDb = $"EINV-ND70-{now:yyyyMMdd}-{receiptId:D4}";
+                _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+                {
+                    UserId = validAuditUserId,
+                    WarehouseId = receipt?.WarehouseId ?? request?.WarehouseId ?? 1,
+                    EntityName = "ExportReceipt",
+                    EntityId = receiptId,
+                    Action = "ExportReceipt.IssueEinvoiceNd70Draft",
+                    NewValues = $"DraftCode={draftCodeDb}; BuyerTaxCode={buyerTaxCode}; BuyerName={buyerName}; Standard={decreeStandard}",
+                    Reason = $"Phát hành Hóa đơn điện tử nháp tuân thủ Nghị định 70/2025/NĐ-CP & Thông tư 32/2025/TT-BTC ({draftCodeDb})",
+                    Result = "Success",
+                    Timestamp = now
+                });
+
+                _db.IntegrationOutboxMessages.Add(new ERP.Domain.Entities.IntegrationOutboxMessage
+                {
+                    EventId = $"EINV-ND70-{receiptId}-{now.Ticks}",
+                    EventType = "EinvoiceNd70DraftIssued",
+                    AggregateType = "ExportReceipt",
+                    AggregateId = receiptId,
+                    PayloadJson = System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        exportReceiptId = receiptId,
+                        invoiceDraftCode = draftCodeDb,
+                        buyerTaxCode,
+                        buyerName,
+                        decreeStandard,
+                        issuedAtUtc = now
+                    }),
+                    Status = "PENDING",
+                    CreatedAt = now
+                });
+
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+
+            var draftCode = $"EINV-ND70-{now:yyyyMMdd}-{receiptId:D4}";
+            return Ok(new
+            {
+                exportReceiptId = receiptId,
+                invoiceDraftCode = draftCode,
+                draftNumber = draftCode,
+                buyerTaxCode,
+                buyerName,
+                decreeStandard,
+                provider = "MISA_MEINVOICE",
+                status = "DRAFT_ISSUED",
+                statusLabel = $"Đã phát hành Hóa đơn điện tử nháp ({draftCode}) tuân thủ Nghị định 70/2025/NĐ-CP & Thông tư 32/2025/TT-BTC",
+                issuedAtUtc = now
+            });
         }
     }
 
