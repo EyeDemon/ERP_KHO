@@ -145,6 +145,10 @@ public sealed class WarehouseCalendarsController(
             var actorUserId = int.TryParse(
                 User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
                 out var uid) ? uid : (int?)null;
+            if (actorUserId.HasValue && !await db.Users.AsNoTracking().AnyAsync(u => u.Id == actorUserId.Value, token))
+            {
+                actorUserId = null;
+            }
             db.AuditLogs.Add(new AuditLog
             {
                 UserId = actorUserId,
@@ -187,8 +191,7 @@ public sealed class WarehouseCalendarsController(
 
         var items = await db.AuditLogs.AsNoTracking()
             .Where(a => a.EntityName == "WarehouseCalendarException" && a.WarehouseId == warehouseId)
-            .OrderByDescending(a => a.Timestamp)
-            .ThenByDescending(a => a.Id)
+            .OrderByDescending(a => a.Id)
             .Select(a => new WarehouseCalendarExceptionDto(
                 a.Id,
                 warehouseId,
@@ -225,8 +228,12 @@ public sealed class WarehouseCalendarsController(
         if (string.IsNullOrWhiteSpace(reason))
             throw new BusinessRuleException("Lý do ghi nhận ngoại lệ lịch vận hành là bắt buộc.");
 
-        var userIdClaim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userIdClaim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value;
         int? userId = int.TryParse(userIdClaim, out var parsedId) ? parsedId : null;
+        if (userId.HasValue && db is not null && !await db.Users.AsNoTracking().AnyAsync(u => u.Id == userId.Value, token))
+        {
+            userId = null;
+        }
 
         var log = new AuditLog
         {

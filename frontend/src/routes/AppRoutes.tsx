@@ -50,7 +50,7 @@ const AccessDenied = () => (
     <div role="alert">
       <UiCard title="Không có quyền truy cập">
         <p className="ui-muted-text">
-          Tài khoản hiện tại chưa có quyền đọc màn hình này. Hãy kiểm tra vai trò, warehouse scope hoặc permission grant.
+          Tài khoản hiện tại chưa có quyền truy cập màn hình này. Vui lòng kiểm tra vai trò, phạm vi kho hoặc quyền được cấp.
         </p>
       </UiCard>
     </div>
@@ -74,11 +74,20 @@ const ApprovalRoute = () => {
   return canViewApprovals() ? <Approvals /> : <AccessDenied />;
 };
 
-const LazyPageFallback = <div className="p-6 text-slate-600">Đang tải phân hệ...</div>;
+const PageLoadingFallback = () => (
+  <div
+    role="status"
+    aria-live="polite"
+    className="p-6 text-slate-600"
+    style={{ padding: '24px 16px', fontSize: 14, color: '#475569' }}
+  >
+    Đang tải màn hình nghiệp vụ...
+  </div>
+);
 
 const AppRoutes = () => {
   return (
-    <Suspense fallback={LazyPageFallback}>
+    <Suspense fallback={<PageLoadingFallback />}>
       <Routes>
         <Route path="/login" element={<Login />} />
 

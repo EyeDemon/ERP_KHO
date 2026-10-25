@@ -62,7 +62,7 @@ namespace ERP.Api.Controllers
             }
             else if (_db != null)
             {
-                var stockQuery = _db.InventoryStocks.AsQueryable();
+                var stockQuery = _db.InventoryStocks.AsNoTracking().AsQueryable();
                 if (effectiveWarehouseId.HasValue)
                     stockQuery = stockQuery.Where(s => s.WarehouseId == effectiveWarehouseId.Value);
                 if (effectiveProductId.HasValue)
@@ -353,6 +353,10 @@ namespace ERP.Api.Controllers
                 var actorUserId = int.TryParse(
                     User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
                     out var uid) ? uid : (int?)null;
+                if (actorUserId.HasValue && !await _db.Users.AsNoTracking().AnyAsync(u => u.Id == actorUserId.Value, cancellationToken))
+                {
+                    actorUserId = null;
+                }
 
                 _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
                 {
@@ -439,8 +443,8 @@ namespace ERP.Api.Controllers
             }
 
             var dbMessages = await query
-                .OrderByDescending(x => x.CreatedAt)
-                .ThenByDescending(x => x.Id)
+                .OrderByDescending(x => x.Id)
+                .Take(500)
                 .ToListAsync(cancellationToken);
 
             if (warehouseId.HasValue)
@@ -615,6 +619,10 @@ namespace ERP.Api.Controllers
                 var actorUserId = int.TryParse(
                     User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
                     out var uid) ? uid : (int?)null;
+                if (actorUserId.HasValue && !await _db.Users.AsNoTracking().AnyAsync(u => u.Id == actorUserId.Value, cancellationToken))
+                {
+                    actorUserId = null;
+                }
                 _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
                 {
                     UserId = actorUserId,

@@ -37,7 +37,7 @@ namespace ERP.Infrastructure.Repositories
 
         public async Task<bool> ExistsByCodeAsync(string code, int? excludeId = null)
         {
-            var query = _dbSet.Where(e => e.Code == code);
+            var query = _dbSet.AsNoTracking().Where(e => e.Code == code);
             if (excludeId.HasValue)
             {
                 query = query.Where(e => e.Id != excludeId.Value);
@@ -175,7 +175,7 @@ namespace ERP.Infrastructure.Repositories
         {
             try
             {
-                if (entity.CustomerId.HasValue && !await _context.BusinessPartners.AnyAsync(x => x.Id == entity.CustomerId && x.IsActive && x.IsCustomer, cancellationToken))
+                if (entity.CustomerId.HasValue && !await _context.BusinessPartners.AsNoTracking().AnyAsync(x => x.Id == entity.CustomerId && x.IsActive && x.IsCustomer, cancellationToken))
                     throw new BusinessRuleException("Khách hàng không tồn tại, không hoạt động hoặc sai vai trò.");
                 return await base.AddAsync(entity, cancellationToken);
             }

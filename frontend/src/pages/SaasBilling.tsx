@@ -26,6 +26,17 @@ const extractErrorText = (err: any, fallback: string) => {
   return `${msg}${code ? ` [${code}]` : ''}${corr ? ` (CorrelationId: ${corr})` : ''}`;
 };
 
+const resolveSubscriptionStatusLabel = (status: string): string => {
+  const upper = (status || 'ACTIVE').trim().toUpperCase();
+  if (upper.includes('ACTIVE')) return 'Đang hoạt động';
+  if (upper.includes('TRIAL')) return 'Đang dùng thử';
+  if (upper.includes('PAST_DUE') || upper.includes('OVERDUE')) return 'Quá hạn thanh toán';
+  if (upper.includes('READ_ONLY') || upper.includes('LOCKED')) return 'Khóa chỉ đọc (>115%)';
+  if (upper.includes('SUSPENDED') || upper.includes('CANCEL')) return 'Tạm ngưng';
+  if (/^[A-Z0-9_]{3,}$/.test(upper)) return 'Đang hoạt động';
+  return status;
+};
+
 const resolveQuotaTierLabel = (used: number, max: number) => {
   if (max <= 0) return { label: 'Bình thường', tone: 'success' as const, pct: 0 };
   const pct = Math.round((used * 100) / max);
@@ -161,7 +172,7 @@ const SaasBilling = () => {
       );
       const d = (res?.data ?? {}) as Record<string, unknown>;
       const rawStatus = String(d.subscriptionStatus ?? 'ACTIVE');
-      const statusLabel = rawStatus.toUpperCase().includes('ACTIVE') ? 'Đang hoạt động' : rawStatus;
+      const statusLabel = resolveSubscriptionStatusLabel(rawStatus);
       setVietQrInvoice((prev) => ({
         ...prev,
         gatewayStatus: `Trạng thái gói cước: ${statusLabel} (Đã kích hoạt tự động & mở khóa 100% hạn mức)`,
@@ -202,7 +213,7 @@ const SaasBilling = () => {
       {loading && <p role="status">Đang tải thông tin gói cước thuê bao SaaS...</p>}
 
       <UiMetricGrid>
-        <UiMetric value={billing.planName} label={`Trạng thái: ${billing.subscriptionStatus === 'ACTIVE' ? 'Đang hoạt động' : billing.subscriptionStatus}`} />
+        <UiMetric value={billing.planName} label={`Trạng thái: ${resolveSubscriptionStatusLabel(billing.subscriptionStatus)}`} />
         <UiMetric value={`${billing.activeWarehouses} / ${billing.maxWarehouses} kho`} label={`Hạn mức kho: ${whTier.label} (${whTier.pct}%)`} />
         <UiMetric value={`${billing.activeUsers} / ${billing.maxUsers} người dùng`} label={`Hạn mức tài khoản: ${userTier.label} (${userTier.pct}%)`} />
         <UiMetric value={`${billing.activeProducts} / ${billing.maxProducts.toLocaleString('vi-VN')} mặt hàng`} label={`Hạn mức mặt hàng: ${skuTier.label} (${skuTier.pct}%)`} />
@@ -232,7 +243,7 @@ const SaasBilling = () => {
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>{item.title}</span>
                   <UiBadge tone={item.tier.tone}>{item.tier.label}</UiBadge>
                 </div>
-                <strong style={{ display: 'block', fontSize: 16, color: '#0f172a', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
+                <strong style={{ display: 'block', fontSize: 16, color: '#0f172a', marginTop: 4, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                   {item.used.toLocaleString('vi-VN')} / {item.max.toLocaleString('vi-VN')}
                 </strong>
                 <div style={{ marginTop: 6, height: 8, borderRadius: 4, background: '#e2e8f0', overflow: 'hidden' }}>
@@ -278,7 +289,7 @@ const SaasBilling = () => {
                     <strong style={{ fontSize: 14, color: '#0f172a' }}>{plan.title}</strong>
                     {active && <UiBadge tone="info">Đang chọn</UiBadge>}
                   </div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#0369a1', marginTop: 4 }}>{plan.price}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#0369a1', marginTop: 4, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{plan.price}</div>
                   <div style={{ fontSize: 12, color: '#475569', marginTop: 4 }}>{plan.specs}</div>
                 </div>
               );

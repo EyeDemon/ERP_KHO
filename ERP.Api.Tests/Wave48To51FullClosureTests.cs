@@ -1255,11 +1255,11 @@ public class Wave48To51FullClosureTests
         tplDoc.RootElement.GetProperty("templates").GetArrayLength().Should().BeGreaterThan(0);
 
         var importRes = await dataImportsCtrl.ImportOpeningBalance(
-            new ExportReceiptsController.ImportOpeningBalanceRequest(
+            new DataImportOpeningBalanceRequest(
                 WarehouseId: 1,
                 Items:
                 [
-                    new ExportReceiptsController.OpeningBalanceItemRequest(
+                    new DataImportOpeningBalanceItemRequest(
                         ProductCode: "SKU-SPLIT-201",
                         LocationCode: "A-01-01",
                         Quantity: 25m,
@@ -1278,7 +1278,7 @@ public class Wave48To51FullClosureTests
         subRes.Should().BeOfType<OkObjectResult>();
 
         var qrRes = await saasBillingCtrl.GenerateVietQrInvoice(
-            new PermissionsController.CreateVietQrInvoiceRequest(PlanCode: "GROWTH", AmountVnd: 1490000m),
+            new SaasCreateVietQrInvoiceRequest(PlanCode: "GROWTH", AmountVnd: 1490000m),
             default);
         using var qrDoc = JsonSerializer.SerializeToDocument(qrRes.Should().BeOfType<OkObjectResult>().Subject.Value);
         qrDoc.RootElement.GetProperty("planCode").GetString().Should().Be("GROWTH");
@@ -2670,5 +2670,117 @@ public class Wave48To51FullClosureTests
         multiAllocs[1].GetProperty("OrderCode").GetString().Should().Be("SO-QA-001-SUB2");
         multiAllocs[1].GetProperty("WarehouseName").GetString().Should().Be("WH02 — Kho Chi Nhánh Hà Nội");
         multiAllocs[1].GetProperty("AllocatedQuantity").GetDecimal().Should().Be(4m);
+    }
+
+    [Fact]
+    public async Task Wave60_ArchAndDomainClosure_SaasBillingAndDataImportsServices_AndWarehouseCalendarExceptionSafety()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase($"W60_Arch_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ErpKhoDbContext(options);
+
+        db.Warehouses.Add(new Warehouse { Id = 1, Code = "WH01", Name = "Kho Chính TP.HCM", IsActive = true });
+        db.WarehouseLocations.Add(new WarehouseLocation
+        {
+            Id = 10,
+            WarehouseId = 1,
+            Code = "BIN-A01",
+            Name = "Kệ A01",
+            LocationType = WarehouseLocationType.Storage,
+            IsActive = true,
+            IsPickable = true,
+            IsReceivable = true
+        });
+        db.Products.Add(new Product
+        {
+            Id = 501,
+            Code = "QA-OB-501",
+            Name = "Sản phẩm Tồn đầu kỳ Wave 60",
+            MovingAverageCost = 100000m,
+            IsActive = true
+        });
+        await db.SaveChangesAsync();
+
+        // 1. [W60-ARCH-01] ISaasBillingService & SaasBillingController (Zero PermissionsController coupling)
+        ISaasBillingService billingService = new SaasBillingService(db);
+        var saasCtrl = new SaasBillingController(db, billingService);
+        var subRes = await saasCtrl.GetSubscription(420, 1000, default);
+        using var subDoc = JsonSerializer.SerializeToDocument(subRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        subDoc.RootElement.GetProperty("usagePct").GetDecimal().Should().Be(42m);
+        subDoc.RootElement.GetProperty("writeBlocked").GetBoolean().Should().BeFalse();
+
+        var invRes = await saasCtrl.GenerateVietQrInvoice(
+            new SaasCreateVietQrInvoiceRequest(PlanCode: "ENTERPRISE", AmountVnd: 3490000m),
+            default);
+        using var invDoc = JsonSerializer.SerializeToDocument(invRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        var invoiceCode = invDoc.RootElement.GetProperty("invoiceCode").GetString();
+        invoiceCode.Should().StartWith("INV-VQR-");
+
+        var webhookRes = await saasCtrl.HandleVietQrBillingWebhook(
+            new SaasVietQrWebhookRequest(InvoiceCode: invoiceCode, PlanCode: "ENTERPRISE", PaidAmountVnd: 3490000m),
+            default);
+        using var webhookDoc = JsonSerializer.SerializeToDocument(webhookRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        webhookDoc.RootElement.GetProperty("subscriptionStatus").GetString().Should().Be("ACTIVE");
+        webhookDoc.RootElement.GetProperty("upgradedPlanCode").GetString().Should().Be("ENTERPRISE");
+
+        // 2. [W60-ARCH-01] IDataImportService & DataImportsController (Zero ExportReceiptsController coupling)
+        var whAuth = new Mock<IWarehouseAuthorizationService>();
+        whAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        IDataImportService dataImportService = new DataImportService(db);
+        var importCtrl = new DataImportsController(db, whAuth.Object, null, dataImportService);
+
+        var obRes = await importCtrl.ImportOpeningBalance(
+            new DataImportOpeningBalanceRequest(
+                WarehouseId: 1,
+                CutoverReference: "OB-W60-001",
+                Items:
+                [
+                    new DataImportOpeningBalanceItemRequest(
+                        ProductCode: "QA-OB-501",
+                        LocationCode: "BIN-A01",
+                        Quantity: 25m,
+                        UnitCost: 110000m,
+                        LotNumber: "LOT-OB-W60")
+                ]),
+            default);
+        using var obDoc = JsonSerializer.SerializeToDocument(obRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        obDoc.RootElement.GetProperty("importedCount").GetInt32().Should().Be(1);
+
+        var obStock = await db.InventoryStocks.SingleAsync(s => s.ProductId == 501);
+        obStock.Quantity.Should().Be(25m);
+        obStock.MovingAverageCost.Should().Be(110000m);
+        obStock.GrainHash.Should().NotBeNullOrEmpty();
+
+        // 3. [W60-DOMAIN-02] WarehouseCalendarsController Exception Safety with non-existent UserId claim
+        var calSvc = new Mock<IWarehouseCalendarService>();
+        var calCtrl = new WarehouseCalendarsController(calSvc.Object, db, whAuth.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+                {
+                    User = new System.Security.Claims.ClaimsPrincipal(
+                        new System.Security.Claims.ClaimsIdentity(
+                        [
+                            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "999999")
+                        ], "TestAuth"))
+                }
+            }
+        };
+        var createExRes = await calCtrl.CreateException(
+            1,
+            new CreateWarehouseCalendarExceptionRequest(
+                "MAINTENANCE_WINDOW",
+                "2026-10-26 00:00..04:00",
+                "Bảo trì băng tải phân loại định kỳ"),
+            default);
+        createExRes.Should().BeOfType<OkObjectResult>();
+
+        var listExRes = await calCtrl.GetExceptions(1, default);
+        var exItems = listExRes.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeAssignableTo<IEnumerable<WarehouseCalendarExceptionDto>>().Subject.ToList();
+        exItems.Should().ContainSingle(x => x.ExceptionType == "MAINTENANCE_WINDOW" && x.CreatedBy == null);
     }
 }

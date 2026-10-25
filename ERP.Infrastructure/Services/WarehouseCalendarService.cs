@@ -116,8 +116,8 @@ public sealed class WarehouseCalendarService(
             }
         }
 
-        context.AuditLogs.Add(Audit("WarehouseCalendar.Updated", warehouseId, warehouseId,
-            "Timezone: " + calendar.TimeZoneId + "; OpenDays: " + calendar.Days.Count(x => x.IsOpen)));
+        context.AuditLogs.Add(await AuditAsync("WarehouseCalendar.Updated", warehouseId, warehouseId,
+            "Timezone: " + calendar.TimeZoneId + "; OpenDays: " + calendar.Days.Count(x => x.IsOpen), token));
 
         try
         {
@@ -154,7 +154,7 @@ public sealed class WarehouseCalendarService(
         context.WarehouseShifts.Add(shift);
 
         await context.SaveChangesAsync(token);
-        context.AuditLogs.Add(Audit("WarehouseShift.Created", shift.Id, warehouseId, "Code: " + shift.Code));
+        context.AuditLogs.Add(await AuditAsync("WarehouseShift.Created", shift.Id, warehouseId, "Code: " + shift.Code, token));
         await context.SaveChangesAsync(token);
         if (transaction is not null) await transaction.CommitAsync(token);
         return MapShift(shift);
@@ -174,7 +174,7 @@ public sealed class WarehouseCalendarService(
         ApplyShift(shift, dto);
         shift.UpdatedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
         shift.UpdatedBy = currentUser.UserId;
-        context.AuditLogs.Add(Audit("WarehouseShift.Updated", shift.Id, warehouseId, "Code: " + shift.Code + "; Active: " + shift.IsActive));
+        context.AuditLogs.Add(await AuditAsync("WarehouseShift.Updated", shift.Id, warehouseId, "Code: " + shift.Code + "; Active: " + shift.IsActive, token));
 
         try
         {
@@ -191,8 +191,7 @@ public sealed class WarehouseCalendarService(
         context.AuditLogs.AsNoTracking()
             .Where(a => a.EntityName == "WarehouseCalendarException" &&
                         (a.WarehouseId == warehouseId || a.EntityId == warehouseId))
-            .OrderByDescending(a => a.Timestamp)
-            .ThenByDescending(a => a.Id)
+            .OrderByDescending(a => a.Id)
             .ToListAsync(token);
 
     private static bool? EvaluateDateException(IReadOnlyList<AuditLog> exceptions, DateTimeOffset localTime)
@@ -575,15 +574,21 @@ public sealed class WarehouseCalendarService(
 
     private static string? Version(byte[]? value) => value is { Length: > 0 } ? Convert.ToBase64String(value) : null;
 
-    private AuditLog Audit(string action, int entityId, int warehouseId, string values) => new()
+    private async Task<AuditLog> AuditAsync(string action, int entityId, int warehouseId, string values, CancellationToken token)
     {
-        UserId = currentUser.UserId,
-        Action = action,
-        EntityName = action.StartsWith("WarehouseShift.", StringComparison.Ordinal) ? "WarehouseShift" : "WarehouseCalendar",
-        EntityId = entityId,
-        WarehouseId = warehouseId,
-        NewValues = values,
-        Result = "Success",
-        Timestamp = timeProvider.GetUtcNow().UtcDateTime
-    };
+        int? validUserId = currentUser.UserId > 0 && await context.Users.AsNoTracking().AnyAsync(u => u.Id == currentUser.UserId, token)
+            ? currentUser.UserId
+            : null;
+        return new AuditLog
+        {
+            UserId = validUserId,
+            Action = action,
+            EntityName = action.StartsWith("WarehouseShift.", StringComparison.Ordinal) ? "WarehouseShift" : "WarehouseCalendar",
+            EntityId = entityId,
+            WarehouseId = warehouseId,
+            NewValues = values,
+            Result = "Success",
+            Timestamp = timeProvider.GetUtcNow().UtcDateTime
+        };
+    }
 }

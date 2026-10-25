@@ -412,7 +412,7 @@ public sealed class InventoryTraceabilityQueryService(
                           shipment.WarehouseId == picking.WarehouseId &&
                           exportReceipt.Status == ReceiptStatus.Dispatched &&
                           exportReceipt.DispatchedAt.HasValue &&
-                          context.ExportReceiptDetails.Any(d =>
+                          context.ExportReceiptDetails.AsNoTracking().Any(d =>
                               d.ExportReceiptId == exportReceipt.Id &&
                               d.ProductId == productId.Value && d.Quantity > 0)
                     select new InventoryTraceabilityShipmentExportSourceDto
@@ -424,7 +424,7 @@ public sealed class InventoryTraceabilityQueryService(
                         ExportReceiptId = exportReceipt.Id,
                         ExportReceiptCode = exportReceipt.Code.Trim(),
                         ExportReceiptDispatchedAt = exportReceipt.DispatchedAt,
-                        ExportReceiptProductQuantity = context.ExportReceiptDetails
+                        ExportReceiptProductQuantity = context.ExportReceiptDetails.AsNoTracking()
                             .Where(d => d.ExportReceiptId == exportReceipt.Id &&
                                         d.ProductId == productId.Value)
                             .Sum(d => d.Quantity)
