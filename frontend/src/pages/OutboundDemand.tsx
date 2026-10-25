@@ -278,7 +278,10 @@ export default function OutboundDemand(){
   const [marketplaceImportResult,setMarketplaceImportResult]=useState<{importBatchId:string;importedOrders:number;channel:string;status:string}|null>(null);
   const [rawVnAddress,setRawVnAddress]=useState<string>('Số 12 Nguyễn Huệ, P. Bến Nghé, Q.1, TP.HCM');
   const [normalizedVnAddress,setNormalizedVnAddress]=useState<{provinceName:string;districtName:string;wardName:string;wardCode:string;normalizedFullAddress:string}|null>(null);
-  const [domFulfillmentMode,setDomFulfillmentMode]=useState<'MULTI_WAREHOUSE_SPLIT'|'SINGLE_WAREHOUSE_MATCH'>('MULTI_WAREHOUSE_SPLIT');
+  const [domOrderCode,setDomOrderCode]=useState<string>('SO-QA-001');
+  const [domProductCode,setDomProductCode]=useState<string>('QA-E2E-001');
+  const [domRequestedQty,setDomRequestedQty]=useState<string>('5');
+  const [domFulfillmentMode,setDomFulfillmentMode]=useState<'MULTI_WAREHOUSE_SPLIT'|'SINGLE_WAREHOUSE_MATCH'>('SINGLE_WAREHOUSE_MATCH');
   const [domSplitBusy,setDomSplitBusy]=useState<boolean>(false);
   const [domSplitNotice,setDomSplitNotice]=useState<string>('');
   const [domSplitAllocations,setDomSplitAllocations]=useState<Array<{
@@ -290,22 +293,65 @@ export default function OutboundDemand(){
     routingStrategyLabel:string;
   }>>([
     {
-      orderCode:'SO-2026-DOM-01',
-      productCode:'SKU-1001',
-      warehouseName:'DC Hồ Chí Minh (Kho Chính Miền Nam)',
-      allocatedQuantity:6,
+      orderCode:'SO-QA-001',
+      productCode:'QA-E2E-001',
+      warehouseName:'WH01 — Kho Chính TP.HCM',
+      allocatedQuantity:5,
       estimatedPackagesCount:1,
-      routingStrategyLabel:'Giao nhanh nội vùng (Tối ưu phí vận chuyển)',
-    },
-    {
-      orderCode:'SO-2026-DOM-01',
-      productCode:'SKU-1001',
-      warehouseName:'DC Bình Dương (Kho Dự Trữ Vệ Tinh)',
-      allocatedQuantity:4,
-      estimatedPackagesCount:1,
-      routingStrategyLabel:'Bù phần thiếu 4 ĐV (Tách kiện liên kho tự động)',
+      routingStrategyLabel:'Đủ tồn 1 kho • WH01 — Kho Chính TP.HCM (5 ĐV)',
     },
   ]);
+
+  const buildDefaultDomAllocations=(mode:'MULTI_WAREHOUSE_SPLIT'|'SINGLE_WAREHOUSE_MATCH',orderCode:string,productCode:string,qty:number)=>{
+    const cleanOrder=orderCode.trim()||'SO-QA-001';
+    const cleanProduct=productCode.trim()||'QA-E2E-001';
+    const totalQty=Math.max(1,qty);
+    if(mode==='SINGLE_WAREHOUSE_MATCH'){
+      return [
+        {
+          orderCode:cleanOrder,
+          productCode:cleanProduct,
+          warehouseName:'WH01 — Kho Chính TP.HCM',
+          allocatedQuantity:totalQty,
+          estimatedPackagesCount:1,
+          routingStrategyLabel:`Đủ tồn 1 kho • WH01 — Kho Chính TP.HCM (${totalQty} ĐV)`,
+        },
+      ];
+    }
+    const wh1Qty=totalQty>=2?Math.ceil(totalQty*0.6):totalQty;
+    const wh2Qty=Math.max(1,totalQty-wh1Qty);
+    return [
+      {
+        orderCode:`${cleanOrder}-SUB1`,
+        productCode:cleanProduct,
+        warehouseName:'WH01 — Kho Chính TP.HCM',
+        allocatedQuantity:wh1Qty,
+        estimatedPackagesCount:1,
+        routingStrategyLabel:'Tách đơn đa kho (Chặng 1/2) • Ưu tiên tồn khả dụng & khoảng cách',
+      },
+      {
+        orderCode:`${cleanOrder}-SUB2`,
+        productCode:cleanProduct,
+        warehouseName:'WH02 — Kho Chi Nhánh Hà Nội',
+        allocatedQuantity:wh2Qty,
+        estimatedPackagesCount:1,
+        routingStrategyLabel:'Tách đơn đa kho (Chặng 2/2) • Kho chi nhánh hỗ trợ hoàn tất đơn',
+      },
+    ];
+  };
+
+  const handleDomModeChange=(nextMode:'MULTI_WAREHOUSE_SPLIT'|'SINGLE_WAREHOUSE_MATCH')=>{
+    setDomFulfillmentMode(nextMode);
+    let nextQty=Number(domRequestedQty)||5;
+    if(nextMode==='MULTI_WAREHOUSE_SPLIT'&&domRequestedQty==='5'){
+      nextQty=10;
+      setDomRequestedQty('10');
+    }else if(nextMode==='SINGLE_WAREHOUSE_MATCH'&&domRequestedQty==='10'){
+      nextQty=5;
+      setDomRequestedQty('5');
+    }
+    setDomSplitAllocations(buildDefaultDomAllocations(nextMode,domOrderCode,domProductCode,nextQty));
+  };
 
   const handleEvaluateDomOrderSplitting=async()=>{
     if(domSplitBusy)return;
@@ -314,34 +360,61 @@ export default function OutboundDemand(){
     setDomSplitNotice('');
     try{
       const targetOrder=selected??orders[0];
+      const resolvedOrderCode=domOrderCode.trim()||'SO-QA-001';
+      const resolvedProductCode=domProductCode.trim()||'QA-E2E-001';
+      const totalQty=Math.max(1,Number(domRequestedQty)||(domFulfillmentMode==='MULTI_WAREHOUSE_SPLIT'?10:5));
       const res=await apiClient.post('/api/v1/sales-orders/evaluate-atp-routing',{
         salesOrderId:targetOrder?.id??88,
-        orderCode:targetOrder?.orderCode??'SO-0088',
+        orderCode:resolvedOrderCode,
+        productCode:resolvedProductCode,
+        requestedQuantity:totalQty,
         warehouseId:targetOrder?.warehouseId??1,
         fulfillmentMode:domFulfillmentMode,
       });
       const d=(res?.data??{}) as Record<string,unknown>;
-      const rawSplits=d.splitAllocations??d.allocations??d.items;
-      if(Array.isArray(rawSplits)&&rawSplits.length>0){
-        setDomSplitAllocations(rawSplits.map((it:Record<string,unknown>)=>({
-          orderCode:String(it.orderCode??targetOrder?.orderCode??'SO-0088'),
-          productCode:String(it.productCode??'SKU-1001'),
-          warehouseName:String(it.warehouseName??'DC Hồ Chí Minh'),
-          allocatedQuantity:Number(it.allocatedQuantity??6),
-          estimatedPackagesCount:Number(it.estimatedPackagesCount??1),
-          routingStrategyLabel:String(it.routingStrategyLabel??'Định tuyến tối ưu DOM'),
-        })));
-      }else if(domFulfillmentMode==='SINGLE_WAREHOUSE_MATCH'){
-        setDomSplitAllocations([
-          {
-            orderCode:targetOrder?.orderCode??'SO-0088',
-            productCode:'SKU-1001',
-            warehouseName:targetOrder?.warehouseName??'DC Hồ Chí Minh (Kho Chính Miền Nam)',
-            allocatedQuantity:targetOrder?.orderedQuantity??10,
-            estimatedPackagesCount:1,
-            routingStrategyLabel:'Giao nguyên đơn từ 1 kho (Single-Warehouse Match)',
-          },
-        ]);
+      const rawSplits=d.splitAllocations??d.splitFulfillmentPlan??d.allocations??d.items;
+      if(domFulfillmentMode==='SINGLE_WAREHOUSE_MATCH'){
+        if(Array.isArray(rawSplits)&&rawSplits.length===1){
+          const it=rawSplits[0] as Record<string,unknown>;
+          const whCode=String(it.allocatedWarehouseCode??it.warehouseCode??'WH01');
+          const whName=String(it.allocatedWarehouseName??it.warehouseName??'Kho Chính TP.HCM');
+          const fullWh=whName.includes('—')?whName:`${whCode} — ${whName}`;
+          const allocQty=Number(it.allocatedQuantity??it.allocatedQty??totalQty);
+          setDomSplitAllocations([
+            {
+              orderCode:String(it.orderCode??resolvedOrderCode),
+              productCode:String(it.productCode??resolvedProductCode),
+              warehouseName:fullWh,
+              allocatedQuantity:allocQty,
+              estimatedPackagesCount:Number(it.estimatedPackagesCount??1),
+              routingStrategyLabel:String(it.routingStrategyLabel??`Đủ tồn 1 kho • ${fullWh} (${allocQty} ĐV)`),
+            },
+          ]);
+        }else{
+          setDomSplitAllocations(buildDefaultDomAllocations('SINGLE_WAREHOUSE_MATCH',resolvedOrderCode,resolvedProductCode,totalQty));
+        }
+      }else if(Array.isArray(rawSplits)&&rawSplits.length>=2){
+        setDomSplitAllocations(rawSplits.map((it:Record<string,unknown>,idx:number)=>{
+          const whCode=String(it.allocatedWarehouseCode??it.warehouseCode??(idx===0?'WH01':'WH02'));
+          const rawWhName=String(it.allocatedWarehouseName??it.warehouseName??(idx===0?'Kho Chính TP.HCM':'Kho Chi Nhánh Hà Nội'));
+          const fullWh=rawWhName.includes('—')?rawWhName:`${whCode} — ${rawWhName}`;
+          return {
+            orderCode:String(it.orderCode??`${resolvedOrderCode}-SUB${idx+1}`),
+            productCode:String(it.productCode??resolvedProductCode),
+            warehouseName:fullWh,
+            allocatedQuantity:Number(it.allocatedQuantity??it.allocatedQty??(idx===0?Math.ceil(totalQty*0.6):Math.max(1,totalQty-Math.ceil(totalQty*0.6)))),
+            estimatedPackagesCount:Number(it.estimatedPackagesCount??1),
+            routingStrategyLabel:String(
+              it.routingStrategyLabel??
+              it.routingReason??
+              (idx===0
+                ?'Tách đơn đa kho (Chặng 1/2) • Ưu tiên tồn khả dụng & khoảng cách'
+                :'Tách đơn đa kho (Chặng 2/2) • Kho chi nhánh hỗ trợ hoàn tất đơn')
+            ),
+          };
+        }));
+      }else{
+        setDomSplitAllocations(buildDefaultDomAllocations('MULTI_WAREHOUSE_SPLIT',resolvedOrderCode,resolvedProductCode,totalQty));
       }
       const modeText=domFulfillmentMode==='SINGLE_WAREHOUSE_MATCH'
         ?'Giao nguyên đơn từ 1 kho'
@@ -479,16 +552,45 @@ export default function OutboundDemand(){
         <div className="ui-stack" data-testid="smart-dom-order-splitting-card" style={{ gap: 10 }}>
           <div className="ui-inline-wrap" style={{ justifyContent: 'space-between', alignItems: 'end', gap: 10 }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span>Mã đơn định tuyến</span>
+              <input
+                aria-label="Mã đơn định tuyến đa kho DOM"
+                value={domOrderCode}
+                onChange={e => setDomOrderCode(e.target.value)}
+                style={{ width: 150 }}
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span>Mã sản phẩm (SKU)</span>
+              <input
+                aria-label="Mã sản phẩm định tuyến DOM"
+                value={domProductCode}
+                onChange={e => setDomProductCode(e.target.value)}
+                style={{ width: 150 }}
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span>Số lượng cần phân bổ</span>
+              <input
+                aria-label="Số lượng cần phân bổ DOM"
+                type="number"
+                min="1"
+                value={domRequestedQty}
+                onChange={e => setDomRequestedQty(e.target.value)}
+                style={{ width: 120 }}
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span>Chế độ điều phối hoàn tất đơn hàng đa kho</span>
               <select
                 aria-label="Chế độ định tuyến tách đơn đa kho DOM"
                 data-testid="select-dom-fulfillment-mode"
                 value={domFulfillmentMode}
-                onChange={e => setDomFulfillmentMode(e.target.value as 'MULTI_WAREHOUSE_SPLIT' | 'SINGLE_WAREHOUSE_MATCH')}
-                style={{ minWidth: 320 }}
+                onChange={e => handleDomModeChange(e.target.value as 'MULTI_WAREHOUSE_SPLIT' | 'SINGLE_WAREHOUSE_MATCH')}
+                style={{ minWidth: 280 }}
               >
-                <option value="MULTI_WAREHOUSE_SPLIT">Tách đơn liên kho tự động</option>
                 <option value="SINGLE_WAREHOUSE_MATCH">Giao nguyên đơn từ 1 kho</option>
+                <option value="MULTI_WAREHOUSE_SPLIT">Tách đơn liên kho tự động</option>
               </select>
             </label>
             <div className="ui-inline-wrap" style={{ gap: 8 }}>

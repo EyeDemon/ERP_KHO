@@ -2488,3 +2488,69 @@ Thực hiện nghiêm ngặt theo **Quy tắc Điều phối 4 Bước ("Phân c
 <!-- slide -->
 ![3PL Daily Storage Occupancy Snapshot & Billing Desktop — Wave 58 (`/partner-debts`: Thẻ `Đối Soát & Chốt Số Dư Lưu Kho 3PL Hàng Ngày (Theo Pallet • Thể tích m³ • Vị trí kệ)`, huy hiệu `Định mức tính phí: Ngày-Pallet • Ngày-m³ • Ngày-Vị trí kệ` và các cột `SỐ MẶT HÀNG`, `SỐ VỊ TRÍ KỆ CHIẾM CHỖ`, `TỔNG THỂ TÍCH (M³)` 100% Tiếng Việt)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave58-3pl-storage-snapshot-desktop.png)
 ````
+
+
+---
+
+## 59. Nghiệm thu Thực thi Phẫu thuật `Wave 59` — Khóa Sổ Kiểm Toán Tương Tác Trực Tiếp & Đồng Bộ Dữ Liệu Trực Quan 100% (`[BUG-INT-01..09]` & `[WAVE59-FIX-01..04]`)
+
+- Đã sửa triệt để 9 lỗi tương tác Backend (`[BUG-INT-01] → [BUG-INT-09]`) và 4 lỗi hiển thị trực quan (`[WAVE59-FIX-01] → [WAVE59-FIX-04]`) trên `/`, `/inventory-movements`, `/packing-sessions`, `/export-receipts` và `/backorders`.
+
+---
+
+## 60. Nghiệm thu Thực thi Phẫu thuật `Wave 60` — Phẫu Thuật Đóng Kín 100% 4 Điểm Lệch Hiển Thị & Đồng Bộ Báo Cáo Cuối Cùng (`[W60-01] → [W60-04]` — Baseline `commit 2458acb`)
+
+### 60.1. Ma Trận Phân Công Subagents (`Dispatch-First & Zero File Overlap`)
+
+| Đợt | Định danh Subagent | Hạng mục Phụ trách | Phạm vi File Độc quyền (`Zero File Overlap`) | Trạng thái |
+| :---: | :--- | :--- | :--- | :---: |
+| **Đợt 1 (Song song)** | [`Subagent 1A`](conversation://9f37ace2-10e6-45e1-bb29-abd48b2377ca) (`Backend & Seed`) | `[W60-01]`, `[W60-02]`, `[W60-03]` (Backend API & Seed) | - [`ERP.Api/Controllers/ReportsController.cs:194-339,1945-2148`](file:///d:/ERP_KHO/ERP.Api/Controllers/ReportsController.cs#L194-L339)<br>- [`ERP.Api/Controllers/PackingSessionsController.cs:1071-1127,1257-1466`](file:///d:/ERP_KHO/ERP.Api/Controllers/PackingSessionsController.cs#L1071-L1127)<br>- [`ERP.Api/Controllers/SalesOrdersController.cs:143-167,550-762`](file:///d:/ERP_KHO/ERP.Api/Controllers/SalesOrdersController.cs#L550-L762)<br>- [`tools/ERP.QaSeed/Program.cs:3783-3840`](file:///d:/ERP_KHO/tools/ERP.QaSeed/Program.cs#L3783-L3840) | **HOÀN TẤT 100%** |
+| **Đợt 1 (Song song)** | [`Subagent 2A`](conversation://8adcaefd-d834-4bcc-9fe5-05f54703a6c5) (`Frontend React 19`) | `[W60-01]`, `[W60-02]`, `[W60-03]` (Frontend UI) | - [`frontend/src/pages/Dashboard.tsx:128-270`](file:///d:/ERP_KHO/frontend/src/pages/Dashboard.tsx#L128-L270)<br>- [`frontend/src/components/dashboard/DashboardRecentActivity.tsx:3-22`](file:///d:/ERP_KHO/frontend/src/components/dashboard/DashboardRecentActivity.tsx#L3-L22)<br>- [`frontend/src/pages/PackingSessions.tsx:103-213`](file:///d:/ERP_KHO/frontend/src/pages/PackingSessions.tsx#L103-L213)<br>- [`frontend/src/pages/OutboundDemand.tsx:281-428,551-614`](file:///d:/ERP_KHO/frontend/src/pages/OutboundDemand.tsx#L281-L428) | **HOÀN TẤT 100%** |
+| **Đợt 2 (Tuần tự)** | **`Agent Chính`** (`16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb`) | `[W60-04]` + Kiểm thử tự động + **Gate 1 → Gate 5** | - [`ERP.Api.Tests/Wave48To51FullClosureTests.cs:2488-2675`](file:///d:/ERP_KHO/ERP.Api.Tests/Wave48To51FullClosureTests.cs#L2488-L2675)<br>- [`frontend/src/pages/Dashboard.test.tsx`](file:///d:/ERP_KHO/frontend/src/pages/Dashboard.test.tsx), [`PackingSessions.test.tsx`](file:///d:/ERP_KHO/frontend/src/pages/PackingSessions.test.tsx), [`OutboundDemand.test.tsx`](file:///d:/ERP_KHO/frontend/src/pages/OutboundDemand.test.tsx)<br>- [`INTERACTIVE_WEB_QA_FULL_REPORT.md`](file:///d:/ERP_KHO/INTERACTIVE_WEB_QA_FULL_REPORT.md)<br>- [`docs/FULL_SYSTEM_AUDIT_REPORT.md`](file:///d:/ERP_KHO/docs/FULL_SYSTEM_AUDIT_REPORT.md) | **HOÀN TẤT 100%** |
+
+---
+
+### 60.2. Chi Tiết 4 Hạng Mục Đóng Kín Trực Quan (`[W60-01] → [W60-04]`)
+
+1. **`[W60-01]` — Việt hóa 100% `DEKIT_DISASSEMBLE_EXECUTED` & Chuẩn hóa Định dạng Số lượng Ngoại lệ `INVENTORY_HOLD` trên Trang Tổng quan `/` (`Dashboard.tsx` & `ReportsController.cs`):**
+   - **Tọa độ mã nguồn:** [`ERP.Api/Controllers/ReportsController.cs:194-339,1945-2148`](file:///d:/ERP_KHO/ERP.Api/Controllers/ReportsController.cs#L194-L339), [`frontend/src/pages/Dashboard.tsx:128-270`](file:///d:/ERP_KHO/frontend/src/pages/Dashboard.tsx#L128-L270) và [`frontend/src/components/dashboard/DashboardRecentActivity.tsx:3-22`](file:///d:/ERP_KHO/frontend/src/components/dashboard/DashboardRecentActivity.tsx#L3-L22).
+   - **Giải pháp kỹ thuật:** Ánh xạ `DEKIT_DISASSEMBLE_EXECUTED` / `DEKIT_DISASSEMBLE` $\rightarrow$ **`"Đã xả bộ hàng lắp ráp (De-kitting)"`** và `KIT_ASSEMBLE_EXECUTED` $\rightarrow$ **`"Đã đóng bộ hàng lắp ráp (Kitting)"`**; trong `GetOperationalExceptions`, nạp dữ liệu ra bộ nhớ C# (`.ToListAsync()`) trước khi định dạng số lượng bằng `.ToString("0.##", CultureInfo.InvariantCulture)` và chuẩn hóa thông điệp: **`"Tồn khóa / biệt trữ: 10 (Cảnh báo: 5 • Hư hỏng / Cách ly: 12) tại BIN-DMG-01"`** (triệt tiêu hoàn toàn `.0000` và mã số enum `5`).
+
+2. **`[W60-02]` — Đồng bộ 100% Kích thước & Trọng lượng Quy đổi (`DIM Weight`) của Thùng `CARTON-M` trên `/packing-sessions` (`PackingSessionsController.cs` & `PackingSessions.tsx`):**
+   - **Tọa độ mã nguồn:** [`ERP.Api/Controllers/PackingSessionsController.cs:1071-1127,1257-1466`](file:///d:/ERP_KHO/ERP.Api/Controllers/PackingSessionsController.cs#L1071-L1127) và [`frontend/src/pages/PackingSessions.tsx:103-213`](file:///d:/ERP_KHO/frontend/src/pages/PackingSessions.tsx#L103-L213).
+   - **Giải pháp kỹ thuật:** Đồng bộ 100% danh mục 4 cỡ thùng chuẩn giữa Backend (`StandardCartonCatalog`) và Frontend (`packingBoxCatalog`): `CARTON-S` (`25×20×15 cm` / `1.25 kg`), `CARTON-M` (`35×25×20 cm` / `2.92 kg`), `CARTON-L` (`40×30×30 cm` / `6.0 kg`), `CARTON-XL` (`50×40×30 cm` / `10.0 kg`); trả về trực tiếp `lengthCm`, `widthCm`, `heightCm`, `totalItemsVolumeM3`, `volumeFillRatePercent` và hỗ trợ `PreferredCartonCode` với `DimDivisor = 6000m`.
+
+3. **`[W60-03]` — Đồng bộ Thực thể Thật (`SO-QA-001`, `QA-E2E-001`, `WH01`, `WH02`) & Hai Chế độ Định tuyến Đa kho trên `/backorders` (`SalesOrdersController.cs` & `OutboundDemand.tsx`):**
+   - **Tọa độ mã nguồn:** [`ERP.Api/Controllers/SalesOrdersController.cs:143-167,550-762`](file:///d:/ERP_KHO/ERP.Api/Controllers/SalesOrdersController.cs#L550-L762), [`tools/ERP.QaSeed/Program.cs:3783-3840`](file:///d:/ERP_KHO/tools/ERP.QaSeed/Program.cs#L3783-L3840) và [`frontend/src/pages/OutboundDemand.tsx:281-428,551-614`](file:///d:/ERP_KHO/frontend/src/pages/OutboundDemand.tsx#L281-L428).
+   - **Giải pháp kỹ thuật:** Loại bỏ hoàn toàn các chuỗi mẫu giả định (`SO-2026-DOM-01`, `SKU-1001`, `DC Hồ Chí Minh`, `DC Bình Dương`) khỏi `OutboundDemand.tsx`; bổ sung tồn kho `QA-E2E-001` tại `WH02 — Kho Chi Nhánh Hà Nội` (`BIN-HN-01`) trong `ERP.QaSeed` và hỗ trợ đầy đủ 2 chế độ trên `POST /api/v1/sales-orders/evaluate-atp-routing`:
+     + `SINGLE_WAREHOUSE_MATCH`: **`"Đủ tồn 1 kho • WH01 — Kho Chính TP.HCM (5 ĐV)"`**.
+     + `MULTI_WAREHOUSE_SPLIT`: Tách 2 chặng **`SO-QA-001-SUB1`** tại **`WH01 — Kho Chính TP.HCM` (`6 ĐV`)** và **`SO-QA-001-SUB2`** tại **`WH02 — Kho Chi Nhánh Hà Nội` (`4 ĐV`)**.
+
+4. **`[W60-04]` — Đồng bộ 100% Báo cáo Nghiệm thu, Bộ Kiểm thử Tự động (`1.567 / 1.567 PASS`) & Ảnh chụp Trình duyệt (`Gate 1 → Gate 5`):**
+   - Bổ sung bài kiểm thử tích hợp `Wave60_VisualTruthClosure_DashboardExceptions_3DCartonCatalog_And_SmartDomSplit_AreSynchronized` trong [`Wave48To51FullClosureTests.cs:2488-2675`](file:///d:/ERP_KHO/ERP.Api.Tests/Wave48To51FullClosureTests.cs#L2488-L2675) và 3 bài kiểm thử Vitest mới trong `Dashboard.test.tsx`, `PackingSessions.test.tsx`, `OutboundDemand.test.tsx`.
+
+---
+
+### 60.3. Kết Quả Nghiệm Thu 5 Cổng Chất Lượng (`Gate 1 → Gate 5` — Wave 60 `VISUAL TRUTH CLOSURE`)
+
+1. **Gate 1 — Encoding & Solution Release Build (`task-16055`, `task-16237`)**:
+   - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-encoding.ps1` → **`Exit Code 0`** (`Encoding check passed: all scanned files are valid UTF-8 and no mojibake markers were found.`).
+   - `dotnet build ERP.slnx -c Release --no-restore` → **`0 Warning(s), 0 Error(s)`**.
+2. **Gate 2 — Full Backend API & Real SQL Server Integration Suites (`task-16055` — Chạy toàn bộ không dùng `--filter`)**:
+   - `dotnet test ERP.Api.Tests/ERP.Api.Tests.csproj -c Release --no-build` → **`516 / 516 PASS`** (`0 Failed, 0 Skipped`).
+   - `dotnet run --project tools/ERP.SqlIntegrationHarness/ERP.SqlIntegrationHarness.csproj -c Release --no-build` → **`651 / 651 PASS`** (`0 Failed, 0 Skipped`).
+   - **Tổng cộng Gate 2**: **`516 + 651 = 1.167 / 1.167` bài kiểm thử Backend & SQL Server PASS tuyệt đối (`100%`)**.
+3. **Gate 3 — Frontend Production Build & Full Vitest (`task-16023`, `task-16237` — Chạy toàn bộ không dùng `--filter`)**:
+   - `npm --prefix frontend run build` → **`Exit Code 0`** (`1,711 modules transformed`).
+   - `npm --prefix frontend test -- --run` → **`70 / 70` test files, `400 / 400` tests PASS (`0 Failed, 0 Skipped`)**.
+   - **Tổng hợp toàn hệ thống (`Gate 2 + Gate 3`)**: **`516 + 651 + 400 = 1.567 / 1.567` bài kiểm thử tự động PASS tuyệt đối (`100%`)**.
+4. **Gate 4 — Live Browser Interactive QA & Kiểm định Pixel-by-Pixel 3 Ảnh Chụp Mới (`gate4-wave60-*.png`)**:
+   - Đã kiểm chứng trực tiếp bằng `playwright-erp-kho` và `read_file` trên cả 3 ảnh chụp mới ở `1440×900` (cùng kiểm tra `390×844` Mobile: `desktopOverflow = 0`, `mobileOverflow = 0`, `errors = []`, `httpErrors = []`):
+
+````carousel
+![Wave 60 Kịch bản 1 — Tổng quan (`/`): Hiển thị đầy đủ 8 thẻ KPI (`2` kho, `2` SP, `9` nhóm tồn, `3` tác vụ; `54.000.000 đ` doanh thu, `8.350.000 đ` giá vốn, `43.469.000 đ` lãi gộp `80,5%`, `34.500.000 đ` COD), ngoại lệ `Tồn khóa / biệt trữ: 10 (Cảnh báo: 5 • Hư hỏng / Cách ly: 12) tại BIN-DMG-01` và hoạt động gần đây `Đã xả bộ hàng lắp ráp (De-kitting)`](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave60-s1-dashboard-desktop.png)
+<!-- slide -->
+![Wave 60 Kịch bản 5 — Trạm Đóng gói Hợp nhất (`/packing-sessions`): Đồng bộ 100% Gợi ý Thùng 3D (`Thùng trung M (35×25×20 cm)`, `0.014 m³ (80% lấp đầy)`, `Trọng lượng quy đổi: 2.92 kg`), Danh mục 4 cỡ thùng chuẩn (`CARTON-S / M / L / XL`) và kết quả Xả Bộ Hàng Lắp Ráp Thuần Tiếng Việt (`DEKIT-VAS-20261025-0423`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave60-s5-packing-3d-dekitting-desktop.png)
+<!-- slide -->
+![Wave 60 Kịch bản 4B — Định tuyến Đơn hàng Đa kho & Tách Đơn Thông minh (`/backorders`): Đơn thật `SO-QA-001`, sản phẩm `QA-E2E-001` (`10 ĐV`) tách 2 chặng `SO-QA-001-SUB1` (`WH01 — Kho Chính TP.HCM: 6 ĐV`) và `SO-QA-001-SUB2` (`WH02 — Kho Chi Nhánh Hà Nội: 4 ĐV`)](C:/Users/van40/.gemini/antigravity/brain/16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb/gate4-wave60-s4b-smart-split-dom-desktop.png)
+````

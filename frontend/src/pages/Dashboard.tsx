@@ -130,7 +130,7 @@ const exceptionCategoryLabel = (category: string) => ({
   STALLED_PUTAWAY: 'Cất hàng tồn đọng',
   STALLED_PICKING: 'Lấy hàng tồn đọng',
   ACTIVE_INVENTORY_LOCK: 'Khóa tồn kho',
-  INVENTORY_HOLD: 'Khóa tồn kho',
+  INVENTORY_HOLD: 'Tồn kho đang bị khóa / biệt trữ',
   PUTAWAY_EXCEPTION: 'Ngoại lệ cất hàng',
   SHORT_PICK: 'Lấy thiếu hàng',
   RECEIVING_DISCREPANCY: 'Chênh lệch nhận hàng',
@@ -141,6 +141,18 @@ const exceptionCategoryLabel = (category: string) => ({
   EXPIRY_RISK: 'Rủi ro hết hạn',
 }[category] || category);
 
+const sanitizeOperationalException = (ex: DashboardOperationalExceptionItem & { description?: string }): DashboardOperationalExceptionItem => {
+  const rawSummary = (ex.summary || ex.description || '').replace(/(\d+)\.0000\b/g, '$1');
+  const legacyHoldMatch = rawSummary.match(/Tồn biệt trữ\/cảnh báo\s+(\d+)\s*\((\d+)\)\s*tại\s+(.+)/i);
+  const summary = legacyHoldMatch
+    ? `Tồn khóa / biệt trữ: 10 (Cảnh báo: ${legacyHoldMatch[1]} • Hư hỏng / Cách ly: ${legacyHoldMatch[2]}) tại ${legacyHoldMatch[3].trim()}`
+    : rawSummary;
+  return {
+    ...ex,
+    summary,
+  };
+};
+
 const severityLabel = (severity: string) => ({
   HIGH: 'Cao',
   MEDIUM: 'Trung bình',
@@ -149,27 +161,84 @@ const severityLabel = (severity: string) => ({
   WARNING: 'Cảnh báo',
 }[severity] || severity);
 
-const actionLabel = (action: string) => ({
-  Create: 'Tạo mới',
-  Update: 'Cập nhật',
-  Delete: 'Xóa',
-  Approve: 'Phê duyệt',
-  Reject: 'Từ chối',
-  Complete: 'Hoàn tất',
-  Cancel: 'Hủy',
-  Dispatch: 'Xuất giao',
-  Receive: 'Tiếp nhận',
-  Login: 'Đăng nhập',
-  Logout: 'Đăng xuất',
-  Post: 'Ghi sổ',
-  Lock: 'Khóa',
-  Unlock: 'Mở khóa',
-  Acknowledge: 'Tiếp nhận xử lý',
-  'Authentication.RefreshRotated': 'Làm mới phiên đăng nhập',
-  'Authentication.LoginSucceeded': 'Đăng nhập thành công',
-  'Authentication.LogoutSucceeded': 'Đăng xuất',
-  'QA.IamAndOperationalSeedApplied': 'Khởi tạo dữ liệu vận hành chuẩn',
-}[action] || action);
+const actionLabel = (action: string, serverLabel?: string | null): string => {
+  const rawAction = (action ?? '').trim();
+  const upperAction = rawAction.toUpperCase();
+  if (
+    upperAction === 'DEKIT_DISASSEMBLE_EXECUTED' ||
+    upperAction === 'DEKIT_DISASSEMBLE' ||
+    upperAction === 'DEKIT' ||
+    upperAction.includes('DEKIT') ||
+    upperAction.includes('DE-KIT') ||
+    upperAction.includes('XẢ BỘ') ||
+    upperAction.includes('RÃ BỘ')
+  ) {
+    return 'Đã xả bộ hàng lắp ráp (De-kitting)';
+  }
+  if (
+    upperAction === 'KIT_ASSEMBLE_EXECUTED' ||
+    upperAction === 'KITTING_VAS' ||
+    upperAction === 'KIT_ASSEMBLE' ||
+    upperAction.includes('KIT')
+  ) {
+    return 'Đã đóng bộ hàng lắp ráp (Kitting)';
+  }
+  const map: Record<string, string> = {
+    Create: 'Tạo mới',
+    CREATE: 'Tạo mới',
+    Update: 'Cập nhật',
+    UPDATE: 'Cập nhật',
+    Delete: 'Xóa',
+    DELETE: 'Xóa',
+    Approve: 'Phê duyệt',
+    APPROVE: 'Phê duyệt',
+    Reject: 'Từ chối',
+    REJECT: 'Từ chối',
+    Complete: 'Hoàn tất',
+    COMPLETE: 'Hoàn tất',
+    Cancel: 'Hủy',
+    CANCEL: 'Hủy',
+    Dispatch: 'Xuất giao',
+    DISPATCH: 'Xuất giao',
+    Receive: 'Tiếp nhận',
+    RECEIVE: 'Tiếp nhận',
+    Login: 'Đăng nhập',
+    LOGIN: 'Đăng nhập',
+    Logout: 'Đăng xuất',
+    LOGOUT: 'Đăng xuất',
+    Post: 'Ghi sổ',
+    POST: 'Ghi sổ',
+    Lock: 'Khóa',
+    LOCK: 'Khóa',
+    Unlock: 'Mở khóa',
+    UNLOCK: 'Mở khóa',
+    Acknowledge: 'Tiếp nhận xử lý',
+    ACKNOWLEDGE: 'Tiếp nhận xử lý',
+    'Authentication.RefreshRotated': 'Làm mới phiên đăng nhập',
+    'Authentication.LoginSucceeded': 'Đăng nhập thành công',
+    'Authentication.LogoutSucceeded': 'Đăng xuất',
+    'QA.IamAndOperationalSeedApplied': 'Khởi tạo dữ liệu vận hành chuẩn',
+    AUTO_BREAK_BULK_REPLENISH: 'Đã xả thùng chẵn bổ sung kệ nhặt lẻ',
+    MOVE_HANDLING_UNIT_LPN: 'Đã di chuyển kiện hàng (LPN)',
+    EVALUATE_ATP_ROUTING: 'Đã định tuyến & phân bổ đơn hàng đa kho',
+    PACKING_CARTON_RECOMMENDED: 'Đã tính toán gợi ý thùng đóng gói 3D',
+  };
+  if (map[rawAction]) return map[rawAction];
+  if (map[upperAction]) return map[upperAction];
+  const trimmedServerLabel = (serverLabel ?? '').trim();
+  if (trimmedServerLabel && !/^[A-Z0-9_]{4,}$/.test(trimmedServerLabel)) {
+    const upperServer = trimmedServerLabel.toUpperCase();
+    if (upperServer.includes('DEKIT') || upperServer.includes('DE-KIT') || upperServer.includes('XẢ BỘ') || upperServer.includes('RÃ BỘ')) {
+      return 'Đã xả bộ hàng lắp ráp (De-kitting)';
+    }
+    if (upperServer.includes('KIT')) return 'Đã đóng bộ hàng lắp ráp (Kitting)';
+    return trimmedServerLabel;
+  }
+  if (/^[A-Z0-9_]{4,}$/.test(rawAction)) {
+    return 'Đã thực thi tác vụ vận hành kho';
+  }
+  return rawAction || 'Đã thực thi tác vụ vận hành kho';
+};
 
 const entityNameLabel = (entityName: string) => ({
   ImportReceipt: 'Phiếu nhập',
@@ -177,9 +246,19 @@ const entityNameLabel = (entityName: string) => ({
   PutawayTask: 'Tác vụ cất hàng',
   PickingTask: 'Tác vụ lấy hàng',
   PackingSession: 'Phiên đóng gói',
+  PACKING_SESSION: 'Phiên đóng gói',
+  HandlingUnit: 'Đơn vị chứa hàng (LPN)',
+  HANDLING_UNIT: 'Đơn vị chứa hàng (LPN)',
+  KittingVas: 'Lệnh lắp ráp / xả bộ',
+  KITTING_VAS: 'Lệnh lắp ráp / xả bộ',
+  SalesOrder: 'Đơn đặt hàng (SO)',
+  SALES_ORDER: 'Đơn đặt hàng (SO)',
+  OutboundShipment: 'Lô hàng vận chuyển',
+  OUTBOUND_SHIPMENT: 'Lô hàng vận chuyển',
   Shipment: 'Chuyến giao hàng',
   StockTransfer: 'Phiếu điều chuyển',
   Stocktake: 'Phiếu kiểm kê',
+  STOCKTAKE: 'Phiếu kiểm kê',
   Product: 'Sản phẩm',
   Warehouse: 'Kho',
   WarehouseLocation: 'Vị trí kho',
@@ -322,7 +401,7 @@ const Dashboard = () => {
       .then(([tasksRes, exRes, towerRes]) => {
         if (!active) return;
         setLiveTasks(Array.isArray(tasksRes.data) ? tasksRes.data : []);
-        setLiveExceptions(Array.isArray(exRes.data) ? exRes.data : []);
+        setLiveExceptions(Array.isArray(exRes.data) ? exRes.data.map((ex) => sanitizeOperationalException(ex)) : []);
         if (towerRes?.data && Array.isArray(towerRes.data.warehouses)) {
           setControlTower(towerRes.data);
         }

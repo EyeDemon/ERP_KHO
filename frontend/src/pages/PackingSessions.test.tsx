@@ -201,4 +201,14 @@ describe('Packing workbench',()=>{
     expect(await view.findByText(/VAS-DEKIT-2026-001/)).toBeTruthy();
     expect(view.getByText(/Đã xả bộ KIT trả tồn thành phần về kệ/)).toBeTruthy();
   });
+
+  it('Wave 60 [W60-02]: synchronizes 3D carton catalog dimensions and DIM weight (D×R×C / 6000) across badge and details',async()=>{
+    const view=render(<PackingSessions/>);
+    await view.findByText('PACK-2026-0077');
+
+    const suggestionBox=view.getByTestId('unified-carton-suggestion');
+    expect(suggestionBox.textContent).toContain('Thùng trung M (35×25×20 cm)');
+    expect(suggestionBox.textContent).toContain('Kích thước thùng: 35×25×20 cm');
+    expect(suggestionBox.textContent).toContain('2.92 kg');
+  });
 });

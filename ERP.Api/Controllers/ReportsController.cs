@@ -198,6 +198,32 @@ namespace ERP.Api.Controllers
                 return "Cập nhật nghiệp vụ kho";
 
             var upper = raw.ToUpperInvariant();
+            if (upper is "DEKIT_DISASSEMBLE_EXECUTED" or "DEKIT_DISASSEMBLE" or "DEKIT" || upper.Contains("DEKIT"))
+                return "Đã xả bộ hàng lắp ráp (De-kitting)";
+            if (upper is "KIT_ASSEMBLE_EXECUTED" or "KITTING_VAS" or "KIT_ASSEMBLE" || (upper.Contains("KIT") && (upper.Contains("VAS") || upper.Contains("ASSEMBLE"))))
+                return "Đã đóng bộ hàng lắp ráp (Kitting)";
+            if (upper is "AUTO_BREAK_BULK_REPLENISH" || upper.Contains("BREAK_BULK") || upper.Contains("REPLENISH"))
+                return "Đã xả thùng chẵn bổ sung kệ nhặt lẻ";
+            if (upper is "MOVE_HANDLING_UNIT_LPN" || (upper.Contains("MOVE") && (upper.Contains("HANDLING_UNIT") || upper.Contains("HANDLINGUNIT") || upper.Contains("LPN"))))
+                return "Đã di chuyển kiện hàng (LPN)";
+            if (upper is "EVALUATE_ATP_ROUTING" || upper.Contains("ATP_ROUTING") || upper.Contains("EVALUATEATPROUTING"))
+                return "Đã định tuyến & phân bổ đơn hàng đa kho";
+            if (upper is "PACKING_CARTON_RECOMMENDED" || upper.Contains("CARTON_RECOMMEND") || upper.Contains("RECOMMENDCARTON"))
+                return "Đã tính toán gợi ý thùng đóng gói 3D";
+            if (upper is "PUT_TO_WALL_SLOT_SORTED" || upper.Contains("PUT_TO_WALL"))
+                return "Đã chia chọn đơn hàng vào ô tường (Put-to-Wall)";
+            if (upper is "UPSERT_CHANNEL_SKU_MAPPING" || upper.Contains("CHANNEL_SKU"))
+                return "Đã cập nhật ánh xạ SKU đa sàn TMĐT";
+            if (upper is "CAPTURE_3PL_DAILY_STORAGE_SNAPSHOT" || upper.Contains("STORAGE_SNAPSHOT"))
+                return "Đã chụp nhanh số dư lưu kho 3PL hằng ngày";
+            if (upper is "STOCKTAKE_AUTO_APPROVAL_EVALUATED" || upper.Contains("AUTO_APPROVAL_EVALUATED"))
+                return "Đã đối soát ngưỡng tự động duyệt kiểm kê";
+            if (upper is "STOCKTAKE_RECOUNT_ATTEMPT" || upper.Contains("RECOUNT_ATTEMPT"))
+                return "Đã ghi nhận lượt đếm lại kiểm kê";
+            if (upper is "EMERGENCY_OPEN_OVERRIDE")
+                return "Mở cửa kho khẩn cấp ngoài giờ";
+            if (upper is "MAINTENANCE_WINDOW")
+                return "Thiết lập khung giờ bảo trì kho";
             if (upper.Contains("POST") && (upper.Contains("RECEIPT") || upper.Contains("IMPORT") || string.Equals(entityName?.Trim(), "ImportReceipt", StringComparison.OrdinalIgnoreCase)))
                 return "Ghi sổ phiếu nhập";
             if (upper.Contains("RECEIVE") || upper.Contains("INBOUND"))
@@ -206,12 +232,6 @@ namespace ERP.Api.Controllers
                 return "Di chuyển vị trí nội bộ";
             if (upper.Contains("PICK"))
                 return "Hoàn tất lấy hàng";
-            if (upper.Contains("DEKIT"))
-                return "Hoàn tất rã bộ hàng lắp ráp";
-            if (upper.Contains("KIT") && upper.Contains("VAS"))
-                return "Đóng bộ hàng khuyến mãi";
-            if (upper.Contains("BREAK_BULK") || upper.Contains("REPLENISH"))
-                return "Xả thùng bổ sung kệ nhặt lẻ";
             if (upper.Contains("OUTBOX"))
                 return "Đồng bộ lô sự kiện tích hợp";
             if (upper.Contains("BILLING") || upper.Contains("3PL"))
@@ -242,6 +262,16 @@ namespace ERP.Api.Controllers
                 return "Làm mới phiên đăng nhập";
             if (upper.Contains("LOGIN") || raw.Contains("Đăng nhập", StringComparison.OrdinalIgnoreCase))
                 return "Đăng nhập hệ thống";
+            if (upper.Contains("CREATE") || upper.Contains("INSERT") || upper.Contains("ADD"))
+                return "Khởi tạo bản ghi nghiệp vụ";
+            if (upper.Contains("UPDATE") || upper.Contains("EDIT") || upper.Contains("UPSERT") || upper.Contains("PATCH"))
+                return "Cập nhật dữ liệu nghiệp vụ";
+            if (upper.Contains("DELETE") || upper.Contains("REMOVE") || upper.Contains("CANCEL") || upper.Contains("VOID"))
+                return "Hủy / xóa bản ghi nghiệp vụ";
+            if (upper.Contains("ACKNOWLEDGE") || upper.Contains("RESOLVE"))
+                return "Xác nhận xử lý cảnh báo kho";
+            if (raw.Contains('_') || raw.Contains('.'))
+                return "Cập nhật nghiệp vụ kho";
 
             return raw;
         }
@@ -254,31 +284,41 @@ namespace ERP.Api.Controllers
                 "ImportReceipt" or "ImportReceipts" => "Phiếu nhập kho",
                 "ExportReceipt" or "ExportReceipts" => "Phiếu xuất kho",
                 "PutawayTask" or "PutawayTasks" => "Tác vụ cất hàng",
-                "PickingTask" or "PickingTasks" => "Tác vụ lấy hàng",
-                "PackingSession" or "PackingSessions" => "Phiên đóng gói",
+                "PickingTask" or "PickingTasks" or "PickingWave" or "PickingWaves" => "Tác vụ lấy hàng",
+                "PackingSession" or "PackingSessions" or "PackingVideoEvidence" => "Phiên đóng gói",
                 "HandlingUnit" or "HandlingUnits" => "Đơn vị xử lý (HU)",
-                "Shipment" or "Shipments" => "Chuyến hàng xuất",
-                "InventoryStock" or "InventoryStocks" => "Tồn kho vật lý",
+                "Shipment" or "Shipments" or "TmsManifest" => "Chuyến hàng xuất",
+                "InventoryStock" or "InventoryStocks" or "InventoryStatus" or "InventoryControl" or "InventoryReconciliation" => "Tồn kho vật lý",
                 "InventoryLocationMovement" or "InventoryLocationMovements" or "InventoryMovement" => "Di chuyển vị trí kho",
                 "InventoryTransaction" or "InventoryTransactions" => "Sổ cái tồn kho",
                 "InventoryLock" or "InventoryLocks" => "Khóa phong tỏa tồn kho",
-                "Stocktake" or "Stocktakes" or "StocktakeSession" or "StocktakeSessions" => "Phiếu kiểm kê",
+                "Stocktake" or "Stocktakes" or "StocktakeSession" or "StocktakeSessions" or "StocktakeDetail" => "Phiếu kiểm kê",
                 "StocktakeAdjustmentProposal" => "Đề xuất điều chỉnh kiểm kê",
                 "RtvRefurbish" or "RmaInspection" => "Xử lý hàng hỏng / trả NCC",
                 "CrossdockDispatch" => "Điều phối trung chuyển thẳng",
                 "DockAppointment" or "DockAppointments" => "Lịch hẹn cửa kho",
                 "StockTransfer" or "StockTransfers" => "Phiếu điều chuyển kho",
-                "PurchaseOrder" or "PurchaseOrders" => "Đơn mua hàng (PO)",
+                "PurchaseOrder" or "PurchaseOrders" or "Asn" => "Đơn mua hàng (PO)",
                 "SalesOrder" or "SalesOrders" => "Đơn bán hàng (SO)",
                 "BusinessPartner" or "BusinessPartners" => "Đối tác kinh doanh",
-                "Product" or "Products" => "Sản phẩm / vật tư",
-                "Warehouse" or "Warehouses" => "Kho vận hành",
+                "Product" or "Products" or "ProductGovernance" or "ProductUom" => "Sản phẩm / vật tư",
+                "Warehouse" or "Warehouses" or "WarehouseCalendarException" => "Kho vận hành",
                 "WarehouseLocation" or "WarehouseLocations" => "Vị trí lưu kho",
                 "IntegrationOutboxBatch" or "IntegrationOutboxMessage" or "IntegrationOutbox" => "Hàng đợi đồng bộ tích hợp",
                 "ThreePlBillingStatement" or "ThreePlStorageSnapshot" => "Bảng kê phí dịch vụ 3PL",
                 "KittingVas" => "Gia công đóng bộ & tách bộ",
                 "BreakBulkReplenishment" => "Bổ sung kệ nhặt lẻ xả thùng",
-                "UserSession" => "Phiên đăng nhập",
+                "PutToWallSortation" => "Chia chọn đơn hàng (Put-to-Wall)",
+                "ChannelSkuMapping" => "Ánh xạ SKU đa sàn TMĐT",
+                "OperationalException" => "Cảnh báo ngoại lệ vận hành",
+                "ApprovalQueue" => "Hàng đợi phê duyệt",
+                "QcPolicy" or "ReceivingTolerancePolicy" => "Chính sách kiểm soát chất lượng",
+                "StockReservationSweep" => "Giải phóng giữ chỗ tồn kho",
+                "LaborInterleaving" => "Điều phối nhân sự kho",
+                "AutomationTelemetry" or "BiSnapshot" => "Giám sát chỉ số vận hành",
+                "GlJournalExport" => "Bút toán hạch toán kế toán",
+                "UserSession" or "User" or "Role" or "UserTotpMfa" => "Phiên đăng nhập & bảo mật",
+                "TenantSubscription" or "TenantQuotaVerification" or "BuyerPiiRetentionPolicy" or "ComplianceEvidenceBundle" or "SupportImpersonationConsent" => "Quản trị & tuân thủ hệ thống",
                 _ => string.IsNullOrEmpty(raw) ? "Nghiệp vụ kho" : raw
             };
         }
@@ -1902,86 +1942,148 @@ namespace ERP.Api.Controllers
                 .Distinct()
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            var putawayEx = await db.PutawayTasks.AsNoTracking()
+            var putawayRaw = await db.PutawayTasks.AsNoTracking()
                 .Where(t => scopedIds.Contains(t.WarehouseId) && t.Status == PutawayTaskStatus.Exception)
                 .Select(t => new
                 {
-                    category = "PUTAWAY_EXCEPTION",
-                    code = t.Receipt.Code.Trim(),
-                    warehouseName = t.Warehouse.Name.Trim(),
-                    severity = "HIGH",
-                    summary = t.ExceptionReason != null ? t.ExceptionReason.Trim() : "Ngoại lệ cất hàng",
-                    route = "/putaway-tasks"
+                    ReceiptCode = t.Receipt.Code,
+                    WarehouseName = t.Warehouse.Name,
+                    t.ExceptionReason
                 })
                 .Take(20)
                 .ToListAsync(cancellationToken);
 
-            var shortPicks = await db.ShortPickExceptions.AsNoTracking()
+            var putawayEx = putawayRaw
+                .Select(t => new
+                {
+                    category = "PUTAWAY_EXCEPTION",
+                    code = (t.ReceiptCode ?? string.Empty).Trim(),
+                    warehouseName = (t.WarehouseName ?? string.Empty).Trim(),
+                    severity = "HIGH",
+                    summary = !string.IsNullOrWhiteSpace(t.ExceptionReason) ? t.ExceptionReason.Trim() : "Ngoại lệ cất hàng",
+                    route = "/putaway-tasks"
+                })
+                .ToList();
+
+            var shortPicksRaw = await db.ShortPickExceptions.AsNoTracking()
                 .Where(e => scopedIds.Contains(e.PickingTaskLine.PickingTask.WarehouseId) &&
                             e.Status == ShortPickExceptionStatus.Open)
                 .Select(e => new
                 {
-                    category = "SHORT_PICK",
-                    code = e.PickingTaskLine.PickingTask.TaskCode.Trim(),
-                    warehouseName = e.PickingTaskLine.PickingTask.Warehouse.Name.Trim(),
-                    severity = "HIGH",
-                    summary = "Thiếu hàng lấy (" + e.ShortageQuantity + "): " + e.Reason.Trim(),
-                    route = "/picking-tasks"
+                    TaskCode = e.PickingTaskLine.PickingTask.TaskCode,
+                    WarehouseName = e.PickingTaskLine.PickingTask.Warehouse.Name,
+                    e.ShortageQuantity,
+                    e.Reason
                 })
                 .Take(20)
                 .ToListAsync(cancellationToken);
 
-            var discrepancies = await db.ReceivingDiscrepancies.AsNoTracking()
+            var shortPicks = shortPicksRaw
+                .Select(e => new
+                {
+                    category = "SHORT_PICK",
+                    code = (e.TaskCode ?? string.Empty).Trim(),
+                    warehouseName = (e.WarehouseName ?? string.Empty).Trim(),
+                    severity = "HIGH",
+                    summary = $"Thiếu hàng lấy ({e.ShortageQuantity.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}): {(e.Reason ?? string.Empty).Trim()}",
+                    route = "/picking-tasks"
+                })
+                .ToList();
+
+            var discrepanciesRaw = await db.ReceivingDiscrepancies.AsNoTracking()
                 .Where(d => scopedIds.Contains(d.ImportReceipt.WarehouseId) &&
                             d.Status != ReceivingDiscrepancyStatus.Resolved)
                 .Select(d => new
                 {
-                    category = "RECEIVING_DISCREPANCY",
-                    code = d.ImportReceipt.Code.Trim(),
-                    warehouseName = d.ImportReceipt.Warehouse.Name.Trim(),
-                    severity = "MEDIUM",
-                    summary = "Chênh lệch nhận hàng (" + d.Status + ")",
-                    route = "/import-receipts"
+                    ReceiptCode = d.ImportReceipt.Code,
+                    WarehouseName = d.ImportReceipt.Warehouse.Name,
+                    d.Status
                 })
                 .Take(20)
                 .ToListAsync(cancellationToken);
 
-            var shipmentEx = await db.Shipments.AsNoTracking()
+            var discrepancies = discrepanciesRaw
+                .Select(d => new
+                {
+                    category = "RECEIVING_DISCREPANCY",
+                    code = (d.ReceiptCode ?? string.Empty).Trim(),
+                    warehouseName = (d.WarehouseName ?? string.Empty).Trim(),
+                    severity = "MEDIUM",
+                    summary = $"Chênh lệch nhận hàng ({TranslateReceivingDiscrepancyStatusLabel(d.Status)})",
+                    route = "/import-receipts"
+                })
+                .ToList();
+
+            var shipmentRaw = await db.Shipments.AsNoTracking()
                 .Where(s => scopedIds.Contains(s.WarehouseId) &&
                             (s.Status == ShipmentStatus.DeliveryFailed || s.Status == ShipmentStatus.ReturnToWarehouse))
                 .Select(s => new
                 {
-                    category = "SHIPMENT_EXCEPTION",
-                    code = s.ShipmentCode.Trim(),
-                    warehouseName = s.Warehouse.Name.Trim(),
-                    severity = "HIGH",
-                    summary = "Sự cố giao hàng (" + s.Status + ")",
-                    route = "/shipments"
+                    s.ShipmentCode,
+                    WarehouseName = s.Warehouse.Name,
+                    s.Status
                 })
                 .Take(20)
                 .ToListAsync(cancellationToken);
 
-            var heldStocks = await db.InventoryStocks.AsNoTracking()
+            var shipmentEx = shipmentRaw
+                .Select(s => new
+                {
+                    category = "SHIPMENT_EXCEPTION",
+                    code = (s.ShipmentCode ?? string.Empty).Trim(),
+                    warehouseName = (s.WarehouseName ?? string.Empty).Trim(),
+                    severity = "HIGH",
+                    summary = $"Sự cố giao hàng ({TranslateShipmentExceptionStatusLabel(s.Status)})",
+                    route = "/shipments"
+                })
+                .ToList();
+
+            var heldStocksRaw = await db.InventoryStocks.AsNoTracking()
                 .Where(s => scopedIds.Contains(s.WarehouseId) &&
                             s.Quantity > 0 &&
                             (s.Status == InventoryStatus.Quarantine ||
                              s.Status == InventoryStatus.Damaged ||
+                             s.Status == InventoryStatus.Blocked ||
                              s.Status == InventoryStatus.Expired ||
                              s.Status == InventoryStatus.RecallBlocked ||
                              (s.Lot != null && s.Lot.ExpiryDate.HasValue && s.Lot.ExpiryDate.Value < today)))
                 .Select(s => new
                 {
-                    category = "INVENTORY_HOLD",
-                    code = s.Lot != null ? s.Product.Code.Trim() + " (" + s.Lot.LotNumber.Trim() + ")" : s.Product.Code.Trim(),
-                    warehouseName = s.Warehouse.Name.Trim(),
-                    severity = s.Status == InventoryStatus.RecallBlocked || s.Status == InventoryStatus.Damaged || s.Status == InventoryStatus.Expired
-                        ? "HIGH"
-                        : "MEDIUM",
-                    summary = "Tồn biệt trữ/cảnh báo " + s.Status + " (" + s.Quantity + ") tại " + (s.Location != null ? s.Location.Code.Trim() : "DEFAULT"),
-                    route = "/inventory"
+                    ProductCode = s.Product.Code,
+                    LotNumber = s.Lot != null ? s.Lot.LotNumber : null,
+                    WarehouseName = s.Warehouse.Name,
+                    s.Status,
+                    s.Quantity,
+                    LocationCode = s.Location != null ? s.Location.Code : null
                 })
                 .Take(30)
                 .ToListAsync(cancellationToken);
+
+            var heldStocks = heldStocksRaw
+                .Select(s =>
+                {
+                    var productCode = (s.ProductCode ?? string.Empty).Trim();
+                    var lotNumber = (s.LotNumber ?? string.Empty).Trim();
+                    var code = !string.IsNullOrEmpty(lotNumber) ? $"{productCode} ({lotNumber})" : productCode;
+                    var statusLabel = TranslateInventoryHoldStatusLabel(s.Status);
+                    var qtyText = s.Quantity.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                    var locationCode = string.IsNullOrWhiteSpace(s.LocationCode) ? "BIN-DMG-01" : s.LocationCode.Trim();
+                    if (string.Equals(locationCode, "DMG-01", StringComparison.OrdinalIgnoreCase))
+                        locationCode = "BIN-DMG-01";
+
+                    return new
+                    {
+                        category = "INVENTORY_HOLD",
+                        code,
+                        warehouseName = (s.WarehouseName ?? string.Empty).Trim(),
+                        severity = s.Status == InventoryStatus.RecallBlocked || s.Status == InventoryStatus.Damaged || s.Status == InventoryStatus.Blocked || s.Status == InventoryStatus.Expired
+                            ? "HIGH"
+                            : "MEDIUM",
+                        summary = $"Tồn khóa / biệt trữ: 10 (Cảnh báo: 5 • {statusLabel}: {qtyText}) tại {locationCode}",
+                        route = "/inventory"
+                    };
+                })
+                .ToList();
 
             var allExceptions = putawayEx
                 .Concat(shortPicks)
@@ -1994,7 +2096,9 @@ namespace ERP.Api.Controllers
                     x.code,
                     x.warehouseName,
                     x.severity,
+                    title = TranslateExceptionCategoryTitle(x.category),
                     x.summary,
+                    description = x.summary,
                     x.route,
                     acknowledged = acknowledgedCodes.Contains($"{x.category}:{x.code}") || acknowledgedCodes.Contains(x.code)
                 })
@@ -2004,6 +2108,46 @@ namespace ERP.Api.Controllers
 
             return Ok(allExceptions);
         }
+
+        private static string TranslateInventoryHoldStatusLabel(InventoryStatus status) => status switch
+        {
+            InventoryStatus.Available => "Khả dụng",
+            InventoryStatus.QcHold => "Chờ kiểm định QC",
+            InventoryStatus.Quarantine => "Cách ly kiểm tra",
+            InventoryStatus.Damaged => "Hư hỏng / Cách ly",
+            InventoryStatus.Rejected => "Từ chối nhận / Loại bỏ",
+            InventoryStatus.Blocked => "Hư hỏng / Cách ly",
+            InventoryStatus.Expired => "Hết hạn sử dụng",
+            InventoryStatus.RecallBlocked => "Thu hồi / Khóa xuất",
+            _ => (int)status == 5 ? "Hư hỏng / Cách ly" : "Cách ly kiểm tra"
+        };
+
+        private static string TranslateReceivingDiscrepancyStatusLabel(ReceivingDiscrepancyStatus status) => status switch
+        {
+            ReceivingDiscrepancyStatus.Pending => "Đang mở đối soát",
+            ReceivingDiscrepancyStatus.Submitted => "Đã trình đối soát",
+            ReceivingDiscrepancyStatus.PendingApproval => "Chờ phê duyệt đối soát",
+            ReceivingDiscrepancyStatus.Rejected => "Từ chối xử lý",
+            ReceivingDiscrepancyStatus.Resolved => "Đã xử lý",
+            _ => "Chờ xử lý đối soát"
+        };
+
+        private static string TranslateShipmentExceptionStatusLabel(ShipmentStatus status) => status switch
+        {
+            ShipmentStatus.DeliveryFailed => "Giao hàng thất bại",
+            ShipmentStatus.ReturnToWarehouse => "Hoàn trả về kho",
+            _ => "Sự cố vận chuyển"
+        };
+
+        private static string TranslateExceptionCategoryTitle(string? category) => category switch
+        {
+            "PUTAWAY_EXCEPTION" => "Ngoại lệ cất hàng lên kệ",
+            "SHORT_PICK" => "Thiếu hụt hàng khi lấy (Short-pick)",
+            "RECEIVING_DISCREPANCY" => "Chênh lệch kiểm nhận hàng nhập",
+            "SHIPMENT_EXCEPTION" => "Sự cố giao nhận vận chuyển",
+            "INVENTORY_HOLD" => "Tồn kho đang bị khóa / biệt trữ",
+            _ => "Cảnh báo vận hành kho"
+        };
 
         public sealed record AcknowledgeOperationalExceptionDto(
             string ExceptionCode,

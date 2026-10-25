@@ -901,6 +901,8 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
     else
     {
+        product.Code = "QA-E2E-001";
+        product.Name = "Thùng linh kiện điện tử QA-01";
         product.UnitId = unit.Id;
         product.CategoryId ??= catQa01.Id;
         product.StorageClass = "AMBIENT";
@@ -3776,6 +3778,64 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             CreatedBy = qaAdmin.Id,
             Note = "Nhập kiện Pallet PALLET-LPN-001 (6 hộp cảm biến LOT-QA-002) tại cửa tiếp nhận RCV-01"
         });
+    await context.SaveChangesAsync();
+
+    var wh02StorageBin = await context.WarehouseLocations.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(l => l.WarehouseId == wh02.Id && l.Code == "BIN-HN-01");
+    if (wh02StorageBin is null)
+    {
+        wh02StorageBin = new WarehouseLocation
+        {
+            WarehouseId = wh02.Id,
+            Code = "BIN-HN-01",
+            Name = "Kệ lưu trữ chính Kho Chi Nhánh Hà Nội",
+            LocationType = WarehouseLocationType.Storage,
+            IsActive = true,
+            IsBlocked = false,
+            IsPickable = true,
+            IsReceivable = false,
+            IsSystemManaged = false,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = qaAdmin.Id
+        };
+        context.WarehouseLocations.Add(wh02StorageBin);
+        await context.SaveChangesAsync();
+    }
+
+    var wh02QaE2EStock = await context.InventoryStocks.IgnoreQueryFilters()
+        .FirstOrDefaultAsync(s =>
+            s.WarehouseId == wh02.Id &&
+            s.ProductId == product.Id &&
+            s.Status == InventoryStatus.Available &&
+            s.LocationId == wh02StorageBin.Id &&
+            s.LotId == null &&
+            s.SerialId == null &&
+            s.HandlingUnitId == null &&
+            s.OwnerId == null);
+    if (wh02QaE2EStock is null)
+    {
+        wh02QaE2EStock = new InventoryStock
+        {
+            WarehouseId = wh02.Id,
+            ProductId = product.Id,
+            LocationId = wh02StorageBin.Id,
+            Status = InventoryStatus.Available,
+            Quantity = 24m,
+            ReservedQuantity = 0m,
+            MovingAverageCost = 250000m,
+            LastUpdated = DateTime.UtcNow
+        };
+        wh02QaE2EStock.RefreshGrainHash();
+        context.InventoryStocks.Add(wh02QaE2EStock);
+    }
+    else
+    {
+        if (wh02QaE2EStock.Quantity < 20m)
+            wh02QaE2EStock.Quantity = 24m;
+        wh02QaE2EStock.MovingAverageCost = 250000m;
+        wh02QaE2EStock.LastUpdated = DateTime.UtcNow;
+        wh02QaE2EStock.RefreshGrainHash();
+    }
     await context.SaveChangesAsync();
 
     // 7. Idempotent Inventory Reconciliation pass — ensure 100% Match across all (WarehouseId, ProductId, Status) pairs

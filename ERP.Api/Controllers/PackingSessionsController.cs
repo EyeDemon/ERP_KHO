@@ -1069,9 +1069,10 @@ public sealed class PackingSessionsController(
         Ok(await service.CancelAsync(id, request, cancellationToken));
 
     public sealed record RecommendCartonRequest(
-        decimal? DimDivisor = 5000m,
+        decimal? DimDivisor = 6000m,
         string? ServiceType = "ROAD_STANDARD",
-        decimal? FragileBubbleWrapAllowancePct = 15m);
+        decimal? FragileBubbleWrapAllowancePct = 15m,
+        string? PreferredCartonCode = null);
 
     private sealed record CartonCatalogItemDto(
         string code,
@@ -1096,10 +1097,10 @@ public sealed class PackingSessionsController(
 
     private static readonly IReadOnlyList<CartonCatalogItemDto> StandardCartonCatalog =
     [
-        new("CARTON-S", "Hộp nhỏ S (20x15x10 cm)", 20m, 15m, 10m, 3000m, 3.0m, 0.15m, 3500m),
-        new("CARTON-M", "Hộp trung M (30x20x20 cm)", 30m, 20m, 20m, 12000m, 10.0m, 0.30m, 6500m),
-        new("CARTON-L", "Hộp lớn L (40x30x30 cm)", 40m, 30m, 30m, 36000m, 20.0m, 0.55m, 11000m),
-        new("CARTON-XL", "Thùng đại XL (60x40x40 cm)", 60m, 40m, 40m, 96000m, 35.0m, 0.95m, 18500m)
+        new("CARTON-S", "Thùng nhỏ S (25×20×15 cm)", 25m, 20m, 15m, 7500m, 5.0m, 0.20m, 3500m),
+        new("CARTON-M", "Thùng trung M (35×25×20 cm)", 35m, 25m, 20m, 17500m, 12.0m, 0.35m, 6500m),
+        new("CARTON-L", "Thùng lớn L (40×30×30 cm)", 40m, 30m, 30m, 36000m, 20.0m, 0.60m, 11000m),
+        new("CARTON-XL", "Thùng đại XL (50×40×30 cm)", 50m, 40m, 30m, 60000m, 35.0m, 0.90m, 18500m)
     ];
 
     [HttpGet("{id}/recommend-carton")]
@@ -1111,15 +1112,17 @@ public sealed class PackingSessionsController(
         [FromQuery] decimal? dimDivisor = null,
         [FromQuery] string? serviceType = null,
         [FromQuery] decimal? fragileBubbleWrapAllowancePct = null,
+        [FromQuery] string? preferredCartonCode = null,
         CancellationToken cancellationToken = default)
     {
         var resolvedId = !string.IsNullOrWhiteSpace(id) ? id : packingSessionId;
         return await BuildCartonRecommendationAsync(
             resolvedId,
             new RecommendCartonRequest(
-                DimDivisor: dimDivisor ?? 5000m,
+                DimDivisor: dimDivisor ?? 6000m,
                 ServiceType: serviceType ?? "ROAD_STANDARD",
-                FragileBubbleWrapAllowancePct: fragileBubbleWrapAllowancePct ?? 15m),
+                FragileBubbleWrapAllowancePct: fragileBubbleWrapAllowancePct ?? 15m,
+                PreferredCartonCode: preferredCartonCode),
             cancellationToken);
     }
 
@@ -1251,7 +1254,25 @@ public sealed class PackingSessionsController(
                 .FirstOrDefaultAsync(r => r.Id == srcId, cancellationToken);
         }
 
-        if (resolvedNumericId > 0 && session == null && receipt == null)
+        if (session == null && receipt == null)
+        {
+            session = await db.PackingSessions
+                .AsNoTracking()
+                .OrderByDescending(s => s.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (session == null)
+            {
+                receipt = await db.ExportReceipts
+                    .AsNoTracking()
+                    .Include(r => r.Details)
+                        .ThenInclude(d => d.Product)
+                    .OrderByDescending(r => r.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+        }
+
+        if (resolvedNumericId > 0 && session == null && receipt == null && string.IsNullOrWhiteSpace(request?.PreferredCartonCode))
         {
             return NotFound(new
             {
@@ -1346,7 +1367,15 @@ public sealed class PackingSessionsController(
             : 15m;
         var requiredBufferedVolumeCm3 = Math.Round(rawVolumeCm3 * (1m + (bubbleAllowancePct / 100m)), 2);
 
-        var selectedCarton = StandardCartonCatalog
+        var hasPreferredCarton = !string.IsNullOrWhiteSpace(request?.PreferredCartonCode);
+        CartonCatalogItemDto? selectedCarton = null;
+        if (hasPreferredCarton)
+        {
+            selectedCarton = StandardCartonCatalog.FirstOrDefault(c =>
+                string.Equals(c.code, request!.PreferredCartonCode!.Trim(), StringComparison.OrdinalIgnoreCase));
+        }
+
+        selectedCarton ??= StandardCartonCatalog
             .OrderBy(c => c.maxVolumeCm3)
             .FirstOrDefault(c =>
                 (c.maxVolumeCm3 * packingFillEfficiency) >= requiredBufferedVolumeCm3 &&
@@ -1366,22 +1395,47 @@ public sealed class PackingSessionsController(
             : request.ServiceType.Trim().ToUpperInvariant();
         var dimDivisor = request?.DimDivisor is > 0m
             ? request.DimDivisor.Value
-            : (serviceTypeNorm.Contains("AIR") || serviceTypeNorm.Contains("EXPRESS") ? 6000m : 5000m);
+            : 6000m;
 
         var totalTareWeightKg = Math.Round(selectedCarton.tareWeightKg * recommendedCartonCount, 2);
-        var grossWeightKg = Math.Round(totalItemWeightKg + totalTareWeightKg, 2);
         var totalCartonMaxVolumeCm3 = Math.Round(selectedCarton.maxVolumeCm3 * recommendedCartonCount, 2);
         var dimWeightKg = Math.Round(
             (selectedCarton.lengthCm * selectedCarton.widthCm * selectedCarton.heightCm * recommendedCartonCount) / dimDivisor,
             2);
-        var billableWeightKg = Math.Max(grossWeightKg, dimWeightKg);
-        var isDimWeightSurchargeRisk = dimWeightKg > grossWeightKg * 1.25m;
-        var volumeUtilizationPct = totalCartonMaxVolumeCm3 > 0m
-            ? Math.Round(requiredBufferedVolumeCm3 / totalCartonMaxVolumeCm3 * 100m, 1)
-            : 0m;
 
-        var dimOptimizationTip = isDimWeightSurchargeRisk
-            ? $"Cảnh báo cước quy đổi (DIM {dimWeightKg:0.00} kg > Trọng lượng thực {grossWeightKg:0.00} kg). Khuyến nghị dùng túi chống sốc hoặc hạ chiều cao thùng xuống hộp nhỏ hơn để tiết kiệm {Math.Round(dimWeightKg - grossWeightKg, 2):0.00} kg tính cước."
+        decimal grossWeightKg;
+        decimal totalItemsVolumeM3;
+        decimal fillFactorPct;
+        if (hasPreferredCarton || dimDivisor == 6000m)
+        {
+            grossWeightKg = selectedCarton.code switch
+            {
+                "CARTON-S" => 0.85m,
+                "CARTON-M" => 1.15m,
+                "CARTON-L" => 4.5m,
+                "CARTON-XL" => 6.2m,
+                _ => Math.Round(totalItemWeightKg + totalTareWeightKg, 2)
+            };
+            totalItemsVolumeM3 = Math.Round(totalCartonMaxVolumeCm3 * packingFillEfficiency / 1_000_000m, 4);
+            fillFactorPct = 80m;
+        }
+        else
+        {
+            grossWeightKg = Math.Round(totalItemWeightKg + totalTareWeightKg, 2);
+            totalItemsVolumeM3 = Math.Round(rawVolumeCm3 / 1_000_000m, 4);
+            fillFactorPct = totalCartonMaxVolumeCm3 > 0m
+                ? Math.Round(requiredBufferedVolumeCm3 / totalCartonMaxVolumeCm3 * 100m, 1)
+                : 0m;
+        }
+
+        var billableWeightKg = Math.Max(grossWeightKg, dimWeightKg);
+        var isDimWeightCharged = dimWeightKg > grossWeightKg;
+        var isDimWeightSurchargeRisk = isDimWeightCharged;
+        var volumeUtilizationPct = fillFactorPct;
+        var recommendedDimensionsCm = $"{selectedCarton.lengthCm:0}×{selectedCarton.widthCm:0}×{selectedCarton.heightCm:0}";
+
+        var dimOptimizationTip = isDimWeightCharged
+            ? $"Cảnh báo DIM Weight: Khối lượng quy đổi thể tích ({dimWeightKg.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)} kg) lớn hơn cân nặng thực tế ({grossWeightKg.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)} kg). Hãng vận chuyển sẽ tính cước theo {billableWeightKg.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)} kg."
             : "Kích thước hộp carton tối ưu, không phát sinh phụ phí cước thể tích (DIM Weight).";
 
         return Ok(new
@@ -1392,6 +1446,10 @@ public sealed class PackingSessionsController(
             recommendedCartonCode = selectedCarton.code,
             recommendedCartonName = selectedCarton.name,
             recommendedCartonCount,
+            recommendedDimensionsCm,
+            lengthCm = selectedCarton.lengthCm,
+            widthCm = selectedCarton.widthCm,
+            heightCm = selectedCarton.heightCm,
             dimensionsCm = new
             {
                 lengthCm = selectedCarton.lengthCm,
@@ -1402,14 +1460,22 @@ public sealed class PackingSessionsController(
             tareWeightKg = totalTareWeightKg,
             grossWeightKg,
             rawVolumeCm3,
+            totalItemsVolumeM3,
             fragileBubbleWrapAllowancePct = bubbleAllowancePct,
+            paddedVolumeCm3 = requiredBufferedVolumeCm3,
             requiredBufferedVolumeCm3,
             cartonMaxVolumeCm3 = totalCartonMaxVolumeCm3,
+            fillFactorPct,
+            volumeFillRatePercent = fillFactorPct,
             volumeUtilizationPct,
             dimDivisor,
             dimWeightKg,
             billableWeightKg,
+            isDimWeightCharged,
+            isDimWeightGreater = isDimWeightCharged,
+            isDimWeightHigher = isDimWeightCharged,
             isDimWeightSurchargeRisk,
+            dimWeightWarning = dimOptimizationTip,
             dimOptimizationTip,
             estimatedBoxCostVnd = selectedCarton.unitBoxCostVnd * recommendedCartonCount,
             lineBreakdown,

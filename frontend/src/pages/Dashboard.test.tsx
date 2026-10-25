@@ -169,4 +169,68 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
     expect((await view.findByRole('alert')).textContent).toContain('Lỗi kết nối cổng đồng bộ sàn.');
     expect(view.queryByText(/Đã đồng bộ tồn kho an toàn đa gian hàng/)).toBeNull();
   });
+
+  it('Wave 60 [W60-01]: translates DEKIT_DISASSEMBLE_EXECUTED and formats INVENTORY_HOLD exception without .0000 or raw enum numbers', async () => {
+    get.mockImplementation(async (url) => {
+      if (url === '/api/Reports/operational-dashboard') {
+        return {
+          data: {
+            warehouseCount: 2,
+            productCount: 2,
+            inventoryBucketCount: 7,
+            invalidStockCount: 0,
+            openTaskCount: 3,
+            openInboundCount: 1,
+            openPutawayCount: 1,
+            openOutboundCount: 1,
+            openTransferCount: 0,
+            recentActivities: [
+              {
+                id: 9901,
+                action: 'DEKIT_DISASSEMBLE_EXECUTED',
+                actionLabel: 'DEKIT_DISASSEMBLE_EXECUTED',
+                entityName: 'KittingVas',
+                entityId: 801,
+                warehouseName: 'Kho Chính TP.HCM',
+                result: 'Success',
+                timestamp: '2026-10-25T08:00:00Z',
+              },
+            ],
+          },
+        } as never;
+      }
+      if (url === '/api/Reports/operational-exceptions') {
+        return {
+          data: [
+            {
+              category: 'INVENTORY_HOLD',
+              code: 'QA-E2E-001 (LOT-QA-001)',
+              warehouseName: 'Kho Chính TP.HCM',
+              severity: 'HIGH',
+              summary: 'Tồn biệt trữ/cảnh báo 5 (12.0000) tại BIN-DMG-01',
+              route: '/inventory',
+              acknowledged: false,
+            },
+          ],
+        } as never;
+      }
+      return { data: [] } as never;
+    });
+
+    const view = render(
+      <MemoryRouter>
+        <Dashboard />
+      </MemoryRouter>,
+    );
+
+    expect(await view.findByText('Đã xả bộ hàng lắp ráp (De-kitting)')).toBeTruthy();
+    expect(view.getByText(/Lệnh lắp ráp \/ xả bộ/)).toBeTruthy();
+    expect(view.queryByText('DEKIT_DISASSEMBLE_EXECUTED')).toBeNull();
+
+    expect(await view.findByText('Tồn kho đang bị khóa / biệt trữ')).toBeTruthy();
+    expect(
+      view.getByText('Tồn khóa / biệt trữ: 10 (Cảnh báo: 5 • Hư hỏng / Cách ly: 12) tại BIN-DMG-01'),
+    ).toBeTruthy();
+    expect(view.container.textContent).not.toContain('12.0000');
+  });
 });

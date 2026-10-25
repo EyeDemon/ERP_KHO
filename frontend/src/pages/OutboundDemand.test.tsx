@@ -148,4 +148,23 @@ describe('Outbound demand and backorder workbench',()=>{
     expect(await view.findByText(/Phường Bến Nghé \(Mã: 26734\)/)).toBeTruthy();
     expect(apiClient.post).toHaveBeenCalledWith('/api/shipments/normalize-vn-address',expect.objectContaining({rawAddress:expect.any(String)}));
   });
+
+  it('Wave 60 [W60-03]: initializes Smart DOM order splitting with SO-QA-001 / QA-E2E-001 / WH01 and toggles MULTI_WAREHOUSE_SPLIT across WH01 & WH02',async()=>{
+    const view=render(<OutboundDemand/>);
+    await view.findByText('SO-0088');
+
+    const domCard=view.getByTestId('smart-dom-order-splitting-card');
+    expect(domCard.textContent).toContain('SO-QA-001');
+    expect(domCard.textContent).toContain('QA-E2E-001');
+    expect(domCard.textContent).toContain('WH01 — Kho Chính TP.HCM');
+    expect(domCard.textContent).not.toContain('SO-2026-DOM-01');
+    expect(domCard.textContent).not.toContain('DC Bình Dương');
+
+    const modeSelect=view.getByTestId('select-dom-fulfillment-mode');
+    fireEvent.change(modeSelect,{target:{value:'MULTI_WAREHOUSE_SPLIT'}});
+    expect(domCard.textContent).toContain('SO-QA-001-SUB1');
+    expect(domCard.textContent).toContain('SO-QA-001-SUB2');
+    expect(domCard.textContent).toContain('WH01 — Kho Chính TP.HCM');
+    expect(domCard.textContent).toContain('WH02 — Kho Chi Nhánh Hà Nội');
+  });
 });

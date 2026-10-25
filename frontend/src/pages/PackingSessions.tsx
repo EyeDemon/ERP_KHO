@@ -100,10 +100,17 @@ export default function PackingSessions(){
   const [videoSearchAwb,setVideoSearchAwb]=useState<string>('');
   const [videoNotice,setVideoNotice]=useState<string>('');
   const [videoEvidences,setVideoEvidences]=useState<Array<{id:number;sessionId:number;sessionCode:string;awbCode:string;durationSeconds:number;fileSizeMb:number;sha256Hash:string;recordedAt:string;cameraStation:string}>>([]);
+  const packingBoxCatalog = [
+    { code: 'CARTON-S', name: 'Thùng nhỏ S (25×20×15 cm)', l: 25, w: 20, h: 15, maxWeightKg: 5, volumeCm3: 7500, dimWeightKg: 1.25, gross: 0.85, vol: 0.006 },
+    { code: 'CARTON-M', name: 'Thùng trung M (35×25×20 cm)', l: 35, w: 25, h: 20, maxWeightKg: 12, volumeCm3: 17500, dimWeightKg: 2.92, gross: 1.15, vol: 0.014 },
+    { code: 'CARTON-L', name: 'Thùng lớn L (40×30×30 cm)', l: 40, w: 30, h: 30, maxWeightKg: 20, volumeCm3: 36000, dimWeightKg: 6.0, gross: 4.5, vol: 0.0288 },
+    { code: 'CARTON-XL', name: 'Thùng đại XL (50×40×30 cm)', l: 50, w: 40, h: 30, maxWeightKg: 35, volumeCm3: 60000, dimWeightKg: 10.0, gross: 6.2, vol: 0.048 },
+  ];
+  const [selectedBoxCode,setSelectedBoxCode]=useState<string>('CARTON-M');
   const [unifiedScanInput,setUnifiedScanInput]=useState<string>('');
   const [unifiedScanStatus,setUnifiedScanStatus]=useState<string>('');
   const [unifiedScanCancelledWarning,setUnifiedScanCancelledWarning]=useState<string>('');
-  const [unifiedSuggestedCarton,setUnifiedSuggestedCarton]=useState<string>('Thùng trung M (30×20×15 cm)');
+  const [unifiedSuggestedCarton,setUnifiedSuggestedCarton]=useState<string>('Thùng trung M (35×25×20 cm)');
   const [unifiedAwbPrintNotice,setUnifiedAwbPrintNotice]=useState<string>('');
   const [unifiedAwbPrintBusy,setUnifiedAwbPrintBusy]=useState<boolean>(false);
   const [unifiedScanTimestamp,setUnifiedScanTimestamp]=useState<string>('08:30:00');
@@ -120,14 +127,14 @@ export default function PackingSessions(){
     isDimWeightHigher:boolean;
   }>({
     recommendedCartonCode:'CARTON-M',
-    recommendedCartonName:'Thùng trung M (30×20×15 cm)',
-    lengthCm:30,
-    widthCm:20,
-    heightCm:15,
-    totalItemsVolumeM3:0.0072,
+    recommendedCartonName:'Thùng trung M (35×25×20 cm)',
+    lengthCm:35,
+    widthCm:25,
+    heightCm:20,
+    totalItemsVolumeM3:0.014,
     volumeFillRatePercent:80,
     grossWeightKg:1.15,
-    dimWeightKg:1.5,
+    dimWeightKg:2.92,
     isDimWeightHigher:true,
   });
   const [cartonRecommendBusy,setCartonRecommendBusy]=useState<boolean>(false);
@@ -135,30 +142,56 @@ export default function PackingSessions(){
   const [webrtcCameraStatus,setWebrtcCameraStatus]=useState<string>('');
   const [kittingVasMode,setKittingVasMode]=useState<'PRE_KIT'|'DEKIT_DISASSEMBLE'>('PRE_KIT');
 
+  const applyCatalogCartonSelection=(boxCode:string)=>{
+    const matched=packingBoxCatalog.find(b=>b.code===boxCode)??packingBoxCatalog[1];
+    setSelectedBoxCode(matched.code);
+    setUnifiedSuggestedCarton(matched.name);
+    setCartonRecommendation({
+      recommendedCartonCode:matched.code,
+      recommendedCartonName:matched.name,
+      lengthCm:matched.l,
+      widthCm:matched.w,
+      heightCm:matched.h,
+      totalItemsVolumeM3:matched.vol,
+      volumeFillRatePercent:80,
+      grossWeightKg:matched.gross,
+      dimWeightKg:matched.dimWeightKg,
+      isDimWeightHigher:matched.dimWeightKg>matched.gross,
+    });
+  };
+
   const handleRecommendCarton3D=async(customBoxCode?:string)=>{
     if(cartonRecommendBusy)return;
     setCartonRecommendBusy(true);
     setError('');
     try{
       const targetId=selected?.id??sessions[0]?.id??77;
+      const preferredCode=customBoxCode||selectedBoxCode||'CARTON-M';
       const res=await apiClient.post(`/api/v1/packing-sessions/${targetId}/recommend-carton`,{
-        preferredCartonCode:customBoxCode||undefined,
+        dimDivisor:6000,
+        preferredCartonCode:preferredCode,
         requiredQuantity:selected?.requiredQuantity??4,
       });
       const d=(res?.data??{}) as Record<string,unknown>;
-      const code=String(d.recommendedCartonCode??customBoxCode??'CARTON-M');
-      const dims=code==='CARTON-S'?{l:20,w:15,h:10,name:'Thùng tiêu chuẩn S (20×15×10 cm)',gross:0.85,vol:0.0024}
-        :code==='CARTON-L'?{l:50,w:40,h:30,name:'Thùng lớn L (50×40×30 cm)',gross:6.2,vol:0.048}
-        :{l:30,w:20,h:15,name:'Thùng trung M (30×20×15 cm)',gross:1.15,vol:0.0072};
-      const lengthCm=Number(d.lengthCm??dims.l);
-      const widthCm=Number(d.widthCm??dims.w);
-      const heightCm=Number(d.heightCm??dims.h);
+      const code=String(d.recommendedCartonCode??preferredCode);
+      const matchedCatalog=packingBoxCatalog.find(b=>b.code===code)??packingBoxCatalog[1];
+      const dimObj=(d.dimensionsCm&&typeof d.dimensionsCm==='object')?(d.dimensionsCm as Record<string,unknown>):null;
+      const dimStr=typeof d.recommendedDimensionsCm==='string'
+        ?d.recommendedDimensionsCm
+        :(typeof d.dimensionsCm==='string'?d.dimensionsCm:(typeof d.recommendedCartonName==='string'?d.recommendedCartonName:''));
+      const dimMatch=dimStr.match(/(\d+(?:\.\d+)?)\s*[x×X*]\s*(\d+(?:\.\d+)?)\s*[x×X*]\s*(\d+(?:\.\d+)?)/);
+      const lengthCm=Number(dimObj?.lengthCm??dimObj?.l??d.lengthCm??(dimMatch?dimMatch[1]:matchedCatalog.l));
+      const widthCm=Number(dimObj?.widthCm??dimObj?.w??d.widthCm??(dimMatch?dimMatch[2]:matchedCatalog.w));
+      const heightCm=Number(dimObj?.heightCm??dimObj?.h??d.heightCm??(dimMatch?dimMatch[3]:matchedCatalog.h));
       const dimWeightKg=Number(d.dimWeightKg??Math.round(((lengthCm*widthCm*heightCm)/6000)*100)/100);
-      const grossWeightKg=Number(d.grossWeightKg??dims.gross);
-      const totalItemsVolumeM3=Number(d.totalItemsVolumeM3??dims.vol);
+      const grossWeightKg=Number(d.grossWeightKg??d.totalItemWeightKg??d.actualWeightKg??matchedCatalog.gross);
       const boxVolM3=Math.max(0.0001,(lengthCm*widthCm*heightCm)/1000000);
+      const totalItemsVolumeM3=Number(d.totalItemsVolumeM3??Math.round(boxVolM3*0.8*10000)/10000);
       const volumeFillRatePercent=Number(d.volumeFillRatePercent??Math.min(98,Math.round((totalItemsVolumeM3/boxVolM3)*100)));
-      const recommendedCartonName=String(d.recommendedCartonName??dims.name);
+      const recommendedCartonName=typeof d.recommendedCartonName==='string'&&d.recommendedCartonName.trim().length>0
+        ?d.recommendedCartonName
+        :matchedCatalog.name;
+      setSelectedBoxCode(code);
       setCartonRecommendation({
         recommendedCartonCode:code,
         recommendedCartonName,
@@ -169,7 +202,7 @@ export default function PackingSessions(){
         volumeFillRatePercent,
         grossWeightKg,
         dimWeightKg,
-        isDimWeightHigher:Boolean(d.isDimWeightHigher??(dimWeightKg>grossWeightKg)),
+        isDimWeightHigher:Boolean(d.isDimWeightHigher??d.isDimWeightCharged??(dimWeightKg>grossWeightKg)),
       });
       setUnifiedSuggestedCarton(recommendedCartonName);
     }catch(err){
@@ -219,16 +252,13 @@ export default function PackingSessions(){
     }
     setUnifiedScanCancelledWarning('');
     const reqQty=matchedSession?.requiredQuantity??4;
-    const suggestion=reqQty<=2
-      ?'Thùng tiêu chuẩn S (20×15×10 cm)'
-      :reqQty<=8
-        ?'Thùng trung M (30×20×15 cm)'
-        :'Thùng lớn L (50×40×30 cm)';
-    setUnifiedSuggestedCarton(suggestion);
+    const targetBoxCode=reqQty<=2?'CARTON-S':reqQty<=8?'CARTON-M':reqQty<=15?'CARTON-L':'CARTON-XL';
+    const matchedCatalog=packingBoxCatalog.find(b=>b.code===targetBoxCode)??packingBoxCatalog[1];
+    applyCatalogCartonSelection(matchedCatalog.code);
     const nowStr=new Date().toLocaleTimeString('vi-VN');
     setUnifiedScanTimestamp(nowStr);
     const targetCode=codeToCheck||matchedSession?.sessionCode||'PACK-001';
-    setUnifiedScanStatus(`Đã xác thực đơn ${targetCode} (${reqQty} SP) lúc ${nowStr} — Đủ điều kiện đóng gói • Đề xuất: ${suggestion}`);
+    setUnifiedScanStatus(`Đã xác thực đơn ${targetCode} (${reqQty} SP) lúc ${nowStr} — Đủ điều kiện đóng gói • Đề xuất: ${matchedCatalog.name}`);
   };
 
   const handlePrintUnifiedThermalAwb=async()=>{
@@ -532,38 +562,17 @@ export default function PackingSessions(){
               )}
             </div>
             <div className="ui-inline-wrap" style={{ gap: 6 }}>
-              {[
-                { label: 'Thùng tiêu chuẩn S (20×15×10 cm)', code: 'CARTON-S' },
-                { label: 'Thùng trung M (30×20×15 cm)', code: 'CARTON-M' },
-                { label: 'Thùng lớn L (50×40×30 cm)', code: 'CARTON-L' },
-              ].map(box => (
+              {packingBoxCatalog.map(box => (
                 <button
                   key={box.code}
                   type="button"
-                  onClick={() => {
-                    setUnifiedSuggestedCarton(box.label);
-                    const dims = box.code === 'CARTON-S' ? { l: 20, w: 15, h: 10, gross: 0.85, vol: 0.0024, fill: 80, dim: 0.5 }
-                      : box.code === 'CARTON-L' ? { l: 50, w: 40, h: 30, gross: 6.2, vol: 0.048, fill: 80, dim: 10.0 }
-                      : { l: 30, w: 20, h: 15, gross: 1.15, vol: 0.0072, fill: 80, dim: 1.5 };
-                    setCartonRecommendation({
-                      recommendedCartonCode: box.code,
-                      recommendedCartonName: box.label,
-                      lengthCm: dims.l,
-                      widthCm: dims.w,
-                      heightCm: dims.h,
-                      totalItemsVolumeM3: dims.vol,
-                      volumeFillRatePercent: dims.fill,
-                      grossWeightKg: dims.gross,
-                      dimWeightKg: dims.dim,
-                      isDimWeightHigher: dims.dim > dims.gross,
-                    });
-                  }}
+                  onClick={() => applyCatalogCartonSelection(box.code)}
                   style={{
                     fontSize: 11.5,
                     padding: '4px 8px',
-                    fontWeight: unifiedSuggestedCarton === box.label ? 700 : 500,
-                    background: unifiedSuggestedCarton === box.label ? '#1e40af' : '#ffffff',
-                    color: unifiedSuggestedCarton === box.label ? '#ffffff' : '#1e293b',
+                    fontWeight: cartonRecommendation.recommendedCartonCode === box.code ? 700 : 500,
+                    background: cartonRecommendation.recommendedCartonCode === box.code ? '#1e40af' : '#ffffff',
+                    color: cartonRecommendation.recommendedCartonCode === box.code ? '#ffffff' : '#1e293b',
                     border: '1px solid #93c5fd',
                     borderRadius: 6,
                   }}
@@ -575,7 +584,7 @@ export default function PackingSessions(){
                 type="button"
                 data-testid="btn-recommend-carton-3d"
                 disabled={!!busy || governanceBusy || cartonRecommendBusy}
-                onClick={() => void handleRecommendCarton3D(cartonRecommendation.recommendedCartonCode)}
+                onClick={() => void handleRecommendCarton3D(selectedBoxCode)}
                 style={{ fontSize: 11.5, padding: '4px 8px' }}
               >
                 {cartonRecommendBusy ? 'Đang tính 3D...' : 'Tính Toán Gợi Ý Thùng 3D & Trọng Lượng Quy Đổi'}
@@ -655,10 +664,10 @@ export default function PackingSessions(){
 
       <UiCard title="Danh mục Loại Bao bì Chuẩn & Gợi ý Tối ưu Đóng thùng">
         <div className="ui-inline-wrap">
-          <span><strong>CARTON-S</strong> (Thùng carton): tối đa 15 kg / 0.04 m³</span>
-          <span><strong>CARTON-L</strong> (Thùng carton): tối đa 30 kg / 0.12 m³</span>
-          <span><strong>TOTE-STD</strong> (Khay nhựa): tối đa 25 kg / 0.06 m³</span>
-          <span><strong>PALLET-EUR</strong> (Pallet gỗ/nhựa): tối đa 1000 kg / 1.80 m³</span>
+          <span><strong>CARTON-S</strong> (25×20×15 cm): tối đa 5 kg / Cước DIM 1.25 kg</span>
+          <span><strong>CARTON-M</strong> (35×25×20 cm): tối đa 12 kg / Cước DIM 2.92 kg</span>
+          <span><strong>CARTON-L</strong> (40×30×30 cm): tối đa 20 kg / Cước DIM 6.0 kg</span>
+          <span><strong>CARTON-XL</strong> (50×40×30 cm): tối đa 35 kg / Cước DIM 10.0 kg</span>
           <span>Chính sách tối ưu đóng thùng: <UiBadge tone="success">Đề xuất & Xác nhận bởi Nhân viên</UiBadge></span>
         </div>
         <div className="ui-inline-wrap">

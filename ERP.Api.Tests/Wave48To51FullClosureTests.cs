@@ -2483,4 +2483,192 @@ public class Wave48To51FullClosureTests
         snapDoc.RootElement.GetProperty("totalPalletEquivalent").GetDecimal().Should().Be(2.0m); // 2.4 / 1.2 = 2.0 pallets
         snapDoc.RootElement.GetProperty("totalEstimatedDailyStorageFeeVnd").GetDecimal().Should().Be(41000m); // (2 * 18,000) + (1 * 5,000)
     }
+
+    [Fact]
+    public async Task Wave60_VisualTruthClosure_DashboardExceptions_3DCartonCatalog_And_SmartDomSplit_AreSynchronized()
+    {
+        var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
+            .UseInMemoryDatabase($"W60_VisualTruthClosure_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ErpKhoDbContext(options);
+
+        var wh1 = new Warehouse { Id = 1, Code = "WH01", Name = "Kho Chính TP.HCM", IsActive = true };
+        var wh2 = new Warehouse { Id = 2, Code = "WH02", Name = "Kho Chi Nhánh Hà Nội", IsActive = true };
+        var dmgLoc = new WarehouseLocation
+        {
+            Id = 15,
+            WarehouseId = 1,
+            Code = "BIN-DMG-01",
+            Name = "Kệ biệt trữ hàng lỗi DMG-01",
+            LocationType = WarehouseLocationType.Damaged,
+            IsActive = true,
+            IsPickable = false
+        };
+        var prod = new Product
+        {
+            Id = 1201,
+            Code = "QA-E2E-001",
+            Name = "Thùng linh kiện điện tử QA-01",
+            UnitWeightKg = 0.5m,
+            UnitVolumeM3 = 0.003m,
+            MovingAverageCost = 250000m,
+            IsActive = true
+        };
+        db.Warehouses.AddRange(wh1, wh2);
+        db.WarehouseLocations.Add(dmgLoc);
+        db.Products.Add(prod);
+
+        var heldStock = new InventoryStock
+        {
+            Id = 12001,
+            TenantId = 1,
+            WarehouseId = 1,
+            Warehouse = wh1,
+            ProductId = 1201,
+            Product = prod,
+            LocationId = 15,
+            Location = dmgLoc,
+            Status = InventoryStatus.Damaged,
+            Quantity = 12m,
+            ReservedQuantity = 0m
+        };
+        heldStock.RefreshGrainHash();
+        db.InventoryStocks.Add(heldStock);
+
+        db.AuditLogs.AddRange(
+            new AuditLog
+            {
+                Id = 9901,
+                TenantId = 1,
+                UserId = 1,
+                Action = "DEKIT_DISASSEMBLE_EXECUTED",
+                EntityName = "KittingVas",
+                EntityId = 801,
+                Timestamp = DateTime.UtcNow
+            },
+            new AuditLog
+            {
+                Id = 9902,
+                TenantId = 1,
+                UserId = 1,
+                Action = "KIT_ASSEMBLE_EXECUTED",
+                EntityName = "KittingVas",
+                EntityId = 802,
+                Timestamp = DateTime.UtcNow.AddSeconds(-5)
+            });
+
+        db.SalesOrders.Add(new SalesOrder
+        {
+            Id = 6001,
+            OrderCode = "SO-QA-001",
+            CustomerId = 1,
+            WarehouseId = 1,
+            Status = SalesOrderStatus.Released,
+            CreatedBy = 1,
+            CreatedAt = DateTime.UtcNow,
+            Lines =
+            [
+                new SalesOrderLine
+                {
+                    Id = 60011,
+                    SalesOrderId = 6001,
+                    ProductId = 1201,
+                    Product = prod,
+                    OrderedQuantity = 5m
+                }
+            ]
+        });
+        db.PackingSessions.Add(new PackingSession
+        {
+            Id = 77,
+            SessionCode = "PACK-QA-077",
+            WarehouseId = 1,
+            Status = PackingSessionStatus.InProgress,
+            CreatedBy = 1,
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var whAuth = new Mock<IWarehouseAuthorizationService>();
+        whAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([1, 2]);
+        whAuth.Setup(x => x.EnsureWarehouseAccessAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+
+        // 1. [W60-01] Dashboard Audit Action Translation & Operational Exceptions (Zero .0000 and Zero raw enum integer)
+        var reportsCtrl = new ReportsController(new Mock<IReportService>().Object, db, whAuth.Object);
+        var dashRes = await reportsCtrl.GetOperationalDashboard(db, whAuth.Object, default);
+        using var dashDoc = JsonSerializer.SerializeToDocument(dashRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        var recentActs = dashDoc.RootElement.GetProperty("recentActivities").EnumerateArray().ToList();
+        recentActs.Should().Contain(a => a.GetProperty("Action").GetString() == "Đã xả bộ hàng lắp ráp (De-kitting)");
+        recentActs.Should().Contain(a => a.GetProperty("Action").GetString() == "Đã đóng bộ hàng lắp ráp (Kitting)");
+
+        var exRes = await reportsCtrl.GetOperationalExceptions(db, whAuth.Object, null, false, default);
+        using var exDoc = JsonSerializer.SerializeToDocument(exRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        var holdEx = exDoc.RootElement.EnumerateArray().Single(x => x.GetProperty("category").GetString() == "INVENTORY_HOLD");
+        holdEx.GetProperty("title").GetString().Should().Be("Tồn kho đang bị khóa / biệt trữ");
+        holdEx.GetProperty("summary").GetString().Should().Be("Tồn khóa / biệt trữ: 10 (Cảnh báo: 5 • Hư hỏng / Cách ly: 12) tại BIN-DMG-01");
+        holdEx.GetProperty("summary").GetString().Should().NotContain(".0000");
+
+        // 2. [W60-02] 3D Cartonization Catalog Synchronization (CARTON-M 35x25x20 -> 2.92kg, CARTON-L 40x30x30 -> 6.0kg)
+        var packingCtrl = new PackingSessionsController(new Mock<IPackingService>().Object, db, whAuth.Object);
+        var cartonMRes = await packingCtrl.RecommendCarton(
+            "77",
+            new PackingSessionsController.RecommendCartonRequest(DimDivisor: 6000m, PreferredCartonCode: "CARTON-M"),
+            default);
+        using var cartonMDoc = JsonSerializer.SerializeToDocument(cartonMRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        cartonMDoc.RootElement.GetProperty("recommendedCartonCode").GetString().Should().Be("CARTON-M");
+        cartonMDoc.RootElement.GetProperty("recommendedCartonName").GetString().Should().Be("Thùng trung M (35×25×20 cm)");
+        cartonMDoc.RootElement.GetProperty("lengthCm").GetDecimal().Should().Be(35m);
+        cartonMDoc.RootElement.GetProperty("widthCm").GetDecimal().Should().Be(25m);
+        cartonMDoc.RootElement.GetProperty("heightCm").GetDecimal().Should().Be(20m);
+        cartonMDoc.RootElement.GetProperty("dimWeightKg").GetDecimal().Should().Be(2.92m);
+        cartonMDoc.RootElement.GetProperty("grossWeightKg").GetDecimal().Should().Be(1.15m);
+
+        var cartonLRes = await packingCtrl.RecommendCarton(
+            "77",
+            new PackingSessionsController.RecommendCartonRequest(DimDivisor: 6000m, PreferredCartonCode: "CARTON-L"),
+            default);
+        using var cartonLDoc = JsonSerializer.SerializeToDocument(cartonLRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        cartonLDoc.RootElement.GetProperty("recommendedCartonCode").GetString().Should().Be("CARTON-L");
+        cartonLDoc.RootElement.GetProperty("recommendedCartonName").GetString().Should().Be("Thùng lớn L (40×30×30 cm)");
+        cartonLDoc.RootElement.GetProperty("lengthCm").GetDecimal().Should().Be(40m);
+        cartonLDoc.RootElement.GetProperty("widthCm").GetDecimal().Should().Be(30m);
+        cartonLDoc.RootElement.GetProperty("heightCm").GetDecimal().Should().Be(30m);
+        cartonLDoc.RootElement.GetProperty("dimWeightKg").GetDecimal().Should().Be(6.0m);
+
+        // 3. [W60-03] Smart Multi-Warehouse DOM Order Splitting (SINGLE_WAREHOUSE_MATCH & MULTI_WAREHOUSE_SPLIT)
+        var salesCtrl = new SalesOrdersController(new Mock<ISalesOrderBackorderService>().Object, db, whAuth.Object);
+        var singleDomRes = await salesCtrl.EvaluateAtpRouting(
+            new EvaluateAtpRoutingRequest(
+                OrderCode: "SO-QA-001",
+                ProductCode: "QA-E2E-001",
+                RequestedQuantity: 5m,
+                FulfillmentMode: "SINGLE_WAREHOUSE_MATCH"),
+            default);
+        using var singleDomDoc = JsonSerializer.SerializeToDocument(singleDomRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        singleDomDoc.RootElement.GetProperty("canFulfillSingleWarehouse").GetBoolean().Should().BeTrue();
+        var singleAlloc = singleDomDoc.RootElement.GetProperty("splitAllocations").EnumerateArray().Single();
+        singleAlloc.GetProperty("OrderCode").GetString().Should().Be("SO-QA-001");
+        singleAlloc.GetProperty("ProductCode").GetString().Should().Be("QA-E2E-001");
+        singleAlloc.GetProperty("WarehouseName").GetString().Should().Be("WH01 — Kho Chính TP.HCM");
+        singleAlloc.GetProperty("AllocatedQuantity").GetDecimal().Should().Be(5m);
+
+        var multiDomRes = await salesCtrl.EvaluateAtpRouting(
+            new EvaluateAtpRoutingRequest(
+                OrderCode: "SO-QA-001",
+                ProductCode: "QA-E2E-001",
+                RequestedQuantity: 10m,
+                FulfillmentMode: "MULTI_WAREHOUSE_SPLIT"),
+            default);
+        using var multiDomDoc = JsonSerializer.SerializeToDocument(multiDomRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        multiDomDoc.RootElement.GetProperty("canFulfillSingleWarehouse").GetBoolean().Should().BeFalse();
+        var multiAllocs = multiDomDoc.RootElement.GetProperty("splitAllocations").EnumerateArray().ToList();
+        multiAllocs.Should().HaveCount(2);
+        multiAllocs[0].GetProperty("OrderCode").GetString().Should().Be("SO-QA-001-SUB1");
+        multiAllocs[0].GetProperty("WarehouseName").GetString().Should().Be("WH01 — Kho Chính TP.HCM");
+        multiAllocs[0].GetProperty("AllocatedQuantity").GetDecimal().Should().Be(6m);
+        multiAllocs[1].GetProperty("OrderCode").GetString().Should().Be("SO-QA-001-SUB2");
+        multiAllocs[1].GetProperty("WarehouseName").GetString().Should().Be("WH02 — Kho Chi Nhánh Hà Nội");
+        multiAllocs[1].GetProperty("AllocatedQuantity").GetDecimal().Should().Be(4m);
+    }
 }

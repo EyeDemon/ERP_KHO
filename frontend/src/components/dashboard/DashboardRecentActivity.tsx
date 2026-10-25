@@ -3,6 +3,7 @@ import { UiBadge, UiCard, UiTableScroll } from '../../ui/ProductionUi';
 export type DashboardRecentActivityItem = {
   id: number;
   action: string;
+  actionLabel?: string | null;
   entityName: string;
   entityId: number;
   warehouseId?: number | null;
@@ -16,7 +17,7 @@ type DashboardRecentActivityProps = {
   liveLoading: boolean;
   hasSummary: boolean;
   activities: DashboardRecentActivityItem[];
-  actionLabel: (action: string) => string;
+  actionLabel: (action: string, serverLabel?: string | null) => string;
   entityNameLabel: (entityName: string) => string;
 };
 
@@ -49,7 +50,7 @@ export const DashboardRecentActivity = ({
               {activities.map((item) => (
                 <tr key={item.id}>
                   <td>{new Date(item.timestamp).toLocaleString('vi-VN')}</td>
-                  <td><UiBadge>{actionLabel(item.action)}</UiBadge></td>
+                  <td><UiBadge>{actionLabel(item.action, item.actionLabel)}</UiBadge></td>
                   <td>
                     {entityNameLabel(item.entityName)}
                     {item.referenceCode && !item.entityName.includes(`(${item.referenceCode})`)
