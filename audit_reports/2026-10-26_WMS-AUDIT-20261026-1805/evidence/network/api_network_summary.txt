@@ -1,0 +1,59 @@
+# API & Network Traffic Audit Summary (`WMS-AUDIT-20261026-1805`)
+
+- **Audit Run ID:** `WMS-AUDIT-20261026-1805`
+- **Backend Base URL:** `http://localhost:5260`
+- **Database Verified:** `ERP_KHO` on `(localdb)\MSSQLLocalDB` (`Heavenly\LOCALDB#7B6FFF75`)
+
+## 1. Key Mutating & Verification API Calls Observed in Browser Network Log
+
+| Module | HTTP Method & Endpoint | Status Code | Correlation / Audit Reference | Result |
+|---|---|---:|---|---|
+| Auth | `POST /api/auth/login` (invalid credentials) | `401` | `INVALID_CREDENTIALS` | `PASS_VERIFIED` |
+| Auth | `POST /api/auth/login` (`qa_admin`) | `200` | `UserId=712`, `Role=Admin` | `PASS_VERIFIED` |
+| Auth | `GET /api/auth/me` | `200` | `124` permissions loaded | `PASS_VERIFIED` |
+| Dashboard | `POST /api/reports/operational-dashboard/exceptions/IR-QA-001/acknowledge` | `200` | `Idempotency-Key` verified after `FND-DASH-001` fix | `PASS_VERIFIED` |
+| Dashboard | `POST /api/sales-orders/marketplace-shops/sync-inventory` | `200` | `SYNC-MKT-20261026113142` (`6` shops synced) | `PASS_VERIFIED` |
+| Dashboard | `POST /api/sales-orders/cod-reconciliation/import` | `200` | `COD-BATCH-20261026112842` (`3` orders matched) | `PASS_VERIFIED` |
+| Master Data | `POST /api/products/verify-sku-governance` | `200` | `SKU-GOV-20261026-1134` | `PASS_VERIFIED` |
+| Master Data | `POST /api/ProductCategories/verify-storage-policy` | `200` | `CAT-POL-20261026-1220` | `PASS_VERIFIED` |
+| Master Data | `POST /api/warehouses/verify-network-mhe-readiness` | `200` | `NET-MHE-20261026-1137` | `PASS_VERIFIED` |
+| Master Data | `POST /api/putaway-tasks/locations/verify-virtual-subwarehouse-routing` | `200` | `VLOC-AUD-20261026-1138` | `PASS_VERIFIED` |
+| Master Data | `POST /api/reports/warehouse-map/capture-bi-snapshot` | `200` | `BI-SNAP-20261026-1142` | `PASS_VERIFIED` |
+| Master Data | `POST /api/warehouse-calendar/verify-shift-capacity` | `200` | `CAL-VER-20261026-1142` | `PASS_VERIFIED` |
+| Master Data | `POST /api/warehouse-calendar/evaluate-task-interleaving` | `200` | `WLM-INT-20261026-1142` | `PASS_VERIFIED` |
+| Master Data | `POST /api/business-partners/verify-3pl-billing-contracts` | `200` | `3PL-BILL-20261026-1143` | `PASS_VERIFIED` |
+| Master Data | `POST /api/business-partners/1002/generate-3pl-statement` | `200` | `3PL-STMT-20261026-01` (`7.312.500 đ`) | `PASS_VERIFIED` |
+| Inbound | `POST /api/dock-appointments/evaluate-crossdock-opportunities` | `200` | `XDOCK-20261026-1144` | `PASS_VERIFIED` |
+| Inbound | `POST /api/purchase-orders/expedite-overdue` | `200` | `PO-EXP-20261026-1145` | `PASS_VERIFIED` |
+| Inbound | `POST /api/purchase-orders/generate-procurement-recommendations` | `200` | `PROC-REC-20261026-1145` | `PASS_VERIFIED` |
+| Inbound | `POST /api/asns/pre-allocate-staging` | `200` | `ASN-STG-20261026-1145` | `PASS_VERIFIED` |
+| Inbound | `POST /api/import-receipts/5031/rma-intake-check` | `200` | `RMA-QC-20261026-1147` | `PASS_VERIFIED` |
+| Inbound | `POST /api/putaway-tasks/evaluate-directed-slotting` | `200` | `SLOT-EVAL-20261026-1147` | `PASS_VERIFIED` |
+| Inventory | `POST /api/inventory/what-if-simulation` | `200` | `WhatIfSimulation` (`1.5x -> 343.5 Thùng`) | `PASS_VERIFIED` |
+| Inventory | `POST /api/inventory/verify-decision-policies` | `200` | `DEC-POL-20261026-1149` | `PASS_VERIFIED` |
+| Inventory | `POST /api/inventory-locks/verify-lock-precedence` | `200` | `Inventory.VerifyLockPrecedence` | `PASS_VERIFIED` |
+| Inventory | `POST /api/inventory-reversals/verify-reversal-integrity` | `200` | `REV-INT-20261026-1151` | `PASS_VERIFIED` |
+| Inventory | `POST /api/inventory-traceability/simulate-recall` | `200` | `TRC-RCL-20261026-1153` | `PASS_VERIFIED` |
+| Inventory | `POST /api/inventory-reconciliation/verify-site-readiness` | `200` | `Reconciliation.VerifySiteReadiness` | `PASS_VERIFIED` |
+| Inventory | `POST /api/inventory-reconciliation/rebuild-9dim-balances` | `200` | `Δ = 0` across all 9-dim grains | `PASS_VERIFIED` |
+| Inventory | `POST /api/inventory-reconciliation/dispatch-outbox` | `200` | `4/4` outbox messages synced | `PASS_VERIFIED` |
+| Inventory | `POST /api/stocktakes/2002/evaluate-auto-approval` | `200` | `STOCKTAKE_AUTO_APPROVAL_EVALUATED` | `PASS_VERIFIED` |
+| Inventory | `POST /api/stock-transfers/verify-hu-transit-seals` | `200` | `HU-SEAL-20261026-1157` | `PASS_VERIFIED` |
+| Outbound | `POST /api/sales-orders/expedite-backorders` | `200` | `EXP-BO-20261026-1158` | `PASS_VERIFIED` |
+| Outbound | `POST /api/sales-orders/evaluate-dom-routing` | `200` | `ATP-ROUTE-20261026-1221` | `PASS_VERIFIED` |
+| Outbound | `POST /api/shipments/normalize-vn-address` | `200` | `WardCode: 26734` (`Phường Bến Nghé, Quận 1`) | `PASS_VERIFIED` |
+| Outbound | `POST /api/export-receipts/batch-print-awb` | `200` | `VTP8938505001, GHN8938505002` | `PASS_VERIFIED` |
+| Outbound | `POST /api/stock-reservations/sweep-expired` | `200` | `RSV-SWP-20261026-1201` | `PASS_VERIFIED` |
+| Outbound | `POST /api/stock-allocations/verify-fefo-compliance` | `200` | `ALC-FEFO-20261026-1201` | `PASS_VERIFIED` |
+| Outbound | `POST /api/picking-tasks/sync-automation-telemetry` | `200` | `WCS-IOT-20261026-1202` | `PASS_VERIFIED` |
+| Outbound | `POST /api/picking-tasks/1/put-to-wall-sort` | `200` | `PUT_TO_WALL_SLOT_SORTED` (`SLOT-01`) | `PASS_VERIFIED` |
+| Outbound | `POST /api/packing-sessions/execute-kitting-vas` | `200` | `KIT-VAS-20261026-1203` | `PASS_VERIFIED` |
+| Outbound | `POST /api/shipments/sync-tms-manifests` | `200` | `TMS-MNF-20261026-1205` | `PASS_VERIFIED` |
+| Outbound | `POST /api/shipments/1002/scan-awb-handover` (duplicate) | `409` | `DUPLICATE_AWB_SCAN` | `PASS_VERIFIED` |
+| Finance | `GET /api/v1/export-receipts/misa-excel-export?format=xlsx` | `200` | Binary `.xlsx` (`Bang_Ke_Nhap_Xuat_MISA_AMIS.xlsx`) | `PASS_VERIFIED` |
+| Finance | `POST /api/v1/export-receipts/einvoice-nd70-draft` | `200` | `EINV-ND70-20261026-0179` | `PASS_VERIFIED` |
+| Finance | `POST /api/v1/export-receipts/einvoice-nd70-draft` (idempotency conflict) | `409` | `IDEMPOTENCY_CONFLICT` | `PASS_VERIFIED` |
+| Admin/SaaS | `POST /api/v1/permissions/saas/vietqr-renewal-invoice` | `200` | `TT INV-VQR-20261026-603BA1` | `PASS_VERIFIED` |
+| Admin/SaaS | `POST /api/approvals/escalate-overdue` | `200` | `ESC-SLA-20261026-1212` | `PASS_VERIFIED` |
+| Admin/SaaS | `POST /api/permissions/export-evidence-bundle` | `200` | `EVD-20261026-1213` | `PASS_VERIFIED` |
+| Admin/SaaS | `POST /api/user-warehouse-access/verify-sod-isolation` | `200` | `ZERO_PRIVILEGE_ESCALATION_VERIFIED` | `PASS_VERIFIED` |

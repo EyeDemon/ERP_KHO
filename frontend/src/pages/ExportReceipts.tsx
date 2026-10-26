@@ -6,7 +6,7 @@ import { conflictErrorMessage, extractConflictCode } from '../services/permissio
 import ReceiptPrintPreview from '../components/ReceiptPrintPreview';
 import { BarcodeSvg } from '../components/BarcodeSvg';
 import { roundQty4, sanitizeScannerCode } from './productCatalog';
-import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 import './ExportReceipts.css';
 
 interface ExportReceiptDetail {
@@ -111,7 +111,7 @@ const ExportReceipts = () => {
   const canDispatch = hasPermission('export_receipt.dispatch');
   const canCancel = hasPermission('export_receipt.cancel');
   const canReadPartners = hasPermission('partner.read');
-  const [showCreateForm, setShowCreateForm] = useState(true);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [receipts, setReceipts] = useState<ExportReceipt[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -489,26 +489,41 @@ const ExportReceipts = () => {
           eyebrow="Xuất kho"
           title="Quản Lý Phiếu Xuất Kho"
           description="Tạo và theo dõi phiếu xuất từ kiểm tra tồn khả dụng, duyệt và giữ hàng đến xác nhận hàng rời kho."
+          actions={
+            canCreate ? (
+              <button
+                type="button"
+                className="no-print ui-primary-button"
+                onClick={() => setShowCreateForm(prev => !prev)}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                {showCreateForm ? 'Thu gọn biểu mẫu' : '+ Tạo phiếu xuất kho mới'}
+              </button>
+            ) : undefined
+          }
         />
 
         {error && <p role="alert">{error}</p>}
         {successMsg && <p role="status" className="ui-success-text">{successMsg}</p>}
         {receipts.some(receipt => !receipt.writeEnabled) && (
-          <div role="status" className="export-maintenance">
+          <div role="status" className="export-maintenance no-print">
             Luồng xuất kho đang tạm dừng để bảo trì. Dữ liệu vẫn có thể xem.
           </div>
         )}
 
+        <div className="no-print">
         <UiCard title="Tổng quan Luồng Phiếu xuất Kho">
-          <div className="ui-inline-wrap">
-            <UiBadge>{`Tổng phiếu xuất: ${receipts.length}`}</UiBadge>
-            <UiBadge tone="warning">{`Đang soạn: ${receipts.filter(r => r.status === 'Draft').length}`}</UiBadge>
-            <UiBadge tone="warning">{`Đã duyệt & Giữ hàng chờ xuất: ${receipts.filter(r => r.status === 'Approved').length}`}</UiBadge>
-            <UiBadge tone="success">{`Đã xuất kho: ${receipts.filter(r => r.status === 'Dispatched' || r.status === 'Completed').length}`}</UiBadge>
-            <UiBadge tone="danger">{`Phiếu xuất đã hủy: ${receipts.filter(r => r.status === 'Cancelled').length}`}</UiBadge>
-            <UiBadge tone="danger">{`Đơn quá hạn bàn giao sàn: ${receipts.filter(r => r.status === 'CancelPendingPutback').length || 1}`}</UiBadge>
-            <UiBadge tone="warning">{`Đơn sắp trễ hạn (< 2 giờ): ${receipts.filter(r => r.status === 'Approved').length || 2}`}</UiBadge>
-            <UiBadge tone="info">{`Đơn phải giao trong ngày: ${Math.max(receipts.length, 5)}`}</UiBadge>
+          <UiMetricGrid>
+            <UiMetric value={receipts.length} label={`Tổng phiếu xuất: ${receipts.length}`} />
+            <UiMetric value={receipts.filter(r => r.status === 'Draft').length} label={`Đang soạn: ${receipts.filter(r => r.status === 'Draft').length}`} />
+            <UiMetric value={receipts.filter(r => r.status === 'Approved').length} label={`Đã duyệt & Giữ hàng chờ xuất: ${receipts.filter(r => r.status === 'Approved').length}`} />
+            <UiMetric value={receipts.filter(r => r.status === 'Dispatched' || r.status === 'Completed').length} label={`Đã xuất kho: ${receipts.filter(r => r.status === 'Dispatched' || r.status === 'Completed').length}`} />
+            <UiMetric value={receipts.filter(r => r.status === 'Cancelled').length} label={`Phiếu xuất đã hủy: ${receipts.filter(r => r.status === 'Cancelled').length}`} />
+            <UiMetric value={receipts.filter(r => r.status === 'CancelPendingPutback').length || 1} label={`Đơn quá hạn bàn giao sàn: ${receipts.filter(r => r.status === 'CancelPendingPutback').length || 1}`} />
+            <UiMetric value={receipts.filter(r => r.status === 'Approved').length || 2} label={`Đơn sắp trễ hạn (< 2 giờ): ${receipts.filter(r => r.status === 'Approved').length || 2}`} />
+            <UiMetric value={Math.max(receipts.length, 5)} label={`Đơn phải giao trong ngày: ${Math.max(receipts.length, 5)}`} />
+          </UiMetricGrid>
+          <div className="ui-inline-wrap" style={{ marginTop: 10 }}>
             <button
               type="button"
               disabled={cutoffBusy}
@@ -547,7 +562,9 @@ const ExportReceipts = () => {
             </div>
           )}
         </UiCard>
+        </div>
 
+        <div className="no-print">
         <UiCard
           title="In Gộp Phiếu Gửi Hàng Nhiệt 100x150mm Theo Vị Trí Kệ & Biên Bản Bàn Giao Bưu Tá Điện Tử"
           subtitle="Sắp xếp tem vận đơn theo thứ tự kệ nhặt (A → Z), chống giao nhầm đơn hủy trên sàn và kết xuất bảng kê chuẩn MISA / Hóa đơn điện tử Nghị định 70/2025"
@@ -657,7 +674,7 @@ const ExportReceipts = () => {
             </div>
 
             <div className="ui-inline-wrap" style={{ gap: 10, alignItems: 'center' }}>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: '1 1 320px' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, flex: '1 1 280px', minWidth: 0, maxWidth: '100%' }}>
                 <span style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap' }}>Mã vận đơn bàn giao (AWB):</span>
                 <input
                   type="search"
@@ -666,7 +683,7 @@ const ExportReceipts = () => {
                   value={handoverTrackingInput}
                   onChange={(e) => setHandoverTrackingInput(e.target.value)}
                   placeholder="Nhập hoặc quét mã vận đơn AWB..."
-                  style={{ minHeight: 36, minWidth: 340, width: 360, flex: 1, padding: '4px 10px' }}
+                  style={{ minHeight: 36, minWidth: 340, width: 360, maxWidth: '100%', flex: '1 1 200px', padding: '4px 10px' }}
                 />
               </label>
               {receipts.length > 0 && (
@@ -754,15 +771,17 @@ const ExportReceipts = () => {
             )}
           </div>
         </UiCard>
+        </div>
 
         {canCreate && (
+          <div className="no-print">
           <UiCard title="Tạo Phiếu Xuất Kho">
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: showCreateForm ? 12 : 0 }}>
               <button type="button" onClick={() => setShowCreateForm(prev => !prev)}>
-                {showCreateForm ? 'Thu gọn biểu mẫu' : 'Mở biểu mẫu tạo mới'}
+                {showCreateForm ? 'Thu gọn biểu mẫu' : '+ Tạo phiếu xuất kho mới'}
               </button>
             </div>
-            {showCreateForm && (
+            <div style={showCreateForm ? undefined : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }}>
             <form onSubmit={handleCreate} className="export-form">
               <div className="export-form-grid">
                 <label className="ui-stack">
@@ -892,10 +911,12 @@ const ExportReceipts = () => {
                 </button>
               </div>
             </form>
-            )}
+            </div>
           </UiCard>
+          </div>
         )}
 
+        <div className="no-print">
         <UiCard title="Danh Sách Phiếu Xuất">
           <UiTableScroll>
             <table aria-label="Danh sách phiếu xuất">
@@ -963,6 +984,7 @@ const ExportReceipts = () => {
             </table>
           </UiTableScroll>
         </UiCard>
+        </div>
 
         {selectedReceipt && (
           <UiCard title={'Chi Tiết Phiếu Xuất: ' + selectedReceipt.code}>
@@ -970,7 +992,7 @@ const ExportReceipts = () => {
               <div><strong>Kho:</strong> {selectedReceipt.warehouseName}</div>
               <div><strong>Khách hàng:</strong> {selectedReceipt.customerCode ? selectedReceipt.customerCode + ' - ' + selectedReceipt.customerName : '—'}</div>
               {selectedReceipt.status === 'Draft' && canUpdate && canReadPartners && (
-                <div>
+                <div className="no-print">
                   <label className="ui-stack">
                     <span>Đổi khách hàng</span>
                     <select aria-label="Đổi khách hàng" disabled={partnerUpdating} value={selectedReceipt.customerId || ''} onChange={e => void changeCustomer(e.target.value ? Number(e.target.value) : null)}>
@@ -1016,30 +1038,70 @@ const ExportReceipts = () => {
               <table aria-label={'Chi tiết phiếu xuất ' + selectedReceipt.code}>
                 <thead>
                   <tr>
+                    <th style={{ textAlign: 'center', width: 52 }}>STT</th>
                     <th>Sản phẩm</th>
-                    <th className="export-numeric">Số lượng</th>
-                    <th className="export-numeric">Đơn giá</th>
-                    <th className="export-numeric">Thành tiền</th>
+                    <th style={{ textAlign: 'center', width: 88 }}>ĐVT</th>
+                    <th className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số lượng</th>
+                    <th className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đơn giá</th>
+                    <th className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Thành tiền</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedReceipt.details.map(d => {
+                  {selectedReceipt.details.map((d, idx) => {
                     const unitDisplay = !d.unitName || d.unitName === 'QA_UNIT' || d.unitName === 'QA-PCS' ? 'THÙNG' : d.unitName;
                     return (
                     <tr key={d.id}>
+                      <td style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{idx + 1}</td>
                       <td><strong style={{ whiteSpace: 'nowrap' }}>{d.productCode}</strong> - {d.productName}</td>
-                      <td className="export-numeric">{d.quantity} {unitDisplay}</td>
-                      <td className="export-numeric">{d.unitPrice === null ? 'Ẩn theo phân quyền' : `${Number(d.unitPrice || 0).toLocaleString('vi-VN')} VND`}</td>
-                      <td className="export-numeric">{d.unitPrice === null || d.lineTotalAmount === null ? 'Ẩn theo phân quyền' : `${(d.lineTotalAmount !== undefined ? Number(d.lineTotalAmount) : Number(d.quantity || 0) * Number(d.unitPrice || 0)).toLocaleString('vi-VN')} VND`}</td>
+                      <td style={{ textAlign: 'center' }}>{unitDisplay}</td>
+                      <td className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.quantity} {unitDisplay}</td>
+                      <td className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.unitPrice === null ? 'Ẩn theo phân quyền' : `${Number(d.unitPrice || 0).toLocaleString('vi-VN')} VND`}</td>
+                      <td className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.unitPrice === null || d.lineTotalAmount === null ? 'Ẩn theo phân quyền' : `${(d.lineTotalAmount !== undefined ? Number(d.lineTotalAmount) : Number(d.quantity || 0) * Number(d.unitPrice || 0)).toLocaleString('vi-VN')} VND`}</td>
                     </tr>
                     );
                   })}
-                  {selectedReceipt.details.length === 0 && <tr><td colSpan={4} className="ui-empty-cell">Không có chi tiết</td></tr>}
+                  {selectedReceipt.details.length === 0 && <tr><td colSpan={6} className="ui-empty-cell">Không có chi tiết</td></tr>}
                 </tbody>
               </table>
             </UiTableScroll>
 
-            <div className="export-section-actions">
+            <div
+              className="ui-print-signatures"
+              aria-label="Khối chữ ký chứng từ xuất kho"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                gap: 16,
+                marginTop: 24,
+                paddingTop: 16,
+                borderTop: '1px dashed #cbd5e1',
+                textAlign: 'center',
+                pageBreakInside: 'avoid',
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>Người lập phiếu</div>
+                <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', marginBottom: 48 }}>(Ký, ghi rõ họ tên)</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{selectedReceipt.createdByName || '........................'}</div>
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>Người giao / nhận hàng</div>
+                <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', marginBottom: 48 }}>(Ký, ghi rõ họ tên)</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{selectedReceipt.customerName || '........................'}</div>
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>Thủ kho</div>
+                <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', marginBottom: 48 }}>(Ký, ghi rõ họ tên)</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{selectedReceipt.dispatchedByName || '........................'}</div>
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>Quản lý kho / Kế toán</div>
+                <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', marginBottom: 48 }}>(Ký, ghi rõ họ tên)</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{selectedReceipt.approvedByName || '........................'}</div>
+              </div>
+            </div>
+
+            <div className="export-section-actions no-print">
               <button type="button" onClick={() => setSelectedReceipt(null)}>Đóng chi tiết</button>
             </div>
           </UiCard>

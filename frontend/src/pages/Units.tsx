@@ -5,6 +5,7 @@ import { sanitizeScannerCode } from './productCatalog';
 import {
   UiBadge,
   UiCard,
+  UiDrawer,
   UiMetric,
   UiMetricGrid,
   UiPage,
@@ -228,7 +229,7 @@ const Units = () => {
         eyebrow="Dữ liệu nền"
         title="Đơn vị tính"
         description="Quản lý mã và tên đơn vị tính dùng trong chứng từ, tồn kho và quy đổi số lượng."
-        actions={canManage ? <button type="button" className="ui-primary-button" onClick={openCreate}>Thêm đơn vị</button> : undefined}
+        actions={canManage ? <button type="button" className="ui-primary-button" onClick={openCreate}>+ Thêm đơn vị tính</button> : undefined}
       />
 
       {success && <p role="status" className="ui-success-text">{success}</p>}
@@ -239,39 +240,6 @@ const Units = () => {
         <UiMetric value={activeCount} label="Đang hoạt động" />
         <UiMetric value={filtered.length} label="Kết quả hiện tại" />
       </UiMetricGrid>
-
-      <UiCard title="Tổng quan Hệ thống Đơn vị tính & Quy đổi">
-        <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, maxWidth: '100%' }}>
-          <div className="ui-subcard">
-            <strong>Tỷ lệ đơn vị tính kích hoạt</strong><br />
-            {activeCount}/{units.length} ĐVT hoạt động ({units.length > 0 ? Math.round((activeCount / units.length) * 100) : 0}%)
-          </div>
-          <div className="ui-subcard">
-            <strong>Đơn vị tính ngừng hoạt động (bảo toàn lịch sử)</strong><br />
-            {units.length - activeCount} ĐVT ngừng hoạt động
-          </div>
-          <div className="ui-subcard">
-            <strong>Phạm vi hiển thị theo bộ lọc</strong><br />
-            {filtered.length}/{units.length} ĐVT khớp điều kiện tra cứu
-          </div>
-        </div>
-        <div className="ui-inline-wrap">
-          <button type="button" disabled={loading || saving || governanceBusy} onClick={() => void verifyUomIntegrity()}>
-            Kiểm định Hệ số Quy đổi & Bất biến ĐVT Cơ sở
-          </button>
-          {uomIntegrity && (
-            <UiBadge tone="success">
-              {`Đã kiểm định ${uomIntegrity.verificationId} • ${({ UOM_HIERARCHY_VALIDATED: 'Đã chuẩn hóa hệ số quy đổi & bất biến ĐVT cơ sở', BASE_UOM_IMMUTABLE: 'ĐVT cơ sở bất biến hợp lệ' } as Record<string, string>)[uomIntegrity.status] || uomIntegrity.status}`}
-            </UiBadge>
-          )}
-          <button type="button" disabled={loading || saving || governanceBusy} onClick={() => void verifyCatchWeightColdChain()}>
-            Kiểm định Tồn kho Hai ĐVT (Trọng lượng biến thiên), Chuỗi lạnh &amp; Hàng nguy hiểm
-          </button>
-          {catchWeightColdChainResult && (
-            <UiBadge tone="success">{catchWeightColdChainResult}</UiBadge>
-          )}
-        </div>
-      </UiCard>
 
       <UiToolbar>
         <UiToolbarField label="Tìm đơn vị tính">
@@ -339,54 +307,76 @@ const Units = () => {
         </UiCard>
       )}
 
-      {showForm && canManage && (
-        <UiCard title={editing ? `Sửa đơn vị ${form.code}` : 'Thêm đơn vị tính'}>
-          <form className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, alignItems: 'end', maxWidth: '100%' }} onSubmit={save}>
-            {formError && <p role="alert">{formError}</p>}
+      <UiCard title="Tổng quan Hệ thống Đơn vị tính & Quy đổi">
+        <div className="ui-inline-wrap">
+          <button type="button" disabled={loading || saving || governanceBusy} onClick={() => void verifyUomIntegrity()}>
+            Kiểm định Hệ số Quy đổi & Bất biến ĐVT Cơ sở
+          </button>
+          {uomIntegrity && (
+            <UiBadge tone="success">
+              {`Đã kiểm định ${uomIntegrity.verificationId} • ${({ UOM_HIERARCHY_VALIDATED: 'Đã chuẩn hóa hệ số quy đổi & bất biến ĐVT cơ sở', BASE_UOM_IMMUTABLE: 'ĐVT cơ sở bất biến hợp lệ' } as Record<string, string>)[uomIntegrity.status] || uomIntegrity.status}`}
+            </UiBadge>
+          )}
+          <button type="button" disabled={loading || saving || governanceBusy} onClick={() => void verifyCatchWeightColdChain()}>
+            Kiểm định Tồn kho Hai ĐVT (Trọng lượng biến thiên), Chuỗi lạnh &amp; Hàng nguy hiểm
+          </button>
+          {catchWeightColdChainResult && (
+            <UiBadge tone="success">{catchWeightColdChainResult}</UiBadge>
+          )}
+        </div>
+      </UiCard>
 
-            <label className="ui-stack">
-              <span>Mã đơn vị tính *</span>
-              <input
-                aria-label="Mã đơn vị tính"
-                value={form.code}
-                onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
-                disabled={saving || editing}
-                maxLength={50} placeholder="VD: THUNG" style={{ height: 38, boxSizing: 'border-box' }}
-                required
-              />
-            </label>
+      <UiDrawer
+        open={showForm && canManage}
+        title={editing ? `Sửa đơn vị ${form.code}` : 'Thêm đơn vị tính'}
+        busy={saving}
+        onClose={closeForm}
+      >
+        <form className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, maxWidth: '100%' }} onSubmit={save}>
+          {formError && <p role="alert">{formError}</p>}
 
-            <label className="ui-stack">
-              <span>Tên đơn vị tính *</span>
+          <label className="ui-stack">
+            <span>Mã đơn vị tính *</span>
+            <input
+              aria-label="Mã đơn vị tính"
+              value={form.code}
+              onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
+              disabled={saving || editing}
+              maxLength={50} placeholder="VD: THUNG" style={{ height: 38, boxSizing: 'border-box' }}
+              required
+            />
+          </label>
+
+          <label className="ui-stack">
+            <span>Tên đơn vị tính *</span>
+            <input
+              aria-label="Tên đơn vị tính"
+              value={form.name}
+              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+              disabled={saving}
+              maxLength={200} placeholder="Nhập tên đơn vị tính" style={{ height: 38, boxSizing: 'border-box' }}
+              required
+            />
+          </label>
+
+          {editing && (
+            <label className="ui-checkbox-label">
               <input
-                aria-label="Tên đơn vị tính"
-                value={form.name}
-                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
                 disabled={saving}
-                maxLength={200} placeholder="Nhập tên đơn vị tính" style={{ height: 38, boxSizing: 'border-box' }}
-                required
               />
+              Đơn vị đang hoạt động
             </label>
+          )}
 
-            {editing && (
-              <label className="ui-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={form.isActive}
-                  onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
-                  disabled={saving}
-                />
-                Đơn vị đang hoạt động
-              </label>
-            )}
-
-            <div className="ui-inline-actions">
-              <button type="submit" disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu đơn vị'}</button>
-              <button type="button" disabled={saving} onClick={closeForm}>Hủy</button>
-            </div>
-          </form>
-        </UiCard>
-      )}
+          <div className="ui-inline-actions">
+            <button type="submit" disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu đơn vị'}</button>
+            <button type="button" disabled={saving} onClick={closeForm}>Hủy</button>
+          </div>
+        </form>
+      </UiDrawer>
     </UiPage>
   );
 };

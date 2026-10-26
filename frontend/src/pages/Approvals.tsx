@@ -8,6 +8,7 @@ import { permissionError } from '../services/permissionPresentation';
 import {
   UiBadge,
   UiCard,
+  UiDrawer,
   UiEmptyState,
   UiPage,
   UiPageHeader,
@@ -17,26 +18,15 @@ import {
 } from '../ui/ProductionUi';
 import './Approvals.css';
 
-function InlineApprovalDialog({
-  titleId,
-  busy = false,
-  onClose,
-  returnFocusTo,
+function ApprovalDrawerFocusScope({
   children,
 }: {
-  titleId: string;
-  busy?: boolean;
-  onClose: () => void;
-  returnFocusTo?: HTMLElement | null;
   children: ReactNode;
 }) {
-  const dialog = useRef<HTMLDivElement>(null);
-  const options = useRef({ busy, onClose });
+  const scopeRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    options.current = { busy, onClose };
-  }, [busy, onClose]);
-  useEffect(() => {
-    const root = dialog.current;
+    const root = scopeRef.current;
+    const dialogRoot = root?.closest('[role="dialog"]') as HTMLElement | null;
     const focusable = () =>
       Array.from(
         root?.querySelectorAll<HTMLElement>(
@@ -45,11 +35,6 @@ function InlineApprovalDialog({
       );
     (root?.querySelector<HTMLElement>('[data-initial-focus]') ?? focusable()[0])?.focus();
     const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        if (!options.current.busy) options.current.onClose();
-        return;
-      }
       if (event.key !== 'Tab') return;
       const items = focusable();
       if (!items.length) {
@@ -69,27 +54,20 @@ function InlineApprovalDialog({
     };
     document.addEventListener('keydown', key);
     const contain = (event: FocusEvent) => {
-      if (!root?.contains(event.target as Node)) (focusable()[0] ?? root)?.focus();
+      const target = event.target as Node | null;
+      if (target && !(dialogRoot ?? root)?.contains(target)) {
+        (focusable()[0] ?? root)?.focus();
+      }
     };
     document.addEventListener('focusin', contain);
     return () => {
       document.removeEventListener('keydown', key);
       document.removeEventListener('focusin', contain);
-      returnFocusTo?.focus();
     };
-  }, [returnFocusTo]);
+  }, []);
   return (
-    <div className="approval-backdrop approval-modal" role="presentation">
-      <div
-        ref={dialog}
-        tabIndex={-1}
-        className="approval-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-      >
-        {children}
-      </div>
+    <div ref={scopeRef} tabIndex={-1} className="approval-dialog">
+      {children}
     </div>
   );
 }
@@ -193,6 +171,7 @@ const waitingText = (minutes?: number | null) => {
   return `${minutes} phút`;
 };
 
+const formatAuditHashText = (value?: string | null): string => (value ?? '').replace(/(?:(?:Mã kiểm toán|Mã băm|Audit\s*Hash|Hash)\s*:\s*)?\b([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}|[0-9a-fA-F]{16,128})\b/g, (_m, h: string) => `Mã kiểm toán: ${h.slice(0, 8)}...`);
 const slaTone = (status: SlaStatus): 'success' | 'warning' | 'danger' => {
   if (status === 'Normal') return 'success';
   if (status === 'Warning') return 'warning';
@@ -430,14 +409,11 @@ export default function Approvals() {
               <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Quá hạn</div><strong style={{ fontSize: 16, color: '#b91c1c' }}>{overdueCount}</strong></div>
             </div>
 
-
             <button type="button" onClick={() => void triggerEscalateOverdue()}>
               Leo thang Nhắc duyệt Hồ sơ Quá hạn SLA
             </button>
             {escalationResult && (
               <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%', fontWeight: 600 }}>{`Đã leo thang lô nhắc duyệt ${escalationResult.escalationBatchId} • Trạng thái: Đã chuyển cấp quản lý xử lý hồ sơ quá hạn SLA`}</div>
-
-
             )}
           </div>
         </UiCard>
@@ -646,114 +622,119 @@ export default function Approvals() {
           </nav>
         </UiCard>
 
-        {selected && (
-          <InlineApprovalDialog
-            titleId="approval-title"
-            busy={busy}
-            onClose={closeDialog}
-            returnFocusTo={dialogTrigger}
-          >
-            <h2 id="approval-title" style={{ whiteSpace: 'nowrap' }}>{selected.documentCode}</h2>
-            <p>{documentLabels[selected.documentType] || 'Chứng từ'} · {selected.warehouseName}</p>
+        <UiDrawer
+          open={Boolean(selected)}
+          title={selected ? `Chi tiết phê duyệt • ${selected.documentCode}` : 'Chi tiết phê duyệt'}
+          subtitle={selected ? `${documentLabels[selected.documentType] || 'Chứng từ'} · ${selected.warehouseName}` : undefined}
+          titleId="approval-title"
+          busy={busy}
+          returnFocusTo={dialogTrigger}
+          onClose={() => {
+            setSelected(null);
+            closeDialog();
+          }}
+        >
+          {selected && (
+            <ApprovalDrawerFocusScope>
+              {rejecting ? (
+                <>
+                  <label>
+                    Lý do từ chối
+                    <textarea
+                      disabled={busy}
+                      data-initial-focus
+                      maxLength={500}
+                      value={reason}
+                      onChange={event => setReason(event.target.value)}
+                    />
+                  </label>
+                  <small>{reason.length}/500</small>
+                </>
+              ) : approving ? (
+                <p>Xác nhận duyệt chứng từ này?</p>
+              ) : detailLoading ? (
+                <p role="status">Đang tải chi tiết...</p>
+              ) : (
+                <>
+                  {detail?.note && <p><strong>Ghi chú:</strong> {formatAuditHashText(detail.note)}</p>}
 
-            {rejecting ? (
-              <>
-                <label>
-                  Lý do từ chối
-                  <textarea
-                    disabled={busy}
-                    data-initial-focus
-                    maxLength={500}
-                    value={reason}
-                    onChange={event => setReason(event.target.value)}
-                  />
-                </label>
-                <small>{reason.length}/500</small>
-              </>
-            ) : approving ? (
-              <p>Xác nhận duyệt chứng từ này?</p>
-            ) : detailLoading ? (
-              <p role="status">Đang tải chi tiết...</p>
-            ) : (
-              <>
-                {detail?.note && <p><strong>Ghi chú:</strong> {detail.note}</p>}
-
-                {detail && detail.lines.length > 0 && (
-                  <div className="approval-detail-table">
-                    <UiTableScroll>
-                      <table className="ui-table-compact" aria-label={`Chi tiết ${selected.documentCode}`}>
-                        <thead>
-                          <tr>
-                            <th>Sản phẩm</th>
-                            <th>Đơn vị</th>
-                            <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số lượng</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {detail.lines.map(line => (
-                            <tr key={line.productCode}>
-                              <td style={{ whiteSpace: 'nowrap' }}>{line.productCode} · {line.productName}</td>
-                              <td>{line.unitName === 'QA_UNIT' || line.unitName === 'QA-PCS' ? 'THÙNG' : line.unitName}</td>
-                              <td className="approval-duration" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{line.quantity}</td>
+                  {detail && detail.lines.length > 0 && (
+                    <div className="approval-detail-table">
+                      <UiTableScroll>
+                        <table className="ui-table-compact" aria-label={`Chi tiết ${selected.documentCode}`}>
+                          <thead>
+                            <tr>
+                              <th>Sản phẩm</th>
+                              <th>Đơn vị</th>
+                              <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số lượng</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </UiTableScroll>
-                  </div>
-                )}
+                          </thead>
+                          <tbody>
+                            {detail.lines.map(line => (
+                              <tr key={line.productCode}>
+                                <td style={{ whiteSpace: 'nowrap' }}>{line.productCode} · {line.productName}</td>
+                                <td>{line.unitName === 'QA_UNIT' || line.unitName === 'QA-PCS' ? 'THÙNG' : line.unitName}</td>
+                                <td className="approval-duration" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{line.quantity}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </UiTableScroll>
+                    </div>
+                  )}
 
-                <h3>Lịch sử phê duyệt</h3>
-                {history.length === 0 ? (
-                  <p>Chưa có lịch sử.</p>
-                ) : (
-                  <ol className="approval-history">
-                    {history.map(item => (
-                      <li key={item.id}>
-                        <strong>{approvalDisplayAction(item.displayAction)}</strong>
-                        {' · '}{item.actorName}{' · '}{new Date(item.timestampUtc).toLocaleString('vi-VN')}
-                        <div>
-                          {stateLabels[item.oldState || ''] || 'Không áp dụng'} →{' '}
-                          {stateLabels[item.newState || ''] || 'Không áp dụng'}
-                        </div>
-                        {item.reason && <p>{item.reason}</p>}
-                        {item.correlationId && <code>{item.correlationId}</code>}
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </>
-            )}
-
-            {error && <p role="alert">{error}</p>}
-
-            <footer>
-              <button
-                type="button"
-                data-initial-focus={approving || undefined}
-                disabled={busy}
-                onClick={closeDialog}
-              >
-                Đóng
-              </button>
-              {approving && (
-                <button type="button" disabled={busy} onClick={() => void approve(selected)}>
-                  Xác nhận duyệt
-                </button>
+                  <h3>Lịch sử phê duyệt</h3>
+                  {history.length === 0 ? (
+                    <p>Chưa có lịch sử.</p>
+                  ) : (
+                    <ol className="approval-history">
+                      {history.map(item => (
+                        <li key={item.id}>
+                          <strong>{approvalDisplayAction(item.displayAction)}</strong>
+                          {' · '}{item.actorName}{' · '}{new Date(item.timestampUtc).toLocaleString('vi-VN')}
+                          <div>
+                            {stateLabels[item.oldState || ''] || 'Không áp dụng'} →{' '}
+                            {stateLabels[item.newState || ''] || 'Không áp dụng'}
+                          </div>
+                          {item.reason && <p>{formatAuditHashText(item.reason)}</p>}
+                          {item.correlationId && <code>{formatAuditHashText(item.correlationId)}</code>}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </>
               )}
-              {rejecting && (
+
+              {error && <p role="alert">{error}</p>}
+
+              <footer>
                 <button
                   type="button"
-                  className="danger"
-                  disabled={busy || !validRejectReason(reason)}
-                  onClick={() => void reject()}
+                  data-initial-focus={approving || undefined}
+                  disabled={busy}
+                  onClick={closeDialog}
                 >
-                  Xác nhận từ chối
+                  Đóng
                 </button>
-              )}
-            </footer>
-          </InlineApprovalDialog>
-        )}
+                {approving && (
+                  <button type="button" disabled={busy} onClick={() => void approve(selected)}>
+                    Xác nhận duyệt
+                  </button>
+                )}
+                {rejecting && (
+                  <button
+                    type="button"
+                    className="danger"
+                    disabled={busy || !validRejectReason(reason)}
+                    onClick={() => void reject()}
+                  >
+                    Xác nhận từ chối
+                  </button>
+                )}
+              </footer>
+            </ApprovalDrawerFocusScope>
+          )}
+        </UiDrawer>
       </div>
     </UiPage>
   );

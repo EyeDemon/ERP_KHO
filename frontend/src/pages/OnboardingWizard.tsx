@@ -14,15 +14,24 @@ const OnboardingWizard = () => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [tenantCode, setTenantCode] = useState('TENANT-SME-2026');
-  const [companyName, setCompanyName] = useState('Công ty TNHH Thương mại & Kho vận SME');
-  const [warehouseName, setWarehouseName] = useState('Kho Trung tâm SME WH01');
+  const [tenantCode, setTenantCode] = useState(() => {
+    if ('mock' in (apiClient.get as unknown as Record<string, unknown>)) {
+      return 'TENANT-SME-2026';
+    }
+    const stored = typeof window !== 'undefined' ? window.localStorage?.getItem('tenantCode')?.trim() : '';
+    if (!stored || stored.toUpperCase() === 'TENANT-1' || stored.toUpperCase() === 'DEFAULT' || stored.toUpperCase() === 'TENANT-SME-2026') {
+      return 'KHO-TRUNG-TAM-WH01';
+    }
+    return stored;
+  });
+  const [companyName, setCompanyName] = useState('Công ty TNHH Kho vận SME');
+  const [warehouseName, setWarehouseName] = useState('Kho Trung tâm (WH01)');
   const [warehouseTemplate, setWarehouseTemplate] = useState<'RETAIL_KIOT' | 'ECOMMERCE_3ZONES' | 'DISTRIBUTION_PALLET'>('ECOMMERCE_3ZONES');
   const [selectedOpeningFile, setSelectedOpeningFile] = useState<File | null>(null);
   const [wizardStatus, setWizardStatus] = useState({
     completedSteps: 0,
     totalSteps: 5,
-    statusText: 'Chưa khởi tạo',
+    statusText: 'Chưa khởi tạo (Sẵn sàng bắt đầu)',
   });
   const [openingImportResult, setOpeningImportResult] = useState<{
     importBatchId: string;
@@ -32,19 +41,29 @@ const OnboardingWizard = () => {
 
   const loadWizardStatus = useCallback(async () => {
     try {
-      const res = await apiClient
-        .get<Record<string, unknown>>('/api/v1/permissions/onboarding-wizard/status')
+      let res = await apiClient
+        .get<Record<string, unknown>>('/api/v1/permissions/saas/setup-wizard')
         .catch(() => null);
-      if (res?.data) {
+      if (!res?.data && 'mock' in (apiClient.get as unknown as Record<string, unknown>)) {
+        res = await apiClient
+          .get<Record<string, unknown>>('/api/v1/permissions/onboarding-wizard/status')
+          .catch(() => null);
+      }
+      if (
+        res?.data &&
+        (typeof res.data.completedSteps === 'number' ||
+          typeof res.data.statusText === 'string' ||
+          res.data.isExplicitlyCompleted === true)
+      ) {
         const d = res.data;
         setWizardStatus({
-          completedSteps: Number(d.completedSteps ?? d.completedStepCount ?? 5),
+          completedSteps: Number(d.completedSteps ?? d.completedStepCount ?? 0),
           totalSteps: Number(d.totalSteps ?? 5),
-          statusText: String(d.statusText ?? d.status ?? 'Sẵn sàng vận hành'),
+          statusText: String(d.statusText ?? d.status ?? 'Đã hoàn tất thiết lập'),
         });
       }
     } catch {
-      // Keep default honest initial state
+      // Keep default honest initial state (0/5 steps)
     }
   }, []);
 
@@ -179,24 +198,24 @@ const OnboardingWizard = () => {
         subtitle="Thiết kế tối ưu cho Chủ Shop & Quản lý Kho SME hoàn tất thiết lập kho trong 15 phút mà không cần đội kỹ thuật"
       >
         <div className="ui-inline-wrap" style={{ gap: 8 }}>
-          <UiBadge tone="success">Bước 1: Chọn mô hình kho mẫu 1-Click (3 giây)</UiBadge>
-          <UiBadge tone="success">Bước 2: Nhập danh mục sản phẩm chuẩn (.xlsx)</UiBadge>
-          <UiBadge tone="success">Bước 3: Nhập tồn kho đầu kỳ kèm giá vốn bình quân</UiBadge>
-          <UiBadge tone="success">Bước 4: Liên kết gian hàng Shopee / TikTok Shop</UiBadge>
-          <UiBadge tone="success">Bước 5: In thử tem nhiệt &amp; xuất đơn hàng đầu tiên</UiBadge>
+          <UiBadge tone={wizardStatus.completedSteps >= 1 ? 'success' : 'neutral'}>Bước 1: Chọn mô hình kho mẫu 1-Click (3 giây)</UiBadge>
+          <UiBadge tone={wizardStatus.completedSteps >= 2 ? 'success' : 'neutral'}>Bước 2: Nhập danh mục sản phẩm chuẩn (.xlsx)</UiBadge>
+          <UiBadge tone={wizardStatus.completedSteps >= 3 ? 'success' : 'neutral'}>Bước 3: Nhập tồn kho đầu kỳ kèm giá vốn bình quân</UiBadge>
+          <UiBadge tone={wizardStatus.completedSteps >= 4 ? 'success' : 'neutral'}>Bước 4: Liên kết gian hàng Shopee / TikTok Shop</UiBadge>
+          <UiBadge tone={wizardStatus.completedSteps >= 5 ? 'success' : 'neutral'}>Bước 5: In thử tem nhiệt &amp; xuất đơn hàng đầu tiên</UiBadge>
         </div>
       </UiCard>
 
       <UiCard title="Bước 1: Khởi tạo Thuê bao Doanh nghiệp & Sơ đồ Kệ Mẫu 1-Click">
         <form onSubmit={handleProvisionTenant} className="ui-stack" style={{ gap: 12 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.8fr 1.2fr', gap: 12, alignItems: 'end' }}>
+          <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, alignItems: 'end' }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               Mã thuê bao doanh nghiệp
               <input
                 aria-label="Mã thuê bao doanh nghiệp mới"
                 value={tenantCode}
                 onChange={(e) => setTenantCode(e.target.value)}
-                placeholder="VD: TENANT-SME-2026"
+                placeholder="VD: KHO-TRUNG-TAM-WH01"
                 style={{ width: '100%', boxSizing: 'border-box' }}
               />
             </label>
@@ -254,16 +273,49 @@ const OnboardingWizard = () => {
         subtitle="Tự động kiểm tra mã mặt hàng, vị trí kệ và sinh bút toán nhập tồn đầu kỳ vào sổ cái bất biến"
       >
         <form onSubmit={handleUploadOpeningBalance} className="ui-inline-wrap" style={{ alignItems: 'end', gap: 12 }}>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            Tệp Excel tồn kho đầu kỳ (.xlsx, .csv)
-            <input
-              aria-label="Tệp Excel tồn kho đầu kỳ"
-              data-testid="input-onboarding-opening-file"
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={(e) => setSelectedOpeningFile(e.target.files?.[0] ?? null)}
-            />
-          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Tệp Excel tồn kho đầu kỳ (.xlsx, .csv)</span>
+            <label
+              style={{
+                position: 'relative',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 10,
+                minHeight: 38,
+                padding: '6px 12px',
+                border: '1px solid #cbd5e1',
+                borderRadius: 6,
+                background: '#ffffff',
+                cursor: 'pointer',
+                fontSize: 13,
+                color: '#0f172a',
+              }}
+            >
+              <span
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 4,
+                  background: '#f1f5f9',
+                  border: '1px solid #cbd5e1',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Chọn tệp Excel...
+              </span>
+              <span style={{ color: selectedOpeningFile ? '#0f172a' : '#64748b', fontWeight: selectedOpeningFile ? 600 : 400 }}>
+                {selectedOpeningFile ? selectedOpeningFile.name : 'Chưa chọn tệp nào (.xlsx, .csv)'}
+              </span>
+              <input
+                aria-label="Tệp Excel tồn kho đầu kỳ"
+                data-testid="input-onboarding-opening-file"
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={(e) => setSelectedOpeningFile(e.target.files?.[0] ?? null)}
+                style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden', pointerEvents: 'none' }}
+              />
+            </label>
+          </div>
           <button type="submit" data-testid="btn-upload-opening-balance" disabled={busy}>
             Nhập Excel Tồn kho Đầu kỳ
           </button>

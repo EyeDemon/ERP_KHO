@@ -6,6 +6,7 @@ import { sanitizeScannerCode } from './productCatalog';
 import {
   UiBadge,
   UiCard,
+  UiDrawer,
   UiMetric,
   UiMetricGrid,
   UiPage,
@@ -226,7 +227,7 @@ const Warehouses = () => {
         eyebrow="Dữ liệu nền"
         title="Kho hàng"
         description="Quản lý mã kho, tên kho, địa chỉ và trạng thái hoạt động. Các thao tác ghi chỉ hiển thị khi người dùng có quyền quản lý kho."
-        actions={canManage ? <button type="button" className="ui-primary-button" onClick={openCreate}>Thêm kho</button> : undefined}
+        actions={canManage ? <button type="button" className="ui-primary-button" onClick={openCreate}>+ Thêm kho mới</button> : undefined}
       />
 
       {success && <p role="status" className="ui-success-text">{success}</p>}
@@ -252,9 +253,9 @@ const Warehouses = () => {
         }}
       >
         {[
-          { to: '/warehouses', label: 'Tab 1: Danh mục Kho hàng (/warehouses)', testId: 'tab-warehouses', active: true },
-          { to: '/warehouse-locations', label: 'Tab 2: Cấu trúc & Mã vạch Vị trí Kệ (/warehouse-locations)', testId: 'tab-warehouse-locations', active: false },
-          { to: '/warehouse-map', label: 'Tab 3: Bản đồ Nhiệt Kho 2D (/warehouse-map)', testId: 'tab-warehouse-map', active: false },
+          { to: '/warehouses', label: 'Danh mục Kho hàng', testId: 'tab-warehouses', active: true },
+          { to: '/warehouse-locations', label: 'Cấu trúc & Mã vạch Vị trí Kệ', testId: 'tab-warehouse-locations', active: false },
+          { to: '/warehouse-map', label: 'Bản đồ Nhiệt Kho 2D', testId: 'tab-warehouse-map', active: false },
         ].map((tab) => {
           const style: React.CSSProperties = {
             padding: '8px 14px',
@@ -277,32 +278,6 @@ const Warehouses = () => {
           );
         })}
       </div>
-      <UiCard title="Tổng quan Mạng lưới Kho & Trạng thái Vận hành">
-        <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, maxWidth: '100%' }}>
-          <div className="ui-subcard">
-            <strong>Tỷ lệ kho đang vận hành</strong><br />
-            {activeCount}/{warehouses.length} kho hoạt động ({warehouses.length > 0 ? Math.round((activeCount / warehouses.length) * 100) : 0}%)
-          </div>
-          <div className="ui-subcard">
-            <strong>Chuẩn hóa địa chỉ vật lý</strong><br />
-            {warehouses.filter((warehouse) => Boolean(warehouse.address && warehouse.address.trim())).length}/{warehouses.length} kho đã khai báo địa chỉ
-          </div>
-          <div className="ui-subcard">
-            <strong>Kho tạm ngưng hoạt động</strong><br />
-            {warehouses.length - activeCount} kho ngừng hoạt động
-          </div>
-        </div>
-        <div className="ui-inline-wrap">
-          <button type="button" disabled={loading || saving || governanceBusy} onClick={() => void evaluateNetworkMhe()}>
-            Đánh giá Quy hoạch Mạng lưới Kho (Trung tâm / Vệ tinh), Dự báo Sức chứa & Thiết bị MHE
-          </button>
-          {networkMheEval && (
-            <UiBadge tone="success">
-              {`Đã đánh giá ${networkMheEval.evaluationId}: ${viNetworkTerm(networkMheEval.networkTopologyMode)} • ${viNetworkTerm(networkMheEval.capacityForecastStatus)} • ${viNetworkTerm(networkMheEval.mheFleetReadiness)}`}
-            </UiBadge>
-          )}
-        </div>
-      </UiCard>
 
       <UiToolbar>
         <UiToolbarField label="Tìm kho">
@@ -372,65 +347,95 @@ const Warehouses = () => {
         </UiCard>
       )}
 
-      {showForm && canManage && (
-        <UiCard title={editing ? `Sửa kho ${form.code}` : 'Thêm kho'}>
-          <form className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, alignItems: 'end', maxWidth: '100%' }} onSubmit={save}>
-            {formError && <p role="alert">{formError}</p>}
+      <UiCard title="Tổng quan Mạng lưới Kho & Trạng thái Vận hành">
+        <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12, maxWidth: '100%' }}>
+          <div className="ui-subcard">
+            <strong>Tỷ lệ kho đang vận hành</strong><br />
+            {activeCount}/{warehouses.length} kho hoạt động ({warehouses.length > 0 ? Math.round((activeCount / warehouses.length) * 100) : 0}%)
+          </div>
+          <div className="ui-subcard">
+            <strong>Chuẩn hóa địa chỉ vật lý</strong><br />
+            {warehouses.filter((warehouse) => Boolean(warehouse.address && warehouse.address.trim())).length}/{warehouses.length} kho đã khai báo địa chỉ
+          </div>
+          <div className="ui-subcard">
+            <strong>Kho tạm ngưng hoạt động</strong><br />
+            {warehouses.length - activeCount} kho ngừng hoạt động
+          </div>
+        </div>
+        <div className="ui-inline-wrap">
+          <button type="button" disabled={loading || saving || governanceBusy} onClick={() => void evaluateNetworkMhe()}>
+            Đánh giá Quy hoạch Mạng lưới Kho (Trung tâm / Vệ tinh), Dự báo Sức chứa & Thiết bị MHE
+          </button>
+          {networkMheEval && (
+            <UiBadge tone="success">
+              {`Đã đánh giá ${networkMheEval.evaluationId}: ${viNetworkTerm(networkMheEval.networkTopologyMode)} • ${viNetworkTerm(networkMheEval.capacityForecastStatus)} • ${viNetworkTerm(networkMheEval.mheFleetReadiness)}`}
+            </UiBadge>
+          )}
+        </div>
+      </UiCard>
 
-            <label className="ui-stack">
-              <span>Mã kho *</span>
+      <UiDrawer
+        open={showForm && canManage}
+        title={editing ? `Sửa kho ${form.code}` : 'Thêm kho mới'}
+        busy={saving}
+        onClose={closeForm}
+      >
+        <form className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, maxWidth: '100%' }} onSubmit={save}>
+          {formError && <p role="alert">{formError}</p>}
+
+          <label className="ui-stack">
+            <span>Mã kho *</span>
+            <input
+              aria-label="Mã kho"
+              value={form.code}
+              onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
+              disabled={saving || editing}
+              maxLength={50} placeholder="VD: WH-HCM" style={{ height: 38, boxSizing: 'border-box' }}
+              required
+            />
+          </label>
+
+          <label className="ui-stack">
+            <span>Tên kho *</span>
+            <input
+              aria-label="Tên kho"
+              value={form.name}
+              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+              disabled={saving}
+              maxLength={200} placeholder="Nhập tên kho" style={{ height: 38, boxSizing: 'border-box' }}
+              required
+            />
+          </label>
+
+          <label className="ui-stack">
+            <span>Địa chỉ</span>
+            <textarea
+              aria-label="Địa chỉ kho"
+              value={form.address}
+              onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))}
+              disabled={saving}
+              rows={2} placeholder="Nhập địa chỉ kho" style={{ minHeight: 60, boxSizing: 'border-box' }}
+            />
+          </label>
+
+          {editing && (
+            <label className="ui-checkbox-label">
               <input
-                aria-label="Mã kho"
-                value={form.code}
-                onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
-                disabled={saving || editing}
-                maxLength={50} placeholder="VD: WH-HCM" style={{ height: 38, boxSizing: 'border-box' }}
-                required
-              />
-            </label>
-
-            <label className="ui-stack">
-              <span>Tên kho *</span>
-              <input
-                aria-label="Tên kho"
-                value={form.name}
-                onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
                 disabled={saving}
-                maxLength={200} placeholder="Nhập tên kho" style={{ height: 38, boxSizing: 'border-box' }}
-                required
               />
+              Kho đang hoạt động
             </label>
+          )}
 
-            <label className="ui-stack">
-              <span>Địa chỉ</span>
-              <textarea
-                aria-label="Địa chỉ kho"
-                value={form.address}
-                onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))}
-                disabled={saving}
-                rows={1} placeholder="Nhập địa chỉ kho" style={{ height: 38, minHeight: 38, boxSizing: 'border-box' }}
-              />
-            </label>
-
-            {editing && (
-              <label className="ui-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={form.isActive}
-                  onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
-                  disabled={saving}
-                />
-                Kho đang hoạt động
-              </label>
-            )}
-
-            <div className="ui-inline-actions">
-              <button type="submit" disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu kho'}</button>
-              <button type="button" disabled={saving} onClick={closeForm}>Hủy</button>
-            </div>
-          </form>
-        </UiCard>
-      )}
+          <div className="ui-inline-actions">
+            <button type="submit" disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu kho'}</button>
+            <button type="button" disabled={saving} onClick={closeForm}>Hủy</button>
+          </div>
+        </form>
+      </UiDrawer>
     </UiPage>
   );
 };

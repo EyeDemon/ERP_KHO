@@ -90,18 +90,14 @@ describe('SaasBilling Page', () => {
     });
     expect(await screen.findByText(/Nội dung CK: ERPKHO2026 GROWTH/i)).toBeTruthy();
 
-    fireEvent.click(screen.getByTestId('btn-confirm-vietqr-webhook'));
+    fireEvent.click(screen.getByTestId('btn-check-vietqr-payment-status'));
 
     await waitFor(() => {
-      expect(apiClient.post).toHaveBeenCalledWith(
-        '/api/v1/permissions/saas/subscription-billing/webhook-vietqr',
-        expect.objectContaining({
-          planCode: 'GROWTH',
-          paidAmountVnd: 1490000,
-        }),
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/api/v1/permissions/saas/subscription-billing',
       );
     });
-    expect(await screen.findByText(/Đã kích hoạt tự động Gói Tăng trưởng qua Webhook PayOS/i)).toBeTruthy();
+    expect(await screen.findByText(/Đã kiểm tra trạng thái giao dịch từ máy chủ/i)).toBeTruthy();
   });
 
   it('displays server error banner honestly when SaaS billing API fails', async () => {

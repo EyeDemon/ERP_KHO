@@ -4,17 +4,46 @@ import { isReadOnlyDemoRuntime } from './runtimeMode';
 import { createReadOnlyDemoApiAdapter } from './demoApiAdapter';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || 'https://localhost:7198';
-let accessToken: string | null = null;
+const ACCESS_TOKEN_SESSION_KEY = 'wms_access_token';
+const AUTH_ME_CACHE_SESSION_KEY = 'wms_auth_me_cache';
+const AUTH_ME_CACHE_TTL_MS = 60_000;
+const isVitestEnv = Boolean(
+  typeof import.meta !== 'undefined' && (import.meta.env?.VITEST || import.meta.env?.MODE === 'test')
+);
+let accessToken: string | null = (() => {
+  if (isVitestEnv) return null;
+  try {
+    return typeof window !== 'undefined' ? window.sessionStorage?.getItem(ACCESS_TOKEN_SESSION_KEY) : null;
+  } catch {
+    return null;
+  }
+})();
 let isRedirecting = false;
 
 type RetryConfig = InternalAxiosRequestConfig & {
   _authRetry?: boolean;
+  _rateLimitRetryCount?: number;
   _idempotencyKey?: string;
   _autoFingerprint?: string;
 };
 
 const AUTO_IDEMPOTENCY_TTL_MS = 5_000;
 const autoIdempotencyCache = new Map<string, { key: string; expiresAt: number }>();
+
+const GET_CACHE_TTL_MS = 3_000;
+const getResponseCache = new Map<string, { expiresAt: number; promise: Promise<unknown> }>();
+
+const buildGetCacheKey = (url: string, config?: Record<string, unknown>): string => {
+  let paramsKey = '';
+  if (config?.params) {
+    try {
+      paramsKey = JSON.stringify(config.params);
+    } catch {
+      paramsKey = String(config.params);
+    }
+  }
+  return `${accessToken ?? 'anon'}:${url}:${paramsKey}`;
+};
 
 const releaseAutoIdempotencyKey = (config?: RetryConfig): void => {
   if (!config?._autoFingerprint) return;
@@ -42,7 +71,21 @@ const buildRequestFingerprint = (method: string, config: Record<string, unknown>
   return `${method}:${url}:${serializedData}`;
 };
 
-export const setAccessToken = (token: string | null): void => { accessToken = token; };
+export const setAccessToken = (token: string | null): void => {
+  accessToken = token;
+  getResponseCache.clear();
+  if (!isVitestEnv) {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.removeItem(AUTH_ME_CACHE_SESSION_KEY);
+        if (token) window.sessionStorage.setItem(ACCESS_TOKEN_SESSION_KEY, token);
+        else window.sessionStorage.removeItem(ACCESS_TOKEN_SESSION_KEY);
+      }
+    } catch {
+      // Ignore storage access errors in restricted environments
+    }
+  }
+};
 export const getAccessToken = (): string | null => accessToken;
 export const resetRedirectGuard = (): void => { isRedirecting = false; };
 
@@ -68,8 +111,16 @@ const refreshAccessToken = createSingleFlight<string>(() =>
       .then(async (response) => {
         const token = response.data.token as string;
         setAccessToken(token);
+        if (response.data?.username) localStorage.setItem('username', String(response.data.username));
+        if (response.data?.role) localStorage.setItem('role', String(response.data.role));
+        const refreshUid = response.data?.userId ?? response.data?.id;
+        if (refreshUid !== undefined && refreshUid !== null) localStorage.setItem('userId', String(refreshUid));
         const revision = beginPermissionRefresh();
         const identity = await refreshClient.get('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
+        if (identity.data?.username) localStorage.setItem('username', String(identity.data.username));
+        if (identity.data?.role) localStorage.setItem('role', String(identity.data.role));
+        const uid = identity.data?.userId ?? identity.data?.id;
+        if (uid !== undefined && uid !== null) localStorage.setItem('userId', String(uid));
         setCurrentPermissions(identity.data.permissions, revision);
         return token;
       })
@@ -78,6 +129,7 @@ const refreshAccessToken = createSingleFlight<string>(() =>
 const clearAuthentication = (): void => {
   setAccessToken(null);
   autoIdempotencyCache.clear();
+  getResponseCache.clear();
   localStorage.removeItem('username');
   localStorage.removeItem('role');
   localStorage.removeItem('userId');
@@ -99,6 +151,7 @@ apiClient.interceptors.request.use((config) => {
   const retryConfig = config as RetryConfig;
   const method = config.method?.toLowerCase();
   if (method && ['post', 'put', 'patch', 'delete'].includes(method)) {
+    getResponseCache.clear();
     const existingKey =
       config.headers?.['Idempotency-Key'] ??
       config.headers?.['idempotency-key'] ??
@@ -184,10 +237,23 @@ apiClient.interceptors.response.use(
       const revision = beginPermissionRefresh();
       try {
         const identity = await refreshClient.get('/api/auth/me', { headers: { Authorization: `Bearer ${accessToken}` } });
+        if (identity.data?.username) localStorage.setItem('username', String(identity.data.username));
+        if (identity.data?.role) localStorage.setItem('role', String(identity.data.role));
+        const uid = identity.data?.userId ?? identity.data?.id;
+        if (uid !== undefined && uid !== null) localStorage.setItem('userId', String(uid));
         setCurrentPermissions(identity.data.permissions, revision);
       } catch {
         setCurrentPermissions([], revision);
       }
+    }
+    if (error.response?.status === 429 && config && (config._rateLimitRetryCount ?? 0) < 2) {
+      config._rateLimitRetryCount = (config._rateLimitRetryCount ?? 0) + 1;
+      const retryAfterHeader = Number(headers['retry-after']);
+      const delayMs = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
+        ? Math.min(retryAfterHeader * 1000, 2500)
+        : 600 * config._rateLimitRetryCount;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return apiClient.request(config);
     }
     if (error.response?.status === 401 && config && !config._authRetry && !isAuthEndpoint) {
       config._authRetry = true;
@@ -228,5 +294,67 @@ export const logoutAll = async (): Promise<void> => {
     window.location.href = '/login';
   }
 };
+
+const rawGet = apiClient.get.bind(apiClient);
+const isTestRuntime = Boolean(
+  typeof import.meta !== 'undefined' && (import.meta.env?.VITEST || import.meta.env?.MODE === 'test')
+);
+
+if (!isTestRuntime) {
+  apiClient.get = ((url: string, config?: Parameters<typeof rawGet>[1]) => {
+    const now = Date.now();
+    const normalizedUrl = url.trim().toLowerCase();
+    if (normalizedUrl === '/api/auth/me' && accessToken && typeof window !== 'undefined') {
+      try {
+        const rawCached = window.sessionStorage?.getItem(AUTH_ME_CACHE_SESSION_KEY);
+        if (rawCached) {
+          const parsed = JSON.parse(rawCached) as { token?: string; expiresAt?: number; data?: unknown };
+          if (parsed && parsed.token === accessToken && typeof parsed.expiresAt === 'number' && parsed.expiresAt > now && parsed.data) {
+            return Promise.resolve({
+              data: parsed.data,
+              status: 200,
+              statusText: 'OK',
+              headers: {},
+              config: (config ?? {}) as InternalAxiosRequestConfig,
+            }) as ReturnType<typeof rawGet>;
+          }
+        }
+      } catch {
+        // Ignore sessionStorage parse errors
+      }
+    }
+    for (const [k, v] of getResponseCache.entries()) {
+      if (v.expiresAt <= now) getResponseCache.delete(k);
+    }
+    const cacheKey = buildGetCacheKey(url, config as Record<string, unknown> | undefined);
+    const hit = getResponseCache.get(cacheKey);
+    if (hit && hit.expiresAt > now) {
+      return hit.promise as ReturnType<typeof rawGet>;
+    }
+    const reqPromise = rawGet(url, config)
+      .then((res) => {
+        if (normalizedUrl === '/api/auth/me' && accessToken && res?.data && typeof window !== 'undefined') {
+          try {
+            window.sessionStorage?.setItem(
+              AUTH_ME_CACHE_SESSION_KEY,
+              JSON.stringify({ token: accessToken, expiresAt: Date.now() + AUTH_ME_CACHE_TTL_MS, data: res.data }),
+            );
+          } catch {
+            // Ignore storage write errors
+          }
+        }
+        return res;
+      })
+      .catch((err) => {
+        getResponseCache.delete(cacheKey);
+        throw err;
+      });
+    getResponseCache.set(cacheKey, {
+      expiresAt: now + GET_CACHE_TTL_MS,
+      promise: reqPromise,
+    });
+    return reqPromise;
+  }) as typeof apiClient.get;
+}
 
 export default apiClient;

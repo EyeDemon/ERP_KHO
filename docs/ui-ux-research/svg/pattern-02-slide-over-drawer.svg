@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="100%" height="100%" font-family="Inter, 'Be Vietnam Pro', system-ui, -apple-system, sans-serif">
+  <defs>
+    <style>
+      .num { font-variant-numeric: tabular-nums; }
+      .mono { font-family: 'JetBrains Mono', Consolas, monospace; font-variant-numeric: tabular-nums; }
+    </style>
+  </defs>
+
+  <!-- Underlying Page (Preserved 100% in DOM when editing!) -->
+  <rect width="1440" height="900" fill="#F8FAFC" />
+  <rect x="0" y="0" width="250" height="900" fill="#0F172A" />
+  <text x="24" y="40" fill="#FFFFFF" font-size="16" font-weight="700">ERP_KHO v3.0</text>
+  <rect x="12" y="280" width="226" height="36" rx="6" fill="#1E293B" />
+  <text x="28" y="303" fill="#FFFFFF" font-size="13" font-weight="700">Đối tác &amp; Khách hàng 3PL</text>
+
+  <!-- Background Table (Visible behind scrim for context!) -->
+  <rect x="274" y="90" width="1142" height="780" rx="8" fill="#FFFFFF" stroke="#E6E8EA" />
+  <text x="296" y="130" fill="#0F172A" font-size="20" font-weight="700">Danh mục Đối tác Kinh doanh &amp; Chủ hàng 3PL</text>
+  <rect x="275" y="160" width="1140" height="38" fill="#F2F3F4" />
+  <text x="292" y="184" fill="#475569" font-size="11" font-weight="700">MÃ ĐỐI TÁC</text>
+  <text x="420" y="184" fill="#475569" font-size="11" font-weight="700">TÊN ĐỐI TÁC (GIỮ NGUYÊN BẢNG NỀN KHI BẤM SỬA)</text>
+  <text x="760" y="184" fill="#475569" font-size="11" font-weight="700">PHÂN LOẠI</text>
+
+  <rect x="275" y="198" width="1140" height="48" fill="#FFFFFF" />
+  <text x="292" y="227" fill="#0F172A" font-size="13" font-weight="700" class="mono">NCC-0041</text>
+  <text x="420" y="227" fill="#0F172A" font-size="13">Công ty Cổ phần Bao bì Á Châu</text>
+
+  <!-- Highlighted Active Row Being Edited -->
+  <rect x="275" y="246" width="1140" height="52" fill="#ECFDF5" stroke="#059669" stroke-width="2" />
+  <text x="292" y="277" fill="#047857" font-size="13" font-weight="700" class="mono">▶ NCC-0042</text>
+  <text x="420" y="277" fill="#047857" font-size="13" font-weight="700">Công ty CP Nhựa Duy Tân (Đang mở trong Drawer bên phải)</text>
+
+  <rect x="275" y="298" width="1140" height="48" fill="#FFFFFF" />
+  <text x="292" y="327" fill="#0F172A" font-size="13" font-weight="700" class="mono">KH-3PL-108</text>
+  <text x="420" y="327" fill="#0F172A" font-size="13">Shop Mỹ Phẩm Chính Hãng Hà Nội</text>
+
+  <!-- Backdrop Scrim (rgba(15, 23, 42, 0.38)) -->
+  <rect x="0" y="0" width="1440" height="900" fill="#0F172A" fill-opacity="0.38" />
+
+  <!-- Context Callout Badge on Left -->
+  <rect x="290" y="370" width="460" height="68" rx="8" fill="#0F172A" stroke="#059669" stroke-width="2" />
+  <text x="310" y="398" fill="#ECFDF5" font-size="13" font-weight="700">✓ Bảng danh sách KHÔNG bị biến mất khi bấm [Sửa] hoặc [+ Tạo mới]</text>
+  <text x="310" y="420" fill="#CBD5E1" font-size="12">Người dùng vẫn đối chiếu được mã NCC-0041, NCC-0042 ở nền phía sau.</text>
+
+  <!-- RIGHT SLIDE-OVER DRAWER (<UiDrawer> width=640px, X=800..1440) -->
+  <rect x="800" y="0" width="640" height="900" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1.5" />
+
+  <!-- Drawer Sticky Header (Y=0..76px) -->
+  <rect x="800" y="0" width="640" height="76" fill="#F8FAFC" />
+  <line x1="800" y1="76" x2="1440" y2="76" stroke="#E6E8EA" />
+  <text x="828" y="30" fill="#047857" font-size="11" font-weight="700" letter-spacing="0.06em">CHỈNH SỬA HỒ SƠ ĐỐI TÁC • ROWVERSION: 0x0000000000018A4F</text>
+  <text x="828" y="56" fill="#0F172A" font-size="18" font-weight="700">NCC-0042 — Công ty CP Nhựa Duy Tân</text>
+  <rect x="1346" y="20" width="70" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+  <text x="1381" y="43" fill="#334155" font-size="12" font-weight="700" text-anchor="middle">Đóng ✕</text>
+
+  <!-- Drawer Body: Section 1 (General Info) -->
+  <g transform="translate(828, 98)">
+    <rect x="0" y="0" width="584" height="236" rx="10" fill="#F8FAFC" stroke="#E2E8F0" />
+    <text x="16" y="28" fill="#0F172A" font-size="13.5" font-weight="700">1. Thông tin định danh &amp; Phân loại Đối tác</text>
+    <line x1="16" y1="38" x2="568" y2="38" stroke="#E2E8F0" stroke-dasharray="4,4" />
+
+    <!-- 2-Column Grid (.ui-grid-2) -->
+    <text x="16" y="64" fill="#475569" font-size="12" font-weight="600">Mã đối tác *</text>
+    <rect x="16" y="72" width="268" height="40" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+    <text x="28" y="97" fill="#0F172A" font-size="13" class="mono">NCC-0042</text>
+
+    <text x="300" y="64" fill="#475569" font-size="12" font-weight="600">Trạng thái giao dịch</text>
+    <rect x="300" y="72" width="268" height="40" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+    <text x="312" y="97" fill="#047857" font-size="13" font-weight="600">● Đang hoạt động (Active) ▾</text>
+
+    <text x="16" y="138" fill="#475569" font-size="12" font-weight="600">Tên pháp nhân / Tên thương mại đầy đủ *</text>
+    <rect x="16" y="146" width="552" height="40" rx="6" fill="#FFFFFF" stroke="#334155" stroke-width="2" />
+    <text x="28" y="171" fill="#0F172A" font-size="13" font-weight="600">Công ty Cổ phần Sản xuất Nhựa Duy Tân</text>
+
+    <!-- Role Checkboxes -->
+    <rect x="16" y="200" width="20" height="20" rx="4" fill="#334155" />
+    <text x="22" y="215" fill="#FFFFFF" font-size="12" font-weight="700">✓</text>
+    <text x="44" y="215" fill="#0F172A" font-size="12" font-weight="600">Nhà cung cấp (Supplier)</text>
+
+    <rect x="240" y="200" width="20" height="20" rx="4" fill="#FFFFFF" stroke="#CBD5E1" />
+    <text x="268" y="215" fill="#0F172A" font-size="12" font-weight="600">Khách hàng / Chủ hàng thuê kho 3PL</text>
+  </g>
+
+  <!-- Drawer Body: Section 2 (Contact & Address) -->
+  <g transform="translate(828, 352)">
+    <rect x="0" y="0" width="584" height="176" rx="10" fill="#F8FAFC" stroke="#E2E8F0" />
+    <text x="16" y="28" fill="#0F172A" font-size="13.5" font-weight="700">2. Liên hệ &amp; Địa chỉ kho giao nhận</text>
+    <line x1="16" y1="38" x2="568" y2="38" stroke="#E2E8F0" stroke-dasharray="4,4" />
+
+    <text x="16" y="64" fill="#475569" font-size="12" font-weight="600">Số điện thoại điều phối</text>
+    <rect x="16" y="72" width="268" height="40" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+    <text x="28" y="97" fill="#0F172A" font-size="13" class="num">028 3876 2222</text>
+
+    <text x="300" y="64" fill="#475569" font-size="12" font-weight="600">Email nhận thông báo PO / Đối soát</text>
+    <rect x="300" y="72" width="268" height="40" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+    <text x="312" y="97" fill="#0F172A" font-size="13">supply@duytan.com</text>
+
+    <text x="16" y="132" fill="#475569" font-size="12" font-weight="600">Địa chỉ xuất hóa đơn / Kho giao hàng</text>
+    <rect x="16" y="140" width="552" height="28" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+    <text x="28" y="159" fill="#0F172A" font-size="12">298 Hồ Học Lãm, Phường An Lạc, Quận Bình Tân, TP. Hồ Chí Minh</text>
+  </g>
+
+  <!-- Drawer Body: Section 3 (Credit Limit & Payment Terms) -->
+  <g transform="translate(828, 546)">
+    <rect x="0" y="0" width="584" height="174" rx="10" fill="#F8FAFC" stroke="#E2E8F0" />
+    <text x="16" y="28" fill="#0F172A" font-size="13.5" font-weight="700">3. Chính sách Công nợ &amp; Hạn mức Tín dụng (AP/AR)</text>
+    <line x1="16" y1="38" x2="568" y2="38" stroke="#E2E8F0" stroke-dasharray="4,4" />
+
+    <text x="16" y="64" fill="#475569" font-size="12" font-weight="600">Hạn mức tín dụng tối đa (VNĐ)</text>
+    <rect x="16" y="72" width="268" height="40" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+    <text x="272" y="97" fill="#0F172A" font-size="13" font-weight="700" text-anchor="end" class="num">200.000.000 đ</text>
+
+    <text x="300" y="64" fill="#475569" font-size="12" font-weight="600">Kỳ hạn thanh toán (Số ngày)</text>
+    <rect x="300" y="72" width="268" height="40" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+    <text x="556" y="97" fill="#0F172A" font-size="13" font-weight="700" text-anchor="end" class="num">30 ngày</text>
+
+    <!-- Policy Note (Not a Pill Badge!) -->
+    <rect x="16" y="124" width="552" height="36" rx="4" fill="#EFF6FF" />
+    <rect x="16" y="124" width="4" height="36" fill="#1D4ED8" />
+    <text x="30" y="147" fill="#1E3A8A" font-size="12">Mọi thay đổi hạn mức tín dụng được ghi nhận vào Nhật ký Kiểm toán kèm X-Correlation-Id.</text>
+  </g>
+
+  <!-- Drawer Sticky Footer (Y=820..900px) -->
+  <rect x="800" y="820" width="640" height="80" fill="#F8FAFC" />
+  <line x1="800" y1="820" x2="1440" y2="820" stroke="#CBD5E1" />
+  <text x="828" y="865" fill="#64748B" font-size="12">Nhấn Esc để đóng nhanh • Tự động gắn Idempotency-Key</text>
+
+  <rect x="1140" y="840" width="110" height="40" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+  <text x="1195" y="865" fill="#334155" font-size="13" font-weight="600" text-anchor="middle">Hủy bỏ</text>
+
+  <rect x="1262" y="840" width="150" height="40" rx="6" fill="#334155" />
+  <text x="1337" y="865" fill="#FFFFFF" font-size="13" font-weight="700" text-anchor="middle">Lưu thay đổi</text>
+</svg>

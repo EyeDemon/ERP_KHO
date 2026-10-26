@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
 import { Layers3, RefreshCw, Repeat2, Unlock } from 'lucide-react';
-import AccessibleDialog from '../components/AccessibleDialog';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import {
-  UiBadge, UiCard, UiPage, UiPageHeader,
+  UiBadge, UiCard, UiDrawer, UiPage, UiPageHeader,
   UiTableScroll, UiToolbar, UiToolbarField,
 } from '../ui/ProductionUi';
 
@@ -228,8 +227,8 @@ export default function StockAllocations(){
       }}
     >
       {[
-        { to: '/stock-reservations', label: 'Tab 1: Giữ hàng tồn kho (/stock-reservations)', testId: 'tab-stock-reservations', active: false },
-        { to: '/stock-allocations', label: 'Tab 2: Phân bổ vị trí kệ (/stock-allocations)', testId: 'tab-stock-allocations', active: true },
+        { to: '/stock-reservations', label: 'Giữ hàng tồn kho', testId: 'tab-stock-reservations', active: false },
+        { to: '/stock-allocations', label: 'Phân bổ vị trí kệ', testId: 'tab-stock-allocations', active: true },
       ].map((tab) => {
         const style: React.CSSProperties = {
           padding: '8px 14px',
@@ -255,10 +254,10 @@ export default function StockAllocations(){
     {error&&<p role="alert">{error}</p>}
 
     <UiCard>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,marginBottom:8}}>
+      <div style={{display:'flex',flexWrap:'wrap',justifyContent:'space-between',alignItems:'center',gap:12,marginBottom:8}}>
         <h2 className="ui-card-title" style={{margin:0}}>Tổng quan Phân bổ Tồn kho theo Vị trí & Cam kết Chưa phân bổ</h2>
         <div className="ui-inline-actions">
-          <button type="button" style={{whiteSpace:'nowrap'}} disabled={fefoBusy||busy} onClick={()=>void verifyFefoCompliance()}>
+          <button type="button" style={{whiteSpace:'normal',textAlign:'left'}} disabled={fefoBusy||busy} onClick={()=>void verifyFefoCompliance()}>
             Kiểm định Tuân thủ Phân bổ Cận hạn & Nhập trước theo Vị trí
           </button>
           {fefoVerification&&(
@@ -268,7 +267,7 @@ export default function StockAllocations(){
           )}
         </div>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(6, minmax(0, 1fr))',gap:8}}>
+      <div className="ui-kpi-grid" style={{display:'grid',gridTemplateColumns:'repeat(6, minmax(0, 1fr))',gap:8}}>
         <div className="ui-subcard" style={{padding:'6px 10px'}}>
           <span className="ui-muted-text" style={{fontSize:12,display:'block'}}>Phân bổ phù hợp</span>
           <strong style={{fontSize:16,fontVariantNumeric:'tabular-nums'}}>{data.totalRecords}</strong>
@@ -366,20 +365,30 @@ export default function StockAllocations(){
       </div>}
     </UiCard>
 
-    {action&&<AccessibleDialog titleId="allocation-action-title" busy={busy} returnFocusTo={action.trigger} onClose={()=>setAction(null)}>
-      <h2 id="allocation-action-title">{action.kind==='release'?'Giải phóng phân bổ':'Phân bổ lại vị trí'}</h2>
-      <p><strong>{action.allocation.allocationCode}</strong> • {action.allocation.productCode} • {action.allocation.quantity} tại {action.allocation.locationCode}</p>
-      {action.kind==='reallocate'&&<label>Vị trí mới
-        <select aria-label="Vị trí phân bổ lại" value={actionLocationId} disabled={busy} onChange={event=>setActionLocationId(event.target.value?Number(event.target.value):'')}>
+    {action&&<UiDrawer
+      open={Boolean(action)}
+      title={action.kind==='release'?'Giải phóng phân bổ':'Phân bổ lại vị trí'}
+      subtitle={<><strong>{action.allocation.allocationCode}</strong> • {action.allocation.productCode} • {action.allocation.quantity} tại {action.allocation.locationCode}</>}
+      titleId="allocation-action-title"
+      busy={busy}
+      returnFocusTo={action.trigger}
+      onClose={()=>setAction(null)}
+      footer={
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end',width:'100%'}}>
+          <button type="button" className="ui-btn ui-btn-secondary" disabled={busy} onClick={()=>setAction(null)}>Hủy</button>
+          <button type="button" className="ui-btn ui-btn-primary ui-primary-button" disabled={busy||!reason.trim()} onClick={()=>void submitAction()}>{busy?'Đang xử lý...':'Xác nhận'}</button>
+        </div>
+      }
+    >
+      {action.kind==='reallocate'&&<label style={{display:'flex',flexDirection:'column',gap:6,fontSize:13,fontWeight:600,color:'#0f172a',width:'100%'}}>Vị trí mới
+        <select className="ui-select" style={{width:'100%',boxSizing:'border-box',minHeight:38}} aria-label="Vị trí phân bổ lại" value={actionLocationId} disabled={busy} onChange={event=>setActionLocationId(event.target.value?Number(event.target.value):'')}>
           <option value="">Tự động chọn vị trí khác</option>
           {actionCandidates.map(item=><option key={item.locationId} value={item.locationId}>{item.locationCode} • còn {item.allocatableQuantity}</option>)}
         </select>
       </label>}
-      <label>Lý do<textarea data-initial-focus aria-label="Lý do thao tác Allocation" value={reason} disabled={busy} onChange={event=>setReason(event.target.value)}/></label>
-      <div className="approval-dialog-actions">
-        <button type="button" disabled={busy} onClick={()=>setAction(null)}>Hủy</button>
-        <button type="button" disabled={busy||!reason.trim()} onClick={()=>void submitAction()}>{busy?'Đang xử lý...':'Xác nhận'}</button>
-      </div>
-    </AccessibleDialog>}
+      <label style={{display:'flex',flexDirection:'column',gap:6,fontSize:13,fontWeight:600,color:'#0f172a',width:'100%'}}>Lý do
+        <textarea className="ui-input" rows={4} style={{width:'100%',boxSizing:'border-box',padding:'8px 10px'}} data-initial-focus aria-label="Lý do thao tác Allocation" placeholder="Nhập lý do giải phóng hoặc phân bổ lại vị trí..." value={reason} disabled={busy} onChange={event=>setReason(event.target.value)}/>
+      </label>
+    </UiDrawer>}
   </UiPage>;
 }

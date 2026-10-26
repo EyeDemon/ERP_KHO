@@ -223,7 +223,7 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
       </MemoryRouter>,
     );
 
-    expect(await view.findByText('Đã xả bộ hàng lắp ráp (De-kitting)')).toBeTruthy();
+    expect(await view.findByText('Đã xả bộ hàng lắp ráp')).toBeTruthy();
     expect(view.getByText(/Lệnh lắp ráp \/ xả bộ/)).toBeTruthy();
     expect(view.queryByText('DEKIT_DISASSEMBLE_EXECUTED')).toBeNull();
 

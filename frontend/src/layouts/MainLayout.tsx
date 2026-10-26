@@ -8,6 +8,7 @@ import {
   Clipboard,
   ClipboardCheck,
   Handshake,
+  HelpCircle,
   Home,
   Layers3,
   Lock,
@@ -84,6 +85,14 @@ const productionIcons: Record<string, LucideIcon> = {
   '/permissions': Shield,
 };
 
+const pdaBottomNavItems: { path: string; label: string; icon: LucideIcon; permission?: string; access?: 'always' | 'stocktake' }[] = [
+  { path: '/', label: 'Tổng quan', icon: Home, access: 'always' },
+  { path: '/import-receipts', label: 'Nhận hàng', icon: Clipboard, permission: 'receipt.read' },
+  { path: '/putaway-tasks', label: 'Cất hàng', icon: PackageOpen, permission: 'putaway.read' },
+  { path: '/picking-tasks', label: 'Lấy hàng', icon: ClipboardCheck, permission: 'picking.read' },
+  { path: '/stocktakes', label: 'Kiểm kê', icon: Scale, access: 'stocktake' },
+];
+
 const MainLayout = () => {
   usePermissionSet();
   const { pathname } = useLocation();
@@ -93,6 +102,9 @@ const MainLayout = () => {
   const previousPathRef = useRef(pathname);
   const [identityState, setIdentityState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [isCompactViewport, setIsCompactViewport] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 768 : false,
+  );
   const [diagCopiedNotice, setDiagCopiedNotice] = useState('');
   const [complexityMode, setComplexityMode] = useState<'FULL' | 'EXPRESS'>(() => {
     if (typeof window !== 'undefined' && window.localStorage) {
@@ -112,6 +124,14 @@ const MainLayout = () => {
   };
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const syncViewport = () => setIsCompactViewport(window.innerWidth <= 768);
+    syncViewport();
+    window.addEventListener('resize', syncViewport);
+    return () => window.removeEventListener('resize', syncViewport);
+  }, []);
+
+  useEffect(() => {
     let active = true;
     const revision = beginPermissionRefresh();
 
@@ -124,6 +144,10 @@ const MainLayout = () => {
     setIdentityState('loading');
     apiClient.get('/api/auth/me').then(response => {
       if (!active) return;
+      if (response.data?.username) localStorage.setItem('username', String(response.data.username));
+      if (response.data?.role) localStorage.setItem('role', String(response.data.role));
+      const uid = response.data?.userId ?? response.data?.id;
+      if (uid !== undefined && uid !== null) localStorage.setItem('userId', String(uid));
       setCurrentPermissions(response.data.permissions, revision);
       setIdentityState('ready');
     }).catch(() => {
@@ -168,12 +192,24 @@ const MainLayout = () => {
     return true;
   };
 
+  const resolvedTenantBadgeLabel = (() => {
+    const raw = localStorage.getItem('tenantCode')?.trim();
+    if (!raw || raw.toUpperCase() === 'DEFAULT' || raw.toUpperCase() === 'TENANT-1' || raw.toUpperCase() === 'MẶC ĐỊNH') {
+      return 'Kho Trung tâm (WH01)';
+    }
+    return raw;
+  })();
+
   const navLink = (
     to: string,
     label: string,
     options: { accent?: boolean; icon?: LucideIcon } = {},
   ) => {
-    const active = pathname === to || (to !== '/' && pathname.startsWith(to + '/'));
+    const active =
+      pathname === to ||
+      (to !== '/' && pathname.startsWith(to + '/')) ||
+      (to === '/products' && pathname.startsWith('/categories')) ||
+      (to === '/cost-valuation' && pathname.startsWith('/misa-exports'));
     const Icon = options.icon ?? Circle;
 
     return (
@@ -190,6 +226,8 @@ const MainLayout = () => {
     );
   };
 
+  const sidebarHiddenOffCanvas = isCompactViewport && !mobileNavOpen;
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Bỏ qua điều hướng</a>
@@ -203,7 +241,13 @@ const MainLayout = () => {
         />
       )}
 
-      <aside id="system-sidebar" className={'app-sidebar' + (mobileNavOpen ? ' open' : '')} aria-label="Điều hướng hệ thống">
+      <aside
+        id="system-sidebar"
+        className={'app-sidebar' + (mobileNavOpen ? ' open' : '')}
+        aria-label="Điều hướng hệ thống"
+        aria-hidden={sidebarHiddenOffCanvas ? 'true' : undefined}
+        inert={sidebarHiddenOffCanvas ? true : undefined}
+      >
         <div className="app-sidebar-header">
           <h2 className="app-brand">ERP WMS</h2>
           <button type="button" className="sidebar-mobile-close" aria-label="Đóng menu điều hướng" onClick={() => setMobileNavOpen(false)}>
@@ -256,12 +300,14 @@ const MainLayout = () => {
           <div className="topbar-actions">
             <button
               type="button"
+              className="topbar-mode-toggle"
               data-testid="wms-complexity-mode-toggle"
               onClick={toggleComplexityMode}
               title="Chuyển đổi giữa Chế độ Rút gọn (Express) và Chế độ Đầy đủ (Full WMS)"
               style={{
                 fontSize: 12,
                 padding: '4px 10px',
+                minHeight: 34,
                 whiteSpace: 'nowrap',
                 borderRadius: 6,
                 border: complexityMode === 'EXPRESS' ? '1px solid #0284c7' : '1px solid #cbd5e1',
@@ -274,31 +320,50 @@ const MainLayout = () => {
                 ? '⚡ Chế độ Rút gọn (Express)'
                 : '🏭 Chế độ Đầy đủ (Full WMS)'}
             </button>
-            <button
-              type="button"
-              data-testid="btn-copy-zalo-diagnostics"
-              onClick={() => {
-                const lastErrorCode = localStorage.getItem('lastErrorCode') || 'NONE';
-                const lastCorrelationId = localStorage.getItem('lastCorrelationId') || 'CORR-2026-WMS';
-                const payload = `TenantId=${localStorage.getItem('tenantCode') || 'MẶC ĐỊNH'} | WarehouseId=${localStorage.getItem('activeWarehouseId') || 'WH01'} | UserId=${localStorage.getItem('userId') || '1'} | Route=${pathname} | LastErrorCode=${lastErrorCode} | CorrelationId=${lastCorrelationId}`;
-                if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-                  void Promise.resolve(navigator.clipboard.writeText(payload)).catch(() => {});
-                }
-                setDiagCopiedNotice(`Đã sao chép chẩn đoán lỗi 1-Click gửi Zalo (TenantId + WarehouseId + UserId + Route + LastErrorCode + CorrelationId) [${lastErrorCode} | ${lastCorrelationId}].`);
-              }}
-              style={{ fontSize: 12, padding: '4px 10px', whiteSpace: 'nowrap' }}
-            >
-              Sao chép Chẩn đoán Lỗi 1-Click gửi Zalo
-            </button>
-            {diagCopiedNotice && (
-              <span
-                role="status"
-                data-testid="zalo-diagnostics-notice"
-                style={{ fontSize: 12, color: '#065f46', background: '#ecfdf5', padding: '2px 8px', borderRadius: 6, border: '1px solid #a7f3d0' }}
+
+            <details className="topbar-help-menu">
+              <summary
+                className="topbar-help-trigger"
+                aria-label="Trợ giúp và công cụ chẩn đoán kỹ thuật"
+                title="Trợ giúp & Chẩn đoán kỹ thuật"
               >
-                {diagCopiedNotice}
-              </span>
-            )}
+                <HelpCircle size={16} aria-hidden="true" />
+                <span>Trợ giúp</span>
+              </summary>
+              <div className="topbar-help-popover">
+                <div className="topbar-help-title">Hỗ trợ kỹ thuật & Chẩn đoán</div>
+                <p className="topbar-help-desc">
+                  Sao chép nhanh mã chẩn đoán phiên làm việc (Kho, Người dùng, Đường dẫn, Mã lỗi) để gửi bộ phận hỗ trợ.
+                </p>
+                <button
+                  type="button"
+                  data-testid="btn-copy-zalo-diagnostics"
+                  aria-label="Sao chép thông tin chẩn đoán lỗi gửi hỗ trợ Zalo"
+                  onClick={() => {
+                    const lastErrorCode = localStorage.getItem('lastErrorCode') || 'NONE';
+                    const lastCorrelationId = localStorage.getItem('lastCorrelationId') || 'CORR-2026-WMS';
+                    const payload = `TenantId=${resolvedTenantBadgeLabel} | WarehouseId=${localStorage.getItem('activeWarehouseId') || 'WH01'} | UserId=${localStorage.getItem('userId') || '1'} | Route=${pathname} | LastErrorCode=${lastErrorCode} | CorrelationId=${lastCorrelationId}`;
+                    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                      void Promise.resolve(navigator.clipboard.writeText(payload)).catch(() => {});
+                    }
+                    setDiagCopiedNotice(`Đã sao chép mã chẩn đoán [${lastErrorCode} | ${lastCorrelationId}].`);
+                  }}
+                  style={{ fontSize: 12, padding: '6px 10px', width: '100%' }}
+                >
+                  Sao chép Chẩn đoán Lỗi 1-Click gửi Zalo
+                </button>
+                {diagCopiedNotice && (
+                  <span
+                    role="status"
+                    data-testid="zalo-diagnostics-notice"
+                    style={{ display: 'block', marginTop: 6, fontSize: 12, color: '#065f46', background: '#ecfdf5', padding: '4px 8px', borderRadius: 6, border: '1px solid #a7f3d0' }}
+                  >
+                    {diagCopiedNotice}
+                  </span>
+                )}
+              </div>
+            </details>
+
             {demoRuntime ? (
               <>
                 <span className="runtime-badge">MÔI TRƯỜNG MÔ PHỎNG • PHÍA MÁY CHỦ MÔ PHỎNG</span>
@@ -306,10 +371,8 @@ const MainLayout = () => {
               </>
             ) : (
               <>
-                <span className="runtime-badge" data-testid="topbar-tenant-badge">
-                  {(!localStorage.getItem('tenantCode') || localStorage.getItem('tenantCode')?.trim().toUpperCase() === 'DEFAULT')
-                    ? 'MẶC ĐỊNH'
-                    : localStorage.getItem('tenantCode')}
+                <span className="runtime-badge" data-testid="topbar-tenant-badge" title="Chi nhánh / Kho làm việc hiện tại">
+                  {resolvedTenantBadgeLabel}
                 </span>
                 <span className="topbar-context-text">{localStorage.getItem('username') || 'Người dùng'}</span>
                 <button
@@ -352,6 +415,35 @@ const MainLayout = () => {
             <Outlet />
           )}
         </main>
+
+        <nav
+          className="app-bottom-nav"
+          data-testid="pda-bottom-nav"
+          aria-label="Điều hướng tác nghiệp nhanh PDA"
+          aria-hidden={!isCompactViewport ? 'true' : undefined}
+        >
+          {pdaBottomNavItems
+            .filter((item) => {
+              if (item.permission) return hasPermission(item.permission);
+              if (item.access === 'stocktake') return showStocktakes;
+              return true;
+            })
+            .map((item) => {
+              const active = pathname === item.path || (item.path !== '/' && pathname.startsWith(item.path + '/'));
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={'app-bottom-nav-link' + (active ? ' active' : '')}
+                  aria-current={active ? 'page' : undefined}
+                >
+                  <Icon size={18} aria-hidden="true" />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+        </nav>
       </div>
     </div>
   );

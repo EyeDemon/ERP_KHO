@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
-import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbarField } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiDrawer, UiPage, UiPageHeader, UiTableScroll, UiToolbarField } from '../ui/ProductionUi';
 
 type Warehouse={id:number;name:string;isActive:boolean};
 type Status={code:string;name:string};
@@ -67,7 +67,7 @@ export default function InventoryLocks(){
   const canManage=usePermission('inventory_lock.manage');
   const canRecallBlock=usePermission('inventory_status_change.create')||canManage;
   const canReadWarehouses=usePermission('warehouse.read')||canManage||canRecallBlock;
-  const [showCreateForm,setShowCreateForm]=useState(true);
+  const [showCreateForm,setShowCreateForm]=useState(false);
   const [locks,setLocks]=useState<LockRow[]>([]);
   const [warehouses,setWarehouses]=useState<Warehouse[]>([]);
   const [statuses,setStatuses]=useState<Status[]>([]);
@@ -149,6 +149,7 @@ export default function InventoryLocks(){
       },{headers:idempotencyHeaders(key)});
       completeIdempotentAction(key);
       setForm(x=>({...x,locationId:'',productId:'',inventoryStatus:'',lotId:'',serialId:'',reason:'',expiresAt:''}));
+      setShowCreateForm(false);
       await load();
     }catch(e){setError(errorMessage(e))}
     finally{guard.current=false;setBusy(false)}
@@ -192,17 +193,65 @@ export default function InventoryLocks(){
 
   return <UiPage>
     <UiPageHeader eyebrow="Kiểm soát tồn kho" title="Khóa / đóng băng tồn kho"
-      description="Khóa thay đổi điều kiện được phép thao tác nhưng không thay đổi số lượng. Khóa đang hiệu lực được kiểm tra lại ngay trong giao dịch thay đổi tồn kho."/>
+      description="Khóa thay đổi điều kiện được phép thao tác nhưng không thay đổi số lượng. Khóa đang hiệu lực được kiểm tra lại ngay trong giao dịch thay đổi tồn kho."
+      actions={canManage?<button type="button" className="ui-btn ui-btn-primary" onClick={()=>setShowCreateForm(true)}>+ Tạo khóa tồn kho</button>:undefined}/>
     {error&&<p role="alert">{error}</p>}
     {recallMsg&&<p role="status" className="ui-success-text">{recallMsg}</p>}
     <div className="ui-stack">
-      {canManage&&<UiCard title="Tạo khóa tồn kho">
-        <div className="ui-inline-actions" style={{marginBottom:showCreateForm?6:0}}>
-          <button type="button" onClick={()=>setShowCreateForm(v=>!v)}>
-            {showCreateForm?'Thu gọn biểu mẫu':'Mở biểu mẫu tạo mới'}
+      <UiCard title="Danh sách khóa tồn kho">
+        {loading&&locks.length===0?<p role="status">Đang tải khóa tồn kho...</p>:<UiTableScroll>
+          <table className="ui-table-compact" aria-label="Danh sách khóa tồn kho" style={{minWidth:680}}>
+            <thead><tr><th style={{minWidth:120}}>Khóa</th><th style={{minWidth:180}}>Phạm vi</th><th style={{minWidth:110,whiteSpace:'nowrap'}}>Trạng thái</th><th style={{minWidth:160}}>Lý do</th><th style={{minWidth:130}}>Thời gian</th>{canManage&&<th style={{minWidth:100,width:105,whiteSpace:'nowrap'}}>Thao tác</th>}</tr></thead>
+            <tbody>{locks.length===0?<tr><td colSpan={canManage?6:5} className="ui-empty-cell">Chưa có khóa tồn kho.</td></tr>:
+              locks.map(item=><tr key={item.id}>
+                <td><strong>{lockTypeLabel(item.lockType)}</strong><br/><small>#{item.id}</small></td>
+                <td>{item.warehouseName}<br/><small>
+                  {item.locationCode??'mọi vị trí'} • {item.productCode??'mọi sản phẩm'} • {item.inventoryStatus?inventoryStatusLabel(item.inventoryStatus):'mọi trạng thái'} • {item.lotNumber??'mọi lô'} • {item.serialNumber??'mọi sê-ri'}
+                </small></td>
+                <td style={{whiteSpace:'nowrap'}}><UiBadge tone={tone(item.status)}>{lockStatusLabel(item.status)}</UiBadge></td>
+                <td>{item.reason}{item.releaseReason&&<><br/><small>Lý do mở khóa: {item.releaseReason}</small></>}</td>
+                <td>{new Date(item.createdAt).toLocaleString('vi-VN')}<br/><small>{item.expiresAt?`Hết hiệu lực ${new Date(item.expiresAt).toLocaleString('vi-VN')}`:'Không tự hết hiệu lực'}</small></td>
+                {canManage&&<td style={{whiteSpace:'nowrap'}}>{item.status==='Active'?<button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>{setRelease(item);setReleaseReason('')}}>Mở khóa</button>:'—'}</td>}
+              </tr>)}
+            </tbody>
+          </table>
+        </UiTableScroll>}
+        <p className="ui-muted-text" style={{margin:'8px 0 6px'}}>Nền tảng hiện hỗ trợ phạm vi Kho / Vị trí / Sản phẩm / Trạng thái / Lô / Sê-ri. Khóa theo chủ sở hữu, đơn vị đóng gói, một phần số lượng và ghi đè đặc quyền vẫn chưa hoàn tất theo phạm vi chuẩn.</p>
+        <div className="ui-inline-actions" style={{marginTop:4}}>
+          <button type="button" disabled={lockPrecedenceBusy} onClick={()=>void verifyLockPrecedence()}>
+            Kiểm định Độ ưu tiên Khóa Chồng lấp & Cách ly Chất lượng
           </button>
+          {lockPrecedenceResult&&(
+            <span>
+              <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>Mã kiểm định: <strong>{lockPrecedenceResult.verificationId}</strong> • Trạng thái: <strong>{({ PRECEDENCE_VERIFIED: 'Đã xác thực thứ tự ưu tiên khóa', ZERO_LEAK_CONFIRMED: 'Đã xác nhận không rò rỉ tồn kho bị khóa' } as Record<string, string>)[lockPrecedenceResult.status] || 'Đã xác thực độ ưu tiên khóa chồng lấp'}</strong> • Thứ tự ưu tiên: <strong>Thu hồi lô &gt; Kiểm định chất lượng &gt; Kiểm kê &gt; Vận hành</strong></div>
+            </span>
+          )}
         </div>
-        {showCreateForm&&<form onSubmit={create} className="ui-form-grid" style={{display:'grid',gridTemplateColumns:'repeat(5, minmax(0, 1fr))',gap:8,alignItems:'end',maxWidth:'100%'}} aria-busy={busy}>
+      </UiCard>
+
+      {canRecallBlock&&<UiCard title="Kích hoạt Thu hồi Lô hàng">
+        <form onSubmit={submitRecallBlock} className="ui-form-grid" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',gap:8,alignItems:'end',maxWidth:'100%'}} aria-busy={busy}>
+          <UiToolbarField label="Kho thu hồi">
+            <select aria-label="Kho thu hồi" value={recallForm.warehouseId} onChange={e=>setRecallForm(x=>({...x,warehouseId:e.target.value}))} required>
+              <option value="">Chọn kho</option>
+              {warehouses.filter(x=>x.isActive).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="Mã / ID sản phẩm thu hồi">
+            <input aria-label="ID sản phẩm thu hồi" type="number" min="1" value={recallForm.productId} onChange={e=>setRecallForm(x=>({...x,productId:e.target.value}))} required/>
+          </UiToolbarField>
+          <UiToolbarField label="Mã lô thu hồi">
+            <input aria-label="Mã lô thu hồi" value={recallForm.lotNumber} onChange={e=>setRecallForm(x=>({...x,lotNumber:e.target.value}))} placeholder="LÔ-..." required/>
+          </UiToolbarField>
+          <UiToolbarField label="Lý do thu hồi lô">
+            <input aria-label="Lý do thu hồi lô" value={recallForm.reason} onChange={e=>setRecallForm(x=>({...x,reason:e.target.value}))} placeholder="Số thông báo / biên bản QC" required/>
+          </UiToolbarField>
+          <button type="submit" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={busy||!recallForm.warehouseId||!recallForm.productId||!recallForm.lotNumber.trim()||!recallForm.reason.trim()}>Khóa thu hồi lô</button>
+        </form>
+      </UiCard>}
+
+      <UiDrawer open={Boolean(canManage&&showCreateForm)} title="Tạo khóa tồn kho" titleId="create-lock-drawer-title" busy={busy} onClose={()=>setShowCreateForm(false)}>
+        <form onSubmit={create} className="ui-form-grid" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:8,alignItems:'end',maxWidth:'100%'}} aria-busy={busy}>
           <UiToolbarField label="Loại khóa">
             <select aria-label="Loại khóa" value={form.lockType} onChange={e=>setForm(x=>({...x,lockType:e.target.value}))}>
               {types.map(x=><option key={x} value={x}>{lockTypeLabel(x)}</option>)}
@@ -215,24 +264,24 @@ export default function InventoryLocks(){
             </select>
           </UiToolbarField>
           <UiToolbarField label="Mã / ID vị trí (tùy chọn)">
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input aria-label="ID vị trí (tùy chọn)" type="number" min="1" value={form.locationId} onChange={e=>setForm(x=>({...x,locationId:e.target.value}))} inputMode="numeric"/>
-              <select aria-label="Chọn nhanh vị trí khóa" value={form.locationId} onChange={e=>setForm(x=>({...x,locationId:e.target.value}))}>
+            <div style={{ display: 'flex', gap: 6, minWidth: 0 }}>
+              <input aria-label="ID vị trí (tùy chọn)" type="number" min="1" style={{ width: 68, minWidth: 0, flex: '0 0 68px' }} value={form.locationId} onChange={e=>setForm(x=>({...x,locationId:e.target.value}))} inputMode="numeric"/>
+              <select aria-label="Chọn nhanh vị trí khóa" style={{ flex: '1 1 auto', minWidth: 0 }} value={form.locationId} onChange={e=>setForm(x=>({...x,locationId:e.target.value}))}>
                 <option value="">Chọn kệ</option>
-                <option value="1">1 — BIN-A01-01</option>
-                <option value="2">2 — BIN-A01-02</option>
-                <option value="3">3 — QC-HOLD-01</option>
+                <option value="1">1 — RCV-01</option>
+                <option value="3">3 — BIN-A01</option>
+                <option value="4">4 — BIN-B01</option>
               </select>
             </div>
           </UiToolbarField>
           <UiToolbarField label="Mã / ID sản phẩm (tùy chọn)">
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input aria-label="ID sản phẩm (tùy chọn)" type="number" min="1" value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value}))} inputMode="numeric"/>
-              <select aria-label="Chọn nhanh sản phẩm khóa" value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value}))}>
-                <option value="">Chọn SKU</option>
-                <option value="1">1 — SKU-001</option>
-                <option value="2">2 — SKU-002</option>
-                <option value="10">10 — SKU-LOT-10</option>
+            <div style={{ display: 'flex', gap: 6, minWidth: 0 }}>
+              <input aria-label="ID sản phẩm (tùy chọn)" type="number" min="1" style={{ width: 68, minWidth: 0, flex: '0 0 68px' }} value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value}))} inputMode="numeric"/>
+              <select aria-label="Chọn nhanh sản phẩm khóa" style={{ flex: '1 1 auto', minWidth: 0 }} value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value}))}>
+                <option value="">Chọn mặt hàng</option>
+                <option value="1">1 — QA-E2E-001</option>
+                <option value="2">2 — QA-LOT-002</option>
+                <option value="3">3 — QA-SER-003</option>
               </select>
             </div>
           </UiToolbarField>
@@ -254,75 +303,25 @@ export default function InventoryLocks(){
           <UiToolbarField label="Lý do">
             <input aria-label="Lý do" value={form.reason} onChange={e=>setForm(x=>({...x,reason:e.target.value}))} required/>
           </UiToolbarField>
-          <button type="submit" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={busy||!form.warehouseId||!form.reason.trim()}>Tạo khóa</button>
-        </form>}
-        <p className="ui-muted-text" style={{margin:'4px 0 0',fontSize:12}}>Giữ kiểm định chất lượng, giữ để điều tra và thu hồi lô hàng phải được mở thủ công; không tự hết hiệu lực.</p>
-      </UiCard>}
-
-      {canRecallBlock&&<UiCard title="Kích hoạt Thu hồi Lô hàng">
-        <form onSubmit={submitRecallBlock} className="ui-form-grid" style={{display:'grid',gridTemplateColumns:'repeat(5, minmax(0, 1fr))',gap:8,alignItems:'end',maxWidth:'100%'}} aria-busy={busy}>
-          <UiToolbarField label="Kho thu hồi">
-            <select aria-label="Kho thu hồi" value={recallForm.warehouseId} onChange={e=>setRecallForm(x=>({...x,warehouseId:e.target.value}))} required>
-              <option value="">Chọn kho</option>
-              {warehouses.filter(x=>x.isActive).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
-            </select>
-          </UiToolbarField>
-          <UiToolbarField label="Mã / ID sản phẩm thu hồi">
-            <input aria-label="ID sản phẩm thu hồi" type="number" min="1" value={recallForm.productId} onChange={e=>setRecallForm(x=>({...x,productId:e.target.value}))} required/>
-          </UiToolbarField>
-          <UiToolbarField label="Mã lô thu hồi">
-            <input aria-label="Mã lô thu hồi" value={recallForm.lotNumber} onChange={e=>setRecallForm(x=>({...x,lotNumber:e.target.value}))} placeholder="LÔ-..." required/>
-          </UiToolbarField>
-          <UiToolbarField label="Lý do thu hồi lô">
-            <input aria-label="Lý do thu hồi lô" value={recallForm.reason} onChange={e=>setRecallForm(x=>({...x,reason:e.target.value}))} placeholder="Số thông báo / biên bản QC" required/>
-          </UiToolbarField>
-          <button type="submit" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={busy||!recallForm.warehouseId||!recallForm.productId||!recallForm.lotNumber.trim()||!recallForm.reason.trim()}>Khóa thu hồi lô</button>
+          <div className="ui-inline-actions" style={{display:'flex',gap:8,alignSelf:'end'}}>
+            <button type="submit" className="ui-btn ui-btn-primary" style={{height:38,minHeight:38,whiteSpace:'nowrap'}} disabled={busy||!form.warehouseId||!form.reason.trim()}>Tạo khóa</button>
+            <button type="button" className="ui-btn ui-btn-secondary" style={{height:38,minHeight:38,whiteSpace:'nowrap'}} disabled={busy} onClick={()=>setShowCreateForm(false)}>Hủy</button>
+          </div>
         </form>
-      </UiCard>}
+        <p className="ui-muted-text" style={{margin:'8px 0 0',fontSize:12}}>Giữ kiểm định chất lượng, giữ để điều tra và thu hồi lô hàng phải được mở thủ công; không tự hết hiệu lực.</p>
+      </UiDrawer>
 
-      <UiCard title="Danh sách khóa tồn kho">
-        <p className="ui-muted-text" style={{margin:'0 0 6px'}}>Nền tảng hiện hỗ trợ phạm vi Kho / Vị trí / Sản phẩm / Trạng thái / Lô / Sê-ri. Khóa theo chủ sở hữu, đơn vị đóng gói, một phần số lượng và ghi đè đặc quyền vẫn chưa hoàn tất theo phạm vi chuẩn.</p>
-        <div className="ui-inline-actions" style={{marginBottom:6}}>
-          <button type="button" disabled={lockPrecedenceBusy} onClick={()=>void verifyLockPrecedence()}>
-            Kiểm định Độ ưu tiên Khóa Chồng lấp & Cách ly Chất lượng
-          </button>
-          {lockPrecedenceResult&&(
-            <span>
-              <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>Mã kiểm định: <strong>{lockPrecedenceResult.verificationId}</strong> • Trạng thái: <strong>{({ PRECEDENCE_VERIFIED: 'Đã xác thực thứ tự ưu tiên khóa', ZERO_LEAK_CONFIRMED: 'Đã xác nhận không rò rỉ tồn kho bị khóa' } as Record<string, string>)[lockPrecedenceResult.status] || 'Đã xác thực độ ưu tiên khóa chồng lấp'}</strong> • Thứ tự ưu tiên: <strong>Thu hồi lô &gt; Kiểm định chất lượng &gt; Kiểm kê &gt; Vận hành</strong></div>
-            </span>
-          )}
-        </div>
-        {loading&&locks.length===0?<p role="status">Đang tải khóa tồn kho...</p>:<UiTableScroll>
-          <table className="ui-table-compact" aria-label="Danh sách khóa tồn kho">
-            <thead><tr><th>Khóa</th><th>Phạm vi</th><th>Trạng thái</th><th>Lý do</th><th>Thời gian</th>{canManage&&<th style={{minWidth:100,width:105,whiteSpace:'nowrap'}}>Thao tác</th>}</tr></thead>
-            <tbody>{locks.length===0?<tr><td colSpan={canManage?6:5} className="ui-empty-cell">Chưa có khóa tồn kho.</td></tr>:
-              locks.map(item=><tr key={item.id}>
-                <td><strong>{lockTypeLabel(item.lockType)}</strong><br/><small>#{item.id}</small></td>
-                <td>{item.warehouseName}<br/><small>
-                  {item.locationCode??'mọi vị trí'} • {item.productCode??'mọi sản phẩm'} • {item.inventoryStatus?inventoryStatusLabel(item.inventoryStatus):'mọi trạng thái'} • {item.lotNumber??'mọi lô'} • {item.serialNumber??'mọi sê-ri'}
-                </small></td>
-                <td><UiBadge tone={tone(item.status)}>{lockStatusLabel(item.status)}</UiBadge></td>
-                <td>{item.reason}{item.releaseReason&&<><br/><small>Lý do mở khóa: {item.releaseReason}</small></>}</td>
-                <td>{new Date(item.createdAt).toLocaleString('vi-VN')}<br/><small>{item.expiresAt?`Hết hiệu lực ${new Date(item.expiresAt).toLocaleString('vi-VN')}`:'Không tự hết hiệu lực'}</small></td>
-                {canManage&&<td style={{whiteSpace:'nowrap'}}>{item.status==='Active'?<button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>{setRelease(item);setReleaseReason('')}}>Mở khóa</button>:'—'}</td>}
-              </tr>)}
-            </tbody>
-          </table>
-        </UiTableScroll>}
-      </UiCard>
-
-      {release&&canManage&&<UiCard title={`Mở khóa #${release.id}`}>
+      <UiDrawer open={Boolean(release&&canManage)} title={release?`Mở khóa #${release.id}`:'Mở khóa tồn kho'} titleId="release-lock-drawer-title" busy={busy} onClose={()=>setRelease(null)}>
         <form onSubmit={releaseLock} className="ui-form-grid" aria-busy={busy}>
           <UiToolbarField label="Lý do mở khóa">
             <input value={releaseReason} onChange={e=>setReleaseReason(e.target.value)} required/>
           </UiToolbarField>
-          <div className="ui-inline-actions">
-            <button type="submit" disabled={busy||!releaseReason.trim()}>Xác nhận mở khóa</button>
-            <button type="button" disabled={busy} onClick={()=>setRelease(null)}>Hủy</button>
+          <div className="ui-inline-actions" style={{display:'flex',gap:8}}>
+            <button type="submit" className="ui-btn ui-btn-primary" disabled={busy||!releaseReason.trim()}>Xác nhận mở khóa</button>
+            <button type="button" className="ui-btn ui-btn-secondary" disabled={busy} onClick={()=>setRelease(null)}>Hủy</button>
           </div>
         </form>
-      </UiCard>}
+      </UiDrawer>
     </div>
   </UiPage>;
 }
-

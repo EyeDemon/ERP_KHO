@@ -43,6 +43,13 @@ const exceptionTypeTone = (type: string): 'danger' | 'warning' | 'success' | 'ne
       : type === 'EMERGENCY_OPEN_OVERRIDE' ? 'success'
         : 'neutral';
 
+const DEFAULT_TIMEZONE = 'Asia/Ho_Chi_Minh';
+
+const formatTimeZoneDisplay = (tz?: string | null) =>
+  !tz || tz === 'Asia/Ho_Chi_Minh'
+    ? 'Asia/Ho_Chi_Minh (GMT+7 — Giờ Việt Nam)'
+    : tz;
+
 const emptyShift = (): ShiftForm => ({
   code: '', name: '', startTimeLocal: '06:00', endTimeLocal: '14:00', breakMinutes: '30', plannedHeadcount: '0',
   inboundPalletsPerHour: '', outboundOrdersPerHour: '', dockSlots: '', laborHours: '', stagingCapacity: '', packingStations: '',
@@ -62,7 +69,7 @@ const WarehouseCalendar = () => {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehouseId, setWarehouseId] = useState(0);
   const [calendar, setCalendar] = useState<CalendarResponse | null>(null);
-  const [timeZoneId, setTimeZoneId] = useState('Asia/Ho_Chi_Minh');
+  const [timeZoneId, setTimeZoneId] = useState(DEFAULT_TIMEZONE);
   const [days, setDays] = useState<DayForm[]>([]);
   const [shiftForm, setShiftForm] = useState<ShiftForm | null>(null);
   const [exceptions, setExceptions] = useState<CalendarException[]>([]);
@@ -77,8 +84,9 @@ const WarehouseCalendar = () => {
   const [success, setSuccess] = useState('');
 
   const applyCalendar = useCallback((data: CalendarResponse) => {
-    setCalendar(data);
-    setTimeZoneId(data.timeZoneId || 'Asia/Ho_Chi_Minh');
+    const resolvedTimeZone = !data.timeZoneId || data.timeZoneId === 'UTC' ? DEFAULT_TIMEZONE : data.timeZoneId;
+    setCalendar({ ...data, timeZoneId: resolvedTimeZone });
+    setTimeZoneId(resolvedTimeZone);
     setDays(data.days.map(day => ({
       dayOfWeek: day.dayOfWeek,
       isOpen: day.isOpen,
@@ -94,8 +102,9 @@ const WarehouseCalendar = () => {
     let exError = '';
     const [response, exceptionsResponse] = await Promise.all([
       apiClient.get('/api/warehouses/' + targetWarehouseId + '/calendar'),
-      apiClient.get('/api/warehouses/' + targetWarehouseId + '/calendar/exceptions').catch((err: any) => {
-        if (err?.response?.status && err.response.status >= 400) {
+      apiClient.get('/api/warehouses/' + targetWarehouseId + '/calendar/exceptions').catch((err: unknown) => {
+        const httpErr = err as { response?: { status?: number } };
+        if (httpErr?.response?.status && httpErr.response.status >= 400) {
           exError = messageOf(err, 'Không thể tải danh sách ngoại lệ lịch kho.');
         }
         return { data: [] };
@@ -277,7 +286,7 @@ const WarehouseCalendar = () => {
             {warehouses.map(warehouse => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} — {warehouse.name}</option>)}
           </select>
         </UiToolbarField>
-        <div className="ui-muted-text ui-auto-actions">Giờ địa phương: {calendar?.localNow ? new Date(calendar.localNow).toLocaleString('vi-VN', { timeZone: calendar.timeZoneId }) : '—'} • {calendar?.timeZoneId || '—'}</div>
+        <div className="ui-muted-text ui-auto-actions">Giờ địa phương: {calendar?.localNow ? new Date(calendar.localNow).toLocaleString('vi-VN', { timeZone: timeZoneId || DEFAULT_TIMEZONE }) : '—'} • {formatTimeZoneDisplay(timeZoneId)}</div>
       </UiToolbar>
 
       {loading ? <p role="status">Đang tải lịch vận hành...</p> : warehouses.length === 0 ? <UiEmptyState title="Không có kho nào trong phạm vi được phép." /> : calendar ? (
@@ -285,23 +294,41 @@ const WarehouseCalendar = () => {
           <UiCard title="Lịch vận hành tuần">
             {!calendar.isConfigured && <p role="status"><UiBadge tone="warning">Chưa cấu hình</UiBadge> Kho chưa có lịch vận hành. Quản lý kho có thể thiết lập lịch chuẩn đầu tiên.</p>}
             <form onSubmit={saveCalendar}>
-              <label className="ui-stack"><span>Múi giờ kho</span><input aria-label="Warehouse timezone" value={timeZoneId} onChange={event => setTimeZoneId(event.target.value)} disabled={!canManage || saving} placeholder="Asia/Ho_Chi_Minh" /></label>
-              <UiTableScroll>
-                <table aria-label="Lịch vận hành tuần" className="ui-table-compact">
-                  <thead><tr><th>Ngày</th><th>Mở cửa</th><th>Mở</th><th>Đóng</th><th>Hạn cắt đơn nhập</th><th>Hạn cắt đơn xuất</th></tr></thead>
-                  <tbody>{calendar.days.map((day, index) => {
-                    const form = days[index];
-                    return <tr key={day.dayOfWeek}>
-                      <td><strong>{day.dayName}</strong>{day.overnight && <><br /><small>Qua nửa đêm</small></>}</td>
-                      <td><input aria-label={'Mở cửa ' + day.dayName} type="checkbox" checked={form?.isOpen ?? false} disabled={!canManage || saving} onChange={event => setDays(current => current.map((item, i) => i === index ? { ...item, isOpen: event.target.checked, opensAtLocal: event.target.checked ? (item.opensAtLocal || '06:00') : '', closesAtLocal: event.target.checked ? (item.closesAtLocal || '22:00') : '', inboundCutoffLocal: event.target.checked ? item.inboundCutoffLocal : '', outboundCutoffLocal: event.target.checked ? item.outboundCutoffLocal : '' } : item))} /></td>
-                      <td><input aria-label={'Giờ mở ' + day.dayName} type="time" value={form?.opensAtLocal ?? ''} disabled={!canManage || saving || !form?.isOpen} onChange={event => setDays(current => current.map((item, i) => i === index ? { ...item, opensAtLocal: event.target.value } : item))} /></td>
-                      <td><input aria-label={'Giờ đóng ' + day.dayName} type="time" value={form?.closesAtLocal ?? ''} disabled={!canManage || saving || !form?.isOpen} onChange={event => setDays(current => current.map((item, i) => i === index ? { ...item, closesAtLocal: event.target.value } : item))} /></td>
-                      <td><input aria-label={'Inbound cutoff ' + day.dayName} type="time" value={form?.inboundCutoffLocal ?? ''} disabled={!canManage || saving || !form?.isOpen} onChange={event => setDays(current => current.map((item, i) => i === index ? { ...item, inboundCutoffLocal: event.target.value } : item))} /></td>
-                      <td><input aria-label={'Outbound cutoff ' + day.dayName} type="time" value={form?.outboundCutoffLocal ?? ''} disabled={!canManage || saving || !form?.isOpen} onChange={event => setDays(current => current.map((item, i) => i === index ? { ...item, outboundCutoffLocal: event.target.value } : item))} /></td>
-                    </tr>;
-                  })}</tbody>
-                </table>
-              </UiTableScroll>
+              <label className="ui-stack">
+                <span>Múi giờ kho</span>
+                <select
+                  aria-label="Warehouse timezone"
+                  value={timeZoneId}
+                  onChange={event => setTimeZoneId(event.target.value)}
+                  disabled={!canManage || saving}
+                >
+                  <option value="Asia/Ho_Chi_Minh">Asia/Ho_Chi_Minh (GMT+7 — Giờ Việt Nam)</option>
+                  <option value="Asia/Bangkok">Asia/Bangkok (GMT+7)</option>
+                  <option value="Asia/Singapore">Asia/Singapore (GMT+8)</option>
+                  <option value="UTC">UTC</option>
+                  {!['Asia/Ho_Chi_Minh', 'Asia/Bangkok', 'Asia/Singapore', 'UTC'].includes(timeZoneId) && (
+                    <option value={timeZoneId}>{timeZoneId}</option>
+                  )}
+                </select>
+              </label>
+              <div style={{ maxHeight: 180, overflowY: 'auto' }}>
+                <UiTableScroll>
+                  <table aria-label="Lịch vận hành tuần" className="ui-table-compact">
+                    <thead><tr><th>Ngày</th><th>Mở cửa</th><th>Mở</th><th>Đóng</th><th>Hạn cắt đơn nhập</th><th>Hạn cắt đơn xuất</th></tr></thead>
+                    <tbody>{calendar.days.map((day, index) => {
+                      const form = days[index];
+                      return <tr key={day.dayOfWeek}>
+                        <td><strong>{day.dayName}</strong>{day.overnight && <><br /><small>Qua nửa đêm</small></>}</td>
+                        <td><input aria-label={'Mở cửa ' + day.dayName} type="checkbox" checked={form?.isOpen ?? false} disabled={!canManage || saving} onChange={event => setDays(current => current.map((item, i) => i === index ? { ...item, isOpen: event.target.checked, opensAtLocal: event.target.checked ? (item.opensAtLocal || '06:00') : '', closesAtLocal: event.target.checked ? (item.closesAtLocal || '22:00') : '', inboundCutoffLocal: event.target.checked ? item.inboundCutoffLocal : '', outboundCutoffLocal: event.target.checked ? item.outboundCutoffLocal : '' } : item))} /></td>
+                        <td><input aria-label={'Giờ mở ' + day.dayName} type="time" value={form?.opensAtLocal ?? ''} disabled={!canManage || saving || !form?.isOpen} onChange={event => setDays(current => current.map((item, i) => i === index ? { ...item, opensAtLocal: event.target.value } : item))} /></td>
+                        <td><input aria-label={'Giờ đóng ' + day.dayName} type="time" value={form?.closesAtLocal ?? ''} disabled={!canManage || saving || !form?.isOpen} onChange={event => setDays(current => current.map((item, i) => i === index ? { ...item, closesAtLocal: event.target.value } : item))} /></td>
+                        <td><input aria-label={'Inbound cutoff ' + day.dayName} type="time" value={form?.inboundCutoffLocal ?? ''} disabled={!canManage || saving || !form?.isOpen} onChange={event => setDays(current => current.map((item, i) => i === index ? { ...item, inboundCutoffLocal: event.target.value } : item))} /></td>
+                        <td><input aria-label={'Outbound cutoff ' + day.dayName} type="time" value={form?.outboundCutoffLocal ?? ''} disabled={!canManage || saving || !form?.isOpen} onChange={event => setDays(current => current.map((item, i) => i === index ? { ...item, outboundCutoffLocal: event.target.value } : item))} /></td>
+                      </tr>;
+                    })}</tbody>
+                  </table>
+                </UiTableScroll>
+              </div>
               {canManage && <div className="ui-inline-actions"><button type="submit" disabled={saving || days.length !== 7}>{saving ? 'Đang lưu...' : 'Lưu lịch tuần'}</button></div>}
             </form>
           </UiCard>
@@ -401,7 +428,7 @@ const WarehouseCalendar = () => {
                     aria-label="Khung giờ ngoại lệ lịch kho"
                     value={exceptionForm.windowDateOrRange}
                     disabled={saving}
-                    placeholder="VD: 2026-04-30 .. 2026-05-01"
+                    placeholder="VD: 30/04/2026 - 01/05/2026"
                     onChange={event => setExceptionForm(current => ({ ...current, windowDateOrRange: event.target.value }))}
                     required
                   />

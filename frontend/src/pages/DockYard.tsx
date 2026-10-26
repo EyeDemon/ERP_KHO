@@ -101,17 +101,30 @@ const vehicleTypeLabel = (value?: string | null) => {
 
 const eventTypeLabel = (value: string) => ({
   CREATED: 'Đã tạo',
+  Created: 'Đã tạo',
   CONFIRMED: 'Đã xác nhận',
+  Confirmed: 'Đã xác nhận',
   ARRIVED: 'Xe đã đến',
+  Arrived: 'Xe đã đến',
   CHECKED_IN: 'Đã vào cổng',
+  CheckedIn: 'Đã vào cổng',
   DOCK_ASSIGNED: 'Đã gán cửa kho',
+  DockAssigned: 'Đã gán cửa kho',
   SERVICE_STARTED: 'Bắt đầu phục vụ',
+  ServiceStarted: 'Bắt đầu phục vụ',
   SERVICE_COMPLETED: 'Hoàn thành phục vụ',
+  ServiceCompleted: 'Hoàn thành phục vụ',
   CHECKED_OUT: 'Đã rời cổng',
+  CheckedOut: 'Đã rời cổng',
   CANCELLED: 'Đã hủy',
+  Cancelled: 'Đã hủy',
   NO_SHOW: 'Không đến',
+  NoShow: 'Không đến',
   EXCEPTION_RECORDED: 'Ghi nhận ngoại lệ',
+  ExceptionRecorded: 'Ghi nhận ngoại lệ',
   INBOUND_DOCUMENTS_LINKED: 'Liên kết chứng từ nhập',
+  INBOUND_DOC_LINK: 'Liên kết chứng từ nhập',
+  InboundDocumentsLinked: 'Liên kết chứng từ nhập',
 }[value] ?? value);
 const timeZoneParts = (date: Date, timeZone: string) => {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -537,7 +550,7 @@ const DockYard = () => {
                 <tbody>
                   {filtered.map(item => (
                     <tr key={item.id}>
-                      <td className="ui-cell-nowrap">
+                      <td style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
                         <strong>{item.code}</strong><br />
                         <small>{directionLabel(item.direction)}</small>
                         {(item.purchaseOrderCode || item.asnCode || item.importReceiptCode) && (
@@ -803,7 +816,7 @@ const DockYard = () => {
           <table className="ui-table-compact" aria-label="Dòng thời gian lịch hẹn">
             <thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Cửa kho</th><th>Sân bãi</th><th>Ghi chú</th></tr></thead>
             <tbody>{(selected.events ?? []).map(event => <tr key={event.id}>
-              <td>{new Date(event.eventAtUtc).toLocaleString('vi-VN')}</td><td>{eventTypeLabel(event.eventType)}</td><td>{event.dockId ?? '—'}</td><td>{event.yardSlotId ?? '—'}</td><td>{event.note || '—'}</td>
+              <td>{new Date(event.eventAtUtc).toLocaleString('vi-VN')}</td><td>{eventTypeLabel(event.eventType)}</td><td>{event.dockId ? (docks.find(d => d.id === event.dockId)?.code ?? event.dockId) : '—'}</td><td>{event.yardSlotId ? (yardSlots.find(y => y.id === event.yardSlotId)?.code ?? event.yardSlotId) : '—'}</td><td>{event.note || '—'}</td>
             </tr>)}</tbody>
           </table>
         </UiTableScroll>

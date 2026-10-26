@@ -25,7 +25,7 @@
 }
 
 .inventory-page .inventory-numeric {
-  text-align: right;
+  text-align: right !important;
   font-variant-numeric: tabular-nums;
 }
 

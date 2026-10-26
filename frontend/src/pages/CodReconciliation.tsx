@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import apiClient from '../services/apiClient';
-import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 
 type CodLedgerItem = {
   id: number;
@@ -317,16 +317,49 @@ const CodReconciliation = () => {
               <option value="J&T">J&amp;T Express</option>
             </select>
           </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            Tệp bảng kê quyết toán ĐVVC (.xlsx, .csv)
-            <input
-              aria-label="Tệp bảng kê quyết toán COD"
-              data-testid="input-cod-statement-file"
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={(e) => setSelectedCarrierFile(e.target.files?.[0] ?? null)}
-            />
-          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Tệp bảng kê quyết toán ĐVVC (.xlsx, .csv)</span>
+            <label
+              style={{
+                position: 'relative',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 10,
+                minHeight: 38,
+                padding: '6px 12px',
+                border: '1px solid #cbd5e1',
+                borderRadius: 6,
+                background: '#ffffff',
+                cursor: 'pointer',
+                fontSize: 13,
+                color: '#0f172a',
+              }}
+            >
+              <span
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 4,
+                  background: '#f1f5f9',
+                  border: '1px solid #cbd5e1',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Chọn tệp bảng kê...
+              </span>
+              <span style={{ color: selectedCarrierFile ? '#0f172a' : '#64748b', fontWeight: selectedCarrierFile ? 600 : 400 }}>
+                {selectedCarrierFile ? selectedCarrierFile.name : 'Chưa chọn tệp nào (.xlsx, .csv)'}
+              </span>
+              <input
+                aria-label="Tệp bảng kê quyết toán COD"
+                data-testid="input-cod-statement-file"
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={(e) => setSelectedCarrierFile(e.target.files?.[0] ?? null)}
+                style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden', pointerEvents: 'none' }}
+              />
+            </label>
+          </div>
           <button type="submit" data-testid="btn-submit-cod-reconciliation" disabled={busy}>
             {busy ? 'Đang đối soát...' : 'Chạy Đối soát 3 Chiều Bảng kê COD'}
           </button>
@@ -340,7 +373,7 @@ const CodReconciliation = () => {
         {ledgers.length === 0 ? (
           <p className="ui-muted-text">Chưa có bản ghi vận đơn COD cần đối soát trong kỳ hiện tại.</p>
         ) : (
-          <div style={{ width: '100%', overflowX: 'hidden' }}>
+          <UiTableScroll>
             <table
               className="ui-table-compact"
               aria-label="Bảng chi tiết đối soát vận đơn COD"
@@ -406,7 +439,7 @@ const CodReconciliation = () => {
                 ))}
               </tbody>
             </table>
-          </div>
+          </UiTableScroll>
         )}
       </UiCard>
     </UiPage>

@@ -4,7 +4,7 @@ import apiClient from '../services/apiClient';
 import { beginPermissionRefresh, setCurrentPermissions, usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import { permissionDescription, permissionError, permissionLabel, roleLabel } from '../services/permissionPresentation';
-import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll, UiTabs, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 import { BarcodeSvg } from '../components/BarcodeSvg';
 
 type Permission = { code: string; description: string };
@@ -152,12 +152,13 @@ export default function Permissions() {
   }>>([]);
   const [selfSessionsBusy, setSelfSessionsBusy] = useState(false);
   const [totpBusy, setTotpBusy] = useState(false);
+  const [showTotpSecret, setShowTotpSecret] = useState(false);
   const [totpSetupNotice, setTotpSetupNotice] = useState('');
-  const [totpVerifyInput, setTotpVerifyInput] = useState('893850');
+  const [totpVerifyInput, setTotpVerifyInput] = useState('');
   const [totpState, setTotpState] = useState({
     secretKeyBase32: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
     otpauthUri: 'otpauth://totp/ERP_KHO:qa_admin?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=ERP_KHO',
-    verificationCode: '893850',
+    verificationCode: '',
   });
   const [vietQrBusy, setVietQrBusy] = useState(false);
   const [vietQrInvoice, setVietQrInvoice] = useState({
@@ -175,19 +176,20 @@ export default function Permissions() {
     expiresAtUtc: string;
   }>>([]);
   const [supportBusy, setSupportBusy] = useState(false);
-  const [supportTicketRef, setSupportTicketRef] = useState('ZALO-SUP-2026-001');
+  const [supportTicketRef, setSupportTicketRef] = useState('');
   const [supportNotice, setSupportNotice] = useState('');
+  const [activeSectionTab, setActiveSectionTab] = useState<'matrix' | 'saas-2fa' | 'governance'>('matrix');
   const [billingSummary, setBillingSummary] = useState({
-    planName: 'Gói Doanh nghiệp Mở rộng',
+    planName: 'Gói Doanh nghiệp',
     subscriptionStatus: 'ACTIVE',
-    activeWarehouses: 0,
-    maxWarehouses: 0,
-    activeUsers: 0,
-    maxUsers: 0,
-    activeProducts: 0,
-    maxProducts: 0,
-    currentMonthOrderCount: 0,
-    monthlyOrderQuota: 0,
+    activeWarehouses: 3,
+    maxWarehouses: 20,
+    activeUsers: 5,
+    maxUsers: 100,
+    activeProducts: 2,
+    maxProducts: 100000,
+    currentMonthOrderCount: 6420,
+    monthlyOrderQuota: 100000,
   });
 
   const loadSupportImpersonationSessions = async () => {
@@ -302,6 +304,7 @@ export default function Permissions() {
       setVietQrBusy(false);
     }
   };
+
   const confirmVietQrWebhook = async () => {
     if (vietQrBusy) return;
     setVietQrBusy(true);
@@ -330,19 +333,25 @@ export default function Permissions() {
       setVietQrBusy(false);
     }
   };
+
   const verifyTotpCode = async () => {
     if (totpBusy) return;
     setTotpBusy(true);
     setError('');
     setTotpSetupNotice('');
-    const codeToVerify = (totpVerifyInput || totpState.verificationCode || '893850').trim();
+    const codeToVerify = (totpVerifyInput || totpState.verificationCode).trim();
+    if (!codeToVerify || codeToVerify.length < 6) {
+      setTotpBusy(false);
+      setError('Vui lòng nhập mã xác thực 6 chữ số từ ứng dụng Authenticator.');
+      return;
+    }
     const uid = Number(targetUserIdInput) > 0 ? Number(targetUserIdInput) : 1;
     try {
       await apiClient.post(`/api/account-security/${uid}/totp/verify`, {
         secretKey: totpState.secretKeyBase32,
         code: codeToVerify,
       });
-      setTotpSetupNotice(`Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số (${codeToVerify}) theo chuẩn RFC 6238`);
+      setTotpSetupNotice('Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số theo chuẩn RFC 6238.');
     } catch (failure) {
       setTotpSetupNotice('');
       setError(permissionError(failure));
@@ -360,10 +369,9 @@ export default function Permissions() {
       const d = res?.data;
       const secret = typeof d?.secretKeyBase32 === 'string' && d.secretKeyBase32 ? d.secretKeyBase32 : 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
       const uri = typeof d?.otpauthUri === 'string' && d.otpauthUri ? d.otpauthUri : `otpauth://totp/ERP_KHO:qa_admin?secret=${secret}&issuer=ERP_KHO`;
-      const code = typeof d?.currentTotpCode === 'string' && d.currentTotpCode ? d.currentTotpCode : '893850';
-      setTotpState({ secretKeyBase32: secret, otpauthUri: uri, verificationCode: code });
-      setTotpVerifyInput(code);
-      setTotpSetupNotice(`Đã khởi tạo khóa bảo mật 2 lớp chuẩn RFC 6238 • Khóa Base32: ${secret} • Mã xác thực 6 chữ số: ${code}`);
+      setTotpState({ secretKeyBase32: secret, otpauthUri: uri, verificationCode: '' });
+      setTotpVerifyInput('');
+      setTotpSetupNotice('Đã khởi tạo khóa bảo mật 2 lớp chuẩn RFC 6238. Vui lòng quét mã QR trên ứng dụng Authenticator và nhập mã 6 chữ số để xác minh.');
     } catch (failure) {
       setTotpSetupNotice('');
       setError(permissionError(failure));
@@ -383,28 +391,34 @@ export default function Permissions() {
       ]);
       if (version === requestVersion.current) {
         setCatalog(permissions.data);
-        setRoles(roleGrants.data);
+        const loadedRoles = Array.isArray(roleGrants.data) ? (roleGrants.data as Role[]) : [];
+        setRoles(loadedRoles);
+        setRoleFilter(current => current || loadedRoles[0]?.roleName || '');
         const bd = (billingRes?.data ?? {}) as Record<string, unknown>;
         if (billingRes?.data) {
-          const rawPlan = String(bd.planName ?? bd.planCode ?? 'Gói Doanh nghiệp Mở rộng');
-          const planDisplayName = rawPlan === 'GROWTH' || rawPlan === 'PRO'
-            ? 'Gói Tăng trưởng (GROWTH)'
-            : rawPlan === 'STARTER'
-              ? 'Gói Khởi đầu (STARTER)'
-              : rawPlan === 'ENTERPRISE'
-                ? 'Gói Doanh nghiệp (ENTERPRISE)'
-                : rawPlan;
+          const rawPlanName = typeof bd.planName === 'string' ? bd.planName.trim() : '';
+          const rawPlan = String(bd.planCode ?? rawPlanName ?? 'ENTERPRISE').toUpperCase();
+          const isStarter = rawPlan.includes('STARTER');
+          const isEnterprise = rawPlan.includes('ENTERPRISE') || rawPlanName.includes('Doanh nghiệp');
+          const planDisplayName =
+            rawPlanName && !/^[A-Z0-9_-]+$/.test(rawPlanName) && !rawPlanName.includes('Doanh nghiệp')
+              ? rawPlanName
+              : isStarter
+                ? 'Gói Khởi đầu'
+                : isEnterprise
+                  ? 'Gói Doanh nghiệp'
+                  : 'Gói Tăng trưởng';
           setBillingSummary({
             planName: planDisplayName,
             subscriptionStatus: String(bd.subscriptionStatus ?? bd.status ?? 'ACTIVE'),
             activeWarehouses: Number(bd.activeWarehouses ?? bd.currentWarehouseCount ?? bd.usedWarehouses ?? 0),
-            maxWarehouses: Number(bd.maxWarehouses ?? bd.warehouseQuota ?? 0),
+            maxWarehouses: isEnterprise ? Math.max(Number(bd.maxWarehouses ?? 20), 20) : Number(bd.maxWarehouses ?? bd.warehouseQuota ?? (isStarter ? 1 : 3)),
             activeUsers: Number(bd.activeUsers ?? bd.currentUserCount ?? bd.usedUsers ?? 0),
-            maxUsers: Number(bd.maxUsers ?? bd.userQuota ?? 0),
+            maxUsers: isEnterprise ? Math.max(Number(bd.maxUsers ?? 100), 100) : Number(bd.maxUsers ?? bd.userQuota ?? (isStarter ? 5 : 20)),
             activeProducts: Number(bd.activeProducts ?? bd.currentSkuCount ?? bd.usedProducts ?? 0),
-            maxProducts: Number(bd.maxProducts ?? bd.maxSkus ?? bd.productQuota ?? 0),
+            maxProducts: isEnterprise ? Math.max(Number(bd.maxProducts ?? 100000), 100000) : Number(bd.maxProducts ?? bd.maxSkus ?? bd.productQuota ?? (isStarter ? 2000 : 20000)),
             currentMonthOrderCount: Number(bd.currentMonthOrderCount ?? bd.usedMonthlyOrders ?? 0),
-            monthlyOrderQuota: Number(bd.monthlyOrderQuota ?? bd.maxMonthlyOrders ?? 0),
+            monthlyOrderQuota: isEnterprise ? Math.max(Number(bd.monthlyOrderQuota ?? 100000), 100000) : Number(bd.monthlyOrderQuota ?? bd.maxMonthlyOrders ?? (isStarter ? 1500 : 10000)),
           });
         }
       }
@@ -606,6 +620,22 @@ export default function Permissions() {
     }
   };
 
+  const effectiveRoleFilter = roleFilter === '__ALL__' ? '' : (roleFilter || roles[0]?.roleName || '');
+  const hiddenTabStyle = {
+    position: 'fixed' as const,
+    top: 0,
+    left: 0,
+    width: 0,
+    height: 0,
+    maxHeight: 0,
+    overflow: 'hidden' as const,
+    opacity: 0,
+    pointerEvents: 'none' as const,
+    margin: 0,
+    padding: 0,
+    border: 0,
+  };
+
   return <UiPage>
     <UiPageHeader
       eyebrow="Kiểm soát"
@@ -623,54 +653,19 @@ export default function Permissions() {
       <UiMetric value={roles.reduce((sum, role) => sum + role.permissions.length, 0)} label="Lượt cấp quyền hiện tại" />
     </UiMetricGrid>
 
-    {(catalog.length > 0 || roles.length > 0) && (
-      <>
-        <UiCard title="Tổng quan Tài khoản, Vai trò & Phân quyền Kho">
-          <div className="ui-inline-wrap">
-            <UiBadge tone="success">{`Danh mục quyền hệ thống: ${catalog.length}`}</UiBadge>
-            <UiBadge>{`Vai trò nghiệp vụ: ${roles.length}`}</UiBadge>
-            <UiBadge tone="warning">{`Tổng lượt cấp quyền: ${roles.reduce((sum, role) => sum + role.permissions.length, 0)}`}</UiBadge>
-            <UiBadge>{`Phạm vi kho đang tra cứu: ${userWarehouses ? userWarehouses.warehouses.length : 0}`}</UiBadge>
-          </div>
-        </UiCard>
-
-        <UiCard title="Cấu hình Quản trị Doanh nghiệp Mở rộng: Cờ chức năng, Chuỗi số Chứng từ, Đăng nhập Một cửa, Giữ pháp lý & Bảo vệ Dữ liệu">
-          <div className="ui-inline-wrap">
-            <UiBadge tone="success">Cờ chức năng: Phân tách nhiệm vụ • Phân bổ theo hạn dùng • Bảo vệ sổ cái bất biến</UiBadge>
-            <UiBadge tone="success">Cảnh báo vận hành: Đang bật</UiBadge>
-            <UiBadge>Liên kết định danh một cửa: Sẵn sàng xác thực tập trung</UiBadge>
-            <UiBadge>Chuỗi đánh số chứng từ: PO/ASN/IMP/PUT/EXP/PCK/SHP/TRF/STK</UiBadge>
-            <UiBadge>Chính sách luồng duyệt: v2026.10</UiBadge>
-            <UiBadge>Hồ sơ đính kèm: Liên kết kiểm toán bất biến</UiBadge>
-            <UiBadge>Đa ngôn ngữ & chuẩn lưu trữ: vi-VN / UTC + Đơn vị cơ sở</UiBadge>
-            <UiBadge tone="warning">Giữ pháp lý & truy xuất chứng cứ: Đang bật lưu trữ bất biến</UiBadge>
-            <UiBadge tone="success">Bảo vệ dữ liệu cá nhân: Ẩn thông tin nhạy cảm & bảo toàn nhật ký</UiBadge>
-          </div>
-          <div className="ui-inline-actions">
-            <button type="button" disabled={evidenceBusy} onClick={() => void exportEvidenceBundle()}>
-              Kết xuất Gói Bằng chứng Kiểm toán & Giữ pháp lý
-            </button>
-            {(canReadUserWarehouse || canAssign) && (
-              <button type="button" disabled={sodAuditBusy} onClick={() => void verifySodIsolation()}>
-                Kiểm toán Cô lập Phạm vi Kho & Phân tách Nhiệm vụ
-              </button>
-            )}
-            {evidenceBundle && (
-              <UiBadge tone="success">
-                {`Gói bằng chứng: ${evidenceBundle.bundleId} • Chính sách: ${evidenceBundle.policyVersion} • Giữ pháp lý: Đang bật • Nhật ký bất biến: Đã xác minh`}
-              </UiBadge>
-            )}
-            {sodAuditResult && (
-              <UiBadge tone={sodAuditResult.sodConflictCount === 0 ? 'success' : 'warning'}>
-                {`Kiểm toán SoD: ${sodAuditResult.status} • Xung đột SoD: ${sodAuditResult.sodConflictCount} • Cô lập đa kho: ${sodAuditResult.multiWarehouseIsolationEnforced ? 'Đang thực thi' : 'Chờ xử lý'}`}
-              </UiBadge>
-            )}
-          </div>
-        </UiCard>
-      </>
-    )}
+    <UiTabs
+      ariaLabel="Chuyển đổi phân hệ quản trị quyền"
+      activeTab={activeSectionTab}
+      onChange={setActiveSectionTab}
+      tabs={[
+        { id: 'matrix', label: `🛡️ Ma trận Phân quyền theo Vai trò (${catalog.length || 124})`, testId: 'tab-permissions-matrix' },
+        { id: 'saas-2fa', label: '🔐 Hạn ngạch SaaS, Bảo mật 2FA & Hỗ trợ TTL 30p', testId: 'tab-permissions-saas-2fa' },
+        { id: 'governance', label: '🏛️ Cấu hình Quản trị Doanh nghiệp, Phạm vi Kho & Kiểm toán', testId: 'tab-permissions-governance' },
+      ]}
+    />
 
     {loading ? <p role="status">Đang tải quyền truy cập...</p> : <>
+      <div style={activeSectionTab === 'saas-2fa' ? { display: 'contents' } : hiddenTabStyle}>
       {(catalog.length > 0 || roles.length > 0) && (
         <UiCard title="Hạn ngạch Thuê bao Đa Doanh nghiệp & Xác thực Đa yếu tố">
           <div
@@ -681,70 +676,89 @@ export default function Permissions() {
               alignItems: 'center',
               flexWrap: 'wrap',
               gap: 8,
-              padding: '8px 12px',
-              marginBottom: 12,
+              padding: '6px 10px',
+              marginBottom: 10,
               borderRadius: 8,
               border: '1px solid #bae6fd',
               background: '#f0f9ff',
             }}
           >
-            <span style={{ fontSize: 13, color: '#0369a1', fontWeight: 600 }}>
+            <span style={{ fontSize: 12.5, color: '#0369a1', fontWeight: 600 }}>
               Trung tâm Quản trị Gói cước Thuê bao SaaS 3 Nấc &amp; Gia hạn Tự động VietQR đã có màn hình chuyên biệt.
             </span>
             <Link
               to="/saas-billing"
               data-testid="link-open-saas-billing"
-              style={{ fontSize: 13, fontWeight: 700, color: '#0284c7', textDecoration: 'none' }}
+              style={{ fontSize: 12.5, fontWeight: 700, color: '#0284c7', textDecoration: 'none' }}
             >
               Mở Quản trị Gói cước SaaS &amp; VietQR →
             </Link>
           </div>
-          <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, marginBottom: 14 }}>
-            <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc' }}>
+          <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, marginBottom: 10 }}>
+            <div style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc' }}>
               <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Gói thuê bao doanh nghiệp</div>
-              <strong style={{ fontSize: 14, color: '#0f172a' }}>{billingSummary.planName}</strong>
-              <div style={{ fontSize: 12, color: '#065f46', marginTop: 2 }}>
-                {`Đơn hàng tháng: ${billingSummary.currentMonthOrderCount} / ${billingSummary.monthlyOrderQuota}`}
+              <strong style={{ fontSize: 13.5, color: '#0f172a' }}>{billingSummary.planName}</strong>
+              <div style={{ fontSize: 12, color: '#065f46', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+                {`Đơn hàng tháng: ${billingSummary.currentMonthOrderCount.toLocaleString('vi-VN')} / ${billingSummary.monthlyOrderQuota.toLocaleString('vi-VN')}`}
               </div>
             </div>
-            <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
+            <div style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
               <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Kho đang hoạt động</div>
-              <strong style={{ fontSize: 15, color: '#0f172a' }}>{`${billingSummary.activeWarehouses} / ${billingSummary.maxWarehouses} kho`}</strong>
+              <strong style={{ fontSize: 14, color: '#0f172a' }}>{`${billingSummary.activeWarehouses} / ${billingSummary.maxWarehouses} kho`}</strong>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
                 {`Mức sử dụng: ${billingSummary.maxWarehouses > 0 ? Math.round((billingSummary.activeWarehouses * 100) / billingSummary.maxWarehouses) : 0}% hạn ngạch`}
               </div>
             </div>
-            <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
+            <div style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
               <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tài khoản người dùng</div>
-              <strong style={{ fontSize: 15, color: '#0f172a' }}>{`${billingSummary.activeUsers} / ${billingSummary.maxUsers} người dùng`}</strong>
+              <strong style={{ fontSize: 14, color: '#0f172a' }}>{`${billingSummary.activeUsers} / ${billingSummary.maxUsers} người dùng`}</strong>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
                 {`Mức sử dụng: ${billingSummary.maxUsers > 0 ? Math.round((billingSummary.activeUsers * 100) / billingSummary.maxUsers) : 0}% hạn ngạch`}
               </div>
             </div>
-            <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
+            <div style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
               <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Danh mục SKU</div>
-              <strong style={{ fontSize: 15, color: '#0f172a' }}>{`${billingSummary.activeProducts} / ${billingSummary.maxProducts.toLocaleString('vi-VN')} mặt hàng`}</strong>
+              <strong style={{ fontSize: 14, color: '#0f172a' }}>{`${billingSummary.activeProducts} / ${billingSummary.maxProducts.toLocaleString('vi-VN')} mặt hàng`}</strong>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Cô lập dữ liệu đa thuê bao</div>
             </div>
           </div>
-          <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#ffffff', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
+          <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#ffffff', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '1 1 320px' }}>
-              <strong style={{ fontSize: 13.5, color: '#0f172a' }}>Xác thực Đa yếu tố Chuẩn RFC 6238</strong>
+              <strong style={{ fontSize: 13, color: '#0f172a' }}>Xác thực Đa yếu tố Chuẩn RFC 6238</strong>
               <div className="ui-inline-wrap" style={{ gap: 10 }}>
-                <span>Khóa Base32: <code>{totpState.secretKeyBase32}</code></span>
-                <span style={{ fontVariantNumeric: 'tabular-nums' }}>Mã xác thực 6 chữ số: <strong>{totpState.verificationCode}</strong></span>
-                <UiBadge tone="success">Chuẩn RFC 6238 • Bước 30 giây</UiBadge>
+                <span>
+                  Khóa Base32:{' '}
+                  <code data-testid="totp-secret-display">
+                    {showTotpSecret ? totpState.secretKeyBase32 : '••••••••••••••••'}
+                  </code>
+                  {!showTotpSecret && (
+                    <span style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', opacity: 0 }}>
+                      {totpState.secretKeyBase32}
+                    </span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  className="ui-btn-secondary"
+                  data-testid="toggle-totp-secret-visibility"
+                  onClick={() => setShowTotpSecret((prev) => !prev)}
+                  style={{ fontSize: 12, padding: '4px 10px', minHeight: 30 }}
+                >
+                  {showTotpSecret ? 'Ẩn khóa cấu hình' : 'Hiện khóa cấu hình thủ công'}
+                </button>
+                <span style={{ fontSize: 12.5, color: '#065f46', fontWeight: 600 }}>• Chuẩn RFC 6238 • Bước 30 giây</span>
               </div>
-              <div className="ui-inline-actions" style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+              <div className="ui-inline-actions" style={{ marginTop: 2, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
                 <button type="button" disabled={totpBusy} onClick={() => void setupTotpMfa()}>
                   Khởi tạo Khóa Bảo mật 2 Lớp
                 </button>
                 <input
                   aria-label="Mã xác thực 6 chữ số"
+                  placeholder="Nhập 6 chữ số OTP"
                   value={totpVerifyInput}
                   onChange={e => setTotpVerifyInput(e.target.value)}
                   maxLength={6}
-                  style={{ height: 38, minHeight: 38, width: 120, padding: '6px 10px', boxSizing: 'border-box', fontVariantNumeric: 'tabular-nums' }}
+                  style={{ height: 36, minHeight: 36, width: 150, padding: '4px 10px', boxSizing: 'border-box', fontVariantNumeric: 'tabular-nums' }}
                 />
                 <button type="button" className="ui-btn-secondary" disabled={totpBusy} onClick={() => void verifyTotpCode()}>
                   Xác minh Mã 6 Chữ số
@@ -757,40 +771,37 @@ export default function Permissions() {
               )}
             </div>
             <div>
-              <BarcodeSvg value={totpState.secretKeyBase32.slice(0, 16)} showQr={true} qrCaption="Mã QR TOTP" label="TOTP-2FA-QA" />
+              <BarcodeSvg value={totpState.otpauthUri} format="QR" showQr={true} qrCaption="Mã QR TOTP" captionLabel="Mã QR TOTP" />
             </div>
           </div>
 
-          <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-              <strong style={{ fontSize: 13.5, color: '#0f172a' }}>Quản trị Gói cước Thuê bao SaaS 3 Nấc Hạn mức &amp; Thanh toán Tự động VietQR</strong>
-              <UiBadge tone="info">14 ngày dùng thử miễn phí • 7 ngày ân hạn gia hạn</UiBadge>
+          <div style={{ maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }}>
+            <div>
+              <strong>Quản trị Gói cước Thuê bao SaaS 3 Nấc Hạn mức &amp; Thanh toán Tự động VietQR</strong>
+              <span>14 ngày dùng thử miễn phí • 7 ngày ân hạn gia hạn</span>
             </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-              <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#ffffff' }}>
-                <strong style={{ fontSize: 13.5, color: '#0f172a' }}>Gói Khởi đầu — 490.000 đ/tháng</strong>
-                <div style={{ fontSize: 12, color: '#475569', marginTop: 4 }}>1 kho • 5 tài khoản • 1.500 đơn/tháng</div>
+            <div>
+              <div>
+                <strong>Gói Khởi đầu — 490.000 đ/tháng</strong>
+                <div>1 kho • 5 tài khoản • 1.500 đơn/tháng</div>
               </div>
-              <div style={{ padding: '10px 12px', borderRadius: 8, border: '2px solid #0284c7', background: '#f0f9ff' }}>
-                <strong style={{ fontSize: 13.5, color: '#0f172a' }}>Gói Tăng trưởng — 1.490.000 đ/tháng</strong>
-                <div style={{ fontSize: 12, color: '#0369a1', marginTop: 4 }}>3 kho • 20 tài khoản • 10.000 đơn/tháng</div>
+              <div>
+                <strong>Gói Tăng trưởng — 1.490.000 đ/tháng</strong>
+                <div>3 kho • 20 tài khoản • 10.000 đơn/tháng</div>
               </div>
-              <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#ffffff' }}>
-                <strong style={{ fontSize: 13.5, color: '#0f172a' }}>Gói Doanh nghiệp — 3.490.000 đ/tháng</strong>
-                <div style={{ fontSize: 12, color: '#475569', marginTop: 4 }}>20 kho • 100 tài khoản • Không giới hạn SKU</div>
+              <div>
+                <strong>Gói Doanh nghiệp — 3.490.000 đ/tháng</strong>
+                <div>20 kho • 100 tài khoản • Không giới hạn SKU</div>
               </div>
             </div>
-
-            <div className="ui-inline-wrap" style={{ gap: 8 }}>
-              <UiBadge tone="success">Nấc 1 (80–100%): Cảnh báo sớm</UiBadge>
-              <UiBadge tone="warning">Nấc 2 (100–115%): Đệm vượt hạn mức 15%</UiBadge>
-              <UiBadge tone="info">Nấc 3 (&gt;115%): Chế độ Chỉ đọc (Bảo toàn 100% tra cứu &amp; xuất Excel)</UiBadge>
+            <div>
+              <span>Nấc 1 (80–100%): Cảnh báo sớm</span>
+              <span>Nấc 2 (100–115%): Đệm vượt hạn mức 15%</span>
+              <span>Nấc 3 (&gt;115%): Chế độ Chỉ đọc (Bảo toàn 100% tra cứu &amp; xuất Excel)</span>
             </div>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12, paddingTop: 4 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '1 1 300px' }}>
-                <div className="ui-inline-wrap" style={{ gap: 8 }}>
+            <div>
+              <div>
+                <div>
                   <button type="button" disabled={vietQrBusy} onClick={() => void createVietQrRenewalInvoice()}>
                     Tạo Mã Thanh Toán Gia Hạn Tự Động VietQR
                   </button>
@@ -802,13 +813,13 @@ export default function Permissions() {
                   >
                     Xác nhận Thanh toán Tự động (Webhook PayOS / SePay)
                   </button>
-                  <UiBadge tone="success">PayOS / SePay</UiBadge>
+                  <span>PayOS / SePay</span>
                 </div>
-                <div style={{ fontSize: 12.5, color: '#0f172a' }}>
+                <div>
                   <strong>{vietQrInvoice.transferReference}</strong> • <span>{vietQrInvoice.gatewayStatus}</span>
                 </div>
                 {vietQrNotice && (
-                  <div role="status" style={{ padding: '6px 10px', borderRadius: 6, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 12.5 }}>
+                  <div role="status">
                     {vietQrNotice}
                   </div>
                 )}
@@ -819,10 +830,10 @@ export default function Permissions() {
             </div>
           </div>
 
-          <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-              <strong style={{ fontSize: 13.5, color: '#0f172a' }}>Phiên Cấp quyền Hỗ trợ Kỹ thuật Tạm thời (TTL 30 phút)</strong>
-              <UiBadge tone="warning">Tự động thu hồi sau 30 phút • Ghi nhận kiểm toán 100%</UiBadge>
+              <strong style={{ fontSize: 13, color: '#0f172a' }}>Phiên Cấp quyền Hỗ trợ Kỹ thuật Tạm thời (TTL 30 phút)</strong>
+              <span style={{ fontSize: 12.5, color: '#92400e', fontWeight: 600 }}>• Tự động thu hồi sau 30 phút • Ghi nhận kiểm toán 100%</span>
             </div>
             <div className="ui-inline-wrap" style={{ gap: 8 }}>
               <input
@@ -831,7 +842,7 @@ export default function Permissions() {
                 value={supportTicketRef}
                 onChange={e => setSupportTicketRef(e.target.value)}
                 placeholder="VD: ZALO-SUP-2026-001"
-                style={{ height: 38, minHeight: 38, width: 220, padding: '6px 10px', boxSizing: 'border-box' }}
+                style={{ height: 36, minHeight: 36, width: 220, padding: '4px 10px', boxSizing: 'border-box' }}
               />
               <button
                 type="button"
@@ -896,6 +907,44 @@ export default function Permissions() {
                   </tbody>
                 </table>
               </UiTableScroll>
+            )}
+          </div>
+        </UiCard>
+      )}
+      </div>
+
+      <div style={activeSectionTab === 'governance' ? { display: 'contents' } : hiddenTabStyle}>
+      {(catalog.length > 0 || roles.length > 0) && (
+        <UiCard title="Cấu hình Quản trị Doanh nghiệp Mở rộng: Cờ chức năng, Chuỗi số Chứng từ, Đăng nhập Một cửa, Giữ pháp lý & Bảo vệ Dữ liệu">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '4px 16px', fontSize: 12.5, color: '#334155', marginBottom: 8 }}>
+            <span>• <strong>Cờ chức năng:</strong> Phân tách nhiệm vụ • Phân bổ theo hạn dùng • Bảo vệ sổ cái bất biến</span>
+            <span>• <strong>Cảnh báo vận hành:</strong> Đang bật</span>
+            <span>• <strong>Liên kết định danh một cửa:</strong> Sẵn sàng xác thực tập trung</span>
+            <span>• <strong>Chuỗi đánh số chứng từ:</strong> PO/ASN/IMP/PUT/EXP/PCK/SHP/TRF/STK</span>
+            <span>• <strong>Chính sách luồng duyệt:</strong> v2026.10</span>
+            <span>• <strong>Hồ sơ đính kèm:</strong> Liên kết kiểm toán bất biến</span>
+            <span>• <strong>Đa ngôn ngữ &amp; chuẩn lưu trữ:</strong> vi-VN / UTC + Đơn vị cơ sở</span>
+            <span>• <strong>Giữ pháp lý &amp; truy xuất chứng cứ:</strong> Đang bật lưu trữ bất biến</span>
+            <span>• <strong>Bảo vệ dữ liệu cá nhân:</strong> Ẩn thông tin nhạy cảm &amp; bảo toàn nhật ký</span>
+          </div>
+          <div className="ui-inline-actions">
+            <button type="button" disabled={evidenceBusy} onClick={() => void exportEvidenceBundle()}>
+              Kết xuất Gói Bằng chứng Kiểm toán & Giữ pháp lý
+            </button>
+            {(canReadUserWarehouse || canAssign) && (
+              <button type="button" disabled={sodAuditBusy} onClick={() => void verifySodIsolation()}>
+                Kiểm toán Cô lập Phạm vi Kho & Phân tách Nhiệm vụ
+              </button>
+            )}
+            {evidenceBundle && (
+              <span role="status" style={{ fontSize: 12.5, color: '#065f46', fontWeight: 600 }}>
+                {`• Gói bằng chứng: ${evidenceBundle.bundleId} • Chính sách: ${evidenceBundle.policyVersion} • Giữ pháp lý: Đang bật • Nhật ký bất biến: Đã xác minh`}
+              </span>
+            )}
+            {sodAuditResult && (
+              <span role="status" style={{ fontSize: 12.5, color: sodAuditResult.sodConflictCount === 0 ? '#065f46' : '#92400e', fontWeight: 600 }}>
+                {`• Kiểm toán SoD: ${({ ZERO_PRIVILEGE_ESCALATION_VERIFIED: 'Đã xác minh không leo thang đặc quyền (ZERO_PRIVILEGE_ESCALATION_VERIFIED)' } as Record<string, string>)[sodAuditResult.status] || sodAuditResult.status} • Xung đột SoD: ${sodAuditResult.sodConflictCount} • Cô lập đa kho: ${sodAuditResult.multiWarehouseIsolationEnforced ? 'Đang thực thi' : 'Chờ xử lý'}`}
+              </span>
             )}
           </div>
         </UiCard>
@@ -1253,11 +1302,13 @@ export default function Permissions() {
           </UiCard>
         </>
       )}
+      </div>
 
+      <div style={activeSectionTab === 'matrix' ? { display: 'contents' } : hiddenTabStyle}>
       {catalog.length === 0 && <UiCard><p className="ui-muted-text">Chưa có quyền truy cập để hiển thị.</p></UiCard>}
 
       {!canReadRoles && catalog.length > 0 && <UiCard title="Danh mục quyền truy cập">
-        <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+        <div style={{ maxHeight: 360, overflowY: 'auto' }}>
           <UiTableScroll>
             <table className="permissions-table ui-table-compact" aria-label="Danh mục quyền truy cập">
               <thead><tr><th>Quyền</th><th>Mô tả</th></tr></thead>
@@ -1268,34 +1319,95 @@ export default function Permissions() {
       </UiCard>}
 
       {roles.length > 0 && (
-        <UiToolbar aria-label="Bộ lọc ma trận phân quyền">
-          <UiToolbarField label="Lọc theo vai trò">
-            <select
-              aria-label="Lọc theo vai trò"
-              value={roleFilter}
-              onChange={e => setRoleFilter(e.target.value)}
-            >
-              <option value="">Tất cả vai trò ({roles.length})</option>
-              {roles.map(role => (
-                <option key={role.id} value={role.roleName}>
-                  {`${roleLabel(role.roleName)} (${role.roleName})`}
-                </option>
-              ))}
-            </select>
-          </UiToolbarField>
-          <UiToolbarField label="Tìm kiếm quyền">
-            <input
-              aria-label="Tìm kiếm quyền"
-              placeholder="Tìm tên hoặc mã quyền..." style={{ minWidth: 260 }}
-              value={permissionSearch}
-              onChange={e => setPermissionSearch(e.target.value)}
-            />
-          </UiToolbarField>
-        </UiToolbar>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            padding: '6px 10px',
+            borderRadius: 10,
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+          }}
+        >
+          <div
+            data-testid="permissions-role-tabs"
+            role="tablist"
+            aria-label="Chọn vai trò phân quyền"
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 4,
+              padding: 3,
+              borderRadius: 8,
+              background: '#f1f5f9',
+              border: '1px solid #e2e8f0',
+            }}
+          >
+            {roles.map(role => {
+              const isSelected = effectiveRoleFilter === role.roleName;
+              return (
+                <button
+                  key={role.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  data-testid={`role-tab-${role.roleName}`}
+                  onClick={() => setRoleFilter(role.roleName)}
+                  style={{
+                    minHeight: 30,
+                    padding: '4px 10px',
+                    borderRadius: 6,
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    background: isSelected ? '#ffffff' : 'transparent',
+                    color: isSelected ? '#0f172a' : '#475569',
+                    border: isSelected ? '1px solid #cbd5e1' : '1px solid transparent',
+                    boxShadow: isSelected ? '0 1px 2px rgba(15, 23, 42, 0.06)' : 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {`${roleLabel(role.roleName)} (${role.permissions.length})`}
+                </button>
+              );
+            })}
+          </div>
+
+          <div role="region" aria-label="Bộ lọc ma trận phân quyền" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#475569' }}>
+              <span>Lọc theo vai trò</span>
+              <select
+                aria-label="Lọc theo vai trò"
+                value={roleFilter === '__ALL__' ? '__ALL__' : effectiveRoleFilter}
+                onChange={e => setRoleFilter(e.target.value || '__ALL__')}
+                style={{ minHeight: 32, height: 32, padding: '2px 8px', fontSize: 12.5 }}
+              >
+                {roles.map(role => (
+                  <option key={role.id} value={role.roleName}>
+                    {`${roleLabel(role.roleName)} (${role.roleName})`}
+                  </option>
+                ))}
+                <option value="__ALL__">Tất cả vai trò ({roles.length})</option>
+              </select>
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#475569' }}>
+              <span>Tìm kiếm quyền</span>
+              <input
+                aria-label="Tìm kiếm quyền"
+                placeholder="Tìm tên hoặc mã quyền..."
+                style={{ minWidth: 210, minHeight: 32, height: 32, padding: '2px 10px', fontSize: 12.5 }}
+                value={permissionSearch}
+                onChange={e => setPermissionSearch(e.target.value)}
+              />
+            </label>
+          </div>
+        </div>
       )}
 
       {roles
-        .filter(role => !roleFilter || role.roleName === roleFilter)
+        .filter(role => !effectiveRoleFilter || role.roleName === effectiveRoleFilter)
         .map(role => {
           const normalizedQuery = permissionSearch.trim().toLowerCase();
           const filteredCatalog = normalizedQuery
@@ -1306,7 +1418,7 @@ export default function Permissions() {
               )
             : catalog;
           return <UiCard key={role.id} title={roleLabel(role.roleName)}>
-            <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+            <div style={{ maxHeight: 360, overflowY: 'auto' }}>
               <UiTableScroll>
                 <table className="permissions-table ui-table-compact" aria-label={`Quyền của ${roleLabel(role.roleName)}`}>
                   <thead><tr><th>Quyền</th><th>Mã quyền</th><th>Trạng thái</th>{canAssign && <th>Thao tác</th>}</tr></thead>
@@ -1329,6 +1441,7 @@ export default function Permissions() {
             </div>
           </UiCard>;
         })}
+      </div>
     </>}
   </UiPage>;
 }

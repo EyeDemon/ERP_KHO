@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 480" width="100%" height="100%" font-family="Inter, 'Be Vietnam Pro', system-ui, -apple-system, sans-serif">
+  <defs>
+    <style>
+      .num { font-variant-numeric: tabular-nums; }
+      .mono { font-family: 'JetBrains Mono', Consolas, monospace; font-variant-numeric: tabular-nums; }
+    </style>
+  </defs>
+
+  <rect width="1100" height="480" fill="#F8FAFC" />
+
+  <text x="24" y="34" fill="#475569" font-size="11" font-weight="700" letter-spacing="0.08em">MẪU 04: HỆ THỐNG HIỂN THỊ TRẠNG THÁI 3 CẤP ĐỘ • CHỐNG LẠM DỤNG VIÊN THUỐC (.ui-badge)</text>
+  <text x="24" y="60" fill="#0F172A" font-size="20" font-weight="700">Phân tách rạch ròi: Trạng thái vòng đời vs. Chỉ số thống kê vs. Ghi chú chính sách vs. Nút bấm</text>
+
+  <!-- Tier 1: Lifecycle Status Badges (.ui-badge) -->
+  <rect x="24" y="80" width="1052" height="90" rx="8" fill="#FFFFFF" stroke="#E6E8EA" />
+  <text x="44" y="106" fill="#0F172A" font-size="13" font-weight="700">CẤP 1 — HUY HIỆU TRẠNG THÁI VÒNG ĐỜI (.ui-badge): Viên thuốc bo tròn + Chấm 6px • Tối đa 28 ký tự • Chỉ đọc</text>
+
+  <g transform="translate(44, 122)">
+    <rect x="0" y="0" width="124" height="28" rx="14" fill="#ECFDF5" />
+    <circle cx="14" cy="14" r="4" fill="#047857" />
+    <text x="26" y="18" fill="#047857" font-size="12" font-weight="700">Đã ghi sổ kho</text>
+
+    <rect x="138" y="0" width="150" height="28" rx="14" fill="#FFFBEB" />
+    <circle cx="152" cy="14" r="4" fill="#92400E" />
+    <text x="164" y="18" fill="#92400E" font-size="12" font-weight="700">Chờ kiểm định QC</text>
+
+    <rect x="302" y="0" width="144" height="28" rx="14" fill="#FEF2F2" />
+    <circle cx="316" cy="14" r="4" fill="#B91C1C" />
+    <text x="328" y="18" fill="#B91C1C" font-size="12" font-weight="700">Lệch tồn / Khóa</text>
+
+    <rect x="460" y="0" width="146" height="28" rx="14" fill="#E0F2FE" stroke="#7DD3FC" />
+    <circle cx="474" cy="14" r="4" fill="#0369A1" />
+    <text x="486" y="18" fill="#0369A1" font-size="12" font-weight="700">Đang nhặt hàng</text>
+
+    <rect x="620" y="0" width="110" height="28" rx="14" fill="#F2F3F4" />
+    <circle cx="634" cy="14" r="4" fill="#64748B" />
+    <text x="646" y="18" fill="#475569" font-size="12" font-weight="700">Bản nháp</text>
+  </g>
+
+  <!-- Tier 2: Metric Stat Chips (.ui-stat-pill) -->
+  <rect x="24" y="182" width="1052" height="90" rx="8" fill="#FFFFFF" stroke="#E6E8EA" />
+  <text x="44" y="208" fill="#0F172A" font-size="13" font-weight="700">CẤP 2 — NHÃN CHỈ SỐ ĐỊNH LƯỢNG (.ui-stat-pill): Khung chữ nhật bo nhẹ 4px • Nhãn mờ + Số đậm tabular-nums</text>
+
+  <g transform="translate(44, 224)">
+    <rect x="0" y="0" width="170" height="30" rx="4" fill="#F8FAFC" stroke="#CBD5E1" />
+    <text x="12" y="19" fill="#64748B" font-size="12">Số dòng hàng:</text>
+    <text x="158" y="19" fill="#0F172A" font-size="12" font-weight="700" text-anchor="end" class="num">14 dòng</text>
+
+    <rect x="184" y="0" width="210" height="30" rx="4" fill="#F8FAFC" stroke="#CBD5E1" />
+    <text x="196" y="19" fill="#64748B" font-size="12">Tiến độ nhặt:</text>
+    <text x="382" y="19" fill="#047857" font-size="12" font-weight="700" text-anchor="end" class="num">240 / 240 Hộp</text>
+
+    <rect x="408" y="0" width="220" height="30" rx="4" fill="#F8FAFC" stroke="#CBD5E1" />
+    <text x="420" y="19" fill="#64748B" font-size="12">Sức chứa kệ:</text>
+    <text x="616" y="19" fill="#92400E" font-size="12" font-weight="700" text-anchor="end" class="num">475 / 500 kg (95%)</text>
+  </g>
+
+  <!-- Tier 3: Policy / Configuration Callout (.ui-policy-note) -->
+  <rect x="24" y="284" width="1052" height="86" rx="8" fill="#FFFFFF" stroke="#E6E8EA" />
+  <text x="44" y="310" fill="#0F172A" font-size="13" font-weight="700">CẤP 3 — GHI CHÚ CHÍNH SÁCH KHO (.ui-policy-note): Văn bản phẳng có thanh viền trái 4px • CẤM nhét vào viên thuốc!</text>
+
+  <g transform="translate(44, 322)">
+    <rect x="0" y="0" width="980" height="34" rx="4" fill="#F8FAFC" stroke="#E2E8F0" />
+    <rect x="0" y="0" width="4" height="34" fill="#059669" />
+    <text x="16" y="21" fill="#334155" font-size="12">Chính sách phân bổ kho WH01: Ưu tiên xuất lô hết hạn trước (FEFO) • Dung sai tự duyệt kiểm kê: &lt;= 0,5% giá trị dòng.</text>
+  </g>
+
+  <!-- Tier 4: Interactive Action Buttons (button) -->
+  <rect x="24" y="382" width="1052" height="82" rx="8" fill="#FFFFFF" stroke="#E6E8EA" />
+  <text x="44" y="408" fill="#0F172A" font-size="13" font-weight="700">CẤP 4 — NÚT HÀNH ĐỘNG TƯƠNG TÁC (button): Cao 36–40px, bo góc 6px, bắt đầu bằng Động từ chủ động</text>
+
+  <g transform="translate(44, 418)">
+    <rect x="0" y="0" width="176" height="36" rx="6" fill="#334155" />
+    <text x="88" y="23" fill="#FFFFFF" font-size="12" font-weight="700" text-anchor="middle">+ Tạo phiếu nhập kho</text>
+
+    <rect x="190" y="0" width="186" height="36" rx="6" fill="#059669" />
+    <text x="283" y="23" fill="#FFFFFF" font-size="12" font-weight="700" text-anchor="middle">✓ Duyệt &amp; Ghi sổ (Post)</text>
+
+    <rect x="390" y="0" width="144" height="36" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+    <text x="462" y="23" fill="#334155" font-size="12" font-weight="600" text-anchor="middle">In phiếu 01-VT</text>
+
+    <rect x="548" y="0" width="160" height="36" rx="6" fill="#FEF2F2" stroke="#FCA5A5" />
+    <text x="628" y="23" fill="#B91C1C" font-size="12" font-weight="700" text-anchor="middle">Đảo bút toán (Reverse)</text>
+  </g>
+</svg>

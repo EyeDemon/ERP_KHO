@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
-import { UiBadge, UiCard, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiDrawer, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 
 type WarehouseOption = { id:number; name:string; isActive:boolean };
 type StatusDefinition = {
@@ -250,7 +250,7 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
             {buckets.length===0?<tr><td colSpan={canChange?10:9} className="ui-empty-cell">Không có nhóm tồn kho phù hợp.</td></tr>:
               buckets.map(bucket=><tr key={bucket.inventoryStockId}>
                 <td><strong>{bucket.productCode}</strong><br/><small>{bucket.productName}</small></td>
-                <td>{bucket.warehouseName}<br/><small>{bucket.locationCode||'—'}</small></td>
+                <td>{bucket.warehouseName}<br/><small>{bucket.locationCode==='RECEIVING'?'Bãi tiếp nhận (RCV-01)':(bucket.locationCode||'—')}</small></td>
                 <td><UiBadge tone={statusTone(bucket.status)}>{inventoryStatusLabel(bucket.status)}</UiBadge></td>
                 <td>{bucket.lotNumber||'—'}<br/><small>{bucket.expiryDate?`HSD ${new Date(bucket.expiryDate).toLocaleDateString('vi-VN')}`:'Không HSD'}</small></td>
                 <td>{bucket.serialNumber||'—'}</td>
@@ -275,7 +275,7 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
       </UiTableScroll>}
     </UiCard>
 
-    {selected&&canChange&&<UiCard title={`Đổi trạng thái • ${selected.productCode} • ${inventoryStatusLabel(selected.status)}`}>
+    {selected&&canChange&&<UiDrawer open={Boolean(selected&&canChange)} title={`Đổi trạng thái • ${selected.productCode} • ${inventoryStatusLabel(selected.status)}`} titleId="bucket-status-change-drawer-title" busy={busy} onClose={()=>setSelected(null)}>
       <form onSubmit={submit} className="ui-form-grid">
         <p className="ui-muted-text">
           Nhóm tồn {selected.locationCode} • {selected.lotNumber||'không có lô'} • {selected.serialNumber||'không có sê-ri'}.
@@ -292,9 +292,9 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
           <button type="button" disabled={busy} onClick={()=>setSelected(null)}>Hủy</button>
         </div>
       </form>
-    </UiCard>}
+    </UiDrawer>}
 
-    {dispositionBucket&&canChange&&<UiCard title={`Xử lý chất lượng / Thanh hủy • ${dispositionBucket.productCode} • ${inventoryStatusLabel(dispositionBucket.status)}`}>
+    {dispositionBucket&&canChange&&<UiDrawer open={Boolean(dispositionBucket&&canChange)} title={`Xử lý chất lượng / Thanh hủy • ${dispositionBucket.productCode} • ${inventoryStatusLabel(dispositionBucket.status)}`} titleId="bucket-disposition-drawer-title" busy={busy} onClose={()=>setDispositionBucket(null)}>
       <form onSubmit={submitDisposition} className="ui-form-grid">
         <p className="ui-muted-text">
           Nhóm tồn {dispositionBucket.locationCode} • {dispositionBucket.lotNumber||'không có lô'} • {dispositionBucket.serialNumber||'không có sê-ri'}.
@@ -311,7 +311,7 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
           <button type="button" disabled={busy} onClick={()=>setDispositionBucket(null)}>Hủy</button>
         </div>
       </form>
-    </UiCard>}
+    </UiDrawer>}
   </div>;
 }
 

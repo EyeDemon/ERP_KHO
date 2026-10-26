@@ -109,7 +109,8 @@ const ImportReceipts = () => {
   const [suppliers, setSuppliers] = useState<Partner[]>([]);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-  const [showCreateForm, setShowCreateForm] = useState(true);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'receipts' | 'scanner' | 'rma'>('receipts');
   const [selectedReceipt, setSelectedReceipt] = useState<ImportReceipt | null>(null);
   const [receiveLines, setReceiveLines] = useState<Record<number, ReceiveLineForm>>({});
   const [qcExcludedLines, setQcExcludedLines] = useState<number[]>([]);
@@ -146,7 +147,7 @@ const ImportReceipts = () => {
   const [rmaLocationCode, setRmaLocationCode] = useState<string>('QC-HOLD-01');
   const [rmaQuantity, setRmaQuantity] = useState<number>(5);
   const [rmaDispositionType, setRmaDispositionType] = useState<string>('REFURBISH_AND_RTV_SPLIT');
-  const [rtsTrackingCode, setRtsTrackingCode] = useState<string>('GHN-RTS-889901');
+  const [rtsTrackingCode, setRtsTrackingCode] = useState<string>('');
   const [details, setDetails] = useState<ReceiptDetailForm[]>([]);
   const [macPreviewLines, setMacPreviewLines] = useState<Array<{
     productCode: string;
@@ -208,33 +209,12 @@ const ImportReceipts = () => {
     isOverdueInTransit: boolean;
     disputeRemainingHours: number;
     videoEvidenceStatus: string;
-  }>>([
-    {
-      returnCode: 'RMA-2026-0081',
-      trackingCode: 'GHN-RTS-889901',
-      orderCode: 'SO-2026-0881',
-      returnReason: 'Khách báo thiếu phụ kiện / Giao không thành công',
-      returnAgingDays: 9,
-      isOverdueInTransit: true,
-      disputeRemainingHours: 14,
-      videoEvidenceStatus: 'Đã lưu Video khui kiện SHA-256 (CAM-RMA-01)',
-    },
-    {
-      returnCode: 'RMA-2026-0082',
-      trackingCode: 'SPX-RTS-774102',
-      orderCode: 'SO-2026-0895',
-      returnReason: 'Đổi trả nguyên hộp theo chính sách sàn TMĐT',
-      returnAgingDays: 3,
-      isOverdueInTransit: false,
-      disputeRemainingHours: 36,
-      videoEvidenceStatus: 'Chờ ghi hình đồng kiểm bàn QC',
-    },
-  ]);
+  }>>([]);
 
   useEffect(() => {
-    if (!canRead) return;
+    if (!canRead || activeWorkspaceTab !== 'rma') return;
     let active = true;
-    void apiClient.get('/api/importreceipts/customer-returns')
+    void apiClient.get('/api/v1/import-receipts/customer-returns')
       .then((res) => {
         if (!active) return;
         const raw = res?.data?.items ?? res?.data?.returns ?? res?.data;
@@ -244,9 +224,11 @@ const ImportReceipts = () => {
             const overdue = Boolean(r.isOverdueInTransit ?? (aging > 7));
             return {
               returnCode: String(r.returnCode ?? r.rmaCode ?? `RMA-2026-008${idx + 1}`),
-              trackingCode: String(r.trackingNumber ?? r.trackingCode ?? r.awbCode ?? 'GHN-RTS-889901'),
-              orderCode: String(r.orderNumber ?? r.orderCode ?? r.sourceOrderCode ?? 'SO-2026-0881'),
-              returnReason: String(r.returnReason ?? r.reason ?? 'Hoàn trả sàn TMĐT').replace(/chua kiểm định/gi, 'chưa kiểm định'),
+              trackingCode: String(r.trackingNumber ?? r.trackingCode ?? r.awbCode ?? ''),
+              orderCode: String(r.orderNumber ?? r.orderCode ?? r.sourceOrderCode ?? ''),
+              returnReason: String(r.returnReason ?? r.reason ?? 'Hoàn trả sàn TMĐT')
+                .replace(/CUSTOMER_RETURN/gi, 'Khách hoàn trả (RMA)')
+                .replace(/chua kiểm định/gi, 'chưa kiểm định'),
               returnAgingDays: aging,
               isOverdueInTransit: overdue,
               disputeRemainingHours: Number(r.disputeRemainingHours ?? 18),
@@ -260,13 +242,15 @@ const ImportReceipts = () => {
               ),
             };
           }));
+        } else {
+          setCustomerReturns([]);
         }
       })
       .catch(() => {
-        // Fallback to default RMA tracking rows when endpoint is not mocked
+        if (active) setCustomerReturns([]);
       });
     return () => { active = false; };
-  }, [canRead]);
+  }, [canRead, activeWorkspaceTab]);
 
   const getReturnDisputeDeadlineLabel = () => {
     const rmaReceipt = receipts.find(r => (r.note || '').toUpperCase().includes('RMA') || r.status.startsWith('Discrepancy')) ?? selectedReceipt ?? receipts[0];
@@ -615,35 +599,104 @@ const ImportReceipts = () => {
         {error && <p role="alert">{error}</p>}
         {successMsg && !successMsg.includes('RMA') && !successMsg.includes('hàng hoàn trả') && !successMsg.includes('hậu cần thu hồi') && <div role="status" className="ui-success-text" style={{ marginTop: 8, padding: '10px 14px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#065f46', fontSize: 13, fontWeight: 500 }}>{successMsg}</div>}
 
-        <MobileBarcodeScannerBar
-          warehouseId={warehouseId ? Number(warehouseId) : (warehouses[0]?.id ?? undefined)}
-          sampleCode={receipts[0]?.code || 'PNK-001'}
-          disabled={creating || workflowId !== null}
-          onScan={(code) => {
-            const match = receipts.find(r => r.code.toUpperCase() === code.toUpperCase());
-            if (match) void handleViewDetails(match.id);
+        <div
+          className="no-print"
+          role="tablist"
+          aria-label="Chế độ làm việc Quản lý nhập kho"
+          data-testid="import-workspace-tabs"
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 8,
+            padding: 6,
+            borderRadius: 12,
+            background: '#f1f5f9',
+            border: '1px solid #cbd5e1',
           }}
-        />
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeWorkspaceTab === 'receipts'}
+            data-testid="tab-import-receipts"
+            onClick={() => setActiveWorkspaceTab('receipts')}
+            style={{
+              flex: '1 1 200px',
+              minHeight: 40,
+              fontWeight: 700,
+              background: activeWorkspaceTab === 'receipts' ? '#1e40af' : '#ffffff',
+              color: activeWorkspaceTab === 'receipts' ? '#ffffff' : '#0f172a',
+              borderColor: activeWorkspaceTab === 'receipts' ? '#1e40af' : '#cbd5e1',
+            }}
+          >
+            1. Danh sách &amp; Tạo phiếu nhập ({receipts.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeWorkspaceTab === 'scanner'}
+            data-testid="tab-import-scanner"
+            onClick={() => setActiveWorkspaceTab('scanner')}
+            style={{
+              flex: '1 1 200px',
+              minHeight: 40,
+              fontWeight: 700,
+              background: activeWorkspaceTab === 'scanner' ? '#1e40af' : '#ffffff',
+              color: activeWorkspaceTab === 'scanner' ? '#ffffff' : '#0f172a',
+              borderColor: activeWorkspaceTab === 'scanner' ? '#1e40af' : '#cbd5e1',
+            }}
+          >
+            2. Trạm Quét Nhận Hàng (PDA)
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeWorkspaceTab === 'rma'}
+            data-testid="tab-import-rma"
+            onClick={() => setActiveWorkspaceTab('rma')}
+            style={{
+              flex: '1 1 200px',
+              minHeight: 40,
+              fontWeight: 700,
+              background: activeWorkspaceTab === 'rma' ? '#1e40af' : '#ffffff',
+              color: activeWorkspaceTab === 'rma' ? '#ffffff' : '#0f172a',
+              borderColor: activeWorkspaceTab === 'rma' ? '#1e40af' : '#cbd5e1',
+            }}
+          >
+            3. Kiểm định Hàng hoàn (RMA &amp; QC)
+          </button>
+        </div>
 
-        <UiCard title="Tổng quan Luồng Tiếp nhận Hàng đến">
-          <div className="ui-inline-wrap">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10, width: '100%' }}>
-              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Tổng số phiếu nhập</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{receipts.length}</strong></div>
-              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đang soạn / Nhận tại cửa</div><strong style={{ fontSize: 15, color: '#b45309' }}>{receipts.filter(r => r.status === 'Draft' || r.status === 'Received' || r.status.startsWith('Discrepancy')).length}</strong></div>
-              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đang chờ Kiểm định / Chờ duyệt</div><strong style={{ fontSize: 15, color: '#b45309' }}>{receipts.filter(r => r.status === 'QcPending' || r.status === 'QcCompleted' || r.status === 'ReadyToPost').length}</strong></div>
-              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đã ghi sổ tồn kho</div><strong style={{ fontSize: 15, color: '#065f46' }}>{receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}</strong></div>
-              <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Phiếu đã hủy</div><strong style={{ fontSize: 15, color: '#b91c1c' }}>{receipts.filter(r => r.status === 'Cancelled').length}</strong></div>
+        <div className="no-print" style={activeWorkspaceTab === 'scanner' ? undefined : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }}>
+          <MobileBarcodeScannerBar
+            warehouseId={warehouseId ? Number(warehouseId) : (warehouses[0]?.id ?? undefined)}
+            sampleCode={receipts[0]?.code || 'PNK-001'}
+            disabled={creating || workflowId !== null}
+            onScan={(code) => {
+              const match = receipts.find(r => r.code.toUpperCase() === code.toUpperCase());
+              if (match) void handleViewDetails(match.id);
+            }}
+          />
+        </div>
+
+        <div className="no-print" style={activeWorkspaceTab === 'receipts' ? undefined : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }}>
+          <UiCard title="Tổng quan Luồng Tiếp nhận Hàng đến">
+            <div className="ui-inline-wrap">
+              <div className="ui-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10, width: '100%' }}>
+                <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Tổng số phiếu nhập</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{receipts.length}</strong></div>
+                <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đang soạn / Nhận tại cửa</div><strong style={{ fontSize: 15, color: '#b45309' }}>{receipts.filter(r => r.status === 'Draft' || r.status === 'Received' || r.status.startsWith('Discrepancy')).length}</strong></div>
+                <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đang chờ Kiểm định / Chờ duyệt</div><strong style={{ fontSize: 15, color: '#b45309' }}>{receipts.filter(r => r.status === 'QcPending' || r.status === 'QcCompleted' || r.status === 'ReadyToPost').length}</strong></div>
+                <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đã ghi sổ tồn kho</div><strong style={{ fontSize: 15, color: '#065f46' }}>{receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}</strong></div>
+                <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Phiếu đã hủy</div><strong style={{ fontSize: 15, color: '#b91c1c' }}>{receipts.filter(r => r.status === 'Cancelled').length}</strong></div>
+              </div>
             </div>
+          </UiCard>
+        </div>
 
-
-
-
-          </div>
-        </UiCard>
-
+        <div className="no-print" style={activeWorkspaceTab === 'rma' ? undefined : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }}>
         <UiCard title="Mở Bàn làm việc Kiểm định Chất lượng">
           <div className="ui-inline-wrap">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, width: '100%', marginBottom: 8 }}>
+            <div className="ui-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, width: '100%', marginBottom: 8 }}>
               <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Đang kiểm định chất lượng / Xử lý chênh lệch</div><strong style={{ fontSize: 15, color: '#b45309' }}>{receipts.filter(r => r.requiresQc || r.status === 'QcPending' || r.status === 'QcCompleted' || r.status.startsWith('Discrepancy')).length}</strong></div>
               <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Hoàn tất kiểm định & đã ghi sổ tồn kho</div><strong style={{ fontSize: 15, color: '#065f46' }}>{receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length}</strong></div>
               <div style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}><div style={{ fontSize: 12, color: '#475569' }}>Hàng khách trả lại (Khả dụng / Biệt trữ / Hư hỏng)</div><strong style={{ fontSize: 15, color: '#0f172a' }}>{receipts.filter(r => (r.note || '').toUpperCase().includes('RMA') || r.status.startsWith('Discrepancy')).length}</strong></div>
@@ -672,7 +725,13 @@ const ImportReceipts = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {customerReturns.map((row) => (
+                    {customerReturns.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="ui-empty-cell" style={{ textAlign: 'center', padding: '14px 12px', color: '#64748b' }}>
+                          Chưa có dữ liệu đơn hoàn RMA nào đang chờ xử lý hoặc quá hạn khiếu nại.
+                        </td>
+                      </tr>
+                    ) : customerReturns.map((row) => (
                       <tr key={row.returnCode}>
                         <td style={{ whiteSpace: 'nowrap' }}><strong>{row.returnCode}</strong></td>
                         <td style={{ whiteSpace: 'nowrap' }}>
@@ -713,7 +772,7 @@ const ImportReceipts = () => {
                   aria-label="Quét mã vận đơn hoàn hàng nhanh"
                   value={rtsTrackingCode}
                   onChange={e => setRtsTrackingCode(e.target.value)}
-                  placeholder="Quét mã vận đơn hoàn (VD: GHN-RTS-889901)..."
+                  placeholder="VD: GHN-RTS-889901"
                   style={{ height: 38, minHeight: 38, minWidth: 310, padding: '6px 10px', boxSizing: 'border-box' }}
                 />
                 <span
@@ -809,15 +868,18 @@ const ImportReceipts = () => {
             </button>
           </div>
         </UiCard>
+        </div>
 
         {canCreate && (
+          <div className="no-print" style={activeWorkspaceTab === 'receipts' ? undefined : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }}>
           <UiCard title="Tạo Phiếu Nhập (Nháp)">
             <div className="ui-inline-actions" style={{ marginBottom: showCreateForm ? 12 : 0 }}>
               <button type="button" onClick={() => setShowCreateForm(v => !v)}>
                 {showCreateForm ? 'Thu gọn biểu mẫu' : 'Mở biểu mẫu tạo mới'}
               </button>
             </div>
-            {showCreateForm && <form onSubmit={handleCreate} className="import-form">
+            <div style={showCreateForm ? undefined : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }}>
+            <form onSubmit={handleCreate} className="import-form">
               <div className="import-form-grid">
                 <label className="ui-stack">
                   <span>Mã phiếu</span>
@@ -949,10 +1011,13 @@ const ImportReceipts = () => {
                 <button type="button" onClick={handleAddDetail}>+ Thêm dòng</button>
                 <button type="submit" disabled={creating}>{creating ? 'Đang lưu...' : 'Lưu Phiếu Nháp'}</button>
               </div>
-            </form>}
+            </form>
+            </div>
           </UiCard>
+          </div>
         )}
 
+        <div className="no-print" style={activeWorkspaceTab === 'rma' ? undefined : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }}>
         <UiCard title="Cấu hình Thông số Kiểm định Hàng hoàn trả & Phân luồng Tân trang / Xuất trả Nhà cung cấp">
           <div className="import-form-grid">
             <label className="ui-stack">
@@ -986,7 +1051,9 @@ const ImportReceipts = () => {
             </label>
           </div>
         </UiCard>
+        </div>
 
+        <div className="no-print" style={activeWorkspaceTab === 'receipts' ? undefined : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }}>
         <UiCard title="Danh Sách Phiếu Nhập">
           <UiTableScroll>
             <table aria-label="Danh sách phiếu nhập">
@@ -1041,6 +1108,7 @@ const ImportReceipts = () => {
             </table>
           </UiTableScroll>
         </UiCard>
+        </div>
 
         {selectedReceipt && (
           <UiCard title={'Chi Tiết Phiếu Nhập: ' + selectedReceipt.code}>
@@ -1048,7 +1116,7 @@ const ImportReceipts = () => {
               <div><strong>Kho:</strong> {selectedReceipt.warehouseName}</div>
               <div><strong>Nhà cung cấp:</strong> {selectedReceipt.supplierCode ? selectedReceipt.supplierCode + ' - ' + selectedReceipt.supplierName : '—'}</div>
               {selectedReceipt.status === 'Draft' && canUpdate && canReadPartners && (
-                <div>
+                <div className="no-print">
                   <label className="ui-stack">
                     <span>Đổi nhà cung cấp</span>
                     <select aria-label="Đổi nhà cung cấp" disabled={partnerUpdating} value={selectedReceipt.supplierId || ''} onChange={e => void changeSupplier(e.target.value ? Number(e.target.value) : null)}>
@@ -1083,23 +1151,32 @@ const ImportReceipts = () => {
               <table aria-label={'Chi tiết phiếu nhập ' + selectedReceipt.code}>
                 <thead>
                   <tr>
+                    <th style={{ textAlign: 'center', width: 48 }}>STT</th>
                     <th>Mã SP</th>
                     <th>Tên SP</th>
+                    <th style={{ textAlign: 'center' }}>ĐVT</th>
                     <th className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Dự kiến</th>
                     <th className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Nhận / Chấp nhận</th>
                     <th className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đơn vị cơ sở</th>
                     <th className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đơn giá</th>
+                    <th className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Thành tiền</th>
                     <th>Ghi chú</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedReceipt.details.map(d => {
+                  {selectedReceipt.details.map((d, idx) => {
                     const opUnit = normalizeUnitCode(d.operationUnitCode);
                     const baseUnit = normalizeUnitCode(d.baseUnitCode);
+                    const effQty = Number(d.postedQuantity || d.acceptedQuantity || d.receivedQuantity || d.expectedQuantity || 0);
+                    const lineTotal = d.unitPrice === null || d.lineTotalAmount === null
+                      ? null
+                      : (d.lineTotalAmount !== undefined ? Number(d.lineTotalAmount) : effQty * Number(d.unitPrice ?? 0));
                     return (
                     <tr key={d.id}>
+                      <td style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{idx + 1}</td>
                       <td style={{ whiteSpace: 'nowrap' }}><strong>{d.productCode}</strong></td>
                       <td>{d.productName}<br /><small>Kiểm tra chất lượng: {d.requiresQc ? 'Bắt buộc · ' + statusLabel(d.qcState) + ' · chính sách ' + (d.qcPolicyId ?? '—') + ' phiên bản ' + (d.qcPolicyVersion ?? '—') : 'Không yêu cầu'}</small></td>
+                      <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{opUnit || '—'}</td>
                       <td className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.expectedQuantity} {opUnit}</td>
                       <td className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                         {selectedReceipt.status === 'Draft' && (canReceive || canObserve) ? (
@@ -1131,6 +1208,7 @@ const ImportReceipts = () => {
                       </td>
                       <td className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>× {d.conversionFactor} (v{d.conversionVersion})<br />{selectedReceipt.status === 'Draft' ? roundQty4((receiveLines[d.id]?.acceptedQuantity ?? d.expectedQuantity) * d.conversionFactor) : d.baseAcceptedQuantity || d.baseExpectedQuantity} {baseUnit}</td>
                       <td className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.unitPrice === null ? 'Ẩn theo phân quyền' : `${Number(d.unitPrice ?? 0).toLocaleString('vi-VN')} VND`}</td>
+                      <td className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{lineTotal === null ? 'Ẩn theo phân quyền' : `${lineTotal.toLocaleString('vi-VN')} VND`}</td>
                       <td>{d.note}</td>
                     </tr>
                     );
@@ -1140,6 +1218,7 @@ const ImportReceipts = () => {
             </UiTableScroll>
 
             <div
+              className="no-print"
               data-testid="import-mac-preview-panel"
               style={{
                 marginTop: 12,
@@ -1154,7 +1233,7 @@ const ImportReceipts = () => {
                 <div>
                   <strong style={{ fontSize: 13, color: '#0f172a' }}>Mô phỏng &amp; Xem trước Giá vốn Bình quân Gia quyền (MAC) trước khi Ghi sổ</strong>
                   <div style={{ fontSize: 12, color: '#475569' }}>
-                    Kiểm tra biến động giá vốn MAC dự kiến trên từng SKU trước khi thực hiện lệnh Ghi nhận tồn kho (Post).
+                    Kiểm tra biến động giá vốn MAC dự kiến trên từng SKU trước khi thực hiện lệnh Ghi nhận tồn kho.
                   </div>
                 </div>
                 <button
@@ -1207,28 +1286,30 @@ const ImportReceipts = () => {
             </div>
 
             {selectedReceipt.status !== 'Draft' && (
-              <ReceiptInventoryIdentityEditor
-                receiptId={selectedReceipt.id}
-                status={selectedReceipt.status}
-                canUpdate={canUpdate}
-                lines={selectedReceipt.details.map(d => ({
-                  id: d.id,
-                  productId: d.productId,
-                  productCode: d.productCode,
-                  productName: d.productName,
-                  trackingType: d.trackingType || 'None',
-                  expiryControl: d.expiryControl || false,
-                  shelfLifeDays: d.shelfLifeDays,
-                  baseAcceptedQuantity: d.baseAcceptedQuantity || 0,
-                  baseDamagedQuantity: d.baseDamagedQuantity || 0,
-                  baseRejectedQuantity: d.baseRejectedQuantity || 0,
-                  baseUnitCode: normalizeUnitCode(d.baseUnitCode),
-                }))}
-              />
+              <div className="no-print">
+                <ReceiptInventoryIdentityEditor
+                  receiptId={selectedReceipt.id}
+                  status={selectedReceipt.status}
+                  canUpdate={canUpdate}
+                  lines={selectedReceipt.details.map(d => ({
+                    id: d.id,
+                    productId: d.productId,
+                    productCode: d.productCode,
+                    productName: d.productName,
+                    trackingType: d.trackingType || 'None',
+                    expiryControl: d.expiryControl || false,
+                    shelfLifeDays: d.shelfLifeDays,
+                    baseAcceptedQuantity: d.baseAcceptedQuantity || 0,
+                    baseDamagedQuantity: d.baseDamagedQuantity || 0,
+                    baseRejectedQuantity: d.baseRejectedQuantity || 0,
+                    baseUnitCode: normalizeUnitCode(d.baseUnitCode),
+                  }))}
+                />
+              </div>
             )}
 
             {selectedReceipt.status === 'Draft' && canObserve && (
-              <div className="import-section-actions">
+              <div className="import-section-actions no-print">
                 <button type="button" disabled={workflowId === selectedReceipt.id} onClick={() => void observeReceipt(selectedReceipt.id, selectedReceipt)}>
                   {workflowId === selectedReceipt.id ? 'Đang ghi nhận...' : 'Ghi nhận số lượng thực tế'}
                 </button>
@@ -1236,7 +1317,7 @@ const ImportReceipts = () => {
             )}
 
             {canReadDiscrepancy && ['DiscrepancyPending', 'DiscrepancyRejected'].includes(selectedReceipt.status) && (
-              <section aria-labelledby="discrepancy-heading" className="import-workflow-panel warning">
+              <section aria-labelledby="discrepancy-heading" className="import-workflow-panel warning no-print">
                 <h4 id="discrepancy-heading">Xử lý sai lệch nhận hàng</h4>
                 <p>Xử lý sai lệch không ghi tồn kho. Ghi nhận tồn kho là bước duy nhất tạo tồn kho và sổ kho.</p>
                 {discrepancies.filter(d => d.status === 'Pending' || d.status === 'Rejected').map(d => {
@@ -1261,7 +1342,7 @@ const ImportReceipts = () => {
                       <label>Lý do
                         <select value={form.reasonCode} onChange={e => set({ reasonCode: e.target.value })}>
                           <option value="">-- Chọn lý do --</option>
-                          {reasonCodes.map(x => <option key={x.code} value={x.code}>{x.code} — {x.name} (v{x.version})</option>)}
+                          {reasonCodes.map(x => <option key={x.code} value={x.code}>{x.code === 'CUSTOMER_RETURN' ? 'Khách hoàn trả (RMA)' : x.code} — {x.name} (v{x.version})</option>)}
                         </select>
                       </label>
                       <label>Chịu trách nhiệm
@@ -1269,7 +1350,7 @@ const ImportReceipts = () => {
                           <option value="SUPPLIER">Nhà cung cấp</option>
                           <option value="CARRIER">Đơn vị vận chuyển</option>
                           <option value="WAREHOUSE">Kho</option>
-                          <option value="CUSTOMER_RETURN">Khách trả hàng</option>
+                          <option value="CUSTOMER_RETURN">Khách hoàn trả (RMA)</option>
                           <option value="UNKNOWN">Chưa xác định</option>
                         </select>
                       </label>
@@ -1294,7 +1375,7 @@ const ImportReceipts = () => {
             )}
 
             {canReadDiscrepancy && selectedReceipt.status === 'DiscrepancyPendingApproval' && (
-              <section aria-labelledby="discrepancy-approval-heading" className="import-workflow-panel review">
+              <section aria-labelledby="discrepancy-approval-heading" className="import-workflow-panel review no-print">
                 <h4 id="discrepancy-approval-heading">Duyệt phương án xử lý sai lệch</h4>
                 {discrepancies.filter(d => d.status === 'PendingApproval').map(d => (
                   <div key={d.id} className="import-row-actions">
@@ -1306,7 +1387,39 @@ const ImportReceipts = () => {
               </section>
             )}
 
-            <div className="import-section-actions">
+            <div
+              className="ui-print-signatures"
+              data-testid="import-receipt-signatures"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                gap: 16,
+                marginTop: 24,
+                paddingTop: 16,
+                borderTop: '1px dashed #cbd5e1',
+                textAlign: 'center',
+                pageBreakInside: 'avoid',
+              }}
+            >
+              <div>
+                <strong style={{ display: 'block', fontSize: 13, color: '#0f172a' }}>Người lập phiếu</strong>
+                <em style={{ fontSize: 12, color: '#64748b' }}>(Ký, ghi rõ họ tên)</em>
+              </div>
+              <div>
+                <strong style={{ display: 'block', fontSize: 13, color: '#0f172a' }}>Người giao / nhận hàng</strong>
+                <em style={{ fontSize: 12, color: '#64748b' }}>(Ký, ghi rõ họ tên)</em>
+              </div>
+              <div>
+                <strong style={{ display: 'block', fontSize: 13, color: '#0f172a' }}>Thủ kho</strong>
+                <em style={{ fontSize: 12, color: '#64748b' }}>(Ký, ghi rõ họ tên)</em>
+              </div>
+              <div>
+                <strong style={{ display: 'block', fontSize: 13, color: '#0f172a' }}>Quản lý kho / Kế toán</strong>
+                <em style={{ fontSize: 12, color: '#64748b' }}>(Ký, ghi rõ họ tên)</em>
+              </div>
+            </div>
+
+            <div className="import-section-actions no-print">
               {selectedReceipt.status === 'QcPending' && canQc && (
                 <button type="button" disabled={workflowId === selectedReceipt.id} onClick={() => void runWorkflow(selectedReceipt.id, 'qc-disposition', selectedReceipt)}>
                   {workflowId === selectedReceipt.id ? 'Đang lưu kết quả kiểm tra chất lượng...' : 'Ghi nhận kết quả kiểm tra chất lượng'}

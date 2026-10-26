@@ -42,7 +42,7 @@ describe('InventoryLocks',()=>{
     vi.mocked(apiClient.post).mockResolvedValue({data:lock} as never);
     const view=render(<InventoryLocks/>);
     await view.findByText('Giữ kiểm định chất lượng');
-    fireEvent.change(view.getByLabelText('Kho'),{target:{value:'1'}});
+    fireEvent.click(view.getByRole('button',{name:'+ Tạo khóa tồn kho'}));fireEvent.change(view.getByLabelText('Kho'),{target:{value:'1'}});
     fireEvent.change(view.getByLabelText('ID sản phẩm (tùy chọn)'),{target:{value:'10'}});
     fireEvent.change(view.getByLabelText('Lý do'),{target:{value:'Đóng băng phục vụ kiểm kê'}});
     const button=view.getByText('Tạo khóa');

@@ -249,7 +249,7 @@ public sealed class IdempotentCommandFilter(
 
     private (int? Warehouse, int? Source, int? Destination) TrackedWarehouses(IDictionary<string, object?> arguments)
     {
-        foreach (var entity in context.ChangeTracker.Entries().Select(x => x.Entity).Concat(arguments.Values.OfType<object>()))
+        foreach (var entity in context.ChangeTracker.Entries().Select(x => x.Entity).Concat(arguments.Values.Where(v => !IsNonPayloadArgument(v)).OfType<object>()))
         {
             var type = entity.GetType();
             int? Read(string name) => type.GetProperty(name)?.GetValue(entity) is int value ? value : null;
@@ -273,6 +273,32 @@ public sealed class IdempotentCommandFilter(
         };
     }
 
+    private static bool IsNonPayloadArgument(object? value)
+    {
+        if (value is null) return false;
+        if (value is CancellationToken
+            or ErpKhoDbContext
+            or DbContext
+            or IWarehouseAuthorizationService
+            or IRequestMetadata
+            or IBusinessPartnerService
+            or IProductCatalogService
+            or Microsoft.AspNetCore.Http.IFormFile
+            or Microsoft.AspNetCore.Http.IFormCollection
+            or System.IO.Stream)
+            return true;
+
+        var ns = value.GetType().Namespace;
+        return ns is not null && (
+            ns.StartsWith("ERP.Infrastructure", StringComparison.Ordinal) ||
+            ns.StartsWith("ERP.Application.Services", StringComparison.Ordinal) ||
+            ns.StartsWith("ERP.Application.Interfaces", StringComparison.Ordinal) ||
+            ns.StartsWith("ERP.Api.Security", StringComparison.Ordinal) ||
+            ns.StartsWith("ERP.Api.Infrastructure", StringComparison.Ordinal) ||
+            ns.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.Ordinal) ||
+            ns.StartsWith("Microsoft.AspNetCore", StringComparison.Ordinal));
+    }
+
     public static string Fingerprint(string scope, IDictionary<string, object?> arguments) =>
         Fingerprint(scope, arguments, null);
 
@@ -281,7 +307,7 @@ public sealed class IdempotentCommandFilter(
         var canonical = new SortedDictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var argument in arguments.OrderBy(x => x.Key, StringComparer.Ordinal))
         {
-            if (argument.Value is CancellationToken) continue;
+            if (IsNonPayloadArgument(argument.Value)) continue;
             canonical[argument.Key] = JsonSerializer.SerializeToElement(argument.Value, argument.Value?.GetType() ?? typeof(object));
         }
         if (!string.IsNullOrWhiteSpace(queryString))

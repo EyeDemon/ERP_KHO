@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient, { setAccessToken } from '../services/apiClient';
 import { setCurrentPermissions } from '../services/authorization';
@@ -36,9 +36,24 @@ const Login = () => {
   const [tenantCode, setTenantCode] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const clearAutofill = () => {
+      const u = document.getElementById('login-username') as HTMLInputElement | null;
+      const p = document.getElementById('login-password') as HTMLInputElement | null;
+      if (u && u.value) u.value = '';
+      if (p && p.value) p.value = '';
+      setUsername('');
+      setPassword('');
+    };
+    clearAutofill();
+    const timer = window.setTimeout(clearAutofill, 120);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,19 +109,19 @@ const Login = () => {
         <div className="login-heading">
           <div className="ui-eyebrow">ERP WMS</div>
           <h1 id="login-title">Đăng nhập hệ thống</h1>
-          <p>Truy cập các work center theo vai trò và quyền đã được cấp.</p>
+          <p>Truy cập các phân hệ nghiệp vụ kho theo vai trò và quyền đã được cấp.</p>
         </div>
 
-        <form onSubmit={handleLogin} className="login-form">
+        <form onSubmit={handleLogin} className="login-form" autoComplete="off">
           {error && <div role="alert">{error}</div>}
 
           <label className="ui-stack" htmlFor="login-tenant-code">
-            <span>Mã doanh nghiệp (Tenant)</span>
+            <span>Mã doanh nghiệp</span>
             <input
               id="login-tenant-code"
-              autoComplete="organization"
+              autoComplete="off"
               type="text"
-              placeholder="Mặc định: TENANT-1 (hoặc nhập user@TENANT-202)"
+              placeholder="VD: MA-DOANH-NGHIEP (để trống = mặc định)"
               value={tenantCode}
               onChange={(event) => setTenantCode(event.target.value)}
             />
@@ -116,25 +131,42 @@ const Login = () => {
             <span>Tên đăng nhập</span>
             <input
               id="login-username"
-              autoComplete="username"
+              autoComplete="off"
               type="text"
+              placeholder="Nhập tên đăng nhập"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               required
             />
           </label>
 
-          <label className="ui-stack" htmlFor="login-password">
-            <span>Mật khẩu</span>
-            <input
-              id="login-password"
-              autoComplete="current-password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-            />
-          </label>
+          <div className="ui-stack">
+            <label htmlFor="login-password" style={{ fontWeight: 700, fontSize: 13 }}>
+              <span>Mật khẩu</span>
+            </label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%' }}>
+              <input
+                id="login-password"
+                autoComplete="current-password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Nhập mật khẩu"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                style={{ flex: 1, minWidth: 0, width: 'auto' }}
+              />
+              <button
+                type="button"
+                data-testid="toggle-password-visibility"
+                aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                aria-pressed={showPassword}
+                onClick={() => setShowPassword((prev) => !prev)}
+                style={{ width: 'auto', minHeight: 40, padding: '0 14px', whiteSpace: 'nowrap', flexShrink: 0 }}
+              >
+                {showPassword ? 'Ẩn' : 'Hiện'}
+              </button>
+            </div>
+          </div>
 
           <button type="submit" className="ui-primary-button" disabled={submitting}>
             {submitting ? 'Đang đăng nhập...' : 'Đăng nhập'}

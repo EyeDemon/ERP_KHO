@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-export type AppRole = 'Admin' | 'Manager' | 'WarehouseStaff' | 'Viewer';
+export type AppRole = 'Admin' | 'Manager' | 'WarehouseStaff' | 'Staff' | 'Viewer';
 const storageKey = 'permissions';
 let revision = 0;
 export const beginPermissionRefresh = () => ++revision;
@@ -27,7 +27,7 @@ export const hasPermission = (code: string) => currentPermissions().includes(cod
 
 export const currentRole = (): AppRole => {
   const role = localStorage.getItem('role');
-  return role === 'Admin' || role === 'Manager' || role === 'WarehouseStaff' || role === 'Viewer'
+  return role === 'Admin' || role === 'Manager' || role === 'WarehouseStaff' || role === 'Staff' || role === 'Viewer'
     ? role
     : 'Viewer';
 };
@@ -37,7 +37,8 @@ export const currentUserId = (): number | null => {
   return Number.isInteger(value) && value > 0 ? value : null;
 };
 
-// Stocktake remains outside the inbound permission cutover.
-export const canViewStocktakes = (role: AppRole = currentRole()) => role !== 'Viewer';
+// Stocktake checks explicit read grants first, then compatibility role gate.
+export const canViewStocktakes = (role: AppRole | string = currentRole()) =>
+  hasPermission('stocktake.read') || hasPermission('inventory.read') || (Boolean(role) && role !== 'Viewer');
 // Inbound reads use grants; other approval document types retain their compatibility role gate.
 export const canViewApprovals = () => hasPermission('receipt.read') || hasPermission('export_receipt.read') || currentRole() === 'Admin' || currentRole() === 'Manager';

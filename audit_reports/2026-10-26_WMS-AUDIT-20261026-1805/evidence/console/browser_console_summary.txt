@@ -1,0 +1,30 @@
+# Browser Console & PageError Audit Summary (`WMS-AUDIT-20261026-1805`)
+
+- **Audit Run ID:** `WMS-AUDIT-20261026-1805`
+- **Target Frontend URL:** `http://localhost:5173`
+- **Target Backend API URL:** `http://localhost:5260`
+- **Browser Engine:** Chromium via `playwright-erp-kho` MCP (`1440x900` Desktop & `390x844` Mobile PDA)
+
+## 1. Uncaught PageErrors (`window.onerror` / `unhandledrejection`)
+- **Total Uncaught PageErrors Across All 35 Audited Routes:** `0`
+
+## 2. Pre-Fix Console Errors Captured & Resolved
+1. **`FND-DASH-001` (`POST /api/reports/operational-dashboard/exceptions/IR-QA-001/acknowledge` -> `500 Internal Server Error`):**
+   - **Observed Pre-Fix:** Console logged `Failed to load resource: the server responded with a status of 500 (Internal Server Error)` when clicking `"Tiếp nhận xử lý"` on `/` (`SCR-DASH-001`).
+   - **Root Cause:** `IdempotentCommandFilter.Fingerprint` (`ERP.Api/Infrastructure/IdempotentCommandFilter.cs:280`) attempted `JsonSerializer.SerializeToElement` on `[FromServices] ErpKhoDbContext` (`System.Reflection.MethodBase` inside EF Core metadata threw `NotSupportedException`).
+   - **Post-Fix Regression (`TC-DASH-001-05`):** `0` console errors; `POST /api/reports/operational-dashboard/exceptions/IR-QA-001/acknowledge` returned `200 OK`.
+2. **`FND-DASH-002` (`POST /api/sales-orders/marketplace-shops/sync-inventory` -> `500 Internal Server Error`):**
+   - **Observed Pre-Fix:** Console logged `Failed to load resource: the server responded with a status of 500 (Internal Server Error)` when clicking `"Đồng Bộ Tồn Kho Đa Sàn Tức Thì"` on `/` (`SCR-DASH-001`) because `ERP.Api.exe` was running a stale `2026-10-22` binary.
+   - **Post-Fix Regression (`TC-DASH-001-07`):** `0` console errors; `POST /api/sales-orders/marketplace-shops/sync-inventory` returned `200 OK` (`SYNC-MKT-20261026113142`).
+
+## 3. Expected Negative-Test & Token-Rotation Console Entries
+1. **`TC-AUTH-001-02` (`POST /api/auth/login` with wrong password on `/login`):**
+   - Expected `401 Unauthorized` response; UI rendered `role="alert"` (`Tên đăng nhập hoặc mật khẩu không chính xác.`) without page crash.
+2. **`TC-OUT-008-01` (`POST /api/shipments/1002/scan-awb-handover` with duplicate AWB `GHN8938505002` on `/handover-manifests`):**
+   - Expected `409 Conflict` (`DUPLICATE_AWB_SCAN`); UI rendered red `role="alert"` banner with server message and correlation ID.
+3. **`TC-IDEMP-001` (`POST /api/v1/export-receipts/einvoice-nd70-draft` with reused `Idempotency-Key` and modified payload):**
+   - Expected `409 Conflict` (`IDEMPOTENCY_CONFLICT`); verified server-side idempotency protection.
+4. **`TC-SEC-001` (`GET /api/products` with `credentials: 'omit'` and no Bearer token):**
+   - Expected `401 Unauthorized`; verified server-side authentication gate.
+5. **Automatic 20-Minute JWT Access Token Rotation (`401 -> POST /api/auth/refresh -> 200 OK`):**
+   - At `11:53:25 UTC` and `12:14:00 UTC`, the short-lived 20-minute JWT access token expired during navigation; `apiClient.ts` interceptor automatically invoked `POST /api/auth/refresh`, rotated the session token (`Authentication.RefreshRotated` in `AuditLogs`), and retried the original requests with `200 OK`.

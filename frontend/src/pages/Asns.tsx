@@ -78,7 +78,7 @@ export default function Asns(){
   const [error,setError]=useState('');
   const [success,setSuccess]=useState('');
   const [creating,setCreating]=useState(false);
-  const [showCreateForm,setShowCreateForm]=useState(true);
+  const [showCreateForm,setShowCreateForm]=useState(false);
   const [busy,setBusy]=useState('');
   const [stagingBusy,setStagingBusy]=useState(false);
   const [stagingReservation,setStagingReservation]=useState<{stagingReservationId:string;stagingLaneCode:string}|null>(null);
@@ -269,6 +269,11 @@ export default function Asns(){
       eyebrow="Nhập kho"
       title="ASN dự kiến"
       description="Theo dõi lô hàng dự kiến từ nhà cung cấp tới kho trước khi tiếp nhận. Hoàn tất ASN vẫn chưa tạo tồn kho."
+      actions={canCreate ? (
+        <button type="button" className="ui-primary-button" onClick={() => setShowCreateForm(prev => !prev)}>
+          {showCreateForm ? 'Thu gọn biểu mẫu' : '+ Tạo ASN nháp'}
+        </button>
+      ) : undefined}
     />
 
     <InboundPlanningFeedback error={error} success={success}/>
@@ -372,15 +377,15 @@ export default function Asns(){
         {canCreate&&<UiCard title="Tạo ASN nháp">
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: showCreateForm ? 12 : 0 }}>
             <button type="button" onClick={() => setShowCreateForm(prev => !prev)}>
-              {showCreateForm ? 'Thu gọn biểu mẫu' : 'Mở biểu mẫu tạo mới'}
+              {showCreateForm ? 'Thu gọn biểu mẫu' : '+ Tạo ASN nháp'}
             </button>
           </div>
           {showCreateForm&&!canPrepareCreate&&<div className="inbound-planning-notice"><strong>Thiếu quyền dữ liệu tham khảo.</strong><br/>Cần quyền đọc kho, sản phẩm và đối tác để tạo ASN an toàn.</div>}
           {showCreateForm&&canPrepareCreate&&<form className="inbound-planning-form" onSubmit={submitCreate}>
             <div className="inbound-planning-form-grid">
-              <label>Mã ASN<input required value={code} onChange={e=>setCode(e.target.value)}/></label>
-              <label>Đơn mua nguồn
-                <select value={purchaseOrderId} onChange={e=>void choosePurchaseOrder(e.target.value)} disabled={!canReadPo}>
+              <label><span>Mã ASN</span><input aria-label="Mã ASN" required value={code} onChange={e=>setCode(e.target.value)}/></label>
+              <label><span>Đơn mua nguồn</span>
+                <select aria-label="Đơn mua nguồn" value={purchaseOrderId} onChange={e=>void choosePurchaseOrder(e.target.value)} disabled={!canReadPo}>
                   <option value="">{canReadPo?'Không gắn đơn mua':'Không có quyền đọc đơn mua'}</option>
                   {eligiblePurchaseOrders.map(x=><option key={x.id} value={x.id}>{x.code} — {x.supplierCode} — {x.warehouseName}</option>)}
                 </select>
@@ -389,23 +394,23 @@ export default function Asns(){
                 <div><strong>Nhà cung cấp theo đơn mua</strong><br/>{poDetail.supplierCode} — {poDetail.supplierName}</div>
                 <div><strong>Kho theo đơn mua</strong><br/>{poDetail.warehouseName}</div>
               </>:<>
-                <label>Nhà cung cấp<select required={!purchaseOrderId} value={supplierId} onChange={e=>setSupplierId(e.target.value?Number(e.target.value):'')}><option value="">Chọn nhà cung cấp</option>{suppliers.map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}</select></label>
-                <label>Kho nhận<select required={!purchaseOrderId} value={warehouseId} onChange={e=>setWarehouseId(e.target.value?Number(e.target.value):'')}><option value="">Chọn kho</option>{warehouses.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+                <label><span>Nhà cung cấp</span><select aria-label="Nhà cung cấp" required={!purchaseOrderId} value={supplierId} onChange={e=>setSupplierId(e.target.value?Number(e.target.value):'')}><option value="">Chọn nhà cung cấp</option>{suppliers.map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}</select></label>
+                <label><span>Kho nhận</span><select aria-label="Kho nhận" required={!purchaseOrderId} value={warehouseId} onChange={e=>setWarehouseId(e.target.value?Number(e.target.value):'')}><option value="">Chọn kho</option>{warehouses.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
               </>}
-              <label>Dự kiến đến kho<input type="datetime-local" value={expectedArrival} onChange={e=>setExpectedArrival(e.target.value)}/></label>
-              <label>Đơn vị vận chuyển<input value={carrierName} onChange={e=>setCarrierName(e.target.value)}/></label>
-              <label>Biển số xe<input value={vehiclePlate} onChange={e=>setVehiclePlate(e.target.value.toUpperCase())}/></label>
-              <label className="span-2">Ghi chú<textarea rows={2} value={note} onChange={e=>setNote(e.target.value)}/></label>
+              <label><span>Dự kiến đến kho</span><input aria-label="Dự kiến đến kho" type="datetime-local" value={expectedArrival} onChange={e=>setExpectedArrival(e.target.value)}/></label>
+              <label><span>Đơn vị vận chuyển</span><input aria-label="Đơn vị vận chuyển" value={carrierName} onChange={e=>setCarrierName(e.target.value)}/></label>
+              <label><span>Biển số xe</span><input aria-label="Biển số xe" value={vehiclePlate} onChange={e=>setVehiclePlate(e.target.value.toUpperCase())}/></label>
+              <label className="span-2"><span>Ghi chú</span><textarea aria-label="Ghi chú" rows={2} value={note} onChange={e=>setNote(e.target.value)}/></label>
             </div>
 
             <div>
               <div className="ui-inline-wrap inbound-planning-summary"><strong>Dòng hàng dự kiến</strong><button type="button" onClick={()=>setLines(current=>[...current,emptyLine()])}>Thêm dòng</button></div>
               <div className="inbound-planning-lines">
                 {lines.map((line,index)=><div className="inbound-planning-line inbound-planning-line-grid compact" key={index}>
-                  {purchaseOrderId?<label>Dòng đơn mua<select required value={line.purchaseOrderLineId} onChange={e=>changeLine(index,{purchaseOrderLineId:e.target.value?Number(e.target.value):''})}><option value="">Chọn dòng đơn mua</option>{poDetail?.lines.map(x=><option key={x.id} value={x.id}>{x.externalLineId} — {x.productCode} — còn dự kiến tối đa theo đơn mua</option>)}</select></label>:
-                    <label>Sản phẩm<select required value={line.productId} onChange={e=>changeLine(index,{productId:e.target.value?Number(e.target.value):''})}><option value="">Chọn sản phẩm</option>{products.map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}</select></label>}
-                  <label>Đơn vị<select required value={line.operationUnitId} onChange={e=>changeLine(index,{operationUnitId:e.target.value?Number(e.target.value):''})}><option value="">Chọn đơn vị</option>{productUnitOptions(products,line.productId).map(x=><option key={x.unitId} value={x.unitId}>{x.unitCode}</option>)}</select></label>
-                  <label>Số lượng dự kiến<input required min="0" step="any" type="number" value={line.expectedQuantity} onChange={e=>changeLine(index,{expectedQuantity:e.target.value===''?'':Number(e.target.value)})}/></label>
+                  {purchaseOrderId?<label><span>Dòng đơn mua</span><select aria-label="Dòng đơn mua" required value={line.purchaseOrderLineId} onChange={e=>changeLine(index,{purchaseOrderLineId:e.target.value?Number(e.target.value):''})}><option value="">Chọn dòng đơn mua</option>{poDetail?.lines.map(x=><option key={x.id} value={x.id}>{x.externalLineId} — {x.productCode} — còn dự kiến tối đa theo đơn mua</option>)}</select></label>:
+                    <label><span>Sản phẩm</span><select aria-label="Sản phẩm" required value={line.productId} onChange={e=>changeLine(index,{productId:e.target.value?Number(e.target.value):''})}><option value="">Chọn sản phẩm</option>{products.map(x=><option key={x.id} value={x.id}>{x.code} — {x.name}</option>)}</select></label>}
+                  <label><span>Đơn vị</span><select aria-label="Đơn vị" required value={line.operationUnitId} onChange={e=>changeLine(index,{operationUnitId:e.target.value?Number(e.target.value):''})}><option value="">Chọn đơn vị</option>{productUnitOptions(products,line.productId).map(x=><option key={x.unitId} value={x.unitId}>{x.unitCode}</option>)}</select></label>
+                  <label><span>Số lượng dự kiến</span><input aria-label="Số lượng dự kiến" required min="0" step="any" type="number" value={line.expectedQuantity} onChange={e=>changeLine(index,{expectedQuantity:e.target.value===''?'':Number(e.target.value)})}/></label>
                   <div><strong>{products.find(x=>x.id===line.productId)?.code||'Chưa chọn'}</strong><br/><small>{products.find(x=>x.id===line.productId)?.name||'Chọn nguồn dòng để xác định sản phẩm'}</small></div>
                   <button type="button" style={{ height: 38, alignSelf: 'end' }} disabled={lines.length===1} onClick={()=>setLines(current=>current.filter((_,i)=>i!==index))}>Xóa</button>
                 </div>)}

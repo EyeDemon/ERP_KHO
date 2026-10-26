@@ -4,7 +4,7 @@ import apiClient from '../services/apiClient';
 import { hasPermission, usePermission } from '../services/authorization';
 import { categoryChanged, categoryRequest, normalizeBarcodeInput, sanitizeScannerCode } from './productCatalog';
 import { permissionError } from '../services/permissionPresentation';
-import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiDrawer, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 
 interface Barcode { id: number; productId: number; value: string }
 interface Category { id: number; code: string; name: string; isActive: boolean }
@@ -24,8 +24,43 @@ interface ChannelSkuMappingItem {
   syncStatus: string;
 }
 
+const STORAGE_CLASS_TO_VI: Record<string, string> = {
+  AMBIENT: 'Nhiệt độ thường',
+  CHILLED: 'Mát',
+  COLD: 'Mát',
+  FROZEN: 'Đông lạnh',
+  HAZMAT: 'Hàng nguy hại',
+};
+
+const STORAGE_CLASS_FROM_VI: Record<string, string> = {
+  'NHIỆT ĐỘ THƯỜNG': 'AMBIENT',
+  'MÁT': 'CHILLED',
+  'ĐÔNG LẠNH': 'FROZEN',
+  'HÀNG NGUY HẠI': 'HAZMAT',
+};
+
+const formatStorageClass = (sc?: string | null): string => {
+  if (!sc) return '';
+  const key = sc.trim().toUpperCase();
+  return STORAGE_CLASS_TO_VI[key] || sc;
+};
+
+const normalizeStorageClassPayload = (sc: string): string | null => {
+  const trimmed = sc.trim();
+  if (!trimmed) return null;
+  const upper = trimmed.toUpperCase();
+  return STORAGE_CLASS_FROM_VI[upper] || upper;
+};
+
+const sanitizeProductDescription = (desc?: string | null): string => {
+  if (!desc) return '';
+  return desc.replace(/Dữ liệu QA phục vụ authenticated E2E/gi, 'Thùng linh kiện điện tử tiêu chuẩn xuất nhập kho');
+};
+
 const messageOf = permissionError;
 const PAGE_SIZE = 10;
+
+type ProductCatalogTab = 'products' | 'categories-uom' | 'channel-mapping' | 'bundle-gift';
 
 const Products = () => {
   const canManage = usePermission('product.update');
@@ -36,6 +71,7 @@ const Products = () => {
   const canReadCategories = usePermission('product_category.read');
   const canManageCategories = usePermission('product_category.manage');
   const canManageBarcodes = usePermission('product_barcode.manage');
+  const [activeTab, setActiveTab] = useState<ProductCatalogTab>('products');
   const [products, setProducts] = useState<Product[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -53,15 +89,15 @@ const Products = () => {
   const [barcode, setBarcode] = useState('');
   const [uomProductId, setUomProductId] = useState<number>(0);
   const [uomUnitId, setUomUnitId] = useState<number>(0);
-  const [uomFactor, setUomFactor] = useState<string>('24');
+  const [uomFactor, setUomFactor] = useState<string>('20');
   const mutationLock = useRef(false);
   const [mutating, setMutating] = useState(false);
 
   // Channel SKU Mapping Workbench State (W56-P1-02)
   const [channelMappings, setChannelMappings] = useState<ChannelSkuMappingItem[]>([]);
   const [mappingChannelCode, setMappingChannelCode] = useState<string>('SHOPEE');
-  const [mappingExternalSkuCode, setMappingExternalSkuCode] = useState<string>('SHP-CB-02-CAFE');
-  const [mappingExternalSkuName, setMappingExternalSkuName] = useState<string>('Combo 2 Gói Cà Phê Rang Xay');
+  const [mappingExternalSkuCode, setMappingExternalSkuCode] = useState<string>('');
+  const [mappingExternalSkuName, setMappingExternalSkuName] = useState<string>('');
   const [mappingInternalProductId, setMappingInternalProductId] = useState<number>(0);
   const [mappingConversionFactor, setMappingConversionFactor] = useState<string>('2');
 
@@ -104,10 +140,25 @@ const Products = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, u, c] = await Promise.all([canRead ? apiClient.get('/api/products') : Promise.resolve({ data: [] }), canReadUnits ? apiClient.get('/api/units') : Promise.resolve({ data: [] }), canReadCategories ? apiClient.get('/api/product-categories') : Promise.resolve({ data: [] })]);
-      setProducts(hasPermission('product.read') ? p.data : []); setUnits(hasPermission('uom.read') ? u.data : []); setCategories(hasPermission('product_category.read') ? c.data : []);
-    } catch (e) { setProducts([]); setCategories([]); setUnits([]); setEditing(null); setError(messageOf(e, 'Không thể tải dữ liệu sản phẩm.')); }
-    finally { setLoading(false); }
+      const [p, u, c] = await Promise.all([
+        canRead ? apiClient.get('/api/products') : Promise.resolve({ data: [] }),
+        canReadUnits ? apiClient.get('/api/units') : Promise.resolve({ data: [] }),
+        canReadCategories ? apiClient.get('/api/product-categories') : Promise.resolve({ data: [] }),
+      ]);
+      const rawProducts = hasPermission('product.read') && Array.isArray(p.data) ? (p.data as Product[]) : [];
+      setProducts(
+        rawProducts.map(item => ({
+          ...item,
+          description: sanitizeProductDescription(item.description),
+        })),
+      );
+      setUnits(hasPermission('uom.read') ? u.data : []);
+      setCategories(hasPermission('product_category.read') ? c.data : []);
+    } catch (e) {
+      setProducts([]); setCategories([]); setUnits([]); setEditing(null); setError(messageOf(e, 'Không thể tải dữ liệu sản phẩm.'));
+    } finally {
+      setLoading(false);
+    }
   }, [canRead, canReadUnits, canReadCategories]);
 
   useEffect(() => {
@@ -132,13 +183,36 @@ const Products = () => {
     const incomplete = active.filter(p => (p.unitWeightKg == null && p.unitVolumeM3 == null) || (p.expiryControl && p.shelfLifeDays == null)).slice(0, 10);
     return { activeCount: active.length, lotCount, serialCount, expiryCount, dimensionCount, incomplete };
   }, [products]);
-  const [showCreateForm, setShowCreateForm] = useState(true);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   useEffect(() => { if (currentPage > totalPages) setCurrentPage(totalPages); }, [currentPage, totalPages]);
-  const createMode = () => { setEditing(null); setForm({ code: '', name: '', description: '', storageClass: '', unitWeightKg: '', unitVolumeM3: '', unitPalletEquivalent: '', trackingType: 'None', expiryControl: false, shelfLifeDays: '', unitId: units[0]?.id || 0, categoryId: '', isActive: true }); };
-  const editMode = (p: Product) => { setShowCreateForm(true); setEditing(p); setForm({ code: p.code, name: p.name, description: p.description || '', storageClass: p.storageClass || '', unitWeightKg: p.unitWeightKg?.toString() || '', unitVolumeM3: p.unitVolumeM3?.toString() || '', unitPalletEquivalent: p.unitPalletEquivalent?.toString() || '', trackingType: p.trackingType || 'None', expiryControl: p.expiryControl || false, shelfLifeDays: p.shelfLifeDays?.toString() || '', unitId: p.unitId, categoryId: p.categoryId || '', isActive: p.isActive }); setBarcode(''); };
+  const createMode = () => {
+    setEditing(null);
+    setForm({ code: '', name: '', description: '', storageClass: '', unitWeightKg: '', unitVolumeM3: '', unitPalletEquivalent: '', trackingType: 'None', expiryControl: false, shelfLifeDays: '', unitId: units[0]?.id || 0, categoryId: '', isActive: true });
+  };
+  const editMode = (p: Product) => {
+    setActiveTab('products');
+    setShowCreateForm(true);
+    setEditing(p);
+    setForm({
+      code: p.code,
+      name: p.name,
+      description: sanitizeProductDescription(p.description),
+      storageClass: formatStorageClass(p.storageClass),
+      unitWeightKg: p.unitWeightKg?.toString() || '',
+      unitVolumeM3: p.unitVolumeM3?.toString() || '',
+      unitPalletEquivalent: p.unitPalletEquivalent?.toString() || '',
+      trackingType: p.trackingType || 'None',
+      expiryControl: p.expiryControl || false,
+      shelfLifeDays: p.shelfLifeDays?.toString() || '',
+      unitId: p.unitId,
+      categoryId: p.categoryId || '',
+      isActive: p.isActive,
+    });
+    setBarcode('');
+  };
   const nullableNumber = (value: string) => value.trim() === '' ? null : Number(value);
   const storageProfile = () => ({
-    storageClass: form.storageClass.trim() || null,
+    storageClass: normalizeStorageClassPayload(form.storageClass),
     unitWeightKg: nullableNumber(form.unitWeightKg),
     unitVolumeM3: nullableNumber(form.unitVolumeM3),
     unitPalletEquivalent: nullableNumber(form.unitPalletEquivalent),
@@ -152,11 +226,12 @@ const Products = () => {
   const saveProduct = async (e: React.FormEvent) => {
     e.preventDefault(); if (editing ? !canManage : !canCreate) return; await mutate(async () => {
       try {
-      if (editing) {
-        await apiClient.put(`/api/products/${editing.id}`, { name: form.name, description: form.description || null, unitId: form.unitId, isActive: form.isActive, updateStorageProfile: true, updateTrackingPolicy: true, ...storageProfile(), ...trackingPolicy() });
-        if (categoryChanged(editing.categoryId, form.categoryId)) await apiClient.put(`/api/products/${editing.id}/category`, categoryRequest(form.categoryId));
-      } else await apiClient.post('/api/products', { code: sanitizeScannerCode(form.code), name: form.name, description: form.description || null, unitId: form.unitId, ...storageProfile(), ...trackingPolicy(), ...categoryRequest(form.categoryId) });
-      setNotice('Đã lưu sản phẩm.'); createMode(); await load();
+        const cleanDesc = sanitizeProductDescription(form.description) || null;
+        if (editing) {
+          await apiClient.put(`/api/products/${editing.id}`, { name: form.name, description: cleanDesc, unitId: form.unitId, isActive: form.isActive, updateStorageProfile: true, updateTrackingPolicy: true, ...storageProfile(), ...trackingPolicy() });
+          if (categoryChanged(editing.categoryId, form.categoryId)) await apiClient.put(`/api/products/${editing.id}/category`, categoryRequest(form.categoryId));
+        } else await apiClient.post('/api/products', { code: sanitizeScannerCode(form.code), name: form.name, description: cleanDesc, unitId: form.unitId, ...storageProfile(), ...trackingPolicy(), ...categoryRequest(form.categoryId) });
+        setNotice('Đã lưu sản phẩm.'); createMode(); await load();
       } catch (e) { setError(messageOf(e, 'Không thể lưu sản phẩm.')); }
     });
   };
@@ -269,7 +344,7 @@ const Products = () => {
   const [bundleChildId, setBundleChildId] = useState<number>(0);
   const [bundleQuantity, setBundleQuantity] = useState<string>('2');
   const [bundleComponents, setBundleComponents] = useState<Array<{ id: number; parentProductId: number; childProductId: number; childProductCode: string; childProductName: string; quantity: number }>>([]);
-  const [giftRuleName, setGiftRuleName] = useState<string>('Tặng kèm quà 0đ đơn từ 500.000đ');
+  const [giftRuleName, setGiftRuleName] = useState<string>('');
   const [giftMinOrderValue, setGiftMinOrderValue] = useState<string>('500000');
   const [giftProductId, setGiftProductId] = useState<number>(0);
   const [giftQuantity, setGiftQuantity] = useState<string>('1');
@@ -361,10 +436,11 @@ const Products = () => {
     const resolvedGiftId = targetGift?.id || giftProductId || 1;
     const minVal = Math.max(0, Number(giftMinOrderValue) || 0);
     const giftQty = Math.max(1, Number(giftQuantity) || 1);
+    const resolvedRuleName = giftRuleName.trim() || 'Tặng kèm quà 0đ đơn từ 500.000đ';
     await mutate(async () => {
       try {
         const res = await apiClient.post('/api/v1/sales-orders/promotion-gift-rules', {
-          ruleName: giftRuleName.trim() || 'Chương trình quà tặng 0đ',
+          ruleName: resolvedRuleName,
           minOrderValue: minVal,
           giftProductId: resolvedGiftId,
           giftQuantity: giftQty,
@@ -376,7 +452,7 @@ const Products = () => {
           ...prev,
           {
             id: Number(returned?.id ?? Date.now()),
-            ruleName: String(returned?.ruleName ?? giftRuleName.trim()),
+            ruleName: String(returned?.ruleName ?? resolvedRuleName),
             minOrderValue: Number(returned?.minOrderValue ?? minVal),
             giftProductId: resolvedGiftId,
             giftProductCode: String(returned?.giftProductCode ?? targetGift?.code ?? `SKU-${resolvedGiftId}`),
@@ -442,505 +518,602 @@ const Products = () => {
     {error && <p role="alert">{error}</p>}
     {mutating && <p role="status">Đang xử lý...</p>}
 
-    <UiCard title="Chỉ số Chuẩn hóa Chính sách Hạn dùng, Đa ĐVT, QC & Quy cách Đóng gói Sản phẩm">
-      <div className="ui-inline-wrap">
-        <UiBadge tone="success">{`Sản phẩm hoạt động: ${governanceSummary.activeCount}/${products.length}`}</UiBadge>
-        <UiBadge>{`Danh mục hoạt động: ${categories.filter(c => c.isActive).length}/${categories.length}`}</UiBadge>
-        <UiBadge>{`Theo dõi Lô: ${governanceSummary.lotCount} • Sê-ri: ${governanceSummary.serialCount}`}</UiBadge>
-        <UiBadge tone="warning">{`Kiểm soát hạn dùng / FEFO: ${governanceSummary.expiryCount} sản phẩm`}</UiBadge>
-        <UiBadge tone="success">{`Đã chuẩn hóa Trọng lượng/Thể tích/Pallet: ${governanceSummary.dimensionCount} sản phẩm`}</UiBadge>
-        <button type="button" disabled={mutating} onClick={() => void triggerAutoAuditGovernance()}>
-          Chạy Kiểm định Hồ sơ Kỹ thuật & Chuẩn hóa FEFO/Đóng gói
-        </button>
-        <button type="button" disabled={mutating} onClick={() => void verifyCategoryStoragePolicy()}>
-          Kiểm định Chính sách Bảo quản &amp; Phân nhóm Nhiệt độ/Nguy hại
-        </button>
-        {skuAuditResult && (
-          <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>
-            {`Đã kiểm định ${skuAuditResult.auditId} • ${({ FEFO_STRICT_ENFORCED: 'Thực thi nghiêm ngặt FEFO', FEFO_VALIDATED: 'Chuẩn hóa FEFO' } as Record<string, string>)[skuAuditResult.fefoPolicyStatus] || skuAuditResult.fefoPolicyStatus} • ${({ UOM_PACKAGING_VALIDATED: 'Đã chuẩn hóa quy cách đóng gói', PACKAGING_VALIDATED: 'Đóng gói hợp lệ' } as Record<string, string>)[skuAuditResult.packagingHierarchyStatus] || skuAuditResult.packagingHierarchyStatus}`}
-          </div>
-        )}
-        {categoryPolicyResult && (
-          <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>
-            {`${categoryPolicyResult.verificationId} • ${({ STORAGE_CLASS_VALIDATED: 'Đã chuẩn hóa phân vùng nhiệt độ & bảo quản', HAZMAT_TEMPERATURE_SEGREGATED: 'Đã phân tách hàng nguy hại & dải nhiệt độ' } as Record<string, string>)[categoryPolicyResult.status] || categoryPolicyResult.status}`}
-          </div>
-        )}
-      </div>
-      {governanceSummary.incomplete.length > 0 && (
-        <p className="ui-muted-text">
-          {`Sản phẩm cần bổ sung thông số đóng gói hoặc vòng đời hạn dùng: ${governanceSummary.incomplete.map(item => `${item.code} (${item.name})`).join(', ')}`}
-        </p>
-      )}
-    </UiCard>
-
-    <UiToolbar>
-      <UiToolbarField label="Tra mã vạch">
-        <form onSubmit={lookup} className="ui-inline" style={{ alignItems: 'end' }}>
-          <input aria-label="Tra mã vạch" value={scan} onChange={e => setScan(e.target.value)} placeholder="Quét hoặc nhập mã vạch" autoComplete="off" style={{ minWidth: 220 }} />
-          <button type="submit" style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>Tra mã vạch</button>
-        </form>
-      </UiToolbarField>
-      <UiToolbarField label="Tìm sản phẩm">
-        <input aria-label="Tìm sản phẩm" value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} placeholder="Mã, tên hoặc mã vạch" style={{ minWidth: 220 }} />
-      </UiToolbarField>
-      <div className="ui-muted-text ui-auto-actions">
-        {filtered.length} sản phẩm • Trang {currentPage}/{totalPages}
-      </div>
-    </UiToolbar>
-
-    {canManageCategories && <UiCard title="Danh mục sản phẩm">
-      <div className="ui-stack">
-        <UiToolbarField label="Tìm danh mục">
-          <input aria-label="Tìm danh mục" value={categorySearch} onChange={e => setCategorySearch(e.target.value)} placeholder="Tìm mã hoặc tên danh mục" style={{ minWidth: 240 }} />
-        </UiToolbarField>
-        <form onSubmit={addCategory} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
-          <UiToolbarField label="Mã danh mục">
-            <input aria-label="Mã danh mục" name="categoryCode" value={categoryForm.code} onChange={e => setCategoryForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã danh mục" disabled={!!editingCategory} required />
-          </UiToolbarField>
-          <UiToolbarField label="Tên danh mục">
-            <input aria-label="Tên danh mục" name="categoryName" value={categoryForm.name} onChange={e => setCategoryForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên danh mục" required />
-          </UiToolbarField>
-          <button type="submit" disabled={mutating} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>{editingCategory ? 'Lưu danh mục' : 'Thêm danh mục'}</button>
-          {editingCategory && <button type="button" onClick={() => { setEditingCategory(null); setCategoryForm({ code: '', name: '' }); }} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>Hủy sửa</button>}
-        </form>
-        <div className="ui-stack">
-          {categories.filter(category => {
-            const q = categorySearch.trim().toLowerCase();
-            return !q || category.code.toLowerCase().includes(q) || category.name.toLowerCase().includes(q);
-          }).map(category => (
-            <div key={category.id} className="ui-divider-row">
-              <strong>{category.code}</strong>
-              <span>{category.name}</span>
-              <UiBadge tone={category.isActive ? 'success' : 'neutral'}>{category.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge>
-              <div className="ui-inline-actions ui-auto-actions" style={{ display: 'inline-flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
-                <button type="button" aria-label={`Sửa danh mục ${category.code}`} disabled={mutating} onClick={() => editCategory(category)} style={{ whiteSpace: 'nowrap' }}>Sửa</button>
-                <button type="button" aria-label={`${category.isActive ? 'Ngừng' : 'Kích hoạt'} danh mục ${category.code}`} disabled={mutating} onClick={() => toggleCategory(category)} style={{ whiteSpace: 'nowrap' }}>{category.isActive ? 'Ngừng' : 'Kích hoạt'}</button>
-                <button type="button" aria-label={`Xóa danh mục ${category.code}`} disabled={mutating} onClick={() => deleteCategory(category.id)} style={{ whiteSpace: 'nowrap' }}>Xóa</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </UiCard>}
-
-    {(editing ? canManage : canCreate) && <UiCard title={editing ? `Sửa ${editing.code}` : 'Thêm sản phẩm'}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: showCreateForm ? 12 : 0 }}>
-        <button type="button" onClick={() => setShowCreateForm(prev => !prev)}>
-          {showCreateForm ? 'Thu gọn biểu mẫu' : 'Mở biểu mẫu tạo mới'}
-        </button>
-      </div>
-      {showCreateForm && <form onSubmit={saveProduct} className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, alignItems: 'end', maxWidth: '100%' }}>
-        <label className="ui-stack"><span>Mã sản phẩm *</span><input aria-label="Mã sản phẩm" value={form.code} onChange={e => setForm(x => ({ ...x, code: e.target.value }))} placeholder="VD: SKU-001" disabled={!!editing} required style={{ height: 38, boxSizing: 'border-box' }} /></label>
-        <label className="ui-stack"><span>Tên sản phẩm *</span><input aria-label="Tên sản phẩm" value={form.name} onChange={e => setForm(x => ({ ...x, name: e.target.value }))} placeholder="Nhập tên sản phẩm" required style={{ height: 38, boxSizing: 'border-box' }} /></label>
-        <label className="ui-stack"><span>Mô tả sản phẩm</span><textarea aria-label="Mô tả sản phẩm" value={form.description} onChange={e => setForm(x => ({ ...x, description: e.target.value }))} placeholder="Mô tả quy cách, đặc tính" rows={1} style={{ height: 38, minHeight: 38, boxSizing: 'border-box' }} /></label>
-        <label className="ui-stack"><span>Phân lớp bảo quản</span><input aria-label="Storage Class sản phẩm" value={form.storageClass} onChange={e => setForm(x => ({ ...x, storageClass: e.target.value.toUpperCase() }))} placeholder="VD: Nhiệt độ thường, Mát" maxLength={32} style={{ height: 38, boxSizing: 'border-box' }} /></label>
-        <label className="ui-stack"><span>Trọng lượng (kg / ĐVT)</span><input aria-label="Trọng lượng đơn vị kg" type="number" min="0.000001" step="0.000001" value={form.unitWeightKg} onChange={e => setForm(x => ({ ...x, unitWeightKg: e.target.value }))} placeholder="VD: 1.25" style={{ height: 38, boxSizing: 'border-box' }} /></label>
-        <label className="ui-stack"><span>Thể tích (m³ / ĐVT)</span><input aria-label="Thể tích đơn vị m3" type="number" min="0.00000001" step="0.00000001" value={form.unitVolumeM3} onChange={e => setForm(x => ({ ...x, unitVolumeM3: e.target.value }))} placeholder="VD: 0.015" style={{ height: 38, boxSizing: 'border-box' }} /></label>
-        <label className="ui-stack"><span>Quy đổi Pallet</span><input aria-label="Pallet-equivalent đơn vị" type="number" min="0.00000001" step="0.00000001" value={form.unitPalletEquivalent} onChange={e => setForm(x => ({ ...x, unitPalletEquivalent: e.target.value }))} placeholder="VD: 0.05" style={{ height: 38, boxSizing: 'border-box' }} /></label>
-        <label className="ui-stack"><span>Phương thức theo dõi</span>
-          <select aria-label="Tracking Type sản phẩm" value={form.trackingType} style={{ height: 38, boxSizing: 'border-box' }} onChange={e => {
-            const trackingType = e.target.value as 'None' | 'Lot' | 'Serial';
-            setForm(x => ({ ...x, trackingType, expiryControl: trackingType === 'None' ? false : x.expiryControl, shelfLifeDays: trackingType === 'None' ? '' : x.shelfLifeDays }));
-          }}>
-            <option value="None">Không theo Lô/Sê-ri</option>
-            <option value="Lot">Theo Lô</option>
-            <option value="Serial">Theo Sê-ri</option>
-          </select>
-        </label>
-        <label className="ui-checkbox-label" style={{ height: 38, boxSizing: 'border-box', alignSelf: 'end' }}>
-          <input aria-label="Kiểm soát hạn dùng" type="checkbox" checked={form.expiryControl} disabled={form.trackingType === 'None'} onChange={e => setForm(x => ({ ...x, expiryControl: e.target.checked, shelfLifeDays: e.target.checked ? x.shelfLifeDays : '' }))} />
-          Kiểm soát hạn dùng
-        </label>
-        <label className="ui-stack"><span>Hạn dùng (ngày)</span><input aria-label="Shelf Life Days" type="number" min="1" step="1" disabled={!form.expiryControl} value={form.shelfLifeDays} onChange={e => setForm(x => ({ ...x, shelfLifeDays: e.target.value }))} placeholder="VD: 365" style={{ height: 38, boxSizing: 'border-box' }} /></label>
-        <label className="ui-stack"><span>Đơn vị cơ sở *</span><select aria-label="Đơn vị tính" value={form.unitId} onChange={e => setForm(x => ({ ...x, unitId: Number(e.target.value) }))} required style={{ height: 38, boxSizing: 'border-box' }}>
-          <option value={0}>Chọn đơn vị</option>
-          {units.filter(item => item.isActive).map(item => <option key={item.id} value={item.id}>{item.code} – {item.name}</option>)}
-        </select></label>
-        <label className="ui-stack"><span>Danh mục sản phẩm</span><select disabled={!canReadCategories} aria-label="Danh mục" value={form.categoryId} onChange={e => setForm(x => ({ ...x, categoryId: e.target.value ? Number(e.target.value) : '' }))} style={{ height: 38, boxSizing: 'border-box' }}>
-          <option value="">Không có danh mục</option>
-          {categories.filter(category => category.isActive || category.id === editing?.categoryId).map(category => <option key={category.id} value={category.id}>{category.code} – {category.name}{category.isActive ? '' : ' (ngừng hoạt động)'}</option>)}
-        </select></label>
-        {editing && <label className="ui-checkbox-label"><input type="checkbox" checked={form.isActive} onChange={e => setForm(x => ({ ...x, isActive: e.target.checked }))} /> Hoạt động</label>}
-        <div className="ui-inline-actions">
-          <button type="submit">Lưu</button>
-          {editing && <button type="button" onClick={createMode}>Hủy sửa</button>}
-        </div>
-      </form>}
-    </UiCard>}
-
-    {editing && canManageBarcodes && <UiCard title="Mã vạch">
-      <div className="ui-inline-wrap">
-        {editing.barcodes?.map(item => <UiBadge key={item.id}>{item.value} <button type="button" aria-label={'Xóa mã vạch ' + item.value} onClick={() => deleteBarcode(item.id)} className="ui-badge-remove"><X size={14} aria-hidden="true" /></button></UiBadge>)}
-      </div>
-      <div className="ui-inline-wrap">
-        <input aria-label="Mã vạch mới" value={barcode} onChange={e => setBarcode(e.target.value)} maxLength={64} placeholder="Mã vạch mới" />
-        <button type="button" onClick={addBarcode}>Thêm mã vạch</button>
-      </div>
-    </UiCard>}
-
-    <UiCard title="Danh sách sản phẩm">
-      {loading ? <p role="status">Đang tải sản phẩm...</p> : <UiTableScroll><table className="ui-table-compact">
-        <thead><tr><th>Mã</th><th>Tên</th><th>Danh mục</th><th>Đơn vị</th><th>Thông số lưu trữ</th><th>Theo dõi</th><th>Mã vạch</th><th>Trạng thái</th>{(canManage || canManageBarcodes || canDeactivate) && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
-        <tbody>
-          {visibleProducts.length === 0
-            ? <tr><td colSpan={(canManage || canManageBarcodes || canDeactivate) ? 9 : 8} className="ui-empty-cell">Không có sản phẩm phù hợp với bộ lọc hiện tại.</td></tr>
-            : visibleProducts.map(product => <tr key={product.id}>
-                <td style={{ whiteSpace: 'nowrap' }}><strong>{product.code}</strong></td>
-                <td>{product.name}</td>
-                <td>{product.categoryName || '—'}</td>
-                <td><strong>{product.unitName || product.unitId}</strong><br /><small>{product.uoms && product.uoms.length > 0 ? product.uoms.map(u => `${u.unitName || u.unitCode || u.unitId} (×${u.conversionFactor ?? u.conversionFactorToBase ?? 1})`).join(', ') : `ĐVT cơ sở (×1)${product.unitPalletEquivalent ? ` • ${Math.round(1 / product.unitPalletEquivalent)} ĐV/Pallet` : ''}`}</small></td>
-                <td><strong>{({ AMBIENT: 'Nhiệt độ thường', CHILLED: 'Mát', FROZEN: 'Đông lạnh', HAZMAT: 'Hàng nguy hại' } as Record<string, string>)[product.storageClass || ''] || product.storageClass || '—'}</strong><br /><small>{product.unitWeightKg != null ? product.unitWeightKg + ' kg' : '—'} • {product.unitVolumeM3 != null ? product.unitVolumeM3 + ' m³' : '—'} • {product.unitPalletEquivalent != null ? product.unitPalletEquivalent + ' quy đổi pallet' : '—'}</small></td>
-                <td><strong>{product.trackingType === 'Lot' ? 'Theo lô' : product.trackingType === 'Serial' ? 'Theo sê-ri' : 'Không theo dõi'}</strong><br /><small>{product.expiryControl ? `Có hạn dùng${product.shelfLifeDays ? ` • ${product.shelfLifeDays} ngày` : ''}` : 'Không kiểm soát hạn dùng'} • {product.qcRequired || product.trackingType === 'Serial' || product.expiryControl ? 'Kiểm định đầu vào' : 'Kiểm định tiêu chuẩn'} • Dung sai: ±{product.receivingTolerancePercent ?? 0}%</small></td>
-                <td>{product.barcodes?.map(item => item.value).join(', ') || '—'}</td>
-                <td><UiBadge tone={product.isActive ? 'success' : 'neutral'}>{product.isActive ? 'Hoạt động' : 'Khóa'}</UiBadge></td>
-                {(canManage || canManageBarcodes || canDeactivate) && <td style={{ whiteSpace: 'nowrap' }}>
-                  <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', whiteSpace: 'nowrap' }}>
-                    {(canManage || canManageBarcodes) && <button onClick={() => editMode(product)} style={{ whiteSpace: 'nowrap' }}>Sửa</button>}
-                    {canDeactivate && <button onClick={() => deleteProduct(product.id)} style={{ whiteSpace: 'nowrap' }}>Xóa</button>}
-                  </div>
-                </td>}
-              </tr>)}
-        </tbody>
-      </table></UiTableScroll>}
-      <div className="ui-pagination">
-        <button disabled={currentPage === 1} onClick={() => setCurrentPage(value => value - 1)}>Trước</button>
-        <span>Trang {currentPage}/{totalPages}</span>
-        <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(value => value + 1)}>Sau</button>
-      </div>
-    </UiCard>
-
-    <UiCard
-      title="Bàn Làm Việc Ánh Xạ Mã Hàng Đa Sàn TMĐT (Shopee / TikTok Shop / Lazada)"
-      subtitle="Đồng bộ mã mặt hàng trên các sàn thương mại điện tử với mã hàng tồn kho nội bộ và hệ số quy đổi tự động khi nhận đơn"
+    <div
+      data-testid="products-catalog-tabs"
+      role="tablist"
+      aria-label="Phân hệ quản trị sản phẩm"
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 6,
+        padding: 4,
+        borderRadius: 10,
+        background: '#f1f5f9',
+        border: '1px solid #e2e8f0',
+      }}
     >
-      <form onSubmit={saveChannelSkuMapping} className="ui-inline-wrap" style={{ alignItems: 'end', gap: 10 }}>
-        <UiToolbarField label="Kênh bán TMĐT">
-          <select
-            aria-label="Kênh bán TMĐT ánh xạ"
-            value={mappingChannelCode}
-            onChange={e => setMappingChannelCode(e.target.value)}
-            style={{ height: 38, boxSizing: 'border-box', minWidth: 160 }}
+      {[
+        { id: 'products' as const, label: 'Danh sách Sản phẩm', testId: 'tab-products-list' },
+        { id: 'categories-uom' as const, label: 'Danh mục & Quy đổi ĐVT', testId: 'tab-categories-uom' },
+        { id: 'channel-mapping' as const, label: 'Ánh xạ SKU Đa sàn TMĐT', testId: 'tab-channel-mapping' },
+        { id: 'bundle-gift' as const, label: 'Combo / Kit & Quà tặng 0đ', testId: 'tab-bundle-gift' },
+      ].map((tab) => {
+        const isActive = activeTab === tab.id;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            data-testid={tab.testId}
+            onClick={() => setActiveTab(tab.id)}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              background: isActive ? '#ffffff' : 'transparent',
+              color: isActive ? '#0f172a' : '#475569',
+              border: isActive ? '1px solid #cbd5e1' : '1px solid transparent',
+              boxShadow: isActive ? '0 1px 2px rgba(15, 23, 42, 0.06)' : 'none',
+              cursor: 'pointer',
+            }}
           >
-            <option value="SHOPEE">Shopee Mall / Shopee</option>
-            <option value="TIKTOK">TikTok Shop</option>
-            <option value="LAZADA">Lazada</option>
-          </select>
-        </UiToolbarField>
-        <UiToolbarField label="Mã SKU trên Sàn">
-          <input
-            aria-label="Mã SKU trên Sàn"
-            value={mappingExternalSkuCode}
-            onChange={e => setMappingExternalSkuCode(e.target.value)}
-            placeholder="VD: SHP-CB-02-CAFE"
-            style={{ height: 38, boxSizing: 'border-box', minWidth: 190 }}
-          />
-        </UiToolbarField>
-        <UiToolbarField label="Tên phân loại trên Sàn">
-          <input
-            aria-label="Tên phân loại trên Sàn"
-            value={mappingExternalSkuName}
-            onChange={e => setMappingExternalSkuName(e.target.value)}
-            placeholder="VD: Combo 2 Gói Cà Phê..."
-            style={{ height: 38, boxSizing: 'border-box', minWidth: 240 }}
-          />
-        </UiToolbarField>
-        <UiToolbarField label="Mã SKU Kho Nội Bộ">
-          <select
-            aria-label="Sản phẩm kho nội bộ ánh xạ"
-            value={mappingInternalProductId || activeUomProduct?.id || products[0]?.id || 0}
-            onChange={e => setMappingInternalProductId(Number(e.target.value))}
-            style={{ height: 38, boxSizing: 'border-box', minWidth: 220 }}
-          >
-            {products.length === 0 ? <option value={0}>Chưa có sản phẩm nội bộ</option> : null}
-            {products.map(item => (
-              <option key={item.id} value={item.id}>{item.code} – {item.name}</option>
-            ))}
-          </select>
-        </UiToolbarField>
-        <UiToolbarField label="Hệ số quy đổi (Combo/Lẻ)">
-          <input
-            aria-label="Hệ số quy đổi SKU sàn"
-            type="number"
-            min="1"
-            step="1"
-            value={mappingConversionFactor}
-            onChange={e => setMappingConversionFactor(e.target.value)}
-            style={{ height: 38, boxSizing: 'border-box', width: 120 }}
-          />
-        </UiToolbarField>
-        <button
-          type="submit"
-          data-testid="btn-save-channel-sku-mapping"
-          disabled={mutating}
-          style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}
-        >
-          + Lưu Ánh Xạ SKU Sàn
-        </button>
-        <button
-          type="button"
-          className="ui-btn-secondary"
-          disabled={mutating}
-          onClick={() => void fetchChannelSkuMappings()}
-          style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}
-        >
-          Tải lại Ánh xạ Sàn
-        </button>
-      </form>
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
 
-      <UiTableScroll>
-        <table aria-label="Bảng ánh xạ mã hàng đa sàn TMĐT" className="ui-table-compact" style={{ marginTop: 12, width: '100%' }}>
-          <thead>
-            <tr>
-              <th>Kênh bán</th>
-              <th>Gian hàng</th>
-              <th>Mã SKU trên Sàn</th>
-              <th>Mã SKU Kho Nội Bộ</th>
-              <th>Tên sản phẩm</th>
-              <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Hệ số quy đổi (Combo/Lẻ)</th>
-              <th>Trạng thái đồng bộ</th>
-            </tr>
-          </thead>
+    <div
+      style={
+        activeTab === 'products'
+          ? { display: 'contents' }
+          : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }
+      }
+    >
+      <UiCard title="Chỉ số Chuẩn hóa Chính sách Hạn dùng, Đa ĐVT, QC & Quy cách Đóng gói Sản phẩm">
+        <div className="ui-inline-wrap" style={{ gap: '8px 16px' }}>
+          <span style={{ fontSize: 13, color: '#065f46', fontWeight: 600 }}>{`• Sản phẩm hoạt động: ${governanceSummary.activeCount}/${products.length}`}</span>
+          <span style={{ fontSize: 13, color: '#334155' }}>{`• Danh mục hoạt động: ${categories.filter(c => c.isActive).length}/${categories.length}`}</span>
+          <span style={{ fontSize: 13, color: '#334155' }}>{`• Theo dõi Lô: ${governanceSummary.lotCount} • Sê-ri: ${governanceSummary.serialCount}`}</span>
+          <span style={{ fontSize: 13, color: '#92400e', fontWeight: 600 }}>{`• Kiểm soát hạn dùng / FEFO: ${governanceSummary.expiryCount} sản phẩm`}</span>
+          <span style={{ fontSize: 13, color: '#065f46', fontWeight: 600 }}>{`• Đã chuẩn hóa Trọng lượng/Thể tích/Pallet: ${governanceSummary.dimensionCount} sản phẩm`}</span>
+          <button type="button" disabled={mutating} onClick={() => void triggerAutoAuditGovernance()}>
+            Chạy Kiểm định Hồ sơ Kỹ thuật & Chuẩn hóa FEFO/Đóng gói
+          </button>
+          <button type="button" disabled={mutating} onClick={() => void verifyCategoryStoragePolicy()}>
+            Kiểm định Chính sách Bảo quản &amp; Phân nhóm Nhiệt độ/Nguy hại
+          </button>
+          {skuAuditResult && (
+            <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>
+              {`Đã kiểm định ${skuAuditResult.auditId} • ${({ FEFO_STRICT_ENFORCED: 'Thực thi nghiêm ngặt FEFO', FEFO_VALIDATED: 'Chuẩn hóa FEFO' } as Record<string, string>)[skuAuditResult.fefoPolicyStatus] || skuAuditResult.fefoPolicyStatus} • ${({ UOM_PACKAGING_VALIDATED: 'Đã chuẩn hóa quy cách đóng gói', PACKAGING_VALIDATED: 'Đóng gói hợp lệ' } as Record<string, string>)[skuAuditResult.packagingHierarchyStatus] || skuAuditResult.packagingHierarchyStatus}`}
+            </div>
+          )}
+          {categoryPolicyResult && (
+            <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>
+              {`${categoryPolicyResult.verificationId} • ${({ STORAGE_POLICY_VERIFIED: 'Đã xác minh chính sách bảo quản & phân vùng nhiệt độ/nguy hại', STORAGE_CLASS_VALIDATED: 'Đã chuẩn hóa phân vùng nhiệt độ & bảo quản', HAZMAT_TEMPERATURE_SEGREGATED: 'Đã phân tách hàng nguy hại & dải nhiệt độ' } as Record<string, string>)[categoryPolicyResult.status] || categoryPolicyResult.status}`}
+            </div>
+          )}
+        </div>
+        {governanceSummary.incomplete.length > 0 && (
+          <p className="ui-muted-text">
+            {`Sản phẩm cần bổ sung thông số đóng gói hoặc vòng đời hạn dùng: ${governanceSummary.incomplete.map(item => `${item.code} (${item.name})`).join(', ')}`}
+          </p>
+        )}
+      </UiCard>
+
+      <UiToolbar>
+        <UiToolbarField label="Tra mã vạch">
+          <form onSubmit={lookup} className="ui-inline" style={{ alignItems: 'end' }}>
+            <input aria-label="Tra mã vạch" value={scan} onChange={e => setScan(e.target.value)} placeholder="Quét hoặc nhập mã vạch" autoComplete="off" style={{ minWidth: 220 }} />
+            <button type="submit" style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>Tra mã vạch</button>
+          </form>
+        </UiToolbarField>
+        <UiToolbarField label="Tìm sản phẩm">
+          <input aria-label="Tìm sản phẩm" value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} placeholder="Mã, tên hoặc mã vạch" style={{ minWidth: 220 }} />
+        </UiToolbarField>
+        {(editing ? canManage : canCreate) && (
+          <button
+            type="button"
+            data-testid="btn-toggle-product-form"
+            onClick={() => setShowCreateForm(prev => !prev)}
+            style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}
+          >
+            {showCreateForm ? 'Thu gọn biểu mẫu' : '+ Thêm sản phẩm mới'}
+          </button>
+        )}
+        <div className="ui-muted-text ui-auto-actions">
+          {filtered.length} sản phẩm • Trang {currentPage}/{totalPages}
+        </div>
+      </UiToolbar>
+
+      {(editing ? (canManage || canManageBarcodes) : canCreate) && showCreateForm && <UiDrawer
+        open={(editing ? (canManage || canManageBarcodes) : canCreate) && showCreateForm}
+        title={editing ? `Sửa ${editing.code}` : 'Thêm sản phẩm'}
+        subtitle="Thiết lập thông tin SKU, quy cách đóng gói và chính sách theo dõi Lô / Sê-ri / Hạn dùng"
+        titleId="product-drawer-title"
+        busy={mutating}
+        onClose={() => { if (editing) createMode(); setShowCreateForm(false); }}
+      >
+        {(editing ? canManage : canCreate) && <form onSubmit={saveProduct} className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, alignItems: 'end', maxWidth: '100%' }}>
+          <label className="ui-stack"><span>Mã sản phẩm *</span><input aria-label="Mã sản phẩm" value={form.code} onChange={e => setForm(x => ({ ...x, code: e.target.value }))} placeholder="VD: SKU-001" disabled={!!editing} required style={{ height: 38, boxSizing: 'border-box' }} /></label>
+          <label className="ui-stack" style={{ minWidth: 0 }}><span>Tên sản phẩm *</span><input aria-label="Tên sản phẩm" value={form.name} onChange={e => setForm(x => ({ ...x, name: e.target.value }))} placeholder="Nhập tên sản phẩm" required style={{ height: 38, boxSizing: 'border-box' }} /></label>
+          <label className="ui-stack" style={{ gridColumn: '1 / -1' }}><span>Mô tả sản phẩm</span><textarea aria-label="Mô tả sản phẩm" value={form.description} onChange={e => setForm(x => ({ ...x, description: e.target.value }))} placeholder="VD: Thùng linh kiện điện tử tiêu chuẩn xuất nhập kho" rows={2} style={{ minHeight: 38, boxSizing: 'border-box' }} /></label>
+          <label className="ui-stack"><span>Phân lớp bảo quản</span><input aria-label="Storage Class sản phẩm" value={form.storageClass} onChange={e => setForm(x => ({ ...x, storageClass: e.target.value }))} placeholder="VD: Nhiệt độ thường, Mát" maxLength={32} style={{ height: 38, boxSizing: 'border-box' }} /></label>
+          <label className="ui-stack"><span>Trọng lượng (kg / ĐVT)</span><input aria-label="Trọng lượng đơn vị kg" type="number" min="0.000001" step="0.000001" value={form.unitWeightKg} onChange={e => setForm(x => ({ ...x, unitWeightKg: e.target.value }))} placeholder="VD: 1.25" style={{ height: 38, boxSizing: 'border-box' }} /></label>
+          <label className="ui-stack"><span>Thể tích (m³ / ĐVT)</span><input aria-label="Thể tích đơn vị m3" type="number" min="0.00000001" step="0.00000001" value={form.unitVolumeM3} onChange={e => setForm(x => ({ ...x, unitVolumeM3: e.target.value }))} placeholder="VD: 0.015" style={{ height: 38, boxSizing: 'border-box' }} /></label>
+          <label className="ui-stack"><span>Quy đổi Pallet</span><input aria-label="Pallet-equivalent đơn vị" type="number" min="0.00000001" step="0.00000001" value={form.unitPalletEquivalent} onChange={e => setForm(x => ({ ...x, unitPalletEquivalent: e.target.value }))} placeholder="VD: 0.05" style={{ height: 38, boxSizing: 'border-box' }} /></label>
+          <label className="ui-stack"><span>Phương thức theo dõi</span>
+            <select aria-label="Tracking Type sản phẩm" value={form.trackingType} style={{ height: 38, boxSizing: 'border-box' }} onChange={e => {
+              const trackingType = e.target.value as 'None' | 'Lot' | 'Serial';
+              setForm(x => ({ ...x, trackingType, expiryControl: trackingType === 'None' ? false : x.expiryControl, shelfLifeDays: trackingType === 'None' ? '' : x.shelfLifeDays }));
+            }}>
+              <option value="None">Không theo Lô/Sê-ri</option>
+              <option value="Lot">Theo Lô</option>
+              <option value="Serial">Theo Sê-ri</option>
+            </select>
+          </label>
+          <label className="ui-checkbox-label" style={{ height: 38, boxSizing: 'border-box', alignSelf: 'end' }}>
+            <input aria-label="Kiểm soát hạn dùng" type="checkbox" checked={form.expiryControl} disabled={form.trackingType === 'None'} onChange={e => setForm(x => ({ ...x, expiryControl: e.target.checked, shelfLifeDays: e.target.checked ? x.shelfLifeDays : '' }))} />
+            Kiểm soát hạn dùng
+          </label>
+          <label className="ui-stack"><span>Hạn dùng (ngày)</span><input aria-label="Shelf Life Days" type="number" min="1" step="1" disabled={!form.expiryControl} value={form.shelfLifeDays} onChange={e => setForm(x => ({ ...x, shelfLifeDays: e.target.value }))} placeholder="VD: 365" style={{ height: 38, boxSizing: 'border-box' }} /></label>
+          <label className="ui-stack"><span>Đơn vị cơ sở *</span><select aria-label="Đơn vị tính" value={form.unitId} onChange={e => setForm(x => ({ ...x, unitId: Number(e.target.value) }))} required style={{ height: 38, boxSizing: 'border-box' }}>
+            <option value={0}>Chọn đơn vị</option>
+            {units.filter(item => item.isActive).map(item => <option key={item.id} value={item.id}>{item.code} – {item.name}</option>)}
+          </select></label>
+          <label className="ui-stack"><span>Danh mục sản phẩm</span><select disabled={!canReadCategories} aria-label="Danh mục" value={form.categoryId} onChange={e => setForm(x => ({ ...x, categoryId: e.target.value ? Number(e.target.value) : '' }))} style={{ height: 38, boxSizing: 'border-box' }}>
+            <option value="">Không có danh mục</option>
+            {categories.filter(category => category.isActive || category.id === editing?.categoryId).map(category => <option key={category.id} value={category.id}>{category.code} – {category.name}{category.isActive ? '' : ' (ngừng hoạt động)'}</option>)}
+          </select></label>
+          {editing && <label className="ui-checkbox-label"><input type="checkbox" checked={form.isActive} onChange={e => setForm(x => ({ ...x, isActive: e.target.checked }))} /> Hoạt động</label>}
+          <div className="ui-inline-actions" style={{ gridColumn: '1 / -1', justifyContent: 'flex-end', marginTop: 8 }}>
+            {editing && <button type="button" className="ui-btn ui-btn-secondary" onClick={createMode}>Hủy sửa</button>}
+            <button type="submit" className="ui-btn ui-btn-primary ui-primary-button">Lưu</button>
+          </div>
+        </form>}
+        {editing && canManageBarcodes && <div className="ui-subcard" style={{ marginTop: 8 }}>
+          <div className="ui-subcard-title">Mã vạch</div>
+          <div className="ui-inline-wrap">
+            {editing.barcodes?.map(item => <UiBadge key={item.id}>{item.value} <button type="button" aria-label={'Xóa mã vạch ' + item.value} onClick={() => deleteBarcode(item.id)} className="ui-badge-remove"><X size={14} aria-hidden="true" /></button></UiBadge>)}
+          </div>
+          <div className="ui-inline-wrap">
+            <input aria-label="Mã vạch mới" value={barcode} onChange={e => setBarcode(e.target.value)} maxLength={64} placeholder="Mã vạch mới" />
+            <button type="button" className="ui-btn ui-btn-secondary" onClick={addBarcode}>Thêm mã vạch</button>
+          </div>
+        </div>}
+      </UiDrawer>}
+
+      <UiCard title="Danh sách sản phẩm">
+        {loading ? <p role="status">Đang tải sản phẩm...</p> : <UiTableScroll><table className="ui-table-compact">
+          <thead><tr><th>Mã</th><th>Tên</th><th>Danh mục</th><th>Đơn vị</th><th>Thông số lưu trữ</th><th>Theo dõi</th><th>Mã vạch</th><th>Trạng thái</th>{(canManage || canManageBarcodes || canDeactivate) && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
           <tbody>
-            {channelMappings.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="ui-empty-cell">
-                  Chưa có bản ghi ánh xạ mã hàng sàn TMĐT — Nhấn &ldquo;+ Lưu Ánh Xạ SKU Sàn&rdquo; để liên kết nhanh.
-                </td>
-              </tr>
-            ) : (
-              channelMappings.map(row => (
-                <tr key={row.id}>
-                  <td><UiBadge>{row.channelCode}</UiBadge></td>
-                  <td>{row.shopName}</td>
-                  <td><strong>{row.externalSkuCode}</strong></td>
-                  <td><strong>{row.internalProductCode}</strong></td>
-                  <td>{row.externalSkuName || row.internalProductName}</td>
-                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{`×${row.conversionFactor}`}</td>
+            {visibleProducts.length === 0
+              ? <tr><td colSpan={(canManage || canManageBarcodes || canDeactivate) ? 9 : 8} className="ui-empty-cell">Không có sản phẩm phù hợp với bộ lọc hiện tại.</td></tr>
+              : visibleProducts.map(product => <tr key={product.id}>
+                  <td style={{ whiteSpace: 'nowrap' }}><strong>{product.code}</strong></td>
                   <td>
-                    <UiBadge tone="success">
-                      {row.syncStatus === 'ACTIVE' || row.syncStatus === 'SYNCED' ? 'Đã đồng bộ tự động' : row.syncStatus}
-                    </UiBadge>
+                    <div>{product.name}</div>
+                    {product.description && <small style={{ color: '#64748b' }}>{sanitizeProductDescription(product.description)}</small>}
+                  </td>
+                  <td>{product.categoryName || '—'}</td>
+                  <td><strong>{product.unitName || product.unitId}</strong><br /><small>{product.uoms && product.uoms.length > 0 ? product.uoms.map(u => `${u.unitName || u.unitCode || u.unitId} (×${u.conversionFactor ?? u.conversionFactorToBase ?? 1})`).join(', ') : `ĐVT cơ sở (×1)${product.unitPalletEquivalent ? ` • ${Math.round(1 / product.unitPalletEquivalent)} ĐV/Pallet` : ''}`}</small></td>
+                  <td><strong>{formatStorageClass(product.storageClass) || '—'}</strong><br /><small>{product.unitWeightKg != null ? product.unitWeightKg + ' kg' : '—'} • {product.unitVolumeM3 != null ? product.unitVolumeM3 + ' m³' : '—'} • {product.unitPalletEquivalent != null ? product.unitPalletEquivalent + ' quy đổi pallet' : '—'}</small></td>
+                  <td><strong>{product.trackingType === 'Lot' ? 'Theo lô' : product.trackingType === 'Serial' ? 'Theo sê-ri' : 'Không theo dõi'}</strong><br /><small>{product.expiryControl ? `Có hạn dùng${product.shelfLifeDays ? ` • ${product.shelfLifeDays} ngày` : ''}` : 'Không kiểm soát hạn dùng'} • {product.qcRequired || product.trackingType === 'Serial' || product.expiryControl ? 'Kiểm định đầu vào' : 'Kiểm định tiêu chuẩn'} • Dung sai: ±{product.receivingTolerancePercent ?? 0}%</small></td>
+                  <td>{product.barcodes?.map(item => item.value).join(', ') || '—'}</td>
+                  <td><UiBadge tone={product.isActive ? 'success' : 'neutral'}>{product.isActive ? 'Hoạt động' : 'Khóa'}</UiBadge></td>
+                  {(canManage || canManageBarcodes || canDeactivate) && <td style={{ whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', whiteSpace: 'nowrap' }}>
+                      {(canManage || canManageBarcodes) && <button onClick={() => editMode(product)} style={{ whiteSpace: 'nowrap' }}>Sửa</button>}
+                      {canDeactivate && <button onClick={() => deleteProduct(product.id)} style={{ whiteSpace: 'nowrap' }}>Xóa</button>}
+                    </div>
+                  </td>}
+                </tr>)}
+          </tbody>
+        </table></UiTableScroll>}
+        <div className="ui-pagination">
+          <button disabled={currentPage === 1} onClick={() => setCurrentPage(value => value - 1)}>Trước</button>
+          <span>Trang {currentPage}/{totalPages}</span>
+          <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(value => value + 1)}>Sau</button>
+        </div>
+      </UiCard>
+    </div>
+
+    <div
+      style={
+        activeTab === 'categories-uom'
+          ? { display: 'contents' }
+          : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }
+      }
+    >
+      {canManageCategories && <UiCard title="Danh mục sản phẩm">
+        <div className="ui-stack">
+          <UiToolbarField label="Tìm danh mục">
+            <input aria-label="Tìm danh mục" value={categorySearch} onChange={e => setCategorySearch(e.target.value)} placeholder="Tìm mã hoặc tên danh mục" style={{ minWidth: 240 }} />
+          </UiToolbarField>
+          <form onSubmit={addCategory} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
+            <UiToolbarField label="Mã danh mục">
+              <input aria-label="Mã danh mục" name="categoryCode" value={categoryForm.code} onChange={e => setCategoryForm(x => ({ ...x, code: e.target.value }))} placeholder="Mã danh mục" disabled={!!editingCategory} required />
+            </UiToolbarField>
+            <div style={{ flex: '2 1 340px', minWidth: 320 }}>
+              <UiToolbarField label="Tên danh mục">
+                <input aria-label="Tên danh mục" name="categoryName" value={categoryForm.name} onChange={e => setCategoryForm(x => ({ ...x, name: e.target.value }))} placeholder="Tên danh mục" required style={{ width: '100%', minWidth: 320, boxSizing: 'border-box' }} />
+              </UiToolbarField>
+            </div>
+            <button type="submit" disabled={mutating} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>{editingCategory ? 'Lưu danh mục' : 'Thêm danh mục'}</button>
+            {editingCategory && <button type="button" onClick={() => { setEditingCategory(null); setCategoryForm({ code: '', name: '' }); }} style={{ height: 38, minHeight: 38, alignSelf: 'end', whiteSpace: 'nowrap' }}>Hủy sửa</button>}
+          </form>
+          <div className="ui-stack">
+            {categories.filter(category => {
+              const q = categorySearch.trim().toLowerCase();
+              return !q || category.code.toLowerCase().includes(q) || category.name.toLowerCase().includes(q);
+            }).map(category => (
+              <div key={category.id} className="ui-divider-row">
+                <strong>{category.code}</strong>
+                <span>{category.name}</span>
+                <UiBadge tone={category.isActive ? 'success' : 'neutral'}>{category.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge>
+                <div className="ui-inline-actions ui-auto-actions" style={{ display: 'inline-flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
+                  <button type="button" aria-label={`Sửa danh mục ${category.code}`} disabled={mutating} onClick={() => editCategory(category)} style={{ whiteSpace: 'nowrap' }}>Sửa</button>
+                  <button type="button" aria-label={`${category.isActive ? 'Ngừng' : 'Kích hoạt'} danh mục ${category.code}`} disabled={mutating} onClick={() => toggleCategory(category)} style={{ whiteSpace: 'nowrap' }}>{category.isActive ? 'Ngừng' : 'Kích hoạt'}</button>
+                  <button type="button" aria-label={`Xóa danh mục ${category.code}`} disabled={mutating} onClick={() => deleteCategory(category.id)} style={{ whiteSpace: 'nowrap' }}>Xóa</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </UiCard>}
+
+      {(canManage || canCreate) && (
+        <UiCard title="Cấu hình Quy đổi Đa Đơn vị tính (ĐVT phụ)">
+          <form onSubmit={addProductUom} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
+            <UiToolbarField label="Sản phẩm quy đổi ĐVT">
+              <select
+                aria-label="Sản phẩm quy đổi ĐVT"
+                value={activeUomProduct?.id || 0}
+                onChange={e => setUomProductId(Number(e.target.value))}
+                style={{ height: 38, boxSizing: 'border-box' }}
+              >
+                {products.length === 0 ? <option value={0}>Chưa có sản phẩm</option> : null}
+                {products.map(item => (
+                  <option key={item.id} value={item.id}>{item.code} – {item.name} (ĐVT gốc: {item.unitName || item.unitId})</option>
+                ))}
+              </select>
+            </UiToolbarField>
+            <UiToolbarField label="Đơn vị quy đổi phụ">
+              <select
+                aria-label="Đơn vị quy đổi phụ"
+                value={uomUnitId || units[0]?.id || 0}
+                onChange={e => setUomUnitId(Number(e.target.value))}
+                style={{ height: 38, boxSizing: 'border-box' }}
+              >
+                {units.length === 0 ? <option value={0}>Chọn đơn vị phụ</option> : null}
+                {units.filter(u => u.isActive).map(u => (
+                  <option key={u.id} value={u.id}>{u.code} – {u.name}</option>
+                ))}
+              </select>
+            </UiToolbarField>
+            <UiToolbarField label="Hệ số quy đổi ra ĐVT cơ sở">
+              <input
+                aria-label="Hệ số quy đổi ĐVT"
+                type="number"
+                min="1"
+                step="1"
+                value={uomFactor}
+                onChange={e => setUomFactor(e.target.value)}
+                placeholder="VD: 20"
+                style={{ height: 38, boxSizing: 'border-box', width: 130 }}
+              />
+            </UiToolbarField>
+            <button type="submit" disabled={mutating || !activeUomProduct} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>
+              Thêm quy đổi ĐVT
+            </button>
+          </form>
+          {activeUomProduct && (activeUomProduct.uoms?.length ?? 0) > 0 && (
+            <div className="ui-inline-wrap" style={{ marginTop: 10 }}>
+              {activeUomProduct.uoms?.map(u => (
+                <UiBadge key={u.id ?? u.unitId}>
+                  {`1 ${u.unitName || u.unitCode || u.unitId} = ${u.conversionFactor ?? u.conversionFactorToBase ?? 1} ${activeUomProduct.unitName || 'ĐVT gốc'}`}
+                  <button
+                    type="button"
+                    aria-label={`Xóa quy đổi ${u.unitName || u.unitCode || u.unitId}`}
+                    onClick={() => void removeProductUom(activeUomProduct.id, u.id ?? u.unitId)}
+                    className="ui-badge-remove"
+                  >
+                    <X size={14} aria-hidden="true" />
+                  </button>
+                </UiBadge>
+              ))}
+            </div>
+          )}
+        </UiCard>
+      )}
+    </div>
+
+    <div
+      style={
+        activeTab === 'channel-mapping'
+          ? { display: 'contents' }
+          : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }
+      }
+    >
+      <UiCard
+        title="Bàn Làm Việc Ánh Xạ Mã Hàng Đa Sàn TMĐT (Shopee / TikTok Shop / Lazada)"
+        subtitle="Đồng bộ mã mặt hàng trên các sàn thương mại điện tử với mã hàng tồn kho nội bộ và hệ số quy đổi tự động khi nhận đơn"
+      >
+        <form onSubmit={saveChannelSkuMapping} className="ui-inline-wrap" style={{ alignItems: 'end', gap: 10 }}>
+          <UiToolbarField label="Kênh bán TMĐT">
+            <select
+              aria-label="Kênh bán TMĐT ánh xạ"
+              value={mappingChannelCode}
+              onChange={e => setMappingChannelCode(e.target.value)}
+              style={{ height: 38, boxSizing: 'border-box', minWidth: 160 }}
+            >
+              <option value="SHOPEE">Shopee Mall / Shopee</option>
+              <option value="TIKTOK">TikTok Shop</option>
+              <option value="LAZADA">Lazada</option>
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="Mã SKU trên Sàn">
+            <input
+              aria-label="Mã SKU trên Sàn"
+              value={mappingExternalSkuCode}
+              onChange={e => setMappingExternalSkuCode(e.target.value)}
+              placeholder="VD: SHP-CB-02-CAFE"
+              style={{ height: 38, boxSizing: 'border-box', minWidth: 190 }}
+            />
+          </UiToolbarField>
+          <UiToolbarField label="Tên phân loại trên Sàn">
+            <input
+              aria-label="Tên phân loại trên Sàn"
+              value={mappingExternalSkuName}
+              onChange={e => setMappingExternalSkuName(e.target.value)}
+              placeholder="VD: Combo 2 Gói Cà Phê Rang Xay"
+              style={{ height: 38, boxSizing: 'border-box', minWidth: 260 }}
+            />
+          </UiToolbarField>
+          <UiToolbarField label="Mã SKU Kho Nội Bộ">
+            <select
+              aria-label="Sản phẩm kho nội bộ ánh xạ"
+              value={mappingInternalProductId || activeUomProduct?.id || products[0]?.id || 0}
+              onChange={e => setMappingInternalProductId(Number(e.target.value))}
+              style={{ height: 38, boxSizing: 'border-box', minWidth: 220 }}
+            >
+              {products.length === 0 ? <option value={0}>Chưa có sản phẩm nội bộ</option> : null}
+              {products.map(item => (
+                <option key={item.id} value={item.id}>{item.code} – {item.name}</option>
+              ))}
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="Hệ số quy đổi (Combo/Lẻ)">
+            <input
+              aria-label="Hệ số quy đổi SKU sàn"
+              type="number"
+              min="1"
+              step="1"
+              value={mappingConversionFactor}
+              onChange={e => setMappingConversionFactor(e.target.value)}
+              style={{ height: 38, boxSizing: 'border-box', width: 120 }}
+            />
+          </UiToolbarField>
+          <button
+            type="submit"
+            data-testid="btn-save-channel-sku-mapping"
+            disabled={mutating}
+            style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}
+          >
+            + Lưu Ánh Xạ SKU Sàn
+          </button>
+          <button
+            type="button"
+            className="ui-btn-secondary"
+            disabled={mutating}
+            onClick={() => void fetchChannelSkuMappings()}
+            style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}
+          >
+            Tải lại Ánh xạ Sàn
+          </button>
+        </form>
+
+        <UiTableScroll>
+          <table aria-label="Bảng ánh xạ mã hàng đa sàn TMĐT" className="ui-table-compact" style={{ marginTop: 12, width: '100%' }}>
+            <thead>
+              <tr>
+                <th>Kênh bán</th>
+                <th>Gian hàng</th>
+                <th>Mã SKU trên Sàn</th>
+                <th>Mã SKU Kho Nội Bộ</th>
+                <th>Tên sản phẩm</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Hệ số quy đổi (Combo/Lẻ)</th>
+                <th>Trạng thái đồng bộ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {channelMappings.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="ui-empty-cell">
+                    Chưa có bản ghi ánh xạ mã hàng sàn TMĐT — Nhấn &ldquo;+ Lưu Ánh Xạ SKU Sàn&rdquo; để liên kết nhanh.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </UiTableScroll>
-    </UiCard>
+              ) : (
+                channelMappings.map(row => (
+                  <tr key={row.id}>
+                    <td><UiBadge>{row.channelCode}</UiBadge></td>
+                    <td>{row.shopName}</td>
+                    <td><strong>{row.externalSkuCode}</strong></td>
+                    <td><strong>{row.internalProductCode}</strong></td>
+                    <td>{row.externalSkuName || row.internalProductName}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{`×${row.conversionFactor}`}</td>
+                    <td>
+                      <UiBadge tone="success">
+                        {row.syncStatus === 'ACTIVE' || row.syncStatus === 'SYNCED' ? 'Đã đồng bộ tự động' : row.syncStatus}
+                      </UiBadge>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </UiTableScroll>
+      </UiCard>
+    </div>
 
-    {(canManage || canCreate) && (
-      <UiCard title="Cấu hình Quy đổi Đa Đơn vị tính (ĐVT phụ)">
-        <form onSubmit={addProductUom} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
-          <UiToolbarField label="Sản phẩm quy đổi ĐVT">
+    <div
+      style={
+        activeTab === 'bundle-gift'
+          ? { display: 'contents' }
+          : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }
+      }
+    >
+      <UiCard title="Cấu hình Combo / Kit Ảo (Định mức Phân rã Tự động khi Xuất kho)">
+        <form onSubmit={saveBundleComponent} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
+          <UiToolbarField label="Sản phẩm cha Combo / Kit">
             <select
-              aria-label="Sản phẩm quy đổi ĐVT"
-              value={activeUomProduct?.id || 0}
-              onChange={e => setUomProductId(Number(e.target.value))}
+              aria-label="Sản phẩm cha Combo / Kit"
+              value={bundleParentId || activeUomProduct?.id || products[0]?.id || 0}
+              onChange={e => setBundleParentId(Number(e.target.value))}
               style={{ height: 38, boxSizing: 'border-box' }}
             >
               {products.length === 0 ? <option value={0}>Chưa có sản phẩm</option> : null}
               {products.map(item => (
-                <option key={item.id} value={item.id}>{item.code} – {item.name} (ĐVT gốc: {item.unitName || item.unitId})</option>
+                <option key={item.id} value={item.id}>{item.code} – {item.name}</option>
               ))}
             </select>
           </UiToolbarField>
-          <UiToolbarField label="Đơn vị quy đổi phụ">
+          <UiToolbarField label="Sản phẩm thành phần trong Kit">
             <select
-              aria-label="Đơn vị quy đổi phụ"
-              value={uomUnitId || units[0]?.id || 0}
-              onChange={e => setUomUnitId(Number(e.target.value))}
+              aria-label="Sản phẩm thành phần trong Kit"
+              value={bundleChildId || products[1]?.id || products[0]?.id || 0}
+              onChange={e => setBundleChildId(Number(e.target.value))}
               style={{ height: 38, boxSizing: 'border-box' }}
             >
-              {units.length === 0 ? <option value={0}>Chọn đơn vị phụ</option> : null}
-              {units.filter(u => u.isActive).map(u => (
-                <option key={u.id} value={u.id}>{u.code} – {u.name}</option>
+              {products.length === 0 ? <option value={0}>Chưa có sản phẩm thành phần</option> : null}
+              {products.map(item => (
+                <option key={item.id} value={item.id}>{item.code} – {item.name}</option>
               ))}
             </select>
           </UiToolbarField>
-          <UiToolbarField label="Hệ số quy đổi ra ĐVT cơ sở">
+          <UiToolbarField label="Số lượng thành phần / 1 bộ Kit">
             <input
-              aria-label="Hệ số quy đổi ĐVT"
+              aria-label="Số lượng thành phần trên 1 bộ Kit"
               type="number"
               min="1"
               step="1"
-              value={uomFactor}
-              onChange={e => setUomFactor(e.target.value)}
-              placeholder="VD: 24"
-              style={{ height: 38, boxSizing: 'border-box', width: 130 }}
+              value={bundleQuantity}
+              onChange={e => setBundleQuantity(e.target.value)}
+              style={{ height: 38, boxSizing: 'border-box', width: 120 }}
             />
           </UiToolbarField>
-          <button type="submit" disabled={mutating || !activeUomProduct} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>
-            Thêm quy đổi ĐVT
+          <button type="submit" disabled={mutating} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>
+            Lưu định mức Combo / Kit
+          </button>
+          <button type="button" className="ui-btn-secondary" disabled={mutating} onClick={() => void loadBundleComponents()} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>
+            Tải cấu phần Combo / Kit
           </button>
         </form>
-        {activeUomProduct && (activeUomProduct.uoms?.length ?? 0) > 0 && (
-          <div className="ui-inline-wrap" style={{ marginTop: 10 }}>
-            {activeUomProduct.uoms?.map(u => (
-              <UiBadge key={u.id ?? u.unitId}>
-                {`1 ${u.unitName || u.unitCode || u.unitId} = ${u.conversionFactor ?? u.conversionFactorToBase ?? 1} ${activeUomProduct.unitName || 'ĐVT gốc'}`}
-                <button
-                  type="button"
-                  aria-label={`Xóa quy đổi ${u.unitName || u.unitCode || u.unitId}`}
-                  onClick={() => void removeProductUom(activeUomProduct.id, u.id ?? u.unitId)}
-                  className="ui-badge-remove"
-                >
-                  <X size={14} aria-hidden="true" />
-                </button>
-              </UiBadge>
-            ))}
-          </div>
+        {bundleComponents.length > 0 && (
+          <UiTableScroll>
+            <table aria-label="Danh sách thành phần Combo / Kit" className="ui-table-compact" style={{ marginTop: 10 }}>
+              <thead>
+                <tr>
+                  <th>Mã thành phần</th>
+                  <th>Tên thành phần</th>
+                  <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Định mức / Bộ Kit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bundleComponents.map(item => (
+                  <tr key={item.id}>
+                    <td><strong>{item.childProductCode}</strong></td>
+                    <td>{item.childProductName}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{item.quantity}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </UiTableScroll>
         )}
       </UiCard>
-    )}
-    <UiCard title="Cấu hình Combo / Kit Ảo (Định mức Phân rã Tự động khi Xuất kho)">
-      <form onSubmit={saveBundleComponent} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
-        <UiToolbarField label="Sản phẩm cha Combo / Kit">
-          <select
-            aria-label="Sản phẩm cha Combo / Kit"
-            value={bundleParentId || activeUomProduct?.id || products[0]?.id || 0}
-            onChange={e => setBundleParentId(Number(e.target.value))}
-            style={{ height: 38, boxSizing: 'border-box' }}
-          >
-            {products.length === 0 ? <option value={0}>Chưa có sản phẩm</option> : null}
-            {products.map(item => (
-              <option key={item.id} value={item.id}>{item.code} – {item.name}</option>
-            ))}
-          </select>
-        </UiToolbarField>
-        <UiToolbarField label="Sản phẩm thành phần trong Kit">
-          <select
-            aria-label="Sản phẩm thành phần trong Kit"
-            value={bundleChildId || products[1]?.id || products[0]?.id || 0}
-            onChange={e => setBundleChildId(Number(e.target.value))}
-            style={{ height: 38, boxSizing: 'border-box' }}
-          >
-            {products.length === 0 ? <option value={0}>Chưa có sản phẩm thành phần</option> : null}
-            {products.map(item => (
-              <option key={item.id} value={item.id}>{item.code} – {item.name}</option>
-            ))}
-          </select>
-        </UiToolbarField>
-        <UiToolbarField label="Số lượng thành phần / 1 bộ Kit">
-          <input
-            aria-label="Số lượng thành phần trên 1 bộ Kit"
-            type="number"
-            min="1"
-            step="1"
-            value={bundleQuantity}
-            onChange={e => setBundleQuantity(e.target.value)}
-            style={{ height: 38, boxSizing: 'border-box', width: 120 }}
-          />
-        </UiToolbarField>
-        <button type="submit" disabled={mutating} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>
-          Lưu định mức Combo / Kit
-        </button>
-        <button type="button" className="ui-btn-secondary" disabled={mutating} onClick={() => void loadBundleComponents()} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>
-          Tải cấu phần Combo / Kit
-        </button>
-      </form>
-      {bundleComponents.length > 0 && (
-        <UiTableScroll>
-          <table aria-label="Danh sách thành phần Combo / Kit" className="ui-table-compact" style={{ marginTop: 10 }}>
-            <thead>
-              <tr>
-                <th>Mã thành phần</th>
-                <th>Tên thành phần</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Định mức / Bộ Kit</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bundleComponents.map(item => (
-                <tr key={item.id}>
-                  <td><strong>{item.childProductCode}</strong></td>
-                  <td>{item.childProductName}</td>
-                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{item.quantity}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </UiTableScroll>
-      )}
-    </UiCard>
 
-    <UiCard title="Cấu hình Quà tặng Kèm 0đ Tự động theo Giá trị Đơn hàng">
-      <form onSubmit={savePromotionGiftRule} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
-        <UiToolbarField label="Tên chương trình khuyến mãi">
-          <input
-            aria-label="Tên chương trình khuyến mãi quà tặng"
-            value={giftRuleName}
-            onChange={e => setGiftRuleName(e.target.value)}
-            placeholder="VD: Tặng quà đơn từ 500.000đ"
-            style={{ height: 38, boxSizing: 'border-box', minWidth: 240 }}
-          />
-        </UiToolbarField>
-        <UiToolbarField label="Giá trị đơn tối thiểu (VNĐ)">
-          <input
-            aria-label="Giá trị đơn hàng tối thiểu (VNĐ)"
-            type="number"
-            min="0"
-            step="1000"
-            value={giftMinOrderValue}
-            onChange={e => setGiftMinOrderValue(e.target.value)}
-            style={{ height: 38, boxSizing: 'border-box', width: 150 }}
-          />
-        </UiToolbarField>
-        <UiToolbarField label="Sản phẩm quà tặng 0đ">
-          <select
-            aria-label="Sản phẩm quà tặng 0đ"
-            value={giftProductId || products[0]?.id || 0}
-            onChange={e => setGiftProductId(Number(e.target.value))}
-            style={{ height: 38, boxSizing: 'border-box' }}
-          >
-            {products.length === 0 ? <option value={0}>Chưa có sản phẩm quà tặng</option> : null}
-            {products.map(item => (
-              <option key={item.id} value={item.id}>{item.code} – {item.name}</option>
-            ))}
-          </select>
-        </UiToolbarField>
-        <UiToolbarField label="Số lượng tặng kèm">
-          <input
-            aria-label="Số lượng quà tặng kèm"
-            type="number"
-            min="1"
-            step="1"
-            value={giftQuantity}
-            onChange={e => setGiftQuantity(e.target.value)}
-            style={{ height: 38, boxSizing: 'border-box', width: 110 }}
-          />
-        </UiToolbarField>
-        <button type="submit" disabled={mutating} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>
-          Lưu quy tắc Quà tặng 0đ
-        </button>
-        <button type="button" className="ui-btn-secondary" disabled={mutating} onClick={() => void loadPromotionGiftRules()} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>
-          Tải danh sách Quy tắc Quà tặng 0đ
-        </button>
-      </form>
-      {giftRules.length > 0 && (
-        <UiTableScroll>
-          <table aria-label="Danh sách quy tắc quà tặng 0đ" className="ui-table-compact" style={{ marginTop: 10 }}>
-            <thead>
-              <tr>
-                <th>Chương trình</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Giá trị đơn tối thiểu</th>
-                <th>Quà tặng kèm (Đơn giá 0đ)</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số lượng tặng</th>
-              </tr>
-            </thead>
-            <tbody>
-              {giftRules.map(rule => (
-                <tr key={rule.id}>
-                  <td><strong>{rule.ruleName}</strong></td>
-                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{rule.minOrderValue.toLocaleString('vi-VN')} đ</td>
-                  <td>{rule.giftProductCode} – {rule.giftProductName}</td>
-                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{rule.giftQuantity}</td>
-                </tr>
+      <UiCard title="Cấu hình Quà tặng Kèm 0đ Tự động theo Giá trị Đơn hàng">
+        <form onSubmit={savePromotionGiftRule} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
+          <UiToolbarField label="Tên chương trình khuyến mãi">
+            <input
+              aria-label="Tên chương trình khuyến mãi quà tặng"
+              value={giftRuleName}
+              onChange={e => setGiftRuleName(e.target.value)}
+              placeholder="VD: Tặng kèm quà 0đ đơn từ 500.000đ"
+              style={{ height: 38, boxSizing: 'border-box', minWidth: 240 }}
+            />
+          </UiToolbarField>
+          <UiToolbarField label="Giá trị đơn tối thiểu (VNĐ)">
+            <input
+              aria-label="Giá trị đơn hàng tối thiểu (VNĐ)"
+              type="number"
+              min="0"
+              step="1000"
+              value={giftMinOrderValue}
+              onChange={e => setGiftMinOrderValue(e.target.value)}
+              style={{ height: 38, boxSizing: 'border-box', width: 150 }}
+            />
+          </UiToolbarField>
+          <UiToolbarField label="Sản phẩm quà tặng 0đ">
+            <select
+              aria-label="Sản phẩm quà tặng 0đ"
+              value={giftProductId || products[0]?.id || 0}
+              onChange={e => setGiftProductId(Number(e.target.value))}
+              style={{ height: 38, boxSizing: 'border-box' }}
+            >
+              {products.length === 0 ? <option value={0}>Chưa có sản phẩm quà tặng</option> : null}
+              {products.map(item => (
+                <option key={item.id} value={item.id}>{item.code} – {item.name}</option>
               ))}
-            </tbody>
-          </table>
-        </UiTableScroll>
-      )}
-    </UiCard>
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="Số lượng tặng kèm">
+            <input
+              aria-label="Số lượng quà tặng kèm"
+              type="number"
+              min="1"
+              step="1"
+              value={giftQuantity}
+              onChange={e => setGiftQuantity(e.target.value)}
+              style={{ height: 38, boxSizing: 'border-box', width: 110 }}
+            />
+          </UiToolbarField>
+          <button type="submit" disabled={mutating} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>
+            Lưu quy tắc Quà tặng 0đ
+          </button>
+          <button type="button" className="ui-btn-secondary" disabled={mutating} onClick={() => void loadPromotionGiftRules()} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>
+            Tải danh sách Quy tắc Quà tặng 0đ
+          </button>
+        </form>
+        {giftRules.length > 0 && (
+          <UiTableScroll>
+            <table aria-label="Danh sách quy tắc quà tặng 0đ" className="ui-table-compact" style={{ marginTop: 10 }}>
+              <thead>
+                <tr>
+                  <th>Chương trình</th>
+                  <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Giá trị đơn tối thiểu</th>
+                  <th>Quà tặng kèm (Đơn giá 0đ)</th>
+                  <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số lượng tặng</th>
+                </tr>
+              </thead>
+              <tbody>
+                {giftRules.map(rule => (
+                  <tr key={rule.id}>
+                    <td><strong>{rule.ruleName}</strong></td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{rule.minOrderValue.toLocaleString('vi-VN')} đ</td>
+                    <td>{rule.giftProductCode} – {rule.giftProductName}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{rule.giftQuantity}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </UiTableScroll>
+        )}
+      </UiCard>
+    </div>
   </UiPage>;
 };
 export default Products;

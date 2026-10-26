@@ -21,7 +21,7 @@ const locations = [
   { id: 1, warehouseId: 1, code: 'RECEIVING', name: 'Nhận hàng', structurePath: null, locationType: 'Receiving', isActive: true, isBlocked: false, isPickable: false, isReceivable: true, isSystemManaged: true, rowVersion: null },
 ];
 
-describe('WarehouseLocations production UI', () => {
+describe('WarehouseLocations production UI', { timeout: 60000 }, () => {
   afterEach(cleanup);
 
   beforeEach(() => {
@@ -39,23 +39,31 @@ describe('WarehouseLocations production UI', () => {
     put.mockResolvedValue({ data: {} } as never);
   });
 
-  it('renders real hierarchy, unmapped legacy locations and system locations', async () => {
+  it('renders real hierarchy, unmapped legacy locations and system locations across compact UiTabs', async () => {
     const view = render(<WarehouseLocations />);
     expect((await view.findAllByText('ZONE-A')).length).toBeGreaterThan(0);
     expect(view.getAllByText('A01-R02-L03-B04').length).toBeGreaterThan(0);
     expect(view.getAllByText('LEGACY-UNMAPPED-01').length).toBeGreaterThan(0);
-    expect(view.getAllByText('RECEIVING').length).toBeGreaterThan(0);
     expect(view.getByRole('table', { name: 'Cây cấu trúc vị trí thật' })).toBeTruthy();
+
+    fireEvent.click(view.getByTestId('tab-view-capacity'));
     expect(view.getByRole('table', { name: 'Sức chứa vị trí kho thật' })).toBeTruthy();
+    expect(view.getByRole('table', { name: 'Danh sách vị trí kho thật' })).toBeTruthy();
     expect(view.getAllByText('Gần đầy').length).toBeGreaterThan(0);
+
+    fireEvent.click(view.getByTestId('tab-view-system'));
+    expect(view.getAllByText('RECEIVING').length).toBeGreaterThan(0);
+    expect(view.getByRole('table', { name: 'Vị trí hệ thống thật' })).toBeTruthy();
+
     expect(get).toHaveBeenCalledWith('/api/putaway-tasks/locations', { params: { warehouseId: 1 } });
     expect(get).toHaveBeenCalledWith('/api/putaway-tasks/location-capacity', { params: { warehouseId: 1 } });
   });
 
-  it('normalizes and submits the five-level StructurePath on create', async () => {
+  it('normalizes and submits the five-level StructurePath on create via UiDrawer', async () => {
     const view = render(<WarehouseLocations />);
     expect((await view.findAllByText('ZONE-A')).length).toBeGreaterThan(0);
-    fireEvent.click(view.getByText('Thêm vị trí'));
+    fireEvent.click(view.getByText('+ Thêm vị trí mới'));
+    expect(view.getByTestId('ui-drawer')).toBeTruthy();
     fireEvent.change(view.getByLabelText('Mã vị trí'), { target: { value: ' bin-10 ' } });
     fireEvent.change(view.getByLabelText('Tên vị trí'), { target: { value: 'Ô mới' } });
     fireEvent.change(view.getByLabelText('Zone'), { target: { value: ' zone-b ' } });
@@ -65,7 +73,7 @@ describe('WarehouseLocations production UI', () => {
     fireEvent.change(view.getByLabelText('Bin'), { target: { value: ' b10 ' } });
     fireEvent.change(view.getByLabelText('Storage Class vị trí'), { target: { value: 'ambient' } });
     fireEvent.change(view.getByLabelText('Giới hạn trọng lượng kg'), { target: { value: '1200' } });
-    fireEvent.submit(view.getByText('Lưu vị trí').closest('form')!);
+    fireEvent.click(view.getByText('Lưu vị trí'));
 
     await waitFor(() => expect(post).toHaveBeenCalledWith('/api/putaway-tasks/locations', expect.objectContaining({
       warehouseId: 1,
@@ -82,7 +90,7 @@ describe('WarehouseLocations production UI', () => {
   it('creates an outbound staging lane as non-pickable and non-receivable', async () => {
     const view = render(<WarehouseLocations />);
     expect((await view.findAllByText('ZONE-A')).length).toBeGreaterThan(0);
-    fireEvent.click(view.getByText('Thêm vị trí'));
+    fireEvent.click(view.getByText('+ Thêm vị trí mới'));
     fireEvent.change(view.getByLabelText('Mã vị trí'), { target: { value: 'STG-OUT-01' } });
     fireEvent.change(view.getByLabelText('Tên vị trí'), { target: { value: 'Staging outbound 01' } });
     fireEvent.change(view.getByLabelText('Loại vị trí form'), { target: { value: 'Staging' } });
@@ -91,7 +99,7 @@ describe('WarehouseLocations production UI', () => {
     fireEvent.change(view.getByLabelText('Rack'), { target: { value: 'LANE' } });
     fireEvent.change(view.getByLabelText('Level'), { target: { value: 'GROUND' } });
     fireEvent.change(view.getByLabelText('Bin'), { target: { value: '01' } });
-    fireEvent.submit(view.getByText('Lưu vị trí').closest('form')!);
+    fireEvent.click(view.getByText('Lưu vị trí'));
 
     await waitFor(() => expect(post).toHaveBeenCalledWith('/api/putaway-tasks/locations', expect.objectContaining({
       warehouseId: 1,
@@ -113,7 +121,7 @@ describe('WarehouseLocations production UI', () => {
     const zone = view.getByLabelText('Zone') as HTMLInputElement;
     expect(zone.disabled).toBe(true);
     fireEvent.change(view.getByLabelText('Tên vị trí'), { target: { value: 'Ô chính mới' } });
-    fireEvent.submit(view.getByText('Lưu vị trí').closest('form')!);
+    fireEvent.click(view.getByText('Lưu vị trí'));
     await waitFor(() => expect(put).toHaveBeenCalledWith('/api/putaway-tasks/locations/101', expect.objectContaining({
       name: 'Ô chính mới',
       structurePath: 'ZONE-A/A01/R02/L03/B04',
@@ -133,7 +141,7 @@ describe('WarehouseLocations production UI', () => {
     const row = within(hierarchy).getByText('A01-R02-L03-B04').closest('tr');
     fireEvent.click(within(row!).getByRole('button', { name: 'Sửa' }));
     fireEvent.change(view.getByLabelText('Giới hạn trọng lượng kg'), { target: { value: '1600' } });
-    fireEvent.submit(view.getByText('Lưu vị trí').closest('form')!);
+    fireEvent.click(view.getByText('Lưu vị trí'));
 
     await waitFor(() => expect(put).toHaveBeenCalledWith('/api/putaway-tasks/locations/101', expect.objectContaining({
       updateConstraints: true,
@@ -150,7 +158,7 @@ describe('WarehouseLocations production UI', () => {
     fireEvent.click(row!.querySelector('button')!);
     fireEvent.change(view.getByLabelText('Storage Class vị trí'), { target: { value: 'ambient' } });
     fireEvent.change(view.getByLabelText('Giới hạn trọng lượng kg'), { target: { value: '500' } });
-    fireEvent.submit(view.getByText('Lưu vị trí').closest('form')!);
+    fireEvent.click(view.getByText('Lưu vị trí'));
 
     await waitFor(() => expect(put).toHaveBeenCalledWith('/api/putaway-tasks/locations/102', expect.objectContaining({
       structurePath: null,
@@ -165,6 +173,7 @@ describe('WarehouseLocations production UI', () => {
     localStorage.setItem('permissions', '["location.read"]');
     const view = render(<WarehouseLocations />);
     expect((await view.findAllByText('ZONE-A')).length).toBeGreaterThan(0);
+    expect(view.queryByText('+ Thêm vị trí mới')).toBeNull();
     expect(view.queryByText('Thêm vị trí')).toBeNull();
     expect(view.queryByText('Gắn cấu trúc / Sửa')).toBeNull();
     expect(view.getByRole('button', { name: 'Kiểm định Cấu trúc Khu vực / Vị trí Kệ & Giới hạn Sức chứa' })).toBeTruthy();

@@ -6,7 +6,7 @@ import { completeIdempotentAction, idempotencyHeaders } from '../services/idempo
 import {
   UiBadge,
   UiCard,
-  UiEmptyState,
+  UiEmptyState, UiMetric, UiMetricGrid,
   UiPage,
   UiPageHeader,
   UiTableScroll,
@@ -535,13 +535,13 @@ export default function StockTransfers() {
         )}
 
         <UiCard title="Tổng quan Chu trình Điều chuyển Nội bộ & SLA Vận chuyển">
-          <div className="ui-inline-wrap">
-            <UiBadge>{`Tổng phiếu trên trang: ${items.length}`}</UiBadge>
-            <UiBadge>{`Phiếu nháp: ${draftCount}`}</UiBadge>
-            <UiBadge tone="warning">{`Chờ xuất kho (Đã duyệt): ${approvedCount}`}</UiBadge>
-            <UiBadge tone="warning">{`Đang vận chuyển: ${inTransitCount}`}</UiBadge>
-            <UiBadge tone="success">{`Đã nhận / Hoàn tất: ${completedCount}`}</UiBadge>
-            <UiBadge tone={closedExceptionCount > 0 ? 'danger' : 'neutral'}>{`Đã hủy / Hoàn trả: ${closedExceptionCount}`}</UiBadge>
+
+          <UiMetricGrid><UiMetric value={items.length} label={`Tổng phiếu trên trang: ${items.length}`} /><UiMetric value={draftCount} label={`Phiếu nháp: ${draftCount}`} /><UiMetric value={approvedCount} label={`Chờ xuất kho (Đã duyệt): ${approvedCount}`} /><UiMetric value={inTransitCount} label={`Đang vận chuyển: ${inTransitCount}`} /><UiMetric value={completedCount} label={`Đã nhận / Hoàn tất: ${completedCount}`} /><UiMetric value={closedExceptionCount} label={`Đã hủy / Hoàn trả: ${closedExceptionCount}`} /></UiMetricGrid>
+
+
+
+
+          <div className="ui-inline-wrap" style={{ marginTop: 10 }}>
             <button
               type="button"
               disabled={actionInFlight || createInFlight || governanceBusy}
@@ -813,6 +813,7 @@ export default function StockTransfers() {
             <form
               ref={draftDialogRef}
               className="transfer-dialog"
+              style={{ maxWidth: 720, width: '100%' }}
               role="dialog"
               aria-modal="true"
               aria-labelledby="transfer-create-title"
@@ -934,7 +935,7 @@ export default function StockTransfers() {
                   />
                   <input
                     aria-label={`Ghi chú dòng ${index + 1}`}
-                    placeholder="Ghi chú dòng (không bắt buộc)"
+                    placeholder="Ghi chú dòng (tùy chọn)"
                     maxLength={500}
                     disabled={createInFlight}
                     value={line.note}

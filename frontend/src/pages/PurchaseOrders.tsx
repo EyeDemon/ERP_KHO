@@ -282,6 +282,11 @@ export default function PurchaseOrders(){
       eyebrow="Nhập kho"
       title="Đơn mua (PO)"
       description="Theo dõi đơn đặt hàng dự kiến từ hệ thống mua hàng trước khi tạo thông báo giao hàng (ASN) và tiếp nhận. Đơn mua không làm tăng tồn kho."
+      actions={canCreate ? (
+        <button type="button" className="ui-primary-button" onClick={() => setShowCreateForm(prev => !prev)}>
+          {showCreateForm ? 'Thu gọn biểu mẫu' : '+ Tạo đơn mua nháp'}
+        </button>
+      ) : undefined}
     />
 
     <InboundPlanningFeedback error={error} success={success}/>
@@ -399,7 +404,7 @@ export default function PurchaseOrders(){
         {canCreate&&<UiCard title="Tạo đơn mua nháp">
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: showCreateForm ? 12 : 0 }}>
             <button type="button" onClick={() => setShowCreateForm(prev => !prev)}>
-              {showCreateForm ? 'Thu gọn biểu mẫu' : 'Mở biểu mẫu tạo mới'}
+              {showCreateForm ? 'Thu gọn biểu mẫu' : '+ Tạo đơn mua nháp'}
             </button>
           </div>
           {showCreateForm&&!canPrepareCreate&&<div className="inbound-planning-notice"><strong>Thiếu quyền dữ liệu tham khảo.</strong><br/>Cần quyền đọc kho, sản phẩm và đối tác để tạo đơn mua an toàn.</div>}

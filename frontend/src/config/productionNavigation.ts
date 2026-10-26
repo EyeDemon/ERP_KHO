@@ -35,13 +35,13 @@ export const productionNavigation: ProductionNavItem[] = [
   { path: '/inventory-movements', label: 'Di chuyển vị trí nội bộ', section: 'Tồn kho', description: 'Di chuyển tồn chưa được giữ giữa các vị trí trong cùng kho, giữ nguyên Trạng thái/Lô/Sê-ri và ghi bút toán di chuyển nội bộ.', permission: 'inventory.read', expressMode: false },
   { path: '/inventory-reversals', label: 'Đảo giao dịch tồn kho', section: 'Tồn kho', description: 'Đảo hiệu chỉnh cho giao dịch di chuyển/đổi trạng thái mà không sửa lịch sử đã ghi sổ.', permission: 'inventory_ledger.read', expressMode: false },
   { path: '/inventory-traceability', label: 'Truy vết & phả hệ tồn kho', section: 'Tồn kho', description: 'Truy nhóm tồn hiện tại và sổ cái bất biến theo Sản phẩm/Lô/Sê-ri/Tham chiếu.', permission: 'inventory_traceability.read', expressMode: false },
-  { path: '/inventory-reconciliation', label: 'Đối chiếu tồn kho', section: 'Tồn kho', description: 'So sánh số dư vận hành với sổ cái bất biến để phát hiện chênh lệch.', access: 'always', expressMode: false },
+  { path: '/inventory-reconciliation', label: 'Đối chiếu tồn kho', section: 'Tồn kho', description: 'So sánh số dư vận hành với sổ cái bất biến để phát hiện chênh lệch.', permission: 'inventory_ledger.read', expressMode: false },
   { path: '/stocktakes', label: 'Kiểm kê kho', section: 'Tồn kho', description: 'Phiếu kiểm kê, chênh lệch và quy trình duyệt điều chỉnh.', access: 'stocktake', expressMode: true },
   { path: '/stock-transfers', label: 'Điều chuyển kho', section: 'Tồn kho', description: 'Luân chuyển tồn giữa các kho và theo dõi hàng đang vận chuyển.', permission: 'inventory.read', expressMode: false },
 
   // 5. Tài chính
-  { path: '/cod-reconciliation', label: 'Đối soát COD 3 chiều', section: 'Tài chính', description: 'Đối soát tiền thu hộ COD & phí vận chuyển 3 chiều giữa sổ cái nội bộ và bảng kê ĐVVC.', permission: 'inventory.read', expressMode: true },
-  { path: '/cost-valuation', label: 'Giá vốn & kết xuất MISA', section: 'Tài chính', description: 'Định giá tồn kho bình quân gia quyền, lãi gộp chủ shop, kết xuất MISA AMIS và HĐĐT nháp NĐ 70/2025.', permission: 'inventory.read', expressMode: true },
+  { path: '/cod-reconciliation', label: 'Đối soát COD 3 chiều', section: 'Tài chính', description: 'Đối soát tiền thu hộ COD & phí vận chuyển 3 chiều giữa sổ cái nội bộ và bảng kê ĐVVC.', permission: 'inventory.cost.read', expressMode: true },
+  { path: '/cost-valuation', label: 'Giá vốn & kết xuất MISA', section: 'Tài chính', description: 'Định giá tồn kho bình quân gia quyền, lãi gộp chủ shop, kết xuất MISA AMIS và HĐĐT nháp NĐ 70/2025.', permission: 'inventory.cost.read', expressMode: true },
   { path: '/partner-debts', label: 'Công nợ AP / AR', section: 'Tài chính', description: 'Hóa đơn công nợ phải trả (AP), phải thu (AR), thanh toán và sổ cái công nợ bất biến.', permission: 'partner.read', expressMode: false },
 
   // 6. Quản trị
@@ -60,8 +60,28 @@ export const productionNavigation: ProductionNavItem[] = [
 
 export const productionSections = ['Tổng quan', 'Nhập kho', 'Xuất kho', 'Tồn kho', 'Tài chính', 'Quản trị'] as const;
 
+const aliasProductionPages: Record<string, ProductionNavItem> = {
+  '/categories': {
+    path: '/categories',
+    label: 'Danh mục sản phẩm',
+    section: 'Quản trị',
+    description: 'Phân loại nhóm hàng hóa, nguyên vật liệu và thành phẩm theo cấu trúc danh mục.',
+    permission: 'product.read',
+    expressMode: true,
+  },
+  '/misa-exports': {
+    path: '/misa-exports',
+    label: 'Giá vốn & kết xuất MISA',
+    section: 'Tài chính',
+    description: 'Định giá tồn kho bình quân gia quyền, lãi gộp chủ shop, kết xuất MISA AMIS và HĐĐT nháp NĐ 70/2025.',
+    permission: 'inventory.cost.read',
+    expressMode: true,
+  },
+};
+
 export const resolveProductionPage = (pathname: string): ProductionNavItem | undefined => {
   if (pathname === '/') return productionNavigation[0];
+  if (aliasProductionPages[pathname]) return aliasProductionPages[pathname];
   return productionNavigation
     .filter(item => item.path !== '/')
     .sort((a, b) => b.path.length - a.path.length)

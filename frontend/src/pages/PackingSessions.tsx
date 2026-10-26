@@ -5,7 +5,7 @@ import { roundQty4, sanitizeScannerCode } from './productCatalog';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import { MobileBarcodeScannerBar } from '../components/MobileBarcodeScannerBar';
 import { BarcodeSvg } from '../components/BarcodeSvg';
-import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll, UiTabs } from '../ui/ProductionUi';
 
 type SourceLine = {
   pickingTaskLineId:number; productId:number; productCode:string; productName:string;
@@ -51,6 +51,7 @@ const errorMessage=(e:unknown)=>{
 };
 
 export default function PackingSessions(){
+  const [activeTab,setActiveTab]=useState<'workbench'|'sessions-hu'|'kitting-video'>('workbench');
   const [sessions,setSessions]=useState<PackingSession[]>([]);
   const [selected,setSelected]=useState<PackingSession|null>(null);
   const [loading,setLoading]=useState(true);
@@ -93,10 +94,10 @@ export default function PackingSessions(){
     catch(e){setSelected(null);setError(errorMessage(e))}
   };
   const [selectedVideoFile,setSelectedVideoFile]=useState<File|null>(null);
-  const [videoAwbCode,setVideoAwbCode]=useState<string>('SPXVN058291042');
-  const [videoDurationSec,setVideoDurationSec]=useState<string>('48');
-  const [videoSizeMb,setVideoSizeMb]=useState<string>('14.6');
-  const [videoSha256,setVideoSha256]=useState<string>('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+  const [videoAwbCode,setVideoAwbCode]=useState<string>('');
+  const [videoDurationSec,setVideoDurationSec]=useState<string>('');
+  const [videoSizeMb,setVideoSizeMb]=useState<string>('');
+  const [videoSha256,setVideoSha256]=useState<string>('');
   const [videoSearchAwb,setVideoSearchAwb]=useState<string>('');
   const [videoNotice,setVideoNotice]=useState<string>('');
   const [videoEvidences,setVideoEvidences]=useState<Array<{id:number;sessionId:number;sessionCode:string;awbCode:string;durationSeconds:number;fileSizeMb:number;sha256Hash:string;recordedAt:string;cameraStation:string}>>([]);
@@ -459,6 +460,21 @@ export default function PackingSessions(){
     }
   };
 
+  const hiddenTabStyle = {
+    position: 'fixed' as const,
+    top: 0,
+    left: 0,
+    width: 0,
+    height: 0,
+    maxHeight: 0,
+    overflow: 'hidden' as const,
+    opacity: 0,
+    pointerEvents: 'none' as const,
+    margin: 0,
+    padding: 0,
+    border: 0,
+  };
+
   return <UiPage>
     <UiPageHeader
       eyebrow="XUẤT KHO"
@@ -467,29 +483,30 @@ export default function PackingSessions(){
     />
     {error&&<div role="alert">{error}</div>}
 
-    <MobileBarcodeScannerBar
-      warehouseId={selected?.warehouseId??sessions[0]?.warehouseId}
-      sampleCode={sessions[0]?.sessionCode||'HU-001'}
-      disabled={!!busy||governanceBusy}
-      onScan={code=>{
-        const matchSession=sessions.find(s=>s.sessionCode.toUpperCase()===code.toUpperCase());
-        if(matchSession)void detail(matchSession.id);
-      }}
+    <UiTabs
+      ariaLabel="Chuyển đổi phân mục bàn đóng gói"
+      activeTab={activeTab}
+      onChange={setActiveTab}
+      tabs={[
+        { id: 'workbench', label: '⚡ Bàn Đóng Gói Trực Tiếp (1 Màn Hình)', testId: 'tab-packing-workbench' },
+        { id: 'sessions-hu', label: 'Danh sách Phiên & Đơn vị xử lý (HU / SSCC)', badge: sessions.length, testId: 'tab-packing-sessions-hu' },
+        { id: 'kitting-video', label: 'Lắp ráp Kit / VAS & Kho Video SHA-256', testId: 'tab-packing-kitting-video' },
+      ]}
     />
 
-    <div className="ui-stack">
+    <div style={activeTab === 'workbench' ? { display: 'contents' } : hiddenTabStyle}>
       <UiCard title="⚡ Trạm Đóng Gói Hợp Nhất 1 Màn Hình (Quét Đơn • Gợi Ý Thùng • Ghi Hình SHA-256 • In Tem Nhiệt AWB)">
         <div
           data-testid="unified-packing-station-card"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-            gap: 16,
+            gap: 10,
           }}
         >
-          <div style={{ padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-              <strong style={{ fontSize: 13, color: '#0f172a', whiteSpace: 'nowrap' }}>Bước 1: Quét nhanh Mã Đơn / Phiếu Nhặt</strong>
+          <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <strong style={{ fontSize: 13, color: '#0f172a' }}>Bước 1: Quét nhanh Mã Đơn / Phiếu Nhặt</strong>
               <UiBadge tone={unifiedScanCancelledWarning ? 'danger' : 'success'}>
                 {unifiedScanCancelledWarning ? 'Chặn đóng gói' : 'Kiểm tra hủy đơn giữa chừng'}
               </UiBadge>
@@ -508,13 +525,15 @@ export default function PackingSessions(){
                   }
                 }}
                 placeholder="Quét mã đơn / PICK-001 / PACK-001..."
-                style={{ flex: '1 1 240px', minWidth: 220 }}
+                style={{ flex: '1 1 180px', minWidth: 0, minHeight: 34, height: 34 }}
               />
               <button
                 type="button"
+                className="ui-btn ui-btn-primary ui-primary-button"
                 data-testid="unified-packing-verify-order-btn"
                 disabled={!!busy || governanceBusy}
                 onClick={() => handleUnifiedOrderScan(unifiedScanInput)}
+                style={{ minHeight: 34, padding: '4px 12px' }}
               >
                 Kiểm tra Đơn &amp; Chốt Thùng
               </button>
@@ -523,7 +542,7 @@ export default function PackingSessions(){
               <div
                 role="alert"
                 data-testid="unified-packing-cancelled-warning"
-                style={{ padding: '8px 10px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: 12, fontWeight: 600 }}
+                style={{ padding: '6px 10px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: 12, fontWeight: 600 }}
               >
                 {unifiedScanCancelledWarning}
               </div>
@@ -539,14 +558,14 @@ export default function PackingSessions(){
             )}
           </div>
 
-          <div style={{ padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-              <strong style={{ fontSize: 13, color: '#0f172a', whiteSpace: 'nowrap' }}>Bước 2: Gợi ý Thùng Carton Tự động</strong>
+          <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <strong style={{ fontSize: 13, color: '#0f172a' }}>Bước 2: Gợi ý Thùng Carton Tự động</strong>
               <UiBadge tone="info">Tối ưu Thể tích &amp; Trọng lượng</UiBadge>
             </div>
-            <div data-testid="unified-carton-suggestion" style={{ fontSize: 13, fontWeight: 700, color: '#1e3a8a', padding: '6px 10px', borderRadius: 8, background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+            <div data-testid="unified-carton-suggestion" style={{ fontSize: 12.5, fontWeight: 700, color: '#1e3a8a', padding: '6px 10px', borderRadius: 8, background: '#eff6ff', border: '1px solid #bfdbfe' }}>
               Đề xuất: {unifiedSuggestedCarton}
-              <div style={{ marginTop: 6, fontSize: 11.5, fontWeight: 500, color: '#1e293b', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 4, fontVariantNumeric: 'tabular-nums' }}>
+              <div style={{ marginTop: 4, fontSize: 11.5, fontWeight: 500, color: '#1e293b', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 2, fontVariantNumeric: 'tabular-nums' }}>
                 <span>Kích thước thùng: <strong>{cartonRecommendation.lengthCm}×{cartonRecommendation.widthCm}×{cartonRecommendation.heightCm} cm</strong></span>
                 <span>Tổng thể tích hàng: <strong>{cartonRecommendation.totalItemsVolumeM3} m³</strong> ({cartonRecommendation.volumeFillRatePercent}% lấp đầy)</span>
                 <span>Trọng lượng thực tế: <strong>{cartonRecommendation.grossWeightKg} kg</strong></span>
@@ -555,7 +574,7 @@ export default function PackingSessions(){
               {cartonRecommendation.dimWeightKg > cartonRecommendation.grossWeightKg && (
                 <div
                   data-testid="dim-weight-warning-badge"
-                  style={{ marginTop: 6, padding: '4px 8px', borderRadius: 6, background: '#fffbeb', border: '1px solid #f59e0b', color: '#92400e', fontSize: 11.5, fontWeight: 700 }}
+                  style={{ marginTop: 4, padding: '3px 8px', borderRadius: 6, background: '#fffbeb', border: '1px solid #f59e0b', color: '#92400e', fontSize: 11, fontWeight: 700 }}
                 >
                   ⚠️ Cảnh báo Cước Quy Đổi (Trọng lượng quy đổi &gt; Trọng lượng thực tế)
                 </div>
@@ -569,7 +588,8 @@ export default function PackingSessions(){
                   onClick={() => applyCatalogCartonSelection(box.code)}
                   style={{
                     fontSize: 11.5,
-                    padding: '4px 8px',
+                    minHeight: 28,
+                    padding: '3px 8px',
                     fontWeight: cartonRecommendation.recommendedCartonCode === box.code ? 700 : 500,
                     background: cartonRecommendation.recommendedCartonCode === box.code ? '#1e40af' : '#ffffff',
                     color: cartonRecommendation.recommendedCartonCode === box.code ? '#ffffff' : '#1e293b',
@@ -585,81 +605,159 @@ export default function PackingSessions(){
                 data-testid="btn-recommend-carton-3d"
                 disabled={!!busy || governanceBusy || cartonRecommendBusy}
                 onClick={() => void handleRecommendCarton3D(selectedBoxCode)}
-                style={{ fontSize: 11.5, padding: '4px 8px' }}
+                style={{ fontSize: 11.5, minHeight: 28, padding: '3px 8px' }}
               >
                 {cartonRecommendBusy ? 'Đang tính 3D...' : 'Tính Toán Gợi Ý Thùng 3D & Trọng Lượng Quy Đổi'}
               </button>
             </div>
           </div>
 
-          <div style={{ padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-              <strong style={{ fontSize: 13, color: '#0f172a', whiteSpace: 'nowrap' }}>Bước 3: Ghi Hình Đóng Gói SHA-256</strong>
+          <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <strong style={{ fontSize: 13, color: '#0f172a' }}>Bước 3: Ghi Hình Đóng Gói SHA-256</strong>
               <UiBadge tone="success">CAM-PACK-01 • Đóng dấu Thời gian</UiBadge>
             </div>
-            <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.45 }}>
-              <div>Mốc thời gian quét: <strong>{unifiedScanTimestamp}</strong> • Vận đơn: <strong>{videoAwbCode || 'SPXVN058291042'}</strong></div>
-              <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#475569', wordBreak: 'break-all', overflowWrap: 'anywhere' }}>
-                SHA-256: {videoSha256}
+            <div style={{ fontSize: 11.5, color: '#334155', lineHeight: 1.35 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                <span>Mốc quét: <strong>{unifiedScanTimestamp}</strong> • Vận đơn: <strong>{videoAwbCode || 'Chưa nhập mã vận đơn'}</strong></span>
+                <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#475569' }}>SHA-256: {videoSha256 ? `${videoSha256.slice(0, 16)}...` : 'Tự động ký băm khi lưu'}</span>
               </div>
               <div
                 data-testid="packing-watermark-overlay"
-                style={{ marginTop: 6, padding: '5px 8px', borderRadius: 6, background: '#0f172a', color: '#f8fafc', fontFamily: 'monospace', fontSize: 11 }}
+                style={{ marginTop: 4, padding: '4px 8px', borderRadius: 6, background: '#0f172a', color: '#f8fafc', fontFamily: 'monospace', fontSize: 10.5 }}
               >
-                WATERMARK: [{videoAwbCode || 'SPXVN058291042'}] • [{selected?.sessionCode || sessions[0]?.sessionCode || 'PACK-001'}] • [{unifiedScanTimestamp}] • [NV: Bàn Đóng Gói 01]
+                WATERMARK: [{videoAwbCode || 'AWB'}] • [{selected?.sessionCode || sessions[0]?.sessionCode || 'PACK-001'}] • [{unifiedScanTimestamp}] • [NV: Bàn Đóng Gói 01]
               </div>
               {webrtcCameraActive && webrtcCameraStatus && (
-                <div role="status" data-testid="webrtc-camera-status" style={{ marginTop: 4, fontSize: 11.5, color: '#065f46', fontWeight: 600 }}>
+                <div role="status" data-testid="webrtc-camera-status" style={{ marginTop: 3, fontSize: 11, color: '#065f46', fontWeight: 600 }}>
                   🎥 {webrtcCameraStatus}
                 </div>
               )}
+              {videoNotice && <p role="status" className="ui-success-text" style={{ marginTop: 3, fontSize: 11.5 }}>{videoNotice}</p>}
             </div>
-            <div className="ui-inline-wrap" style={{ gap: 6 }}>
-              <button
-                type="button"
-                data-testid="btn-toggle-webrtc-camera"
-                disabled={!!busy || governanceBusy}
-                onClick={() => void handleToggleWebrtcCamera()}
-              >
-                Bật Camera Bàn Đóng Gói (Đóng dấu Thời gian Thực)
-              </button>
-            <button
-              type="button"
-              data-testid="unified-packing-record-video-btn"
-              disabled={!!busy || governanceBusy}
-              onClick={e => void recordPackingVideoEvidence(e as unknown as React.FormEvent)}
-            >
-              Ghi nhận nhanh Video Bằng chứng SHA-256
-            </button>
-            </div>
+            <form onSubmit={recordPackingVideoEvidence} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, alignItems: 'end' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5 }}>Mã vận đơn (AWB)
+                <input aria-label="Mã vận đơn AWB quay video" value={videoAwbCode} onChange={e => setVideoAwbCode(e.target.value)} placeholder="VD: SPXVN058291042" style={{ minHeight: 32, height: 32, padding: '4px 8px', fontSize: 12 }} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5 }}>Tệp Video (.mp4/.webm)
+                <input
+                  aria-label="Tệp video đóng gói"
+                  type="file"
+                  accept="video/*"
+                  style={{ minHeight: 32, height: 32, padding: '3px 6px', fontSize: 11 }}
+                  onChange={e => {
+                    const file = e.target.files?.[0] ?? null;
+                    setSelectedVideoFile(file);
+                    if (file && file.size > 0) {
+                      setVideoSizeMb(String(Math.max(0.1, Math.round((file.size / (1024 * 1024)) * 10) / 10)));
+                    }
+                  }}
+                />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5 }}>Thời lượng (giây)
+                <input aria-label="Thời lượng video (giây)" type="number" min="1" placeholder="VD: 45" value={videoDurationSec} onChange={e => setVideoDurationSec(e.target.value)} style={{ minHeight: 32, height: 32, padding: '4px 8px', fontSize: 12 }} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5 }}>Dung lượng (MB)
+                <input aria-label="Dung lượng tệp video (MB)" type="number" min="0.1" step="0.1" placeholder="VD: 12.4" value={videoSizeMb} onChange={e => setVideoSizeMb(e.target.value)} style={{ minHeight: 32, height: 32, padding: '4px 8px', fontSize: 12 }} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5, gridColumn: '1 / -1' }}>Mã băm toàn vẹn SHA-256
+                <input aria-label="Mã băm toàn vẹn SHA-256" placeholder="VD: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" value={videoSha256} onChange={e => setVideoSha256(e.target.value)} style={{ minHeight: 32, height: 32, padding: '4px 8px', fontSize: 12 }} />
+              </label>
+              <div className="ui-inline-wrap" style={{ gap: 6, gridColumn: '1 / -1', marginTop: 2 }}>
+                <button
+                  type="button"
+                  className="ui-btn ui-btn-secondary"
+                  data-testid="btn-toggle-webrtc-camera"
+                  disabled={!!busy || governanceBusy}
+                  onClick={() => void handleToggleWebrtcCamera()}
+                  style={{ minHeight: 32, padding: '4px 10px', fontSize: 12 }}
+                >
+                  Bật Camera Bàn Đóng Gói (Đóng dấu Thời gian Thực)
+                </button>
+                <button
+                  type="submit"
+                  className="ui-btn ui-btn-primary ui-primary-button"
+                  data-testid="unified-packing-record-video-btn"
+                  disabled={!!busy || governanceBusy}
+                  style={{ minHeight: 32, padding: '4px 10px', fontSize: 12 }}
+                >
+                  Ghi nhận Video Đóng gói &amp; Ký số SHA-256
+                </button>
+              </div>
+            </form>
           </div>
 
-          <div style={{ padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-              <strong style={{ fontSize: 13, color: '#0f172a', whiteSpace: 'nowrap' }}>Bước 4: Tem Nhiệt AWB 100×150mm</strong>
-              <UiBadge tone="neutral">1D Code-128 &amp; 2D QR (A → Z)</UiBadge>
-            </div>
-            <div style={{ padding: '6px 8px', borderRadius: 8, border: '1px dashed #94a3b8', background: '#f8fafc', textAlign: 'center' }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
-                VẬN ĐƠN TMĐT: {videoAwbCode || 'SPXVN058291042'} • Kệ nhặt: A → Z
+          <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0, justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                <strong style={{ fontSize: 13, color: '#0f172a' }}>Bước 4: Tem Nhiệt AWB 100×150mm</strong>
+                <UiBadge tone="neutral">1D Code-128 &amp; 2D QR (A → Z)</UiBadge>
               </div>
-              <BarcodeSvg value={videoAwbCode || 'SPXVN058291042'} height={34} qrCaption="Mã QR vận đơn" />
-            </div>
-            <button
-              type="button"
-              data-testid="unified-packing-print-awb-btn"
-              disabled={!!busy || governanceBusy || unifiedAwbPrintBusy || Boolean(unifiedScanCancelledWarning)}
-              onClick={() => void handlePrintUnifiedThermalAwb()}
-            >
-              {unifiedAwbPrintBusy ? 'Đang phát lệnh in...' : 'In ngay Tem Nhiệt AWB (100×150mm)'}
-            </button>
-            {unifiedAwbPrintNotice && (
-              <div role="status" data-testid="unified-packing-awb-notice" style={{ fontSize: 12, color: '#065f46', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 6, padding: '6px 8px' }}>
-                {unifiedAwbPrintNotice}
+              <div style={{ padding: '8px 10px', borderRadius: 8, border: '1px dashed #94a3b8', background: '#f8fafc', textAlign: 'center' }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+                  VẬN ĐƠN TMĐT: {videoAwbCode || 'SPXVN058291042'} • Kệ nhặt: A → Z
+                </div>
+                <BarcodeSvg value={videoAwbCode || 'SPXVN058291042'} height={34} qrCaption="Mã QR vận đơn" />
               </div>
-            )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <button
+                type="button"
+                className="ui-btn ui-btn-primary ui-primary-button"
+                data-testid="unified-packing-print-awb-btn"
+                disabled={!!busy || governanceBusy || unifiedAwbPrintBusy || Boolean(unifiedScanCancelledWarning)}
+                onClick={() => void handlePrintUnifiedThermalAwb()}
+                style={{ width: '100%' }}
+              >
+                {unifiedAwbPrintBusy ? 'Đang phát lệnh in...' : 'In ngay Tem Nhiệt AWB (100×150mm)'}
+              </button>
+              {unifiedAwbPrintNotice && (
+                <div role="status" data-testid="unified-packing-awb-notice" style={{ fontSize: 12, color: '#065f46', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 6, padding: '6px 8px' }}>
+                  {unifiedAwbPrintNotice}
+                </div>
+              )}
+            </div>
           </div>
         </div>
+      </UiCard>
+    </div>
+
+    <div style={activeTab === 'kitting-video' ? { display: 'contents' } : hiddenTabStyle}>
+      <UiCard title="Kho Bằng chứng Video Đóng gói SHA-256 & Tra cứu Vận đơn (AWB)">
+        <form onSubmit={searchPackingVideoEvidences} className="ui-inline-wrap" style={{ alignItems: 'end', gap: 8 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, flex: 1 }}>Tra cứu theo Mã vận đơn (AWB)
+            <input aria-label="Tra cứu video theo mã vận đơn AWB" value={videoSearchAwb} onChange={e => setVideoSearchAwb(e.target.value)} placeholder="VD: SPXVN058291042" />
+          </label>
+          <button type="submit" className="ui-btn ui-btn-secondary" disabled={!!busy}>Tra cứu Video theo Mã vận đơn (AWB)</button>
+        </form>
+        {videoEvidences.length > 0 && (
+          <UiTableScroll>
+            <table aria-label="Danh sách bằng chứng video đóng gói" className="ui-table-compact">
+              <thead>
+                <tr>
+                  <th>Mã vận đơn (AWB)</th>
+                  <th>Phiên đóng gói</th>
+                  <th>Trạm Camera</th>
+                  <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Thời lượng</th>
+                  <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Dung lượng</th>
+                  <th>Mã băm SHA-256</th>
+                </tr>
+              </thead>
+              <tbody>
+                {videoEvidences.map(ev => (
+                  <tr key={ev.id}>
+                    <td><strong>{ev.awbCode}</strong></td>
+                    <td>{ev.sessionCode}</td>
+                    <td>{ev.cameraStation}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{ev.durationSeconds} giây</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{ev.fileSizeMb} MB</td>
+                    <td><code>{ev.sha256Hash}</code></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </UiTableScroll>
+        )}
       </UiCard>
 
       <UiCard title="Danh mục Loại Bao bì Chuẩn & Gợi ý Tối ưu Đóng thùng">
@@ -677,7 +775,7 @@ export default function PackingSessions(){
             data-testid="select-kitting-vas-mode"
             value={kittingVasMode}
             onChange={e=>setKittingVasMode(e.target.value as 'PRE_KIT'|'DEKIT_DISASSEMBLE')}
-            style={{ minWidth: 260 }}
+            style={{ maxWidth: '100%' }}
           >
             <option value="PRE_KIT">Lắp ráp bộ sản phẩm theo đơn hàng</option>
             <option value="DEKIT_DISASSEMBLE">Xả bộ hàng lắp ráp sau chiến dịch khuyến mãi</option>
@@ -723,6 +821,18 @@ export default function PackingSessions(){
           </div>
         )}
       </UiCard>
+    </div>
+
+    <div style={activeTab === 'sessions-hu' ? { display: 'contents' } : hiddenTabStyle}>
+      <MobileBarcodeScannerBar
+        warehouseId={selected?.warehouseId??sessions[0]?.warehouseId}
+        sampleCode={sessions[0]?.sessionCode||'HU-001'}
+        disabled={!!busy||governanceBusy}
+        onScan={code=>{
+          const matchSession=sessions.find(s=>s.sessionCode.toUpperCase()===code.toUpperCase());
+          if(matchSession)void detail(matchSession.id);
+        }}
+      />
 
       <UiCard title="Danh sách phiên đóng gói">
         {sessions.length===0?<p>Chưa có Packing session. Session được tạo khi Picking hoàn tất.</p>:<UiTableScroll>
@@ -739,7 +849,7 @@ export default function PackingSessions(){
               <td style={{ padding: '6px 4px', fontSize: 11, verticalAlign: 'middle' }}>
                 <button
                   type="button"
-                  style={{ whiteSpace: 'nowrap', padding: '3px 5px', minHeight: 24, fontSize: 10.5, lineHeight: 1.2 }}
+                  style={{ whiteSpace: 'nowrap', padding: '4px 8px', minHeight: 28, fontSize: 11, lineHeight: 1.2 }}
                   onClick={()=>void detail(item.id)}
                 >
                   {item.sessionCode}
@@ -783,8 +893,8 @@ export default function PackingSessions(){
           <div className="ui-inline-wrap">
             <label style={{display:'flex',flexDirection:'column',gap:6}}>Loại kiện đóng gói
               <select aria-label="Loại Handling Unit" value={huType} onChange={e=>setHuType(e.target.value)}>
-                <option value="Carton">Thùng carton (Carton)</option><option value="Tote">Khay nhựa (Tote)</option><option value="Pallet">Pallet tiêu chuẩn (Pallet)</option>
-                <option value="Container">Thùng hàng lớn (Container)</option><option value="Custom">Tùy chỉnh (Custom)</option>
+                <option value="Carton">Thùng carton</option><option value="Tote">Khay nhựa</option><option value="Pallet">Pallet tiêu chuẩn</option>
+                <option value="Container">Thùng hàng lớn</option><option value="Custom">Tùy chỉnh</option>
               </select>
             </label>
             <label style={{display:'flex',flexDirection:'column',gap:6}}>Mã/Barcode tùy chọn
@@ -871,7 +981,7 @@ export default function PackingSessions(){
         <div className="ui-inline-wrap">
           {canExecute&&selected.status==='InProgress'&&<button type="button" disabled={!!busy} onClick={()=>void mutate(
             `packing-complete-${selected.id}`,`/api/packing-sessions/${selected.id}/complete`,{rowVersion:selected.rowVersion}
-          )}>Xác nhận PACKED</button>}
+          )}>Xác nhận Đã đóng gói</button>}
           {canExecute&&selected.status==='Packed'&&<button type="button" disabled={!!busy} onClick={()=>void mutate(
             `packing-close-${selected.id}`,`/api/packing-sessions/${selected.id}/close`,{rowVersion:selected.rowVersion}
           )}>Đóng Packing session</button>}
@@ -963,7 +1073,7 @@ export default function PackingSessions(){
                   <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>SL: {roundQty4((item.contents??[]).reduce((sum,c)=>sum+c.quantity,0))}</div>
                 </td>
                 <td style={{ padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle' }}>
-                  <button type="button" className="ui-btn-secondary" style={{ whiteSpace: 'nowrap', padding: '3px 6px', minHeight: 24, fontSize: 10.5, lineHeight: 1.2 }} onClick={()=>setLabelPreviewHu(item)}>In nhãn</button>
+                  <button type="button" className="ui-btn-secondary" style={{ whiteSpace: 'nowrap', padding: '4px 8px', minHeight: 28, fontSize: 11, lineHeight: 1.2 }} onClick={()=>setLabelPreviewHu(item)}>In nhãn</button>
                 </td>
               </tr>)}
             </tbody>
@@ -971,82 +1081,6 @@ export default function PackingSessions(){
         </UiTableScroll>}
       </UiCard>
     </div>
-      <UiCard title="Trạm Quay Video Đóng gói & Lưu Bằng chứng Khiếu nại">
-        <p className="ui-muted-text">
-          Ghi hình trực tiếp tại bàn đóng gói, gắn mã vận đơn (AWB), thời lượng, dung lượng tệp và mã băm SHA-256 chống chối bỏ khi đối soát khiếu nại sàn TMĐT / đơn vị vận chuyển.
-        </p>
-        {videoNotice&&<p role="status" className="ui-success-text">{videoNotice}</p>}
-        <div className="ui-stack">
-          <div style={{padding:'10px 14px',borderRadius:8,background:'#0f172a',color:'#f8fafc',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
-            <span><strong>Trạm Camera Bàn Đóng gói: CAM-PACK-01</strong> • Độ phân giải: 1080p 30fps • Luồng RTSP/WebRTC Trực tiếp</span>
-            <UiBadge tone="success">Đang ghi hình &amp; Đóng dấu thời gian</UiBadge>
-          </div>
-          <form onSubmit={recordPackingVideoEvidence} className="ui-inline-wrap" style={{alignItems:'end'}}>
-            <label style={{display:'flex',flexDirection:'column',gap:6}}>Mã vận đơn (AWB)
-              <input aria-label="Mã vận đơn AWB quay video" value={videoAwbCode} onChange={e=>setVideoAwbCode(e.target.value)} placeholder="VD: SPXVN058291042"/>
-            </label>
-            <label style={{display:'flex',flexDirection:'column',gap:6}}>Tệp Video bằng chứng (.mp4/.webm)
-              <input
-                aria-label="Tệp video đóng gói"
-                type="file"
-                accept="video/*"
-                onChange={e=>{
-                  const file=e.target.files?.[0]??null;
-                  setSelectedVideoFile(file);
-                  if(file&&file.size>0){
-                    setVideoSizeMb(String(Math.max(0.1,Math.round((file.size/(1024*1024))*10)/10)));
-                  }
-                }}
-              />
-            </label>
-            <label style={{display:'flex',flexDirection:'column',gap:6}}>Thời lượng (giây)
-              <input aria-label="Thời lượng video (giây)" type="number" min="1" value={videoDurationSec} onChange={e=>setVideoDurationSec(e.target.value)}/>
-            </label>
-            <label style={{display:'flex',flexDirection:'column',gap:6}}>Dung lượng (MB)
-              <input aria-label="Dung lượng tệp video (MB)" type="number" min="0.1" step="0.1" value={videoSizeMb} onChange={e=>setVideoSizeMb(e.target.value)}/>
-            </label>
-            <label style={{display:'flex',flexDirection:'column',gap:6,minWidth:240}}>Mã băm toàn vẹn SHA-256
-              <input aria-label="Mã băm toàn vẹn SHA-256" value={videoSha256} onChange={e=>setVideoSha256(e.target.value)}/>
-            </label>
-            <button type="submit" disabled={!!busy}>Ghi nhận Video Đóng gói &amp; Ký số SHA-256</button>
-          </form>
 
-          <form onSubmit={searchPackingVideoEvidences} className="ui-inline-wrap" style={{alignItems:'end'}}>
-            <label style={{display:'flex',flexDirection:'column',gap:6}}>Tra cứu theo Mã vận đơn (AWB)
-              <input aria-label="Tra cứu video theo mã vận đơn AWB" value={videoSearchAwb} onChange={e=>setVideoSearchAwb(e.target.value)} placeholder="Nhập mã AWB cần tra cứu..."/>
-            </label>
-            <button type="submit" className="ui-btn-secondary" disabled={!!busy}>Tra cứu Video theo Mã vận đơn (AWB)</button>
-          </form>
-
-          {videoEvidences.length>0&&(
-            <UiTableScroll>
-              <table aria-label="Danh sách bằng chứng video đóng gói" className="ui-table-compact">
-                <thead>
-                  <tr>
-                    <th>Mã vận đơn (AWB)</th>
-                    <th>Phiên đóng gói</th>
-                    <th>Trạm Camera</th>
-                    <th style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Thời lượng</th>
-                    <th style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>Dung lượng</th>
-                    <th>Mã băm SHA-256</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {videoEvidences.map(ev=>(
-                    <tr key={ev.id}>
-                      <td><strong>{ev.awbCode}</strong></td>
-                      <td>{ev.sessionCode}</td>
-                      <td>{ev.cameraStation}</td>
-                      <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{ev.durationSeconds} giây</td>
-                      <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums'}}>{ev.fileSizeMb} MB</td>
-                      <td><code>{ev.sha256Hash}</code></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </UiTableScroll>
-          )}
-        </div>
-      </UiCard>
   </UiPage>;
 }

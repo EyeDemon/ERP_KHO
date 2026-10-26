@@ -104,7 +104,7 @@ const referenceTypeLabel=(value:string)=>({
   Shipment:'Chuyến giao hàng', InventoryReversal:'Phiếu đảo giao dịch',
   InventoryAdjustment:'Phiếu điều chỉnh', InventoryMove:'Phiếu di chuyển',
   InternalMove:'Di chuyển nội bộ', PurchaseOrder:'Đơn mua hàng', Asn:'Thông báo giao hàng',
-  Stocktake:'Phiếu kiểm kê', Return:'Phiếu trả hàng', PickTask:'Phiếu lấy hàng',
+  Stocktake:'Phiếu kiểm kê', Return:'Phiếu trả hàng', PickTask:'Phiếu lấy hàng', HandlingUnitPalletSeed:'Khởi tạo kiện LPN', QASeedReconcile:'Đối soát sổ cái', VAS_DEKIT:'Lệnh rã bộ KIT',
 }[value]??value);
 
 const inventoryStatusLabel=(value:string)=>({
@@ -116,7 +116,7 @@ const inventoryStatusLabel=(value:string)=>({
   blocked:'Bị chặn',
   expired:'Hết hạn',
   recallblocked:'Khóa thu hồi',
-}[value.replace(/[_\s-]/g,'').toLowerCase()]??value); const locationCodeLabel=(value?:string|null)=>value?({RECEIVING:'TIEP-NHAN (Nhận hàng)',STAGING:'TAP-KET (Tập kết xuất)',PACKING:'DONG-GOI (Đóng gói)',SHIPPING:'XUAT-HANG (Xuất hàng)',QUARANTINE:'CACH-LY (Cách ly)',QC_HOLD:'CHO-QC (Chờ QC)'}[value.trim().toUpperCase()]??value):'—';
+}[value.replace(/[_\s-]/g,'').toLowerCase()]??value); const locationCodeLabel=(value?:string|null)=>value?({RECEIVING:'Bãi tiếp nhận (RCV-01)',STAGING:'TAP-KET (Tập kết xuất)',PACKING:'DONG-GOI (Đóng gói)',SHIPPING:'XUAT-HANG (Xuất hàng)',QUARANTINE:'CACH-LY (Cách ly)',QC_HOLD:'CHO-QC (Chờ QC)'}[value.trim().toUpperCase()]??value):'—';
 
 const tone=(x:Event):'neutral'|'success'|'warning'|'danger'=>
   x.transactionType==='Reversal'?'warning':x.isReversed?'neutral':'success';
@@ -161,7 +161,7 @@ export default function InventoryTraceability(){
     if(recallSimulating)return;
     setRecallSimulating(true);
     setRequestError('');
-    const queryValue=form.lotNumber.trim()||form.serialNumber.trim()||'BATCH-FEFO-2026';
+    const queryValue=form.lotNumber.trim()||form.serialNumber.trim()||'LÔ-FEFO-2026';
     try{
       const response=await apiClient.post<RecallTreeSimulationResult>('/api/inventory/traceability/simulate-recall-tree',{batchOrSerialQuery:queryValue});
       if(response?.data?.simulationId){
@@ -349,8 +349,8 @@ export default function InventoryTraceability(){
       }}
     >
       {[
-        { to: '/inventory-reconciliation', label: 'Tab 1: Đối chiếu Tồn kho & Hàng đợi Outbox (/inventory-reconciliation)', testId: 'tab-inventory-reconciliation', active: false },
-        { to: '/inventory-traceability', label: 'Tab 2: Truy vết & Phả hệ Lô / Sê-ri (/inventory-traceability)', testId: 'tab-inventory-traceability', active: true },
+        { to: '/inventory-reconciliation', label: 'Đối chiếu Tồn kho & Hàng đợi Đồng bộ Sổ cái', testId: 'tab-inventory-reconciliation', active: false },
+        { to: '/inventory-traceability', label: 'Truy vết & Phả hệ Lô / Sê-ri', testId: 'tab-inventory-traceability', active: true },
       ].map((tab) => {
         const style: React.CSSProperties = {
           padding: '8px 14px',
@@ -698,7 +698,7 @@ export default function InventoryTraceability(){
               </td>
               <td>{x.createdByName||('Người dùng #'+x.createdBy)}<br/>
                 {x.reasonCode&&<small>Mã lý do: {x.reasonCode}<br/></small>}
-                <small>{x.note??''}</small>
+                <small>{(x.note??'').replace(/\(100%\s*Match\)/gi,'(Khớp 100%)').replace(/\s*\(De-kitting\)/gi,'').replace(/\bRECEIVING\b/g,'RCV-01')}</small>
               </td>
             </tr>)}
           </tbody>

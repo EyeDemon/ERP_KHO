@@ -49,7 +49,7 @@ it('hỗ trợ đăng nhập Multi-Tenant với Mã doanh nghiệp (Tenant) ho�
   });
 
   const view = render(<MemoryRouter><Login /></MemoryRouter>);
-  fireEvent.change(view.getByLabelText('Mã doanh nghiệp (Tenant)'), { target: { value: 'tenant-202' } });
+  fireEvent.change(view.getByLabelText(/Mã doanh nghiệp/i), { target: { value: 'tenant-202' } });
   fireEvent.change(view.getByLabelText('Tên đăng nhập'), { target: { value: 'admin' } });
   fireEvent.change(view.getByLabelText('Mật khẩu'), { target: { value: 'Secret!202' } });
   fireEvent.submit(view.getByRole('button', { name: 'Đăng nhập' }).closest('form')!);

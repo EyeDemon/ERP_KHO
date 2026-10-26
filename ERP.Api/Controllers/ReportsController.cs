@@ -211,7 +211,7 @@ namespace ERP.Api.Controllers
             if (upper is "PACKING_CARTON_RECOMMENDED" || upper.Contains("CARTON_RECOMMEND") || upper.Contains("RECOMMENDCARTON"))
                 return "Đã tính toán gợi ý thùng đóng gói 3D";
             if (upper is "PUT_TO_WALL_SLOT_SORTED" || upper.Contains("PUT_TO_WALL"))
-                return "Đã chia chọn đơn hàng vào ô tường (Put-to-Wall)";
+                return "Đã chia chọn đơn hàng vào ô tường";
             if (upper is "UPSERT_CHANNEL_SKU_MAPPING" || upper.Contains("CHANNEL_SKU"))
                 return "Đã cập nhật ánh xạ SKU đa sàn TMĐT";
             if (upper is "CAPTURE_3PL_DAILY_STORAGE_SNAPSHOT" || upper.Contains("STORAGE_SNAPSHOT"))
@@ -308,7 +308,7 @@ namespace ERP.Api.Controllers
                 "ThreePlBillingStatement" or "ThreePlStorageSnapshot" => "Bảng kê phí dịch vụ 3PL",
                 "KittingVas" => "Gia công đóng bộ & tách bộ",
                 "BreakBulkReplenishment" => "Bổ sung kệ nhặt lẻ xả thùng",
-                "PutToWallSortation" => "Chia chọn đơn hàng (Put-to-Wall)",
+                "PutToWallSortation" => "Chia chọn đơn hàng theo ô tường",
                 "ChannelSkuMapping" => "Ánh xạ SKU đa sàn TMĐT",
                 "OperationalException" => "Cảnh báo ngoại lệ vận hành",
                 "ApprovalQueue" => "Hàng đợi phê duyệt",
@@ -334,7 +334,7 @@ namespace ERP.Api.Controllers
                     text,
                     @"\b(IR|ER|PUT|PICK|PACK|SHP|MOV|LOT|STK|ADJ|XDOCK|DISP|RMA|PNK|PXK|KK|SO|PO|TRF|APPT|HU)-[A-Z0-9]{2,12}(?:-[A-Z0-9]{1,12})*\b",
                     System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                if (match.Success)
+                if (match.Success && match.Value.Any(char.IsDigit))
                     return match.Value.ToUpperInvariant();
             }
 
@@ -2154,6 +2154,24 @@ namespace ERP.Api.Controllers
             int? WarehouseId,
             string? ResolutionNote,
             string? ExceptionType = null);
+
+        [HttpPost("operational-dashboard/exceptions/{code}/acknowledge")]
+        [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
+        [IdempotentCommand("OperationalException.Acknowledge")]
+        public Task<IActionResult> AcknowledgeOperationalDashboardExceptionByCode(
+            [FromRoute] string code,
+            [FromServices] ErpKhoDbContext db,
+            [FromServices] IWarehouseAuthorizationService warehouseAuth,
+            [FromBody] AcknowledgeOperationalExceptionDto? body = null,
+            CancellationToken cancellationToken = default)
+        {
+            var effectiveRequest = new AcknowledgeOperationalExceptionDto(
+                ExceptionCode: !string.IsNullOrWhiteSpace(body?.ExceptionCode) ? body!.ExceptionCode : code,
+                WarehouseId: body?.WarehouseId,
+                ResolutionNote: body?.ResolutionNote,
+                ExceptionType: body?.ExceptionType);
+            return AcknowledgeOperationalException(effectiveRequest, db, warehouseAuth, cancellationToken);
+        }
 
         [HttpPost("operational-exceptions/acknowledge")]
         [Authorize(Roles = AppRoles.AdminManagerOrStaff)]

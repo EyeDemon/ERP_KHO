@@ -201,8 +201,8 @@ export default function StockReservations() {
         }}
       >
         {[
-          { to: '/stock-reservations', label: 'Tab 1: Giữ hàng tồn kho (/stock-reservations)', testId: 'tab-stock-reservations', active: true },
-          { to: '/stock-allocations', label: 'Tab 2: Phân bổ vị trí kệ (/stock-allocations)', testId: 'tab-stock-allocations', active: false },
+          { to: '/stock-reservations', label: 'Giữ hàng tồn kho', testId: 'tab-stock-reservations', active: true },
+          { to: '/stock-allocations', label: 'Phân bổ vị trí kệ', testId: 'tab-stock-allocations', active: false },
         ].map((tab) => {
           const style: React.CSSProperties = {
             padding: '8px 14px',

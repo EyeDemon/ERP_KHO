@@ -380,7 +380,7 @@ export default function PickingTasks(){
     <div className="ui-stack">
       <UiCard title="Trạm Điều hành Quét Mã Vạch Di Động & Đồng bộ Ngoại tuyến">
         <div className="ui-inline-wrap">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, width: '100%' }}><div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tác vụ sẵn sàng quét mã vạch</span><strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{mobileReadyTasksCount}</strong></div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, width: '100%' }}><div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tác vụ sẵn sàng quét mã vạch</span><strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{mobileReadyTasksCount}</strong></div>
           <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Ngoại lệ chờ xử lý trên thiết bị cầm tay</span><strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{shortPickExceptionTasksCount}</strong></div>
           <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tra cứu nhanh mã vạch sản phẩm</span><strong style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>Sẵn sàng</strong></div>
           <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}><span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Hàng đợi đồng bộ ngoại tuyến</span><div><UiBadge tone="success">Đồng bộ chống trùng lặp an toàn</UiBadge></div></div></div>
@@ -460,7 +460,7 @@ export default function PickingTasks(){
         )}
       </UiCard>
 
-      <div className="ui-grid-2" style={{ display: 'grid', gridTemplateColumns: selected ? 'minmax(0, 1fr) minmax(0, 1.15fr)' : 'minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
+      <div className="ui-grid-2" style={{ display: 'grid', gridTemplateColumns: selected ? 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))' : 'minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
         <UiCard title="Danh sách nhiệm vụ lấy hàng">
           {tasks.length===0?<p>Chưa có nhiệm vụ Picking phù hợp.</p>:<UiTableScroll>
             <table aria-label="Danh sách nhiệm vụ Picking" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
@@ -479,7 +479,7 @@ export default function PickingTasks(){
                   <td style={{ padding: '6px 4px', fontSize: 11, verticalAlign: 'middle' }}>
                     <button
                       type="button"
-                      style={{ whiteSpace: 'nowrap', padding: '3px 5px', minHeight: 24, fontSize: 10.5, lineHeight: 1.2 }}
+                      style={{ whiteSpace: 'nowrap', padding: '4px 8px', minHeight: 28, fontSize: 11, lineHeight: 1.2 }}
                       onClick={()=>void detail(task.id)}
                     >
                       {task.taskCode}
@@ -593,7 +593,7 @@ export default function PickingTasks(){
                         }}
                       >
                         <span>
-                          <strong>{alt.locationCode}</strong> • Lô: {alt.lotNumber} • HSD: {alt.expiryDate} • Tồn: <strong>{alt.availableQty}</strong>
+                          <strong>{alt.locationCode}</strong> • Lô: {alt.lotNumber || 'Lô tiêu chuẩn'} • HSD: {alt.expiryDate || 'Không giới hạn'} • Tồn: <strong>{alt.availableQty}</strong>
                         </span>
                         <button
                           type="button"
@@ -742,7 +742,7 @@ export default function PickingTasks(){
             data-testid="put-to-wall-grid"
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
               gap: 10,
             }}
           >

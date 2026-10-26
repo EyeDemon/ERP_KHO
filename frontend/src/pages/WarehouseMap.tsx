@@ -280,31 +280,34 @@ const WarehouseMap = () => {
 
       <div
         data-testid="warehouse-topology-tabs"
+        role="navigation"
+        aria-label="Điều hướng cấu trúc kho"
         style={{
-          display: 'flex',
+          display: 'inline-flex',
           flexWrap: 'wrap',
-          gap: 8,
+          gap: 6,
           marginBottom: 12,
-          padding: 6,
+          padding: 4,
           borderRadius: 10,
           background: '#f1f5f9',
-          border: '1px solid #cbd5e1',
+          border: '1px solid #e2e8f0',
         }}
       >
         {[
-          { to: '/warehouses', label: 'Tab 1: Danh mục Kho hàng (/warehouses)', testId: 'tab-warehouses', active: false },
-          { to: '/warehouse-locations', label: 'Tab 2: Cấu trúc & Mã vạch Vị trí Kệ (/warehouse-locations)', testId: 'tab-warehouse-locations', active: false },
-          { to: '/warehouse-map', label: 'Tab 3: Bản đồ Nhiệt Kho 2D (/warehouse-map)', testId: 'tab-warehouse-map', active: true },
+          { to: '/warehouses', label: 'Danh mục Kho hàng', testId: 'tab-warehouses', active: false },
+          { to: '/warehouse-locations', label: 'Cấu trúc & Mã vạch Vị trí Kệ', testId: 'tab-warehouse-locations', active: false },
+          { to: '/warehouse-map', label: 'Bản đồ Nhiệt Kho 2D', testId: 'tab-warehouse-map', active: true },
         ].map((tab) => {
           const style: React.CSSProperties = {
-            padding: '8px 14px',
+            padding: '8px 16px',
             borderRadius: 8,
-            fontWeight: 700,
+            fontWeight: 600,
             fontSize: 13,
             textDecoration: 'none',
-            background: tab.active ? '#0f172a' : '#ffffff',
-            color: tab.active ? '#ffffff' : '#334155',
-            border: tab.active ? '1px solid #0f172a' : '1px solid #cbd5e1',
+            background: tab.active ? '#ffffff' : 'transparent',
+            color: tab.active ? '#0f172a' : '#475569',
+            border: tab.active ? '1px solid #cbd5e1' : '1px solid transparent',
+            boxShadow: tab.active ? '0 1px 2px rgba(15, 23, 42, 0.06)' : 'none',
           };
           return inRouter ? (
             <Link key={tab.to} to={tab.to} data-testid={tab.testId} aria-current={tab.active ? 'page' : undefined} style={style}>
@@ -336,11 +339,11 @@ const WarehouseMap = () => {
 
       <UiCard title="Năng suất Tác vụ Kho, Bản đồ Nhiệt & Điểm chuẩn Xuất BI">
         <div className="ui-inline-wrap">
-          <UiBadge tone="success">{`Cất hàng hoàn tất: ${biSnapshot?.completedPutawaysCount ?? 0}`}</UiBadge>
-          <UiBadge tone="success">{`Lấy hàng hoàn tất: ${biSnapshot?.completedPicksCount ?? 0}`}</UiBadge>
-          <UiBadge tone="success">{`Đóng gói hoàn tất: ${biSnapshot?.completedPacksCount ?? 0}`}</UiBadge>
-          <UiBadge>{`Tổng dịch chuyển nội bộ: ${biSnapshot?.totalMovesCount ?? items.reduce((sum, item) => sum + (item.recentMovementCount || 0), 0)}`}</UiBadge>
-          <UiBadge tone="warning">{`Mốc đồng bộ sổ cái: #${biSnapshot?.ledgerWatermarkId ?? 0} • Mốc kiểm toán: #${biSnapshot?.auditWatermarkId ?? 0}`}</UiBadge>
+          <span style={{ fontSize: 13, color: '#334155' }}>{`• Cất hàng hoàn tất: ${biSnapshot?.completedPutawaysCount ?? 0}`}</span>
+          <span style={{ fontSize: 13, color: '#334155' }}>{`• Lấy hàng hoàn tất: ${biSnapshot?.completedPicksCount ?? 0}`}</span>
+          <span style={{ fontSize: 13, color: '#334155' }}>{`• Đóng gói hoàn tất: ${biSnapshot?.completedPacksCount ?? 0}`}</span>
+          <span style={{ fontSize: 13, color: '#334155' }}>{`• Tổng dịch chuyển nội bộ: ${biSnapshot?.totalMovesCount ?? items.reduce((sum, item) => sum + (item.recentMovementCount || 0), 0)}`}</span>
+          <span style={{ fontSize: 13, color: '#334155' }}>{`• Mốc đồng bộ sổ cái: #${biSnapshot?.ledgerWatermarkId ?? 0} • Mốc kiểm toán: #${biSnapshot?.auditWatermarkId ?? 0}`}</span>
           <UiBadge tone={biSnapshot?.readyForBiExport !== false ? 'success' : 'neutral'}>
             {biSnapshot?.readyForBiExport !== false ? `Sẵn sàng đồng bộ BI (${biSnapshot?.stockSnapshotRowCount ?? items.length} dòng)` : 'Đang đồng bộ BI'}
           </UiBadge>
@@ -392,16 +395,16 @@ const WarehouseMap = () => {
             ) : (
               <div className="warehouse-map-canvas" aria-label="Bản đồ kho thật">
                 <div className="warehouse-map-grid" aria-hidden="true" />
-                {filteredMapped.map(item => (
+                {filteredMapped.map((item, idx) => (
                   <button
                     key={item.locationId}
                     type="button"
                     className={'warehouse-map-cell ' + heatClass(item, mode)}
                     style={{
-                      left: item.mapX + '%',
-                      top: item.mapY + '%',
-                      width: item.mapWidth + '%',
-                      height: item.mapHeight + '%',
+                      left: (filteredMapped.some((a, i) => filteredMapped.slice(0, i).some(b => Math.abs((a.mapX ?? 0) - (b.mapX ?? 0)) < 22 && Math.abs((a.mapY ?? 0) - (b.mapY ?? 0)) < 26)) ? (3 + (idx % 3) * 32) : item.mapX) + '%',
+                      top: (filteredMapped.some((a, i) => filteredMapped.slice(0, i).some(b => Math.abs((a.mapX ?? 0) - (b.mapX ?? 0)) < 22 && Math.abs((a.mapY ?? 0) - (b.mapY ?? 0)) < 26)) ? (4 + Math.floor(idx / 3) * 31) : item.mapY) + '%',
+                      width: (filteredMapped.some((a, i) => filteredMapped.slice(0, i).some(b => Math.abs((a.mapX ?? 0) - (b.mapX ?? 0)) < 22 && Math.abs((a.mapY ?? 0) - (b.mapY ?? 0)) < 26)) ? 29 : item.mapWidth) + '%',
+                      height: (filteredMapped.some((a, i) => filteredMapped.slice(0, i).some(b => Math.abs((a.mapX ?? 0) - (b.mapX ?? 0)) < 22 && Math.abs((a.mapY ?? 0) - (b.mapY ?? 0)) < 26)) ? 27 : item.mapHeight) + '%',
                     }}
                     onClick={() => openLayout(item)}
                     disabled={!canManage}
@@ -430,7 +433,7 @@ const WarehouseMap = () => {
                 <tbody>{items.map(item => (
                   <tr key={item.locationId}>
                     <td><strong style={{ whiteSpace: 'nowrap' }}>{item.code}</strong><br /><small>{item.structurePath?.split('/').join(' / ') || item.name}</small></td>
-                    <td>{item.storageClass || '—'}</td>
+                    <td>{item.storageClass === 'AMBIENT' ? 'Nhiệt độ thường' : item.storageClass === 'COLD' ? 'Kho lạnh' : (item.storageClass || '—')}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.utilizationPercent != null ? item.utilizationPercent + '%' : 'Chưa có'}</td>
                     <td><UiBadge tone={capacityTone(item)}>{stateLabel[item.capacityState] || item.capacityState}</UiBadge></td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.recentMovementCount}</td>
@@ -451,7 +454,7 @@ const WarehouseMap = () => {
                   <thead><tr><th>Mã</th><th>Tên</th><th>Đường dẫn cấu trúc</th><th>Phân lớp lưu trữ</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
                   <tbody>{unmappedItems.map(item => (
                     <tr key={item.locationId}>
-                      <td style={{ whiteSpace: 'nowrap' }}><strong>{item.code}</strong></td><td>{item.name}</td><td>{item.structurePath?.split('/').join(' / ') || '—'}</td><td>{item.storageClass || '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}><strong>{item.code}</strong></td><td>{item.name.replace(/\s*\(RMA\)/gi, '')}</td><td>{item.structurePath?.split('/').join(' / ') || '—'}</td><td>{item.storageClass === 'AMBIENT' ? 'Nhiệt độ thường' : item.storageClass === 'COLD' ? 'Kho lạnh' : (item.storageClass || '—')}</td>
                       {canManage && <td style={{ whiteSpace: 'nowrap' }}><button type="button" onClick={() => openLayout(item)} disabled={!item.rowVersion} style={{ whiteSpace: 'nowrap' }}>Bố trí</button></td>}
                     </tr>
                   ))}</tbody>

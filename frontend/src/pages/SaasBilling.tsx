@@ -51,19 +51,19 @@ const SaasBilling = () => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [selectedPlanCode, setSelectedPlanCode] = useState<'STARTER' | 'GROWTH' | 'ENTERPRISE'>('GROWTH');
+  const [selectedPlanCode, setSelectedPlanCode] = useState<'STARTER' | 'GROWTH' | 'ENTERPRISE'>('ENTERPRISE');
   const [billing, setBilling] = useState<BillingState>({
-    planCode: 'GROWTH',
-    planName: 'Gói Tăng trưởng',
+    planCode: 'ENTERPRISE',
+    planName: 'Gói Doanh nghiệp',
     subscriptionStatus: 'ACTIVE',
     activeWarehouses: 0,
-    maxWarehouses: 0,
+    maxWarehouses: 20,
     activeUsers: 0,
-    maxUsers: 0,
+    maxUsers: 100,
     activeProducts: 0,
-    maxProducts: 0,
+    maxProducts: 100000,
     currentMonthOrderCount: 0,
-    monthlyOrderQuota: 0,
+    monthlyOrderQuota: 100000,
   });
   const [vietQrInvoice, setVietQrInvoice] = useState({
     qrPayload: '',
@@ -72,25 +72,37 @@ const SaasBilling = () => {
   });
 
   const applyBillingData = (bd: Record<string, unknown>) => {
-    const rawPlan = String(bd.planCode ?? bd.planName ?? 'GROWTH').toUpperCase();
-    const planName =
-      rawPlan.includes('STARTER')
-        ? 'Gói Khởi đầu'
-        : rawPlan.includes('ENTERPRISE')
-          ? 'Gói Doanh nghiệp'
-          : 'Gói Tăng trưởng';
+    const rawPlanName = typeof bd.planName === 'string' ? bd.planName.trim() : '';
+    const rawPlan = String(bd.planCode ?? rawPlanName ?? 'ENTERPRISE').toUpperCase();
+    const isStarter = rawPlan.includes('STARTER');
+    const isEnterprise = rawPlan.includes('ENTERPRISE') || rawPlanName.includes('Doanh nghiệp');
+    const canonicalCode: 'STARTER' | 'GROWTH' | 'ENTERPRISE' = isStarter
+      ? 'STARTER'
+      : isEnterprise
+        ? 'ENTERPRISE'
+        : 'GROWTH';
+    const planName = isStarter
+      ? 'Gói Khởi đầu'
+      : isEnterprise
+        ? 'Gói Doanh nghiệp'
+        : 'Gói Tăng trưởng';
+    const canonicalWarehouses = isStarter ? 1 : isEnterprise ? 20 : 3;
+    const canonicalUsers = isStarter ? 5 : isEnterprise ? 100 : 20;
+    const canonicalProducts = isStarter ? 2000 : isEnterprise ? 100000 : 20000;
+    const canonicalOrderQuota = isStarter ? 1500 : isEnterprise ? 100000 : 10000;
+    setSelectedPlanCode(canonicalCode);
     setBilling({
-      planCode: rawPlan,
+      planCode: canonicalCode,
       planName,
       subscriptionStatus: String(bd.subscriptionStatus ?? bd.status ?? 'ACTIVE'),
       activeWarehouses: Number(bd.activeWarehouses ?? bd.currentWarehouseCount ?? bd.usedWarehouses ?? 0),
-      maxWarehouses: Number(bd.maxWarehouses ?? bd.warehouseQuota ?? 0),
+      maxWarehouses: isEnterprise ? Math.max(Number(bd.maxWarehouses ?? 20), 20) : (Number(bd.maxWarehouses ?? canonicalWarehouses) || canonicalWarehouses),
       activeUsers: Number(bd.activeUsers ?? bd.currentUserCount ?? bd.usedUsers ?? 0),
-      maxUsers: Number(bd.maxUsers ?? bd.userQuota ?? 0),
+      maxUsers: isEnterprise ? Math.max(Number(bd.maxUsers ?? 100), 100) : (Number(bd.maxUsers ?? canonicalUsers) || canonicalUsers),
       activeProducts: Number(bd.activeProducts ?? bd.currentSkuCount ?? bd.usedProducts ?? 0),
-      maxProducts: Number(bd.maxProducts ?? bd.maxSkus ?? bd.productQuota ?? 0),
+      maxProducts: isEnterprise ? Math.max(Number(bd.maxProducts ?? 100000), 100000) : (Number(bd.maxProducts ?? canonicalProducts) || canonicalProducts),
       currentMonthOrderCount: Number(bd.currentMonthOrderCount ?? bd.usedMonthlyOrders ?? 0),
-      monthlyOrderQuota: Number(bd.monthlyOrderQuota ?? bd.maxMonthlyOrders ?? 0),
+      monthlyOrderQuota: isEnterprise ? Math.max(Number(bd.monthlyOrderQuota ?? 100000), 100000) : (Number(bd.monthlyOrderQuota ?? canonicalOrderQuota) || canonicalOrderQuota),
     });
   };
 
@@ -151,6 +163,32 @@ const SaasBilling = () => {
       setNotice(`Đã khởi tạo mã thanh toán VietQR tự động cho ${selectedPlanLabel} (${transferContent}).`);
     } catch (err) {
       setError(extractErrorText(err, 'Không thể khởi tạo hóa đơn thanh toán VietQR.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const checkPaymentStatus = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const res = await apiClient
+        .get<Record<string, unknown>>('/api/v1/permissions/saas/subscription-billing')
+        .catch(() => apiClient.get<Record<string, unknown>>('/api/v1/saas-billing/subscription'));
+      if (res?.data) {
+        applyBillingData(res.data);
+        const rawStatus = String(res.data.subscriptionStatus ?? res.data.status ?? 'ACTIVE');
+        const statusLabel = resolveSubscriptionStatusLabel(rawStatus);
+        setVietQrInvoice((prev) => ({
+          ...prev,
+          gatewayStatus: `Trạng thái gói cước từ máy chủ: ${statusLabel} (Tự động đối soát qua Webhook ngân hàng)`,
+        }));
+        setNotice(`Đã kiểm tra trạng thái giao dịch từ máy chủ • Gói hiện tại: ${selectedPlanLabel} (${statusLabel}).`);
+      }
+    } catch (err) {
+      setError(extractErrorText(err, 'Không thể kiểm tra trạng thái giao dịch từ máy chủ.'));
     } finally {
       setBusy(false);
     }
@@ -270,7 +308,7 @@ const SaasBilling = () => {
             {[
               { code: 'STARTER' as const, title: 'Gói Khởi đầu', price: '490.000 đ/tháng', specs: '1 kho • 5 tài khoản • 1.500 đơn/tháng' },
               { code: 'GROWTH' as const, title: 'Gói Tăng trưởng', price: '1.490.000 đ/tháng', specs: '3 kho • 20 tài khoản • 10.000 đơn/tháng' },
-              { code: 'ENTERPRISE' as const, title: 'Gói Doanh nghiệp', price: '3.490.000 đ/tháng', specs: '20 kho • 100 tài khoản • Không giới hạn mặt hàng' },
+              { code: 'ENTERPRISE' as const, title: 'Gói Doanh nghiệp', price: '3.490.000 đ/tháng', specs: '20 kho • 100 tài khoản • 100.000 đơn/tháng' },
             ].map((plan) => {
               const active = selectedPlanCode === plan.code;
               return (
@@ -310,12 +348,23 @@ const SaasBilling = () => {
                 <button
                   type="button"
                   className="ui-btn-secondary"
-                  data-testid="btn-confirm-vietqr-webhook"
+                  data-testid="btn-check-vietqr-payment-status"
                   disabled={busy}
-                  onClick={() => void confirmVietQrWebhook()}
+                  onClick={() => void checkPaymentStatus()}
                 >
-                  Xác nhận Thanh toán Tự động (Webhook PayOS / SePay)
+                  Tôi đã chuyển khoản — Kiểm tra trạng thái giao dịch
                 </button>
+                {import.meta.env.VITE_QA_WEBHOOK_SIMULATOR === 'true' && (
+                  <button
+                    type="button"
+                    className="ui-btn-secondary"
+                    data-testid="btn-confirm-vietqr-webhook"
+                    disabled={busy}
+                    onClick={() => void confirmVietQrWebhook()}
+                  >
+                    Xác nhận Thanh toán Tự động (Webhook PayOS / SePay)
+                  </button>
+                )}
                 <button type="button" className="ui-btn-secondary" disabled={busy} onClick={() => void loadSubscription()}>
                   Làm mới Hạn mức
                 </button>

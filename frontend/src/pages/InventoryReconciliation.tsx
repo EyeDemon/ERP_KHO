@@ -324,13 +324,21 @@ export default function InventoryReconciliation() {
             WMS_LEDGER_SNAPSHOT: 'Chốt Số dư Sổ cái Kho Cuối kỳ',
           };
           setOutboxMessages(
-            list.map((item: Record<string, unknown>, idx: number) => {
+            list.slice(0, 8).map((item: Record<string, unknown>, idx: number) => {
               const rawType = String(item.eventType || '');
+              const rawRef = String(item.referenceCode || 'IR-QA-001')
+                .replace(/^Stocktake-/, 'Kiểm kê #')
+                .replace(/^PartnerDebtInvoice-/, 'Hóa đơn công nợ #')
+                .replace(/^Shipment-/, 'Vận đơn #')
+                .replace(/^ImportReceipt-/, 'Phiếu nhập #')
+                .replace(/^ExportReceipt-/, 'Phiếu xuất #')
+                .replace(/^ChannelSkuMapping-/, 'Đồng bộ kênh bán #')
+                .replace(/\[?HandlingUnitLpnMove\]?/gi, '[Di chuyển kiện LPN]');
               return {
                 messageId: String(item.messageId || `OUTBOX-QA-00${idx + 1}`),
                 eventType: eventTypeLabels[rawType] || String(item.eventTypeLabel || 'Kết chuyển Bút toán Sổ cái Chung'),
                 channelLabel: String(item.channelLabel || item.targetSystem || item.description || 'Đồng bộ bản tin tích hợp hệ thống'),
-                referenceCode: String(item.referenceCode || 'IR-QA-001'),
+                referenceCode: rawRef,
                 deliveryStatus: String(item.statusLabel || item.deliveryStatus || 'Đã chuyển phát thành công'),
               };
             }),
@@ -757,8 +765,8 @@ export default function InventoryReconciliation() {
         }}
       >
         {[
-          { to: '/inventory-reconciliation', label: 'Tab 1: Đối chiếu Tồn kho & Hàng đợi Outbox (/inventory-reconciliation)', testId: 'tab-inventory-reconciliation', active: true },
-          { to: '/inventory-traceability', label: 'Tab 2: Truy vết & Phả hệ Lô / Sê-ri (/inventory-traceability)', testId: 'tab-inventory-traceability', active: false },
+          { to: '/inventory-reconciliation', label: 'Đối chiếu Tồn kho & Hàng đợi Đồng bộ Sổ cái', testId: 'tab-inventory-reconciliation', active: true },
+          { to: '/inventory-traceability', label: 'Truy vết & Phả hệ Lô / Sê-ri', testId: 'tab-inventory-traceability', active: false },
         ].map((tab) => {
           const style: React.CSSProperties = {
             padding: '8px 14px',
@@ -1113,9 +1121,9 @@ export default function InventoryReconciliation() {
                 </p>
               )}
               <UiMetricGrid>
-                <UiMetric label="AVAILABLE · Số dư hiện tại" value={numberFormat.format(investigation.currentQuantity)} />
-                <UiMetric label="AVAILABLE · Ledger đến mốc" value={numberFormat.format(investigation.expectedQuantity)} />
-                <UiMetric label="AVAILABLE · Chênh lệch tham khảo" value={numberFormat.format(investigation.difference)} />
+                <UiMetric label="Khả dụng · Số dư hiện tại" value={numberFormat.format(investigation.currentQuantity)} />
+                <UiMetric label="Khả dụng · Ledger đến mốc" value={numberFormat.format(investigation.expectedQuantity)} />
+                <UiMetric label="Khả dụng · Chênh lệch tham khảo" value={numberFormat.format(investigation.difference)} />
               </UiMetricGrid>
               {(investigation.eventsTruncated || investigation.bucketsTruncated) && (
                 <p role="status" className="ui-muted-text">
@@ -1181,21 +1189,21 @@ export default function InventoryReconciliation() {
                   </UiMetricGrid>
                   <UiTableScroll><table aria-label="Đối chiếu từng trạng thái tồn kho theo Ledger">
                     <thead><tr>
-                      <th>Trạng thái</th><th>Bucket</th><th>Tồn hiện tại</th><th>Đang giữ</th>
-                      <th>Ledger nhập/xuất ròng</th><th>Chuyển trạng thái vào</th>
-                      <th>Chuyển trạng thái ra</th><th>Ledger dự kiến</th><th>Lệch tham khảo</th>
+                      <th>Trạng thái</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Bucket</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tồn hiện tại</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đang giữ</th>
+                      <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Ledger nhập/xuất ròng</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Chuyển trạng thái vào</th>
+                      <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Chuyển trạng thái ra</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Ledger dự kiến</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Lệch tham khảo</th>
                     </tr></thead>
                     <tbody>{investigation.statusBreakdown.map(status=>
                       <tr key={status.status}>
                         <td><strong>{statusLabels[status.status] ?? status.status}</strong></td>
-                        <td>{status.bucketCount}</td>
-                        <td>{numberFormat.format(status.currentQuantity)}</td>
-                        <td>{numberFormat.format(status.reservedQuantity)}</td>
-                        <td>{numberFormat.format(status.directLedgerNetQuantity)}</td>
-                        <td>+{numberFormat.format(status.statusChangeInQuantity)}</td>
-                        <td>-{numberFormat.format(status.statusChangeOutQuantity)}</td>
-                        <td>{status.expectedQuantity == null ? 'Chưa xác định' : numberFormat.format(status.expectedQuantity)}</td>
-                        <td>{status.difference == null ? 'Chưa xác định' : numberFormat.format(status.difference)}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{status.bucketCount}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{numberFormat.format(status.currentQuantity)}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{numberFormat.format(status.reservedQuantity)}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{numberFormat.format(status.directLedgerNetQuantity)}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>+{numberFormat.format(status.statusChangeInQuantity)}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>-{numberFormat.format(status.statusChangeOutQuantity)}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{status.expectedQuantity == null ? 'Chưa xác định' : numberFormat.format(status.expectedQuantity)}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{status.difference == null ? 'Chưa xác định' : numberFormat.format(status.difference)}</td>
                       </tr>)}
                     </tbody>
                   </table></UiTableScroll>
@@ -1232,13 +1240,13 @@ export default function InventoryReconciliation() {
                 </p>
               )}
               <UiTableScroll><table aria-label="Bucket tồn phục vụ điều tra chênh lệch">
-                <thead><tr><th>ID bucket</th><th>Vị trí</th><th>Lô</th><th>Sê-ri</th><th>Tồn</th><th>Đã giữ</th></tr></thead>
+                <thead><tr><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>ID bucket</th><th>Vị trí</th><th>Lô</th><th>Sê-ri</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tồn</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đã giữ</th></tr></thead>
                 <tbody>{investigation.buckets.length === 0?
                   <tr><td colSpan={6}>Không có bucket {statusLabels[investigation.bucketStatus ?? 'Available']}.</td></tr>:
                   investigation.buckets.map(b=><tr key={b.inventoryStockId}>
-                    <td>#{b.inventoryStockId}</td><td>{b.locationCode ?? '—'}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>#{b.inventoryStockId}</td><td>{b.locationCode === 'RECEIVING' ? 'Bãi tiếp nhận (RCV-01)' : (b.locationCode ?? '—')}</td>
                     <td>{b.lotNumber ?? '—'}</td><td>{b.serialNumber ?? '—'}</td>
-                    <td>{numberFormat.format(b.quantity)}</td><td>{numberFormat.format(b.reservedQuantity)}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{numberFormat.format(b.quantity)}</td><td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{numberFormat.format(b.reservedQuantity)}</td>
                   </tr>)}
                 </tbody>
               </table></UiTableScroll>
@@ -1261,11 +1269,11 @@ export default function InventoryReconciliation() {
                 và lịch sử đích (dương), nhưng chỉ tính một lần trong tổng tồn mọi trạng thái.
                 Lịch sử cố định theo ID Ledger; bucket/số dư hiện tại không phải snapshot lịch sử.</p>
               <UiTableScroll><table aria-label="Sự kiện Ledger phục vụ điều tra chênh lệch">
-                <thead><tr><th>ID giao dịch</th><th>Loại</th><th>Vị trí</th><th>Lô/sê-ri</th><th>Số lượng có dấu</th><th>Chứng từ</th></tr></thead>
+                <thead><tr><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>ID giao dịch</th><th>Loại</th><th>Vị trí</th><th>Lô/sê-ri</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số lượng có dấu</th><th>Chứng từ</th></tr></thead>
                 <tbody>{investigation.events.length === 0?
                   <tr><td colSpan={6}>Không có sự kiện Ledger tại mốc này.</td></tr>:
                   investigation.events.map(e=><tr key={e.transactionId}>
-                    <td>#{e.transactionId}</td><td>{e.transactionType}
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>#{e.transactionId}</td><td>{e.transactionType === 'Import' ? 'Nhập kho' : e.transactionType === 'Export' ? 'Xuất kho' : e.transactionType === 'Move' || e.transactionType === 'InternalMove' ? 'Dịch chuyển vị trí' : e.transactionType === 'HandlingUnitLpnMove' ? 'Di chuyển kiện LPN' : e.transactionType === 'Adjustment' ? 'Điều chỉnh' : e.transactionType === 'AdjustmentIncrease' ? 'Điều chỉnh tăng' : e.transactionType === 'AdjustmentDecrease' ? 'Điều chỉnh giảm' : e.transactionType === 'StatusChange' ? 'Đổi trạng thái' : e.transactionType === 'TransferIn' ? 'Chuyển kho vào' : e.transactionType === 'TransferOut' ? 'Chuyển kho ra' : e.transactionType === 'Reversal' ? 'Đảo giao dịch' : e.transactionType === 'Ship' ? 'Xuất giao hàng' : e.transactionType.replace(/\[?HandlingUnitLpnMove\]?/gi, '[Di chuyển kiện LPN]')}
                       {e.transactionType === 'StatusChange' && (
                         <span className="reconciliation-product-name">
                           {statusLabels[e.fromInventoryStatus ?? ''] ?? 'Không rõ'} →
@@ -1273,10 +1281,10 @@ export default function InventoryReconciliation() {
                         </span>
                       )}
                     </td>
-                    <td>{e.locationCode ?? '—'}</td>
+                    <td>{e.locationCode === 'RECEIVING' ? 'Bãi tiếp nhận (RCV-01)' : (e.locationCode ?? '—')}</td>
                     <td>{e.lotNumber ?? '—'} / {e.serialNumber ?? '—'}</td>
-                    <td>{e.signedQuantity == null ? 'Chưa xác định' : numberFormat.format(e.signedQuantity)}</td>
-                    <td>{e.referenceType ?? '—'}{e.referenceId != null ? ` #${e.referenceId}` : ''}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{e.signedQuantity == null ? 'Chưa xác định' : numberFormat.format(e.signedQuantity)}</td>
+                    <td>{e.referenceType === 'ImportReceipt' ? 'Phiếu nhập kho' : e.referenceType === 'ExportReceipt' ? 'Phiếu xuất kho' : e.referenceType === 'HandlingUnitPalletSeed' ? 'Khởi tạo kiện LPN' : e.referenceType === 'HandlingUnitLpnMove' || e.referenceType === '[HandlingUnitLpnMove]' ? '[Di chuyển kiện LPN]' : e.referenceType === 'VAS_DEKIT' ? 'Lệnh rã bộ KIT' : e.referenceType === 'QASeedReconcile' ? 'Cân bằng đối soát QA' : e.referenceType === 'InternalMove' ? 'Lệnh dịch chuyển nội bộ' : (e.referenceType ?? '—').replace(/\[?HandlingUnitLpnMove\]?/gi, '[Di chuyển kiện LPN]')}{e.referenceId != null ? ` #${e.referenceId}` : ''}</td>
                   </tr>)}
                 </tbody>
               </table></UiTableScroll>

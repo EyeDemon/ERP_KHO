@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { sanitizeScannerCode } from './productCatalog';
-import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiDrawer, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 
 export interface BusinessPartner {
   id: number; code: string; name: string; isSupplier: boolean; isCustomer: boolean;
@@ -144,186 +144,28 @@ const BusinessPartners = () => {
     {error && <p role="alert">{error}</p>}
     {message && <p role="status" className="ui-success-text">{message}</p>}
 
-    {!showForm && <>
-      <UiCard title="Tổng quan Hồ sơ Nhà cung cấp & Khách hàng">
-        <UiMetricGrid>
-          <UiMetric value={items.length} label="Tổng đối tác trên trang" />
-          <UiMetric value={activeSuppliersCount} label="NCC đang hoạt động" />
-          <UiMetric value={activeCustomersCount} label="KH đang hoạt động" />
-          <UiMetric value={dualRolePartnersCount} label="Đối tác kiêm nhiệm (NCC & KH)" />
-          <UiMetric value={addressDeclaredCount} label="Đã chuẩn hóa địa chỉ giao nhận" />
-          <UiMetric value={missingContactInfoCount} label="Thiếu thông tin liên hệ" />
-        </UiMetricGrid>
-      </UiCard>
-      <UiCard title="Đơn vị Vận chuyển & Hợp đồng Cam kết Thời gian Phục vụ Đối tác">
-        <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, maxWidth: '100%' }}>
-          <div className="ui-subcard">
-            <strong>Hồ sơ cam kết Nhà cung cấp</strong><br />
-            {activeSuppliersCount} hồ sơ • Cam kết thời gian tiếp nhận chuẩn: 24h
-          </div>
-          <div className="ui-subcard">
-            <strong>Hồ sơ cam kết Khách hàng</strong><br />
-            {activeCustomersCount} hồ sơ • Cam kết thời gian xuất giao chuẩn: 12h
-          </div>
-          <div className="ui-subcard">
-            <strong>Đối tác Vai trò kép / Vận chuyển 3PL</strong><br />
-            {dualRolePartnersCount} đối tác vận chuyển & hậu cần hai chiều
-          </div>
-          <div className="ui-subcard">
-            <strong>Mục tiêu tỷ lệ giao nhận đúng hạn</strong><br />
-            98.5% (24h Nhập kho / 12h Xuất kho)
-          </div>
-        </div>
-        <div className="ui-inline-actions" style={{ marginTop: 8 }}>
-          <button type="button" disabled={loading || governanceBusy} onClick={() => void verifySlaContracts()}>
-            Xác minh &amp; Đồng bộ Hồ sơ SLA Đối tác
-          </button>
-          {slaVerified && (
-            <UiBadge tone="success">Đã đồng bộ cam kết dịch vụ (98.5% đúng hạn)</UiBadge>
-          )}
-          <button type="button" disabled={loading || governanceBusy} onClick={() => void calculate3PlBilling()}>
-            Đối soát Hợp đồng 3PL, Tồn Ký gửi Đa Chủ sở hữu &amp; Tính phí Kho
-          </button>
-          {billingStatementResult && (
-            <UiBadge tone="success">{billingStatementResult}</UiBadge>
-          )}
-        </div>
-      </UiCard>
-      <UiCard title="Hợp đồng Dịch vụ Logistics 3PL & Bảng kê Tính phí Lưu kho / Tác nghiệp">
-        <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, maxWidth: '100%', marginBottom: 12 }}>
-          <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Phí lưu kho trong kỳ</span>
-            <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.storageFeeAmount.toLocaleString('vi-VN')} đ</strong>
-            <small style={{ color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.storageUnits} Thùng × 15.000 đ</small>
-          </div>
-          <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Phí tác nghiệp Nhập &amp; Cất hàng</span>
-            <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.inboundHandlingFeeAmount.toLocaleString('vi-VN')} đ</strong>
-            <small style={{ color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.inboundUnits} Thùng × 8.000 đ</small>
-          </div>
-          <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Phí tác nghiệp Xuất &amp; Đóng gói</span>
-            <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.outboundHandlingFeeAmount.toLocaleString('vi-VN')} đ</strong>
-            <small style={{ color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.outboundUnits} Thùng × 9.000 đ</small>
-          </div>
-          <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #86efac', background: '#ecfdf5', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>Tổng cộng Bảng kê 3PL (Gồm VAT 10%)</span>
-            <strong style={{ fontSize: '1.1rem', color: '#065f46', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.totalBillingAmount.toLocaleString('vi-VN')} đ</strong>
-            <small style={{ color: '#047857', fontVariantNumeric: 'tabular-nums' }}>Trước thuế: {billingSummary.subTotalAmount.toLocaleString('vi-VN')} đ • VAT: {billingSummary.vatAmount.toLocaleString('vi-VN')} đ</small>
-          </div>
-        </div>
-        <UiTableScroll>
-          <table className="ui-table-compact" aria-label="Bảng kê chi tiết phí dịch vụ kho 3PL">
-            <thead>
-              <tr>
-                <th>Mã biểu phí</th>
-                <th>Hạng mục dịch vụ 3PL</th>
-                <th>Đơn vị tính</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Sản lượng thực tế</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đơn giá (VND)</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Thành tiền (VND)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><code>TRF-3PL-STO-01</code></td>
-                <td>Lưu kho tiêu chuẩn theo dung lượng tồn thực tế</td>
-                <td>Thùng / Kỳ</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.storageUnits}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(15000).toLocaleString('vi-VN')}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{billingSummary.storageFeeAmount.toLocaleString('vi-VN')}</td>
-              </tr>
-              <tr>
-                <td><code>TRF-3PL-INB-02</code></td>
-                <td>Tác nghiệp tiếp nhận, kiểm đếm &amp; cất hàng lên kệ</td>
-                <td>Thùng nhập</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.inboundUnits}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(8000).toLocaleString('vi-VN')}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{billingSummary.inboundHandlingFeeAmount.toLocaleString('vi-VN')}</td>
-              </tr>
-              <tr>
-                <td><code>TRF-3PL-OUT-03</code></td>
-                <td>Tác nghiệp soạn hàng, đóng gói kiện &amp; xuất bến</td>
-                <td>Thùng xuất</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.outboundUnits}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(9000).toLocaleString('vi-VN')}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{billingSummary.outboundHandlingFeeAmount.toLocaleString('vi-VN')}</td>
-              </tr>
-            </tbody>
-          </table>
-        </UiTableScroll>
-        <div className="ui-inline-actions" style={{ marginTop: 10 }}>
-          <button type="button" className="ui-primary-button" disabled={loading || governanceBusy} onClick={() => void generate3PlStatement()}>
-            Phát hành Bảng kê &amp; Ghi nhận Công nợ 3PL
-          </button>
-          {generated3PlStatementNotice && (
-            <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
-              {generated3PlStatementNotice}
-            </div>
-          )}
-        </div>
-      </UiCard>
-      <UiToolbar>
-        <UiToolbarField label="Tìm đối tác">
-          <input aria-label="Tìm đối tác" placeholder="Mã hoặc tên" value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} />
-        </UiToolbarField>
-        <UiToolbarField label="Vai trò">
-          <select aria-label="Lọc vai trò" value={role} onChange={event => { setRole(event.target.value); setPage(1); }}>
-            <option value="">Mọi vai trò</option>
-            <option value="supplier">Nhà cung cấp</option>
-            <option value="customer">Khách hàng</option>
-          </select>
-        </UiToolbarField>
-        <UiToolbarField label="Trạng thái">
-          <select aria-label="Lọc trạng thái" value={active} onChange={event => { setActive(event.target.value); setPage(1); }}>
-            <option value="">Mọi trạng thái</option>
-            <option value="true">Hoạt động</option>
-            <option value="false">Ngừng hoạt động</option>
-          </select>
-        </UiToolbarField>
-        <div className="ui-muted-text ui-auto-actions">Trang {page}/{pages}</div>
-      </UiToolbar>
-
-      <UiCard title="Danh sách đối tác">
-        {loading ? <p role="status">Đang tải đối tác...</p> : <UiTableScroll><table className="ui-table-compact" aria-label="Danh sách đối tác kinh doanh">
-          <thead><tr><th>Mã</th><th>Tên</th><th>Vai trò</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Công nợ &amp; Tín dụng</th><th>Liên hệ</th><th>Trạng thái</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
-          <tbody>
-            {items.length === 0
-              ? <tr><td colSpan={canManage ? 7 : 6} className="ui-empty-cell">Không có đối tác phù hợp với bộ lọc hiện tại.</td></tr>
-              : items.map(item => <tr key={item.id}>
-                  <td style={{ whiteSpace: 'nowrap' }}><strong>{item.code}</strong></td>
-                  <td><div>{item.name}</div>{item.address && <small>{item.address}</small>}</td>
-                  <td>
-                    <div className="ui-inline-wrap">
-                      {item.isSupplier && <UiBadge>Nhà cung cấp</UiBadge>}
-                      {item.isCustomer && <UiBadge>Khách hàng</UiBadge>}
-                      {!item.isSupplier && !item.isCustomer && <span>—</span>}
-                    </div>
-                  </td>
-                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                    {item.isSupplier && <div><small>Công nợ phải trả: <strong>{Number(item.payableBalance ?? 0).toLocaleString('vi-VN')}</strong></small></div>}
-                    {item.isCustomer && <div><small>Công nợ phải thu: <strong>{Number(item.receivableBalance ?? 0).toLocaleString('vi-VN')}</strong> / Hạn mức: {Number(item.creditLimit ?? 0) > 0 ? Number(item.creditLimit).toLocaleString('vi-VN') : 'Không giới hạn'}</small></div>}
-                    <div><small>Kỳ hạn TT: {item.paymentTermDays ?? 30} ngày</small></div>
-                  </td>
-                  <td><div>{item.phone || '—'}</div>{item.email && <small>{item.email}</small>}</td>
-                  <td><UiBadge tone={item.isActive ? 'success' : 'neutral'}>{item.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge></td>
-                  {canManage && <td style={{ whiteSpace: 'nowrap' }}><div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', whiteSpace: 'nowrap' }}><button type="button" onClick={() => openEdit(item)} style={{ whiteSpace: 'nowrap' }}>Sửa</button><button type="button" onClick={() => void remove(item)} style={{ whiteSpace: 'nowrap' }}>Xóa</button></div></td>}
-                </tr>)}
-          </tbody>
-        </table></UiTableScroll>}
-        <div className="ui-pagination">
-          <button disabled={page <= 1} onClick={() => setPage(value => value - 1)}>Trước</button>
-          <span>Trang {page}/{pages}</span>
-          <button disabled={page >= pages} onClick={() => setPage(value => value + 1)}>Sau</button>
-        </div>
-      </UiCard>
-    </>}
-
-    {showForm && <UiCard title={editing ? 'Sửa đối tác' : 'Thêm đối tác'}>
-      <form onSubmit={submit} className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, alignItems: 'end', maxWidth: '100%' }}>
+    {showForm && <UiDrawer
+      open={showForm}
+      title={editing ? 'Sửa đối tác' : 'Thêm đối tác'}
+      subtitle="Cập nhật hồ sơ nhà cung cấp, khách hàng và điều khoản công nợ"
+      titleId="partner-drawer-title"
+      busy={loading}
+      onClose={() => setShowForm(false)}
+    >
+      <form onSubmit={submit} className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, alignItems: 'end', maxWidth: '100%' }}>
         <label>Mã đối tác *<input aria-label="Mã đối tác" value={form.code || ''} disabled={!!editing || loading} maxLength={50} onChange={event => field('code', event.target.value)} /></label>
-        <label>Tên đối tác *<input aria-label="Tên đối tác" value={form.name || ''} disabled={loading} maxLength={200} onChange={event => field('name', event.target.value)} /></label>
-        <div className="ui-inline-wrap">
+        <label style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+          Tên đối tác *
+          <input
+            aria-label="Tên đối tác"
+            value={form.name || ''}
+            disabled={loading}
+            maxLength={200}
+            onChange={event => field('name', event.target.value)}
+            style={{ width: '100%', boxSizing: 'border-box' }}
+          />
+        </label>
+        <div className="ui-inline-wrap" style={{ gridColumn: '1 / -1' }}>
           <label className="ui-checkbox-label"><input type="checkbox" checked={!!form.isSupplier} disabled={loading} onChange={event => field('isSupplier', event.target.checked)} /> Nhà cung cấp</label>
           <label className="ui-checkbox-label"><input type="checkbox" checked={!!form.isCustomer} disabled={loading} onChange={event => field('isCustomer', event.target.checked)} /> Khách hàng</label>
           <label className="ui-checkbox-label"><input type="checkbox" checked={!!form.isActive} disabled={loading} onChange={event => field('isActive', event.target.checked)} /> Hoạt động</label>
@@ -332,13 +174,189 @@ const BusinessPartners = () => {
         <label>Email<input aria-label="Email đối tác" value={form.email || ''} maxLength={254} onChange={event => field('email', event.target.value)} /></label>
         <label>Hạn mức tín dụng (VND)<input aria-label="Hạn mức tín dụng đối tác" type="number" min="0" step="1000" value={form.creditLimit ?? 0} onChange={event => field('creditLimit', event.target.value === '' ? 0 : Number(event.target.value))} /></label>
         <label>Kỳ hạn thanh toán (ngày)<input aria-label="Kỳ hạn thanh toán đối tác" type="number" min="0" max="3650" value={form.paymentTermDays ?? 30} onChange={event => field('paymentTermDays', event.target.value === '' ? 0 : Number(event.target.value))} /></label>
-        <label>Địa chỉ<textarea aria-label="Địa chỉ đối tác" value={form.address || ''} maxLength={500} rows={1} onChange={event => field('address', event.target.value)} /></label>
-        <div className="ui-inline-actions">
-          <button type="submit" disabled={loading}>{loading ? 'Đang lưu...' : 'Lưu'}</button>
-          <button type="button" disabled={loading} onClick={() => setShowForm(false)}>Hủy</button>
+        <label style={{ gridColumn: '1 / -1' }}>Địa chỉ<textarea aria-label="Địa chỉ đối tác" value={form.address || ''} maxLength={500} rows={2} onChange={event => field('address', event.target.value)} /></label>
+        <div className="ui-inline-actions" style={{ gridColumn: '1 / -1', justifyContent: 'flex-end', marginTop: 8 }}>
+          <button type="button" className="ui-btn ui-btn-secondary" disabled={loading} onClick={() => setShowForm(false)}>Hủy</button>
+          <button type="submit" className="ui-btn ui-btn-primary ui-primary-button" disabled={loading}>{loading ? 'Đang lưu...' : 'Lưu'}</button>
         </div>
       </form>
-    </UiCard>}
+    </UiDrawer>}
+
+    <UiCard title="Tổng quan Hồ sơ Nhà cung cấp & Khách hàng">
+      <UiMetricGrid>
+        <UiMetric value={items.length} label="Tổng đối tác trên trang" />
+        <UiMetric value={activeSuppliersCount} label="NCC đang hoạt động" />
+        <UiMetric value={activeCustomersCount} label="KH đang hoạt động" />
+        <UiMetric value={dualRolePartnersCount} label="Đối tác kiêm nhiệm (NCC & KH)" />
+        <UiMetric value={addressDeclaredCount} label="Đã chuẩn hóa địa chỉ giao nhận" />
+        <UiMetric value={missingContactInfoCount} label="Thiếu thông tin liên hệ" />
+      </UiMetricGrid>
+    </UiCard>
+
+    <UiToolbar>
+      <UiToolbarField label="Tìm đối tác">
+        <input aria-label="Tìm đối tác" placeholder="Mã hoặc tên" value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} />
+      </UiToolbarField>
+      <UiToolbarField label="Vai trò">
+        <select aria-label="Lọc vai trò" value={role} onChange={event => { setRole(event.target.value); setPage(1); }}>
+          <option value="">Mọi vai trò</option>
+          <option value="supplier">Nhà cung cấp</option>
+          <option value="customer">Khách hàng</option>
+        </select>
+      </UiToolbarField>
+      <UiToolbarField label="Trạng thái">
+        <select aria-label="Lọc trạng thái" value={active} onChange={event => { setActive(event.target.value); setPage(1); }}>
+          <option value="">Mọi trạng thái</option>
+          <option value="true">Hoạt động</option>
+          <option value="false">Ngừng hoạt động</option>
+        </select>
+      </UiToolbarField>
+      <div className="ui-muted-text ui-auto-actions">Trang {page}/{pages}</div>
+    </UiToolbar>
+
+    <UiCard title="Danh sách đối tác">
+      {loading ? <p role="status">Đang tải đối tác...</p> : <UiTableScroll><table className="ui-table-compact" aria-label="Danh sách đối tác kinh doanh">
+        <thead><tr><th>Mã</th><th>Tên</th><th>Vai trò</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Công nợ &amp; Tín dụng</th><th>Liên hệ</th><th>Trạng thái</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
+        <tbody>
+          {items.length === 0
+            ? <tr><td colSpan={canManage ? 7 : 6} className="ui-empty-cell">Không có đối tác phù hợp với bộ lọc hiện tại.</td></tr>
+            : items.map(item => <tr key={item.id}>
+                <td style={{ whiteSpace: 'nowrap' }}><strong>{item.code}</strong></td>
+                <td><div>{item.name}</div>{item.address && <small>{item.address}</small>}</td>
+                <td>
+                  <div className="ui-inline-wrap">
+                    {item.isSupplier && <UiBadge>Nhà cung cấp</UiBadge>}
+                    {item.isCustomer && <UiBadge>Khách hàng</UiBadge>}
+                    {!item.isSupplier && !item.isCustomer && <span>—</span>}
+                  </div>
+                </td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  {item.isSupplier && <div><small>Công nợ phải trả: <strong>{Number(item.payableBalance ?? 0).toLocaleString('vi-VN')}</strong></small></div>}
+                  {item.isCustomer && <div><small>Công nợ phải thu: <strong>{Number(item.receivableBalance ?? 0).toLocaleString('vi-VN')}</strong> / Hạn mức: {Number(item.creditLimit ?? 0) > 0 ? Number(item.creditLimit).toLocaleString('vi-VN') : 'Không giới hạn'}</small></div>}
+                  <div><small>Kỳ hạn TT: {item.paymentTermDays ?? 30} ngày</small></div>
+                </td>
+                <td><div>{item.phone || '—'}</div>{item.email && <small>{item.email}</small>}</td>
+                <td><UiBadge tone={item.isActive ? 'success' : 'neutral'}>{item.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge></td>
+                {canManage && <td style={{ whiteSpace: 'nowrap' }}><div style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', whiteSpace: 'nowrap' }}><button type="button" onClick={() => openEdit(item)} style={{ whiteSpace: 'nowrap' }}>Sửa</button><button type="button" onClick={() => void remove(item)} style={{ whiteSpace: 'nowrap' }}>Xóa</button></div></td>}
+              </tr>)}
+        </tbody>
+      </table></UiTableScroll>}
+      <div className="ui-pagination">
+        <button disabled={page <= 1} onClick={() => setPage(value => value - 1)}>Trước</button>
+        <span>Trang {page}/{pages}</span>
+        <button disabled={page >= pages} onClick={() => setPage(value => value + 1)}>Sau</button>
+      </div>
+    </UiCard>
+
+    <UiCard title="Đơn vị Vận chuyển & Hợp đồng Cam kết Thời gian Phục vụ Đối tác">
+      <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, maxWidth: '100%' }}>
+        <div className="ui-subcard">
+          <strong>Hồ sơ cam kết Nhà cung cấp</strong><br />
+          {activeSuppliersCount} hồ sơ • Cam kết thời gian tiếp nhận chuẩn: 24h
+        </div>
+        <div className="ui-subcard">
+          <strong>Hồ sơ cam kết Khách hàng</strong><br />
+          {activeCustomersCount} hồ sơ • Cam kết thời gian xuất giao chuẩn: 12h
+        </div>
+        <div className="ui-subcard">
+          <strong>Đối tác Vai trò kép / Vận chuyển 3PL</strong><br />
+          {dualRolePartnersCount} đối tác vận chuyển & hậu cần hai chiều
+        </div>
+        <div className="ui-subcard">
+          <strong>Mục tiêu tỷ lệ giao nhận đúng hạn</strong><br />
+          98.5% (24h Nhập kho / 12h Xuất kho)
+        </div>
+      </div>
+      <div className="ui-inline-actions" style={{ marginTop: 8 }}>
+        <button type="button" disabled={loading || governanceBusy} onClick={() => void verifySlaContracts()}>
+          Xác minh &amp; Đồng bộ Hồ sơ SLA Đối tác
+        </button>
+        {slaVerified && (
+          <UiBadge tone="success">Đã đồng bộ cam kết dịch vụ (98.5% đúng hạn)</UiBadge>
+        )}
+        <button type="button" disabled={loading || governanceBusy} onClick={() => void calculate3PlBilling()}>
+          Đối soát Hợp đồng 3PL, Tồn Ký gửi Đa Chủ sở hữu &amp; Tính phí Kho
+        </button>
+        {billingStatementResult && (
+          <UiBadge tone="success">{billingStatementResult}</UiBadge>
+        )}
+      </div>
+    </UiCard>
+
+    <UiCard title="Hợp đồng Dịch vụ Logistics 3PL & Bảng kê Tính phí Lưu kho / Tác nghiệp">
+      <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, maxWidth: '100%', marginBottom: 12 }}>
+        <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Phí lưu kho trong kỳ</span>
+          <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.storageFeeAmount.toLocaleString('vi-VN')} đ</strong>
+          <small style={{ color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.storageUnits} Thùng × 15.000 đ</small>
+        </div>
+        <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Phí tác nghiệp Nhập &amp; Cất hàng</span>
+          <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.inboundHandlingFeeAmount.toLocaleString('vi-VN')} đ</strong>
+          <small style={{ color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.inboundUnits} Thùng × 8.000 đ</small>
+        </div>
+        <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Phí tác nghiệp Xuất &amp; Đóng gói</span>
+          <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.outboundHandlingFeeAmount.toLocaleString('vi-VN')} đ</strong>
+          <small style={{ color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.outboundUnits} Thùng × 9.000 đ</small>
+        </div>
+        <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #86efac', background: '#ecfdf5', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>Tổng cộng Bảng kê 3PL (Gồm VAT 10%)</span>
+          <strong style={{ fontSize: '1.1rem', color: '#065f46', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.totalBillingAmount.toLocaleString('vi-VN')} đ</strong>
+          <small style={{ color: '#047857', fontVariantNumeric: 'tabular-nums' }}>Trước thuế: {billingSummary.subTotalAmount.toLocaleString('vi-VN')} đ • VAT: {billingSummary.vatAmount.toLocaleString('vi-VN')} đ</small>
+        </div>
+      </div>
+      <UiTableScroll>
+        <table className="ui-table-compact" aria-label="Bảng kê chi tiết phí dịch vụ kho 3PL">
+          <thead>
+            <tr>
+              <th>Mã biểu phí</th>
+              <th>Hạng mục dịch vụ 3PL</th>
+              <th>Đơn vị tính</th>
+              <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Sản lượng thực tế</th>
+              <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đơn giá (VND)</th>
+              <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Thành tiền (VND)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>TRF-3PL-STO-01</code></td>
+              <td>Lưu kho tiêu chuẩn theo dung lượng tồn thực tế</td>
+              <td>Thùng / Kỳ</td>
+              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.storageUnits}</td>
+              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(15000).toLocaleString('vi-VN')}</td>
+              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{billingSummary.storageFeeAmount.toLocaleString('vi-VN')}</td>
+            </tr>
+            <tr>
+              <td><code>TRF-3PL-INB-02</code></td>
+              <td>Tác nghiệp tiếp nhận, kiểm đếm &amp; cất hàng lên kệ</td>
+              <td>Thùng nhập</td>
+              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.inboundUnits}</td>
+              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(8000).toLocaleString('vi-VN')}</td>
+              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{billingSummary.inboundHandlingFeeAmount.toLocaleString('vi-VN')}</td>
+            </tr>
+            <tr>
+              <td><code>TRF-3PL-OUT-03</code></td>
+              <td>Tác nghiệp soạn hàng, đóng gói kiện &amp; xuất bến</td>
+              <td>Thùng xuất</td>
+              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.outboundUnits}</td>
+              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(9000).toLocaleString('vi-VN')}</td>
+              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{billingSummary.outboundHandlingFeeAmount.toLocaleString('vi-VN')}</td>
+            </tr>
+          </tbody>
+        </table>
+      </UiTableScroll>
+      <div className="ui-inline-actions" style={{ marginTop: 10 }}>
+        <button type="button" className="ui-primary-button" disabled={loading || governanceBusy} onClick={() => void generate3PlStatement()}>
+          Phát hành Bảng kê &amp; Ghi nhận Công nợ 3PL
+        </button>
+        {generated3PlStatementNotice && (
+          <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
+            {generated3PlStatementNotice}
+          </div>
+        )}
+      </div>
+    </UiCard>
   </UiPage>;
 };
 export default BusinessPartners;

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
-import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
+import { UiBadge, UiCard, UiDrawer, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
 
 type TransactionRow={
   id:number;productId:number;productCode?:string;productName?:string;warehouseId:number;warehouseName?:string;
@@ -198,7 +198,7 @@ export default function InventoryReversals(){
         </button>
         {chainIntegrityResult&&(
           <span>
-            Mã xác minh: <strong>{chainIntegrityResult.verificationId}</strong> • Sổ cái chỉ ghi thêm: <strong>{chainIntegrityResult.appendOnlyLedgerStatus}</strong> • Chống đảo lặp: <strong>{chainIntegrityResult.duplicateReversalBlocked?'ĐÃ KHÓA':'MỞ'}</strong>
+            Mã xác minh: <strong>{chainIntegrityResult.verificationId}</strong> • Sổ cái chỉ ghi thêm: <strong>{chainIntegrityResult.appendOnlyLedgerStatus==='IMMUTABLE_VERIFIED'?'ĐÃ XÁC THỰC BẤT BIẾN':chainIntegrityResult.appendOnlyLedgerStatus.replace(/IMMUTABLE_VERIFIED/gi,'ĐÃ XÁC THỰC BẤT BIẾN')}</strong> • Chống đảo lặp: <strong>{chainIntegrityResult.duplicateReversalBlocked?'ĐÃ KHÓA':'MỞ'}</strong>
           </span>
         )}
       </div>
@@ -280,7 +280,7 @@ export default function InventoryReversals(){
       </nav>
     </UiCard>
 
-    {selected&&canReverse&&<UiCard title={'Đảo giao dịch #'+selected.id}>
+    {selected&&canReverse&&<UiDrawer open={Boolean(selected&&canReverse)} title={'Đảo giao dịch #'+selected.id} titleId="reversal-drawer-title" busy={busy} onClose={()=>setSelected(null)}>
       <form onSubmit={submit} className="ui-form-grid">
         <p className="ui-muted-text">{transactionTypeLabel(selected.transactionType)} • {selected.productCode??selected.productId} • số lượng {selected.quantity}. Thao tác hiệu chỉnh vẫn kiểm tra lại khóa tồn, lượng đã giữ, sức chứa và chính sách trạng thái trong cùng giao dịch Serializable.</p>
         <UiToolbarField label="Mã lý do đảo (bắt buộc)">
@@ -303,6 +303,6 @@ export default function InventoryReversals(){
           <button type="button" disabled={busy} onClick={()=>setSelected(null)}>Hủy</button>
         </div>
       </form>
-    </UiCard>}
+    </UiDrawer>}
   </UiPage>;
 }

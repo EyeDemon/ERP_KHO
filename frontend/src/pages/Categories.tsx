@@ -4,11 +4,13 @@ import { permissionError } from '../services/permissionPresentation';
 import {
   UiBadge,
   UiCard,
+  UiDrawer,
   UiEmptyState,
+  UiMetric,
+  UiMetricGrid,
   UiPage,
   UiPageHeader,
   UiTableScroll,
-  UiToolbar,
   UiToolbarField,
 } from '../ui/ProductionUi';
 
@@ -40,6 +42,7 @@ export default function Categories() {
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('Active');
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [showForm, setShowForm] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -78,6 +81,14 @@ export default function Categories() {
     setDescription('');
     setStatus('Active');
     setEditingId(null);
+    setShowForm(false);
+  };
+
+  const openCreate = () => {
+    resetForm();
+    setNotice('');
+    setError('');
+    setShowForm(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -142,6 +153,7 @@ export default function Categories() {
     setStatus(item.status || 'Active');
     setNotice('');
     setError('');
+    setShowForm(true);
   };
 
   const activeCount = categories.filter((c) => c.status.toLowerCase() === 'active').length;
@@ -152,69 +164,25 @@ export default function Categories() {
         eyebrow="DỮ LIỆU NỀN"
         title="Nhóm danh mục sản phẩm"
         description="Phân loại chuẩn hóa nguyên vật liệu, bán thành phẩm, thành phẩm và vật tư đóng gói phục vụ định tuyến cất hàng & kiểm kê."
+        actions={
+          <button type="button" className="ui-primary-button" onClick={openCreate}>
+            + Thêm nhóm danh mục
+          </button>
+        }
       />
 
       {error ? <p role="alert">{error}</p> : null}
       {notice ? <p role="status" className="ui-success-text">{notice}</p> : null}
 
-      <UiCard title="Tổng quan Nhóm danh mục sản phẩm">
-        <div className="ui-inline-wrap">
-          <UiBadge tone="success">{`Tổng nhóm danh mục: ${categories.length}`}</UiBadge>
-          <UiBadge tone="success">{`Đang hoạt động: ${activeCount}`}</UiBadge>
-          <UiBadge>{`Ngừng sử dụng: ${categories.length - activeCount}`}</UiBadge>
-        </div>
-      </UiCard>
-
-      <UiCard title={editingId !== null ? `Cập nhật nhóm danh mục #${editingId}` : 'Tạo nhóm danh mục sản phẩm mới'}>
-        <form onSubmit={(e) => void handleSubmit(e)}>
-          <UiToolbar>
-            <UiToolbarField label="Mã nhóm danh mục">
-              <input
-                aria-label="Mã nhóm danh mục"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                placeholder="VD: CAT-COLD"
-              />
-            </UiToolbarField>
-            <UiToolbarField label="Tên nhóm danh mục">
-              <input
-                aria-label="Tên nhóm danh mục"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="VD: Hàng bảo quản lạnh"
-              />
-            </UiToolbarField>
-            <UiToolbarField label="Trạng thái">
-              <select aria-label="Trạng thái nhóm danh mục" value={status} onChange={(e) => setStatus(e.target.value)}>
-                <option value="Active">Đang hoạt động</option>
-                <option value="Inactive">Ngừng sử dụng</option>
-              </select>
-            </UiToolbarField>
-            <UiToolbarField label="Mô tả chi tiết">
-              <input
-                aria-label="Mô tả nhóm danh mục"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Mô tả tiêu chuẩn lưu kho..."
-              />
-            </UiToolbarField>
-            <div style={{ display: 'flex', gap: 8, alignSelf: 'end' }}>
-              <button type="submit" disabled={submitting}>
-                {editingId !== null ? 'Lưu cập nhật nhóm' : 'Thêm nhóm danh mục'}
-              </button>
-              {editingId !== null ? (
-                <button type="button" onClick={resetForm}>
-                  Hủy chỉnh sửa
-                </button>
-              ) : null}
-            </div>
-          </UiToolbar>
-        </form>
-      </UiCard>
+      <UiMetricGrid>
+        <UiMetric value={categories.length} label="Tổng nhóm danh mục" />
+        <UiMetric value={activeCount} label="Đang hoạt động" />
+        <UiMetric value={categories.length - activeCount} label="Ngừng sử dụng" />
+      </UiMetricGrid>
 
       <UiCard title="Danh sách Nhóm danh mục sản phẩm">
         {categories.length === 0 ? (
-          <UiEmptyState title="Chưa có nhóm danh mục" detail="Hãy khởi tạo nhóm danh mục sản phẩm đầu tiên ở biểu mẫu phía trên." />
+          <UiEmptyState title="Chưa có nhóm danh mục" detail="Hãy khởi tạo nhóm danh mục sản phẩm đầu tiên bằng nút + Thêm nhóm danh mục." />
         ) : (
           <UiTableScroll>
             <table>
@@ -250,6 +218,54 @@ export default function Categories() {
           </UiTableScroll>
         )}
       </UiCard>
+
+      <UiDrawer
+        open={showForm || editingId !== null}
+        title={editingId !== null ? `Chỉnh sửa nhóm danh mục #${editingId}` : 'Tạo nhóm danh mục sản phẩm mới'}
+        busy={submitting}
+        onClose={resetForm}
+      >
+        <form className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, maxWidth: '100%' }} onSubmit={(e) => void handleSubmit(e)}>
+          <UiToolbarField label="Mã nhóm danh mục">
+            <input
+              aria-label="Mã nhóm danh mục"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="VD: CAT-COLD"
+            />
+          </UiToolbarField>
+          <UiToolbarField label="Tên nhóm danh mục">
+            <input
+              aria-label="Tên nhóm danh mục"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="VD: Hàng bảo quản lạnh"
+            />
+          </UiToolbarField>
+          <UiToolbarField label="Trạng thái">
+            <select aria-label="Trạng thái nhóm danh mục" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="Active">Đang hoạt động</option>
+              <option value="Inactive">Ngừng sử dụng</option>
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="Mô tả chi tiết">
+            <input
+              aria-label="Mô tả nhóm danh mục"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Mô tả tiêu chuẩn lưu kho..."
+            />
+          </UiToolbarField>
+          <div className="ui-inline-actions" style={{ display: 'flex', gap: 8 }}>
+            <button type="submit" disabled={submitting}>
+              {editingId !== null ? 'Lưu cập nhật nhóm' : 'Thêm nhóm danh mục'}
+            </button>
+            <button type="button" disabled={submitting} onClick={resetForm}>
+              {editingId !== null ? 'Hủy chỉnh sửa' : 'Hủy'}
+            </button>
+          </div>
+        </form>
+      </UiDrawer>
     </UiPage>
   );
 }

@@ -264,7 +264,7 @@ export default function PutawayTasks(){
              <td style={{ padding: '6px 4px', fontSize: 11, verticalAlign: 'middle' }}>
                <button
                  type="button"
-                 style={{ whiteSpace: 'nowrap', padding: '3px 5px', minHeight: 24, fontSize: 10.5, lineHeight: 1.2 }}
+                 style={{ whiteSpace: 'nowrap', padding: '4px 8px', minHeight: 28, fontSize: 11, lineHeight: 1.2 }}
                  onClick={()=>void detail(task.id)}
                >
                  {task.receiptCode}
@@ -345,7 +345,7 @@ export default function PutawayTasks(){
              <div className="ui-subcard-title">{item.productCode} — {item.productName}</div>
              <div className="ui-inline-wrap">
                <UiBadge>{inventory[item.inventoryStatus]??'Không xác định'}</UiBadge>
-               <UiBadge>Vị trí nguồn: {item.sourceLocationCode}</UiBadge>
+               <UiBadge>Vị trí nguồn: {item.sourceLocationCode?.trim().toUpperCase()==='RECEIVING'?'Bãi tiếp nhận (RCV-01)':item.sourceLocationCode}</UiBadge>
              </div>
              <p>Cần cất: <strong>{item.requiredOperationQuantity} {opUnit}</strong>{!sameUnitAndQty?` (${item.requiredBaseQuantity} ${baseUnit})`:''}</p>
              <p>Đã cất: <strong>{item.movedBaseQuantity}</strong> • Còn lại: <strong>{item.remainingBaseQuantity}</strong></p>

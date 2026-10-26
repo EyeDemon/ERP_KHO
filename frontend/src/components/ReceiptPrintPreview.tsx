@@ -14,6 +14,7 @@ type Props = { kind: 'import' | 'export'; receipt: PrintableReceipt; fetchedAt: 
 
 const dateTime = (value?: string | null) => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'medium' }).format(new Date(value)) : 'Chưa ghi nhận';
 const quantity = (value: number) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 4 }).format(value);
+const normalizeUnit = (unit?: string | null) => (!unit || unit === 'QA_UNIT' || unit === 'QA-PCS') ? 'THÙNG' : unit;
 
 export default function ReceiptPrintPreview({ kind, receipt, fetchedAt, onClose }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -83,12 +84,53 @@ export default function ReceiptPrintPreview({ kind, receipt, fetchedAt, onClose 
         {kind === 'export' && <><div><dt>Người xuất</dt><dd>{receipt.dispatchedByName || 'Chưa ghi nhận'}</dd></div><div><dt>Thời điểm xuất</dt><dd>{dateTime(receipt.dispatchedAt)}</dd></div></>}
       </dl>
       <div className="ui-table-scroll">
-        <table><thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>Đơn vị</th><th>Số lượng</th></tr></thead>
-          <tbody>{receipt.details.map((d, index) => <tr key={d.id}><td>{index + 1}</td><td>{d.productCode || '—'}</td><td>{d.productName || 'Chưa ghi nhận'}</td><td>{d.unitName || 'Chưa ghi nhận'}</td><td className="receipt-number">{quantity(d.quantity)}</td></tr>)}</tbody>
+        <table>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'center', width: '9%' }}>STT</th>
+              <th style={{ textAlign: 'left', width: '18%' }}>Mã hàng</th>
+              <th style={{ textAlign: 'left' }}>Tên hàng</th>
+              <th style={{ textAlign: 'center', width: '15%' }}>Đơn vị</th>
+              <th className="receipt-number" style={{ textAlign: 'right', width: '15%', fontVariantNumeric: 'tabular-nums' }}>Số lượng</th>
+            </tr>
+          </thead>
+          <tbody>
+            {receipt.details.map((d, index) => (
+              <tr key={d.id}>
+                <td style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{index + 1}</td>
+                <td style={{ textAlign: 'left' }}>{d.productCode || '—'}</td>
+                <td style={{ textAlign: 'left' }}>{d.productName || 'Chưa ghi nhận'}</td>
+                <td style={{ textAlign: 'center' }}>{normalizeUnit(d.unitName)}</td>
+                <td className="receipt-number" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{quantity(d.quantity)}</td>
+              </tr>
+            ))}
+          </tbody>
         </table>
       </div>
       <p><strong>Số dòng hàng:</strong> {receipt.details.length}</p>
       {receipt.note && <section className="receipt-note"><strong>Ghi chú:</strong><div>{receipt.note}</div></section>}
+      <section className="receipt-signatures ui-print-signatures" aria-label="Khối chữ ký pháp lý chứng từ kho">
+        <div className="receipt-signature-col">
+          <strong>Người lập phiếu</strong>
+          <em>(Ký, ghi rõ họ tên)</em>
+          <div className="receipt-signature-name">{receipt.createdByName || ''}</div>
+        </div>
+        <div className="receipt-signature-col">
+          <strong>Người giao / nhận hàng</strong>
+          <em>(Ký, ghi rõ họ tên)</em>
+          <div className="receipt-signature-name" />
+        </div>
+        <div className="receipt-signature-col">
+          <strong>Thủ kho</strong>
+          <em>(Ký, ghi rõ họ tên)</em>
+          <div className="receipt-signature-name">{receipt.dispatchedByName || ''}</div>
+        </div>
+        <div className="receipt-signature-col">
+          <strong>Quản lý kho / Kế toán</strong>
+          <em>(Ký, ghi rõ họ tên)</em>
+          <div className="receipt-signature-name">{receipt.approvedByName || ''}</div>
+        </div>
+      </section>
       <footer>Dữ liệu được tải lúc {dateTime(fetchedAt.toISOString())}. Thời gian hiển thị theo múi giờ của trình duyệt.</footer>
     </article>
   </div>;

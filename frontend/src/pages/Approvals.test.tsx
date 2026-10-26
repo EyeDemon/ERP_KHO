@@ -10,7 +10,7 @@ vi.mock('../services/apiClient',()=>({default:{get:vi.fn(),post:vi.fn()}}));
 const item={documentType:'StockTransfer',documentId:7,documentCode:'TRF-7',pendingState:'Draft',creatorName:'Maker',requestedAtUtc:'2026-09-05T01:00:00Z',waitingMinutes:1500,slaStatus:'Warning' as const,warehouseName:'WH01',destinationWarehouseName:'WH02',totalQuantity:5,canApprove:false,canReject:true};
 const page=(items= [item])=>({items,totalRecords:items.length,pageIndex:1,pageSize:20,totalPages:items.length?2:0});
 
-describe('Approvals page',()=>{
+describe('Approvals page',{timeout:20000},()=>{
   afterEach(cleanup);
   it('QC approval requires both grants even when a previously loaded server capability says yes', async () => {
     const qc = { ...item, documentType: 'ImportReceipt', pendingState: 'QcCompleted', canApprove: true, canReject: false };

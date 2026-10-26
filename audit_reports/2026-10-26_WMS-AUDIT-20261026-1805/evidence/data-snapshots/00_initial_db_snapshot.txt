@@ -1,0 +1,99 @@
+=== DB METADATA (ACTIVE BACKEND TARGET: (localdb)\MSSQLLocalDB / ERP_KHO) ===
+
+ServerInstance            CurrentDb SnapshotUtc           
+--------------            --------- -----------           
+Heavenly\LOCALDB#08FC9AD8 ERP_KHO   10/26/2026 11:18:50 AM
+
+
+
+=== USERS & ROLES (REDACTED CREDENTIALS) ===
+
+ Id Username        FullName               RoleName       IsActive TenantId
+ -- --------        --------               --------       -------- --------
+444 qa_admin_local  Quản trị viên Nội bộ   Admin              True        1
+445 qa_manager_wh01 Quản lý Kho WH01       Manager            True        1
+446 qa_staff_wh01   Nhân viên Kho WH01     WarehouseStaff     True        1
+447 qa_viewer_wh01  Giám sát Kho WH01      Viewer             True        1
+712 qa_admin        Quản trị viên Hệ thống Admin              True        1
+
+
+
+=== WAREHOUSES ===
+
+  Id Code    Name                                     IsActive TenantId
+  -- ----    ----                                     -------- --------
+   1 WH01    Kho Chính TP.HCM                             True        1
+1403 WH02    Kho Chi Nhánh Hà Nội                         True        1
+1648 WH-MAIN Kho Trung Tâm - Công ty TNHH Kho vận SME     True        1
+
+
+
+=== PRODUCTS ===
+
+ Id Code       Name                          UnitId IsActive TenantId
+ -- ----       ----                          ------ -------- --------
+317 QA-E2E-001 Thùng linh kiện điện tử QA-01    296     True        1
+517 QA-LOT-002 Hộp cảm biến nhiệt độ QA-02      296     True        1
+
+
+
+=== INVENTORY STOCKS (9-DIM BALANCES) ===
+
+   Id WarehouseId WarehouseCode LocationId LocationCode ProductId ProductCode Status OnHandQty ReservedQuantity
+   -- ----------- ------------- ---------- ------------ --------- ----------- ------ --------- ----------------
+ 3663           1 WH01                   1 RECEIVING          317 QA-E2E-001       0   30.0000           0.0000
+ 3664           1 WH01                   9 BIN-A01            317 QA-E2E-001       0   45.0000           9.0000
+ 3665           1 WH01                   9 BIN-A01            317 QA-E2E-001       2   25.0000           0.0000
+ 3667           1 WH01                  10 BIN-A02            517 QA-LOT-002       0    0.0000           0.0000
+ 3666           1 WH01                  11 BIN-DMG-01         317 QA-E2E-001       3   12.0000           0.0000
+ 4663           1 WH01                1009 BIN-A01-01         317 QA-E2E-001       0   25.0000           9.0000
+ 5663           1 WH01                1009 BIN-A01-01         517 QA-LOT-002       0   60.0000           0.0000
+11675           1 WH01                2013 BIN-A01-03         317 QA-E2E-001       0    8.0000           0.0000
+11676           1 WH01                2013 BIN-A01-03         517 QA-LOT-002       0    6.0000           0.0000
+11672           1 WH01                2014 RCV-01             317 QA-E2E-001       0    0.0000           0.0000
+11673           1 WH01                2014 RCV-01             517 QA-LOT-002       0    0.0000           0.0000
+11674        1403 WH02                2031 BIN-HN-01          317 QA-E2E-001       0   21.0000           0.0000
+
+
+
+=== INVENTORY TRANSACTIONS BY TYPE ===
+
+TransactionType TxCount TotalQty
+--------------- ------- --------
+              0      10 240.0000
+              3       3   3.0000
+              4       4   4.0000
+              5       4   4.0000
+              7       1   5.0000
+              9       6  15.0000
+
+
+
+=== MARKETPLACE SHOPS ===
+
+  Id ChannelCode ShopCode           ShopName                                      DefaultWarehouseId IsActive TenantId
+  -- ----------- --------           --------                                      ------------------ -------- --------
+6131 SHOPEE      SHOPEE-OFFICIAL-01 Gian hàng Chính hãng Shopee Official Flagship                  1     True        1
+6132 TIKTOK      TIKTOK-MALL-01     Gian hàng Chính hãng TikTok Mall TP.HCM                        1     True        1
+6133 SHOPEE      SHP-VN-8801        Gian hàng Chính hãng Shopee Mall TP.HCM                        1     True        1
+6134 TIKTOK      TTS-VN-9902        Gian hàng TikTok Shop Kho Chính WH01                           1     True        1
+6135 LAZADA      LAZ-VN-7703        Gian hàng Lazada LazMall Đông Á                                1     True        1
+6136 SAPO        POS-HCM-1104       Cửa hàng Bán lẻ POS Quận 7                                     1     True        1
+
+
+
+=== CHANNEL SKU MAPPINGS ===
+
+  Id ShopId ChannelSkuCode   InternalProductId IsActive TenantId
+  -- ------ --------------   ----------------- -------- --------
+6141   6131 SHP-OFF-PROD-01                317     True        1
+6142   6131 SP-COMBO-02                    317     True        1
+6143   6132 TTS-MALL-PROD-01               317     True        1
+6144   6132 TTS-FLASH-01                   317     True        1
+6145   6133 SHP-QA-PROD-01                 317     True        1
+6146   6133 SHP-QA-LOT-02                  517     True        1
+6147   6134 TTS-QA-PROD-01                 317     True        1
+6148   6135 LAZ-QA-PROD-01                 317     True        1
+
+
+

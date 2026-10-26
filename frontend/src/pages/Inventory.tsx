@@ -146,6 +146,11 @@ const referenceTypeLabel = (value?: string | null) => ({
   InventoryMove: 'Phiếu di chuyển',
   Return: 'Phiếu trả hàng',
   PickTask: 'Tác vụ lấy hàng',
+  HandlingUnitPalletSeed: 'Khởi tạo kiện LPN',
+  HandlingUnitLpnMove: 'Di chuyển kiện LPN',
+  HandlingUnitMove: 'Di chuyển kiện LPN',
+  LpnMove: 'Di chuyển kiện LPN',
+  VAS_DEKIT: 'Lệnh rã bộ KIT',
   QASeedReconcile: 'Đối soát sổ cái',
   InternalMove: 'Di chuyển nội bộ',
   StocktakeAdjustment: 'Điều chỉnh kiểm kê',
@@ -158,9 +163,19 @@ const referenceTypeLabel = (value?: string | null) => ({
   StatusTransition: 'Chuyển trạng thái',
   ReceivingDiscrepancy: 'Xử lý sai lệch nhận hàng',
   QualityInspection: 'Kiểm định chất lượng',
-}[(value ?? '').replace(/^\[|\]$/g, '').trim()] ?? value ?? '');
+}[(value ?? '').replace(/^\[|\]$/g, '').trim()] ?? (value ?? '').replace(/\[?HandlingUnitLpnMove\]?/gi, 'Di chuyển kiện LPN'));
 
 const transactionTypeLabel = (value: string) => ({
+  Adjustment: 'Điều chỉnh tồn kho',
+  InternalMove: 'Di chuyển vị trí nội bộ',
+  HandlingUnitLpnMove: 'Di chuyển kiện LPN',
+  HandlingUnitPalletSeed: 'Khởi tạo kiện LPN',
+  Putaway: 'Cất hàng lên kệ',
+  Pick: 'Lấy hàng xuất kho',
+  Picking: 'Lấy hàng xuất kho',
+  Pack: 'Đóng gói',
+  Packing: 'Đóng gói',
+  StocktakeAdjustment: 'Điều chỉnh kiểm kê',
   Import: 'Nhập kho',
   Export: 'Xuất kho',
   AdjustmentIncrease: 'Điều chỉnh tăng',
@@ -784,7 +799,7 @@ const Inventory = () => {
                   <th>Sản phẩm</th>
                   <th>Trạng thái</th>
                   <th>Lô / Sê-ri</th>
-                  <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>SL</th>
+                  <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>SL</th>
                   <th>Tham chiếu</th>
                   <th>Ghi chú</th>
                 </tr>
@@ -800,7 +815,7 @@ const Inventory = () => {
                     return (
                       <tr key={item.id}>
                         <td>{new Date(item.transactionDate).toLocaleString('vi-VN')}</td>
-                        <td>{transactionTypeLabel(item.transactionType)}</td>
+                        <td>{transactionTypeLabel(item.transactionType).replace(/\[?HandlingUnitLpnMove\]?/gi, '[Di chuyển kiện LPN]')}</td>
                         <td>{item.warehouseName}</td>
                         <td>{item.productCode} - {item.productName}</td>
                         <td>
@@ -809,11 +824,11 @@ const Inventory = () => {
                             : item.inventoryStatus ? <UiBadge tone={inventoryStatusTone(item.inventoryStatus)}>{inventoryStatusLabel(item.inventoryStatus)}</UiBadge> : '—'}
                         </td>
                         <td>{item.lotNumber || '—'}{item.serialNumber ? ` / ${item.serialNumber}` : ''}</td>
-                        <td className={'inventory-numeric ' + quantityClass} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                        <td className={'inventory-numeric ' + quantityClass} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                           {item.quantity} {formatUnitName(item.unitName)}
                         </td>
                         <td>{item.referenceType ? '[' + referenceTypeLabel(item.referenceType) + '] #' + item.referenceId : '—'}</td>
-                        <td>{(item.note || '').replace(/\(100%\s*Match\)/gi, '(Khớp 100%)').replace(/chờ\s*QC\b/gi, 'chờ kiểm định chất lượng') || '—'}</td>
+                        <td>{(item.note || '').replace(/\[?HandlingUnitLpnMove\]?/gi, '[Di chuyển kiện LPN]').replace(/\[?HandlingUnitPalletSeed\]?/gi, '[Khởi tạo kiện LPN]').replace(/\[?InternalMove\]?/gi, '[Di chuyển nội bộ]').replace(/\[?QASeedReconcile\]?/gi, '[Đối soát sổ cái]').replace(/\[?VAS_DEKIT\]?/gi, '[Lệnh rã bộ KIT]').replace(/\(100%\s*Match\)/gi, '(Khớp 100%)').replace(/\s*\(De-kitting\)/gi, '').replace(/\bRECEIVING\b/g, 'RCV-01').replace(/chờ\s*QC\b/gi, 'chờ kiểm định chất lượng') || '—'}</td>
                       </tr>
                     );
                   })
@@ -993,9 +1008,9 @@ const Inventory = () => {
                   <th>Ngày SX</th>
                   <th>Hạn sử dụng</th>
                   <th>Tình trạng HSD</th>
-                  <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tuổi tồn (ngày)</th>
-                  <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tồn thực tế</th>
-                  <th className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Khả dụng</th>
+                  <th className="inventory-numeric ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Tuổi tồn (ngày)</th>
+                  <th className="inventory-numeric ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Tồn thực tế</th>
+                  <th className="inventory-numeric ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Khả dụng</th>
                 </tr>
               </thead>
               <tbody>
@@ -1004,7 +1019,7 @@ const Inventory = () => {
                 ) : (
                   expiryReport.map(row => (
                     <tr key={row.inventoryStockId}>
-                      <td><strong>{row.warehouseName}</strong><br /><small>{row.locationCode}</small></td>
+                      <td><strong>{row.warehouseName}</strong><br /><small>{row.locationCode === 'RECEIVING' ? 'Bãi tiếp nhận (RCV-01)' : row.locationCode}</small></td>
                       <td><strong>{row.productCode}</strong> — {row.productName}</td>
                       <td>{row.lotNumber || '—'}</td>
                       <td><UiBadge tone={inventoryStatusTone(row.status)}>{inventoryStatusLabel(row.status)}</UiBadge></td>
@@ -1012,8 +1027,8 @@ const Inventory = () => {
                       <td>{row.expiryDate ? new Date(row.expiryDate).toLocaleDateString('vi-VN') : '—'}</td>
                       <td>{expiryBadge(row.expiryStatus, row.daysToExpiry)}</td>
                       <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.ageDays}</td>
-                      <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.quantity} {formatUnitName(row.unitName)}</td>
-                      <td className="inventory-numeric inventory-available" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(['AVAILABLE', 'Available', 'Khả dụng'].includes(row.status) && row.expiryStatus !== 'EXPIRED' && !(row.daysToExpiry !== null && row.daysToExpiry !== undefined && row.daysToExpiry < 0) && !((row as { daysUntilExpiry?: number | null }).daysUntilExpiry !== null && (row as { daysUntilExpiry?: number | null }).daysUntilExpiry !== undefined && (row as { daysUntilExpiry?: number | null }).daysUntilExpiry! < 0) ? row.availableQuantity : 0)} {formatUnitName(row.unitName)}</td>
+                      <td className="inventory-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{row.quantity} {formatUnitName(row.unitName)}</td>
+                      <td className="inventory-numeric inventory-available" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{(['AVAILABLE', 'Available', 'Khả dụng'].includes(row.status) && row.expiryStatus !== 'EXPIRED' && !(row.daysToExpiry !== null && row.daysToExpiry !== undefined && row.daysToExpiry < 0) && !((row as { daysUntilExpiry?: number | null }).daysUntilExpiry !== null && (row as { daysUntilExpiry?: number | null }).daysUntilExpiry !== undefined && (row as { daysUntilExpiry?: number | null }).daysUntilExpiry! < 0) ? row.availableQuantity : 0)} {formatUnitName(row.unitName)}</td>
                     </tr>
                   ))
                 )}

@@ -105,7 +105,7 @@ export default function OutboundDemand(){
   const [backorderCancelQty,setBackorderCancelQty]=useState<Record<number,string>>({});
   const [backorderCancelReason,setBackorderCancelReason]=useState<Record<number,string>>({});
 
-  const load=async()=>{
+  const load=async(isInitial=false)=>{
     setLoading(true);setError('');
     try{
       const [orderResponse,backorderResponse]=await Promise.all([
@@ -114,7 +114,7 @@ export default function OutboundDemand(){
       ]);
       setOrders(orderResponse.data);
       setBackorders(backorderResponse.data);
-    }catch(e){setOrders([]);setBackorders([]);setSelected(null);setError(messageOf(e))}
+    }catch(e){setOrders([]);setBackorders([]);setSelected(null);if(!isInitial)setError(messageOf(e))}
     finally{setLoading(false)}
   };
 
@@ -126,9 +126,9 @@ export default function OutboundDemand(){
         apiClient.get('/api/warehouses'),
         apiClient.get('/api/products'),
       ]);
-      setPartners(partnerResponse.data.items);
-      setWarehouses(warehouseResponse.data.filter((item:Warehouse)=>item.isActive));
-      setProducts(productResponse.data.filter((item:Product)=>item.isActive));
+      setPartners(Array.isArray(partnerResponse.data?.items)?partnerResponse.data.items:Array.isArray(partnerResponse.data)?partnerResponse.data:[]);
+      setWarehouses((Array.isArray(warehouseResponse.data)?warehouseResponse.data:[]).filter((item:Warehouse)=>item.isActive));
+      setProducts((Array.isArray(productResponse.data)?productResponse.data:[]).filter((item:Product)=>item.isActive));
     }catch(e){setError(messageOf(e))}
   };
 
@@ -139,7 +139,7 @@ export default function OutboundDemand(){
     catch(e){setSelected(null);setError(messageOf(e))}
   };
 
-  useEffect(()=>{void load()},[canReadOrders,canReadBackorders]);
+  useEffect(()=>{setError('');setNotice('');void load(true)},[canReadOrders,canReadBackorders]);
   useEffect(()=>{void loadMasters()},[canCreate,canReadPartners,canReadProducts,canReadWarehouses]);
 
   const mutate=async(key:string,path:string,body:object,success:string)=>{
@@ -593,7 +593,7 @@ export default function OutboundDemand(){
                 <option value="MULTI_WAREHOUSE_SPLIT">Tách đơn liên kho tự động</option>
               </select>
             </label>
-            <div className="ui-inline-wrap" style={{ gap: 8 }}>
+            <div className="ui-inline-wrap" style={{ gap: 8, position: 'relative', zIndex: 2, marginBottom: 4 }}>
               <UiBadge tone={domFulfillmentMode === 'MULTI_WAREHOUSE_SPLIT' ? 'warning' : 'success'}>
                 {domFulfillmentMode === 'MULTI_WAREHOUSE_SPLIT'
                   ? 'Tách đơn liên kho tự động'
@@ -822,7 +822,7 @@ export default function OutboundDemand(){
         </UiTableScroll>
       </UiCard>}
 
-      {canReadBackorders&&<UiCard title="Danh sách Đơn nợ hàng (Backorder)">
+      {canReadBackorders&&<UiCard title="Danh sách Đơn nợ hàng">
         {backorders.length===0?<p>Không có đơn nợ hàng nào đang mở.</p>:<div className="ui-stack">
           {backorders.map(item=><div className="ui-subcard" key={item.id}>
             <div className="ui-subcard-title" style={{whiteSpace:'nowrap'}}>{item.backorderCode} — {item.productCode}</div>

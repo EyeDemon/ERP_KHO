@@ -1,44 +1,44 @@
 import { Suspense, lazy, type ReactNode } from 'react';
 import { Navigate, Routes, Route } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
-import Dashboard from '../pages/Dashboard';
-import NotFound from '../pages/NotFound';
-import Login from '../pages/Login';
-import Products from '../pages/Products';
-import Categories from '../pages/Categories';
-import Warehouses from '../pages/Warehouses';
-import WarehouseLocations from '../pages/WarehouseLocations';
-import WarehouseMap from '../pages/WarehouseMap';
-import WarehouseCalendar from '../pages/WarehouseCalendar';
-import DockYard from '../pages/DockYard';
-import Units from '../pages/Units';
-import ExportReceipts from '../pages/ExportReceipts';
-import ImportReceipts from '../pages/ImportReceipts';
-import PurchaseOrders from '../pages/PurchaseOrders';
-import Asns from '../pages/Asns';
-import Inventory from '../pages/Inventory';
-import InventoryLocks from '../pages/InventoryLocks';
-import InventoryMovements from '../pages/InventoryMovements';
-import InventoryReversals from '../pages/InventoryReversals';
-import InventoryTraceability from '../pages/InventoryTraceability';
-import InventoryReconciliation from '../pages/InventoryReconciliation';
-import Stocktakes from '../pages/Stocktakes';
-import StockTransfers from '../pages/StockTransfers';
-import StockReservations from '../pages/StockReservations';
-import StockAllocations from '../pages/StockAllocations';
-import PickingTasks from '../pages/PickingTasks';
-import PackingSessions from '../pages/PackingSessions';
-import Shipments from '../pages/Shipments';
-import OutboundDemand from '../pages/OutboundDemand';
-import Approvals from '../pages/Approvals';
-import BusinessPartners from '../pages/BusinessPartners';
-import PartnerDebts from '../pages/PartnerDebts';
-import PutawayTasks from '../pages/PutawayTasks';
-import Permissions from '../pages/Permissions';
 import { canViewApprovals, canViewStocktakes, hasPermission, usePermissionSet } from '../services/authorization';
 import { isReadOnlyDemoRuntime } from '../services/runtimeMode';
 import { UiCard, UiPage } from '../ui/ProductionUi';
 
+const Dashboard = lazy(() => import('../pages/Dashboard'));
+const NotFound = lazy(() => import('../pages/NotFound'));
+const Login = lazy(() => import('../pages/Login'));
+const Products = lazy(() => import('../pages/Products'));
+const Categories = lazy(() => import('../pages/Categories'));
+const Warehouses = lazy(() => import('../pages/Warehouses'));
+const WarehouseLocations = lazy(() => import('../pages/WarehouseLocations'));
+const WarehouseMap = lazy(() => import('../pages/WarehouseMap'));
+const WarehouseCalendar = lazy(() => import('../pages/WarehouseCalendar'));
+const DockYard = lazy(() => import('../pages/DockYard'));
+const Units = lazy(() => import('../pages/Units'));
+const ExportReceipts = lazy(() => import('../pages/ExportReceipts'));
+const ImportReceipts = lazy(() => import('../pages/ImportReceipts'));
+const PurchaseOrders = lazy(() => import('../pages/PurchaseOrders'));
+const Asns = lazy(() => import('../pages/Asns'));
+const Inventory = lazy(() => import('../pages/Inventory'));
+const InventoryLocks = lazy(() => import('../pages/InventoryLocks'));
+const InventoryMovements = lazy(() => import('../pages/InventoryMovements'));
+const InventoryReversals = lazy(() => import('../pages/InventoryReversals'));
+const InventoryTraceability = lazy(() => import('../pages/InventoryTraceability'));
+const InventoryReconciliation = lazy(() => import('../pages/InventoryReconciliation'));
+const Stocktakes = lazy(() => import('../pages/Stocktakes'));
+const StockTransfers = lazy(() => import('../pages/StockTransfers'));
+const StockReservations = lazy(() => import('../pages/StockReservations'));
+const StockAllocations = lazy(() => import('../pages/StockAllocations'));
+const PickingTasks = lazy(() => import('../pages/PickingTasks'));
+const PackingSessions = lazy(() => import('../pages/PackingSessions'));
+const Shipments = lazy(() => import('../pages/Shipments'));
+const OutboundDemand = lazy(() => import('../pages/OutboundDemand'));
+const Approvals = lazy(() => import('../pages/Approvals'));
+const BusinessPartners = lazy(() => import('../pages/BusinessPartners'));
+const PartnerDebts = lazy(() => import('../pages/PartnerDebts'));
+const PutawayTasks = lazy(() => import('../pages/PutawayTasks'));
+const Permissions = lazy(() => import('../pages/Permissions'));
 const SaasBilling = lazy(() => import('../pages/SaasBilling'));
 const CodReconciliation = lazy(() => import('../pages/CodReconciliation'));
 const OnboardingWizard = lazy(() => import('../pages/OnboardingWizard'));
@@ -74,20 +74,9 @@ const ApprovalRoute = () => {
   return canViewApprovals() ? <Approvals /> : <AccessDenied />;
 };
 
-const PageLoadingFallback = () => (
-  <div
-    role="status"
-    aria-live="polite"
-    className="p-6 text-slate-600"
-    style={{ padding: '24px 16px', fontSize: 14, color: '#475569' }}
-  >
-    Đang tải màn hình nghiệp vụ...
-  </div>
-);
-
 const AppRoutes = () => {
   return (
-    <Suspense fallback={<PageLoadingFallback />}>
+    <Suspense fallback={<div role="status" className="ui-page">Đang tải phân hệ...</div>}>
       <Routes>
         <Route path="/login" element={<Login />} />
 
@@ -125,14 +114,17 @@ const AppRoutes = () => {
           <Route path="handover-manifests" element={<PermissionRoute permission="inventory.read"><HandoverManifests /></PermissionRoute>} />
           <Route path="backorders" element={<PermissionRoute permission={['backorder.read', 'sales_order.read']}><OutboundDemand /></PermissionRoute>} />
           <Route path="outbound-demand" element={<Navigate to="/backorders" replace />} />
-          <Route path="cod-reconciliation" element={<PermissionRoute permission="inventory.read"><CodReconciliation /></PermissionRoute>} />
-          <Route path="cost-valuation" element={<PermissionRoute permission="inventory.read"><CostValuation /></PermissionRoute>} />
-          <Route path="misa-exports" element={<PermissionRoute permission="inventory.read"><CostValuation /></PermissionRoute>} />
+          <Route path="cod-reconciliation" element={<PermissionRoute permission="inventory.cost.read"><CodReconciliation /></PermissionRoute>} />
+          <Route path="cost-valuation" element={<PermissionRoute permission="inventory.cost.read"><CostValuation /></PermissionRoute>} />
+          <Route path="misa-exports" element={<PermissionRoute permission="inventory.cost.read"><CostValuation /></PermissionRoute>} />
           <Route path="onboarding-wizard" element={<PermissionRoute permission="permission.read"><OnboardingWizard /></PermissionRoute>} />
           <Route path="saas-billing" element={<PermissionRoute permission="permission.read"><SaasBilling /></PermissionRoute>} />
           <Route path="approvals" element={<ApprovalRoute />} />
           <Route path="putaway-tasks" element={<PermissionRoute permission="putaway.read"><PutawayTasks /></PermissionRoute>} />
           <Route path="permissions" element={<PermissionRoute permission="permission.read"><Permissions /></PermissionRoute>} />
+          <Route path="users" element={<Navigate to="/permissions" replace />} />
+          <Route path="roles" element={<Navigate to="/permissions" replace />} />
+          <Route path="warehouse-scopes" element={<Navigate to="/permissions" replace />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

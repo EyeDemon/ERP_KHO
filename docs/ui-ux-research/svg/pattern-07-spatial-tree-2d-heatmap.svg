@@ -1,0 +1,171 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 680" width="100%" height="100%" font-family="Inter, 'Be Vietnam Pro', system-ui, -apple-system, sans-serif">
+  <defs>
+    <style>
+      .num { font-variant-numeric: tabular-nums; }
+      .mono { font-family: 'JetBrains Mono', Consolas, monospace; font-variant-numeric: tabular-nums; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="680" fill="#F8FAFC" />
+
+  <text x="24" y="34" fill="#475569" font-size="11" font-weight="700" letter-spacing="0.08em">MẪU 07: CÂY CẤU TRÚC KHO 5 TẦNG + BẢN ĐỒ NHIỆT 2D &amp; THANH SỨC CHỨA 3 CHIỀU</text>
+  <text x="24" y="60" fill="#0F172A" font-size="20" font-weight="700">Trực quan hóa Không gian Kho (Zone → Aisle → Rack → Level → Bin) • Y = 80px</text>
+
+  <rect x="990" y="32" width="186" height="36" rx="6" fill="#334155" />
+  <text x="1083" y="55" fill="#FFFFFF" font-size="12" font-weight="700" text-anchor="middle">+ Thêm vị trí (Drawer)</text>
+
+  <!-- LEFT PANE: 5-Level Hierarchy Tree (X=24..354, Y=80..656) -->
+  <rect x="24" y="80" width="330" height="576" rx="8" fill="#FFFFFF" stroke="#E6E8EA" />
+  <text x="40" y="108" fill="#0F172A" font-size="14" font-weight="700">Cây Phân cấp Kho 5 Tầng</text>
+  <rect x="40" y="120" width="298" height="34" rx="6" fill="#F8FAFC" stroke="#CBD5E1" />
+  <text x="52" y="142" fill="#64748B" font-size="12">Tìm nhanh mã Bin: A01-L2-B2...</text>
+
+  <!-- Tree Nodes -->
+  <text x="40" y="182" fill="#0F172A" font-size="13" font-weight="700">▼ 🏭 Kho Trung tâm (WH01 — 420 Bin)</text>
+  <text x="58" y="212" fill="#0F172A" font-size="13" font-weight="700">▼ 📦 ZONE-A: Khu Hàng Nhanh (FEFO)</text>
+  <text x="78" y="242" fill="#0F172A" font-size="13" font-weight="600">▼ 🛣️ AISLE-A01: Dãy kệ số 01</text>
+
+  <!-- Selected Rack Node -->
+  <rect x="92" y="254" width="246" height="32" rx="6" fill="#ECFDF5" stroke="#059669" />
+  <text x="104" y="275" fill="#047857" font-size="12" font-weight="700">▼ 🗄️ RACK-A01 (Kệ 01 — Đang xem)</text>
+
+  <text x="116" y="306" fill="#334155" font-size="12" font-weight="600">├─ Tầng L3 (Trên cao — 4 Ô Bin)</text>
+  <text x="116" y="332" fill="#047857" font-size="12" font-weight="700">├─ Tầng L2 (Vừa tầm tay — Đang chọn B2)</text>
+  <text x="116" y="358" fill="#334155" font-size="12" font-weight="600">└─ Tầng L1 (Sàn Pallet — 4 Ô Bin)</text>
+
+  <text x="78" y="392" fill="#475569" font-size="13">▶ 🛣️ AISLE-A02: Dãy kệ số 02 (64 Bin)</text>
+  <text x="58" y="424" fill="#475569" font-size="13">▶ ❄️ ZONE-COLD: Kho Mát (18°C–22°C)</text>
+  <text x="58" y="456" fill="#92400E" font-size="13" font-weight="600">▶ ⚠️ ZONE-QC: Khu Cách ly &amp; Hàng hoàn</text>
+  <text x="58" y="488" fill="#475569" font-size="13">▶ 🚚 ZONE-STAGE: Khu Tập kết Xuất/Nhập</text>
+
+  <!-- Heatmap Legend -->
+  <rect x="40" y="516" width="298" height="124" rx="6" fill="#F8FAFC" stroke="#E2E8F0" />
+  <text x="54" y="538" fill="#0F172A" font-size="12" font-weight="700">Chú giải Mức Lấp đầy (Chuẩn WCAG 1.4.1):</text>
+  <rect x="54" y="550" width="14" height="14" rx="3" fill="#F8FAFC" stroke="#CBD5E1" /><text x="76" y="562" fill="#475569" font-size="11">0% (Ô trống hoàn toàn)</text>
+  <rect x="54" y="572" width="14" height="14" rx="3" fill="#ECFDF5" stroke="#059669" /><text x="76" y="584" fill="#047857" font-size="11">1% – 70% (Tối ưu, sẵn sàng Putaway)</text>
+  <rect x="54" y="594" width="14" height="14" rx="3" fill="#FFFBEB" stroke="#F59E0B" /><text x="76" y="606" fill="#92400E" font-size="11">71% – 90% (Sắp đầy - Cảnh báo vàng)</text>
+  <rect x="54" y="616" width="14" height="14" rx="3" fill="#FEF2F2" stroke="#EF4444" /><text x="76" y="628" fill="#B91C1C" font-size="11">&gt; 90% Đầy hoặc Đang khóa tồn (🔒)</text>
+
+  <!-- RIGHT PANE: 2D Rack Elevation Heatmap + Bin Capacity Inspector (X=370..1176, Y=80..656) -->
+  <rect x="370" y="80" width="806" height="576" rx="8" fill="#FFFFFF" stroke="#E6E8EA" />
+
+  <text x="394" y="112" fill="#0F172A" font-size="16" font-weight="700">Sơ đồ Mặt đứng 2D — Kệ RACK-A01 (3 Tầng × 4 Ô Bin = 12 Vị trí)</text>
+  <text x="394" y="132" fill="#64748B" font-size="12">Nhấp trực tiếp vào từng ô Bin để xem danh sách Lô hàng, kiểm tra 3 giới hạn sức chứa hoặc in nhãn mã vạch vị trí.</text>
+
+  <!-- 2D Rack Grid (3 Levels: L3, L2, L1) -->
+  <!-- Level 3 -->
+  <text x="394" y="182" fill="#334155" font-size="12" font-weight="700">TẦNG L3</text>
+  <text x="394" y="198" fill="#64748B" font-size="11">(Hàng nhẹ)</text>
+  <g transform="translate(476, 152)">
+    <rect x="0" y="0" width="160" height="68" rx="6" fill="#ECFDF5" stroke="#059669" />
+    <text x="12" y="22" fill="#0F172A" font-size="12" font-weight="700" class="mono">A01-L3-B1</text>
+    <text x="12" y="42" fill="#047857" font-size="14" font-weight="800" class="num">25% Đầy</text>
+    <text x="12" y="58" fill="#475569" font-size="11" class="num">125 / 500 kg • 1 SKU</text>
+
+    <rect x="172" y="0" width="160" height="68" rx="6" fill="#F8FAFC" stroke="#CBD5E1" stroke-dasharray="4,3" />
+    <text x="184" y="22" fill="#475569" font-size="12" font-weight="700" class="mono">A01-L3-B2</text>
+    <text x="184" y="42" fill="#64748B" font-size="14" font-weight="700" class="num">0% (Trống)</text>
+    <text x="184" y="58" fill="#059669" font-size="11" font-weight="600">✓ Gợi ý Putaway</text>
+
+    <rect x="344" y="0" width="160" height="68" rx="6" fill="#ECFDF5" stroke="#059669" />
+    <text x="356" y="22" fill="#0F172A" font-size="12" font-weight="700" class="mono">A01-L3-B3</text>
+    <text x="356" y="42" fill="#047857" font-size="14" font-weight="800" class="num">40% Đầy</text>
+    <text x="356" y="58" fill="#475569" font-size="11" class="num">200 / 500 kg • 2 SKU</text>
+
+    <rect x="516" y="0" width="160" height="68" rx="6" fill="#F2F3F4" stroke="#64748B" />
+    <text x="528" y="22" fill="#334155" font-size="12" font-weight="700" class="mono">A01-L3-B4 🔒</text>
+    <text x="528" y="42" fill="#B91C1C" font-size="13" font-weight="700">ĐANG KHÓA TỒN</text>
+    <text x="528" y="58" fill="#475569" font-size="11">Chờ kiểm kê đếm mù</text>
+  </g>
+
+  <!-- Level 2 -->
+  <text x="394" y="264" fill="#334155" font-size="12" font-weight="700">TẦNG L2</text>
+  <text x="394" y="280" fill="#64748B" font-size="11">(Nhặt lẻ)</text>
+  <g transform="translate(476, 234)">
+    <rect x="0" y="0" width="160" height="68" rx="6" fill="#FFFBEB" stroke="#F59E0B" />
+    <text x="12" y="22" fill="#0F172A" font-size="12" font-weight="700" class="mono">A01-L2-B1</text>
+    <text x="12" y="42" fill="#92400E" font-size="14" font-weight="800" class="num">82% Sắp đầy</text>
+    <text x="12" y="58" fill="#92400E" font-size="11" class="num">410 / 500 kg • 3 SKU</text>
+
+    <!-- Selected Bin (Highlighted with thick dark ring) -->
+    <rect x="172" y="0" width="160" height="68" rx="6" fill="#FEF2F2" stroke="#0F172A" stroke-width="3" />
+    <text x="184" y="22" fill="#B91C1C" font-size="12" font-weight="800" class="mono">▶ A01-L2-B2 !</text>
+    <text x="184" y="42" fill="#B91C1C" font-size="14" font-weight="800" class="num">95% ĐẦY KỆ</text>
+    <text x="184" y="58" fill="#B91C1C" font-size="11" font-weight="700" class="num">475 / 500 kg (Đang chọn)</text>
+
+    <rect x="344" y="0" width="160" height="68" rx="6" fill="#ECFDF5" stroke="#059669" />
+    <text x="356" y="22" fill="#0F172A" font-size="12" font-weight="700" class="mono">A01-L2-B3</text>
+    <text x="356" y="42" fill="#047857" font-size="14" font-weight="800" class="num">55% Đầy</text>
+    <text x="356" y="58" fill="#475569" font-size="11" class="num">275 / 500 kg • 1 SKU</text>
+
+    <rect x="516" y="0" width="160" height="68" rx="6" fill="#ECFDF5" stroke="#059669" />
+    <text x="528" y="22" fill="#0F172A" font-size="12" font-weight="700" class="mono">A01-L2-B4</text>
+    <text x="528" y="42" fill="#047857" font-size="14" font-weight="800" class="num">60% Đầy</text>
+    <text x="528" y="58" fill="#475569" font-size="11" class="num">300 / 500 kg • 2 SKU</text>
+  </g>
+
+  <!-- Level 1 -->
+  <text x="394" y="346" fill="#334155" font-size="12" font-weight="700">TẦNG L1</text>
+  <text x="394" y="362" fill="#64748B" font-size="11">(Kệ Pallet)</text>
+  <g transform="translate(476, 316)">
+    <rect x="0" y="0" width="160" height="68" rx="6" fill="#FFFBEB" stroke="#F59E0B" />
+    <text x="12" y="22" fill="#0F172A" font-size="12" font-weight="700" class="mono">A01-L1-B1</text>
+    <text x="12" y="42" fill="#92400E" font-size="14" font-weight="800" class="num">88% Sắp đầy</text>
+    <text x="12" y="58" fill="#92400E" font-size="11" class="num">880 / 1.000 kg</text>
+
+    <rect x="172" y="0" width="160" height="68" rx="6" fill="#ECFDF5" stroke="#059669" />
+    <text x="184" y="22" fill="#0F172A" font-size="12" font-weight="700" class="mono">A01-L1-B2</text>
+    <text x="184" y="42" fill="#047857" font-size="14" font-weight="800" class="num">70% Đầy</text>
+    <text x="184" y="58" fill="#475569" font-size="11" class="num">700 / 1.000 kg</text>
+
+    <rect x="344" y="0" width="160" height="68" rx="6" fill="#FFFBEB" stroke="#F59E0B" />
+    <text x="356" y="22" fill="#0F172A" font-size="12" font-weight="700" class="mono">A01-L1-B3</text>
+    <text x="356" y="42" fill="#92400E" font-size="14" font-weight="800" class="num">80% Sắp đầy</text>
+    <text x="356" y="58" fill="#92400E" font-size="11" class="num">800 / 1.000 kg</text>
+
+    <rect x="516" y="0" width="160" height="68" rx="6" fill="#ECFDF5" stroke="#059669" />
+    <text x="528" y="22" fill="#0F172A" font-size="12" font-weight="700" class="mono">A01-L1-B4</text>
+    <text x="528" y="42" fill="#047857" font-size="14" font-weight="800" class="num">50% Đầy</text>
+    <text x="528" y="58" fill="#475569" font-size="11" class="num">500 / 1.000 kg</text>
+  </g>
+
+  <!-- Selected Bin 3-Dimensional Capacity Inspector Card (Y=402..638px) -->
+  <rect x="394" y="402" width="758" height="236" rx="8" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="1.5" />
+  <text x="414" y="432" fill="#0F172A" font-size="15" font-weight="700" class="mono">Chi tiết Ô đang chọn: A01-L2-B2 (Loại: Ô Nhặt lẻ Pick-Face • Chủ hàng: Tất cả)</text>
+
+  <rect x="980" y="412" width="154" height="32" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+  <text x="1057" y="433" fill="#334155" font-size="12" font-weight="600" text-anchor="middle">🖨️ In mã vạch Bin</text>
+
+  <!-- 3 Capacity Bars (Weight kg, Volume m3, Pallets) -->
+  <g transform="translate(414, 452)">
+    <!-- Bar 1: Weight -->
+    <rect x="0" y="0" width="228" height="76" rx="6" fill="#FFFFFF" stroke="#E2E8F0" />
+    <text x="12" y="22" fill="#475569" font-size="11" font-weight="700">1. TẢI TRỌNG (WEIGHT KG)</text>
+    <text x="216" y="22" fill="#B91C1C" font-size="12" font-weight="700" text-anchor="end" class="num">95%</text>
+    <rect x="12" y="32" width="204" height="10" rx="5" fill="#E2E8F0" />
+    <rect x="12" y="32" width="194" height="10" rx="5" fill="#B91C1C" />
+    <text x="12" y="62" fill="#0F172A" font-size="12" font-weight="700" class="num">475,0 / 500,0 kg (Còn 25 kg)</text>
+
+    <!-- Bar 2: Volume -->
+    <rect x="244" y="0" width="228" height="76" rx="6" fill="#FFFFFF" stroke="#E2E8F0" />
+    <text x="256" y="22" fill="#475569" font-size="11" font-weight="700">2. THỂ TÍCH (VOLUME M³)</text>
+    <text x="460" y="22" fill="#92400E" font-size="12" font-weight="700" text-anchor="end" class="num">88%</text>
+    <rect x="256" y="32" width="204" height="10" rx="5" fill="#E2E8F0" />
+    <rect x="256" y="32" width="180" height="10" rx="5" fill="#F59E0B" />
+    <text x="256" y="62" fill="#0F172A" font-size="12" font-weight="700" class="num">1,06 / 1,20 m³ (Còn 0,14 m³)</text>
+
+    <!-- Bar 3: Pallet / HU Count -->
+    <rect x="488" y="0" width="230" height="76" rx="6" fill="#FFFFFF" stroke="#E2E8F0" />
+    <text x="500" y="22" fill="#475569" font-size="11" font-weight="700">3. SỐ PALLET / KHAY CHỨA</text>
+    <text x="706" y="22" fill="#047857" font-size="12" font-weight="700" text-anchor="end" class="num">50%</text>
+    <rect x="500" y="32" width="206" height="10" rx="5" fill="#E2E8F0" />
+    <rect x="500" y="32" width="103" height="10" rx="5" fill="#059669" />
+    <text x="500" y="62" fill="#0F172A" font-size="12" font-weight="700" class="num">1 / 2 Khay Pallet chuẩn</text>
+  </g>
+
+  <!-- Stock inside Selected Bin -->
+  <text x="414" y="554" fill="#334155" font-size="12" font-weight="700">Tồn kho hiện tại trong ô A01-L2-B2 (Định danh 9 chiều • GrainHash SHA-256):</text>
+  <rect x="414" y="564" width="718" height="58" rx="6" fill="#FFFFFF" stroke="#E2E8F0" />
+  <text x="428" y="588" fill="#0F172A" font-size="12" font-weight="600" class="mono">• SKU-MILK-01 (Sữa tươi 1L) | Lô: LOT-202610 | HSD: 15/06/2027 | Thực tế: 400 Hộp | Khả dụng: 360 Hộp</text>
+  <text x="428" y="610" fill="#0F172A" font-size="12" font-weight="600" class="mono">• SKU-MILK-02 (Sữa dâu 180ml)| Lô: LOT-202611 | HSD: 20/08/2027 | Thực tế: 150 Lốc | Khả dụng: 150 Lốc</text>
+</svg>

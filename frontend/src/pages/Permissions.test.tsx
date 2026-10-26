@@ -142,7 +142,7 @@ describe('quản trị quyền truy cập', () => {
     expect(view.getByText('2 / 3 kho')).toBeTruthy();
     expect(view.getByText('11 / 20 người dùng')).toBeTruthy();
     expect(view.getByText('420 / 5.000 mặt hàng')).toBeTruthy();
-    expect(view.getByText('Đơn hàng tháng: 1280 / 10000')).toBeTruthy();
+    expect(view.getByText(/Đơn hàng tháng: 1[.,]?280 \/ 10[.,]?000/)).toBeTruthy();
     expect(view.getByText('JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP')).toBeTruthy();
     expect(view.getByText('Khởi tạo Khóa Bảo mật 2 Lớp')).toBeTruthy();
     expect(view.getByText('Xác minh Mã 6 Chữ số')).toBeTruthy();

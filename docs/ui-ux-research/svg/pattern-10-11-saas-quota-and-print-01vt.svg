@@ -1,0 +1,178 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 820" width="100%" height="100%" font-family="Inter, 'Be Vietnam Pro', system-ui, -apple-system, sans-serif">
+  <defs>
+    <style>
+      .num { font-variant-numeric: tabular-nums; }
+      .mono { font-family: 'JetBrains Mono', Consolas, monospace; font-variant-numeric: tabular-nums; }
+    </style>
+  </defs>
+
+  <rect width="1240" height="820" fill="#F8FAFC" />
+
+  <!-- LEFT HALF: Pattern 10 - Onboarding 5 Steps & 3-Threshold SaaS Quota Meter + VietQR -->
+  <text x="24" y="32" fill="#475569" font-size="11" font-weight="700" letter-spacing="0.08em">MẪU 10: ONBOARDING 5 BƯỚC THU GỌN &amp; THANH ĐO HẠN MỨC SAAS 3 NẤC</text>
+  <rect x="24" y="44" width="560" height="752" rx="8" fill="#FFFFFF" stroke="#E6E8EA" />
+
+  <!-- SaaS Plan & Quota Meter -->
+  <text x="44" y="76" fill="#0F172A" font-size="16" font-weight="700">1. Gói thuê bao: GROWTH 3PL (Chu kỳ Tháng 10/2026)</text>
+  <rect x="410" y="54" width="154" height="32" rx="6" fill="#059669" />
+  <text x="487" y="75" fill="#FFFFFF" font-size="12" font-weight="700" text-anchor="middle">Gia hạn qua VietQR</text>
+
+  <!-- 3-Tier Quota Bars -->
+  <g transform="translate(44, 96)">
+    <!-- Safe (<75%) -->
+    <rect x="0" y="0" width="520" height="62" rx="6" fill="#F8FAFC" stroke="#E2E8F0" />
+    <text x="14" y="22" fill="#0F172A" font-size="12" font-weight="700">Tài khoản nhân sự vận hành (Users)</text>
+    <text x="506" y="22" fill="#047857" font-size="12" font-weight="700" text-anchor="end" class="num">11 / 20 Tài khoản (55% • An toàn)</text>
+    <rect x="14" y="34" width="492" height="12" rx="6" fill="#E2E8F0" />
+    <rect x="14" y="34" width="270" height="12" rx="6" fill="#059669" />
+
+    <!-- Warning (75-90%) -->
+    <rect x="0" y="72" width="520" height="62" rx="6" fill="#FFFBEB" stroke="#FCD34D" />
+    <text x="14" y="94" fill="#92400E" font-size="12" font-weight="700">Số lượng Kho vật lý đang kích hoạt (Warehouses)</text>
+    <text x="506" y="94" fill="#92400E" font-size="12" font-weight="700" text-anchor="end" class="num">3 / 4 Kho (75% • Chạm ngưỡng cảnh báo)</text>
+    <rect x="14" y="106" width="492" height="12" rx="6" fill="#FDE68A" />
+    <rect x="14" y="106" width="369" height="12" rx="6" fill="#F59E0B" />
+
+    <!-- Danger (>90%) -->
+    <rect x="0" y="144" width="520" height="62" rx="6" fill="#FEF2F2" stroke="#FCA5A5" />
+    <text x="14" y="166" fill="#B91C1C" font-size="12" font-weight="700">Sản lượng Đơn hàng xuất kho trong tháng (Orders/Month)</text>
+    <text x="506" y="166" fill="#B91C1C" font-size="12" font-weight="800" text-anchor="end" class="num">9.450 / 10.000 Đơn (94,5% • Sắp chạm trần!)</text>
+    <rect x="14" y="178" width="492" height="12" rx="6" fill="#FECACA" />
+    <rect x="14" y="178" width="465" height="12" rx="6" fill="#EF4444" />
+  </g>
+
+  <!-- Collapsible 5-Step Onboarding Checklist -->
+  <text x="44" y="336" fill="#0F172A" font-size="16" font-weight="700">2. Thiết lập Kho nhanh 5 Bước (Hoàn tất 3/5 bước — 60%)</text>
+  <rect x="44" y="348" width="520" height="10" rx="5" fill="#E2E8F0" />
+  <rect x="44" y="348" width="312" height="10" rx="5" fill="#059669" />
+
+  <g transform="translate(44, 370)">
+    <rect x="0" y="0" width="520" height="42" rx="6" fill="#F8FAFC" stroke="#E2E8F0" />
+    <text x="16" y="26" fill="#047857" font-size="13" font-weight="700">✓ Bước 1: Khởi tạo Kho Trung tâm (WH01) &amp; Múi giờ</text>
+
+    <rect x="0" y="50" width="520" height="42" rx="6" fill="#F8FAFC" stroke="#E2E8F0" />
+    <text x="16" y="76" fill="#047857" font-size="13" font-weight="700">✓ Bước 2: Thiết lập Sơ đồ Khu vực / Dãy / Kệ / Ô Bin</text>
+
+    <rect x="0" y="100" width="520" height="42" rx="6" fill="#F8FAFC" stroke="#E2E8F0" />
+    <text x="16" y="126" fill="#047857" font-size="13" font-weight="700">✓ Bước 3: Khai báo Đơn vị tính cơ sở (Base UOM) &amp; Quy đổi</text>
+
+    <!-- Active Expanded Step 4 -->
+    <rect x="0" y="150" width="520" height="128" rx="8" fill="#ECFDF5" stroke="#059669" stroke-width="2" />
+    <text x="16" y="178" fill="#0F172A" font-size="14" font-weight="700">▶ Bước 4 (Đang làm): Nhập Danh mục Sản phẩm SKU &amp; Chính sách FEFO</text>
+    <text x="16" y="202" fill="#334155" font-size="12">Tải lên danh sách SKU bằng file mẫu .xlsx hoặc tạo trực tiếp mặt hàng đầu tiên.</text>
+    <rect x="16" y="220" width="180" height="38" rx="6" fill="#334155" />
+    <text x="106" y="244" fill="#FFFFFF" font-size="12" font-weight="700" text-anchor="middle">+ Tạo SKU đầu tiên</text>
+    <rect x="208" y="220" width="170" height="38" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+    <text x="293" y="244" fill="#334155" font-size="12" font-weight="600" text-anchor="middle">Tải file mẫu .xlsx</text>
+
+    <rect x="0" y="288" width="520" height="42" rx="6" fill="#FFFFFF" stroke="#E2E8F0" />
+    <text x="16" y="314" fill="#64748B" font-size="13" font-weight="600">○ Bước 5: Ghi nhận Phiếu Nhập Tồn Đầu Kỳ &amp; In thử mẫu 01-VT</text>
+  </g>
+
+  <!-- RIGHT HALF: Pattern 11 - Statutory 1-Page A4 Print Sheet (Mẫu 01-VT / 02-VT) -->
+  <text x="612" y="32" fill="#475569" font-size="11" font-weight="700" letter-spacing="0.08em">MẪU 11: BẢN IN PHÁP LÝ 1 TRANG A4 (MẪU 01-VT / 02-VT THÔNG TƯ 200 BTC)</text>
+
+  <!-- A4 Paper Sheet Simulation (X=612..1216, Y=44..796) -->
+  <rect x="612" y="44" width="604" height="752" fill="#FFFFFF" stroke="#0F172A" stroke-width="1.5" />
+
+  <!-- Legal Header Left & Right -->
+  <text x="636" y="76" fill="#0F172A" font-size="12" font-weight="700">ĐƠN VỊ: CÔNG TY TNHH LOGISTICS ERP_KHO</text>
+  <text x="636" y="94" fill="#334155" font-size="11">Bộ phận: Kho Trung tâm (WH01 - TP.HCM)</text>
+
+  <text x="1192" y="74" fill="#0F172A" font-size="12" font-weight="700" text-anchor="end">Mẫu số: 01-VT</text>
+  <text x="1192" y="90" fill="#475569" font-size="10" font-style="italic" text-anchor="end">(Ban hành theo Thông tư 200/2014/TT-BTC</text>
+  <text x="1192" y="104" fill="#475569" font-size="10" font-style="italic" text-anchor="end">ngày 22/12/2014 của Bộ Tài chính)</text>
+
+  <!-- Title & Barcode -->
+  <text x="914" y="142" fill="#0F172A" font-size="22" font-weight="800" text-anchor="middle">PHIẾU NHẬP KHO</text>
+  <text x="914" y="162" fill="#334155" font-size="12" font-style="italic" text-anchor="middle">Ngày 25 tháng 10 năm 2026  •  Số phiếu: NK-2026-0089</text>
+
+  <!-- Simulated Code-128 Barcode on top right -->
+  <g transform="translate(1070, 118)">
+    <rect x="0" y="0" width="120" height="36" fill="#FFFFFF" stroke="#CBD5E1" />
+    <path d="M10,4 v28 M14,4 v28 M20,4 v28 M22,4 v28 M28,4 v28 M34,4 v28 M38,4 v28 M44,4 v28 M50,4 v28 M54,4 v28 M60,4 v28 M66,4 v28 M70,4 v28 M76,4 v28 M82,4 v28 M88,4 v28 M92,4 v28 M98,4 v28 M104,4 v28 M110,4 v28" stroke="#0F172A" stroke-width="2" />
+  </g>
+
+  <!-- Status Box -->
+  <rect x="636" y="176" width="556" height="28" fill="#F8FAFC" stroke="#0F172A" stroke-width="1.5" />
+  <text x="914" y="195" fill="#0F172A" font-size="12" font-weight="800" text-anchor="middle">TRẠNG THÁI: ĐÃ GHI NHẬN TỒN KHO (POSTED TO LEDGER)</text>
+
+  <!-- Receipt Meta Details -->
+  <text x="636" y="226" fill="#0F172A" font-size="12">- Họ và tên người giao: <tspan font-weight="700">NCC-0042 — Công ty CP Sản xuất Nhựa Duy Tân</tspan></text>
+  <text x="636" y="246" fill="#0F172A" font-size="12">- Theo chứng từ gốc: <tspan font-weight="700" class="mono">PO-2026-0142 / ASN-2026-088</tspan> ngày 25/10/2026</text>
+  <text x="636" y="266" fill="#0F172A" font-size="12">- Nhập tại kho: <tspan font-weight="700">Kho Trung tâm (WH01)</tspan>  •  Người duyệt: <tspan font-weight="700">Trần Quản Lý (25/10/2026 14:30)</tspan></text>
+
+  <!-- Statutory Table with Right-Aligned Quantity Column! -->
+  <g transform="translate(636, 282)">
+    <rect x="0" y="0" width="556" height="34" fill="#F2F3F4" stroke="#0F172A" />
+    <line x1="44" y1="0" x2="44" y2="178" stroke="#0F172A" />
+    <line x1="154" y1="0" x2="154" y2="178" stroke="#0F172A" />
+    <line x1="390" y1="0" x2="390" y2="178" stroke="#0F172A" />
+    <line x1="456" y1="0" x2="456" y2="178" stroke="#0F172A" />
+
+    <text x="22" y="22" fill="#0F172A" font-size="11" font-weight="700" text-anchor="middle">STT</text>
+    <text x="99" y="22" fill="#0F172A" font-size="11" font-weight="700" text-anchor="middle">Mã số (SKU)</text>
+    <text x="272" y="22" fill="#0F172A" font-size="11" font-weight="700" text-anchor="middle">Tên, nhãn hiệu, quy cách vật tư</text>
+    <text x="423" y="22" fill="#0F172A" font-size="11" font-weight="700" text-anchor="middle">ĐVT</text>
+    <text x="546" y="22" fill="#0F172A" font-size="11" font-weight="700" text-anchor="end">Số lượng</text>
+
+    <!-- Row 1 -->
+    <rect x="0" y="34" width="556" height="36" fill="none" stroke="#0F172A" />
+    <text x="22" y="57" fill="#0F172A" font-size="12" text-anchor="middle" class="num">1</text>
+    <text x="52" y="57" fill="#0F172A" font-size="12" font-weight="600" class="mono">SKU-MILK-01</text>
+    <text x="162" y="57" fill="#0F172A" font-size="12">Sữa tươi tiệt trùng 1L (Lô: LOT-2610)</text>
+    <text x="423" y="57" fill="#0F172A" font-size="12" text-anchor="middle">Thùng</text>
+    <text x="546" y="57" fill="#0F172A" font-size="12" font-weight="700" text-anchor="end" class="num">120,00</text>
+
+    <!-- Row 2 -->
+    <rect x="0" y="70" width="556" height="36" fill="none" stroke="#0F172A" />
+    <text x="22" y="93" fill="#0F172A" font-size="12" text-anchor="middle" class="num">2</text>
+    <text x="52" y="93" fill="#0F172A" font-size="12" font-weight="600" class="mono">SKU-MILK-02</text>
+    <text x="162" y="93" fill="#0F172A" font-size="12">Sữa chua uống hương dâu 180ml</text>
+    <text x="423" y="93" fill="#0F172A" font-size="12" text-anchor="middle">Thùng</text>
+    <text x="546" y="93" fill="#0F172A" font-size="12" font-weight="700" text-anchor="end" class="num">85,00</text>
+
+    <!-- Row 3 -->
+    <rect x="0" y="106" width="556" height="36" fill="none" stroke="#0F172A" />
+    <text x="22" y="129" fill="#0F172A" font-size="12" text-anchor="middle" class="num">3</text>
+    <text x="52" y="129" fill="#0F172A" font-size="12" font-weight="600" class="mono">SKU-PACK-04</text>
+    <text x="162" y="129" fill="#0F172A" font-size="12">Thùng Carton 3 lớp 30×20×15cm</text>
+    <text x="423" y="129" fill="#0F172A" font-size="12" text-anchor="middle">Cái</text>
+    <text x="546" y="129" fill="#0F172A" font-size="12" font-weight="700" text-anchor="end" class="num">500,00</text>
+
+    <!-- Total Row -->
+    <rect x="0" y="142" width="556" height="36" fill="#F8FAFC" stroke="#0F172A" />
+    <text x="162" y="165" fill="#0F172A" font-size="12" font-weight="700">Cộng (Tổng số dòng hàng: 03 dòng)</text>
+    <text x="546" y="165" fill="#047857" font-size="13" font-weight="800" text-anchor="end" class="num">705,00</text>
+  </g>
+
+  <text x="636" y="486" fill="#0F172A" font-size="12"><tspan font-weight="700">Ghi chú kiểm định QC:</tspan> Hàng nguyên đai kiện, nhiệt độ xe lạnh đạt 4°C, đã dán tem Lô LOT-2610.</text>
+
+  <!-- 4 Statutory Signature Columns (<UiPrintSignatures />) -->
+  <g transform="translate(636, 514)">
+    <rect x="0" y="0" width="556" height="168" rx="6" fill="#ECFDF5" stroke="#059669" stroke-dasharray="4,3" />
+    <text x="278" y="20" fill="#047857" font-size="11" font-weight="700" text-anchor="middle">✓ KHỐI 4 CHỮ KÝ PHÁP LÝ (&lt;UiPrintSignatures /&gt; • page-break-inside: avoid)</text>
+
+    <text x="68" y="48" fill="#0F172A" font-size="12" font-weight="700" text-anchor="middle">Người lập phiếu</text>
+    <text x="68" y="64" fill="#475569" font-size="11" font-style="italic" text-anchor="middle">(Ký, ghi rõ họ tên)</text>
+    <text x="68" y="144" fill="#0F172A" font-size="12" font-weight="600" text-anchor="middle">Nguyễn Văn Lập</text>
+
+    <text x="206" y="48" fill="#0F172A" font-size="12" font-weight="700" text-anchor="middle">Người giao hàng</text>
+    <text x="206" y="64" fill="#475569" font-size="11" font-style="italic" text-anchor="middle">(Ký, ghi rõ họ tên)</text>
+    <text x="206" y="144" fill="#0F172A" font-size="12" font-weight="600" text-anchor="middle">Lê Văn Giao</text>
+
+    <text x="348" y="48" fill="#0F172A" font-size="12" font-weight="700" text-anchor="middle">Thủ kho</text>
+    <text x="348" y="64" fill="#475569" font-size="11" font-style="italic" text-anchor="middle">(Ký, ghi rõ họ tên)</text>
+    <text x="348" y="144" fill="#0F172A" font-size="12" font-weight="600" text-anchor="middle">Phạm Thủ Kho</text>
+
+    <text x="488" y="48" fill="#0F172A" font-size="12" font-weight="700" text-anchor="middle">Kế toán trưởng</text>
+    <text x="488" y="64" fill="#475569" font-size="11" font-style="italic" text-anchor="middle">(Hoặc Quản lý kho)</text>
+    <text x="488" y="144" fill="#0F172A" font-size="12" font-weight="600" text-anchor="middle">Trần Quản Lý</text>
+  </g>
+
+  <!-- Print CSS Fix Callout Footer -->
+  <rect x="636" y="700" width="556" height="74" rx="6" fill="#0F172A" />
+  <text x="652" y="724" fill="#34D399" font-size="12" font-weight="700">✓ Đã khắc phục triệt để lỗi dư Page 2 &amp; Page 3 trắng tinh khi xuất PDF:</text>
+  <text x="652" y="744" fill="#CBD5E1" font-size="11" class="mono">Thay body * { visibility: hidden } bằng display: none !important cho vùng ngoài</text>
+  <text x="652" y="762" fill="#CBD5E1" font-size="11" class="mono">.receipt-print-overlay + đặt min-height: 0 !important khi @media print.</text>
+</svg>

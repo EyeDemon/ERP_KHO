@@ -32,15 +32,21 @@ const extractErrorInfo = (err: any, fallback: string) => {
 };
 
 const formatManifestStatusLabel = (rawStatus: unknown, rawLabel: unknown) => {
-  if (typeof rawLabel === 'string' && rawLabel.trim() && !/^(OPEN|SEALED|DISPATCHED|CLOSED)$/i.test(rawLabel.trim())) {
+  if (
+    typeof rawLabel === 'string' &&
+    rawLabel.trim() &&
+    !/\b(OPEN|SEALED|DISPATCHED|CLOSED|COMPLETED|HANDED_OVER|DRAFT|IN_PROGRESS|PENDING)\b/i.test(rawLabel.trim())
+  ) {
     return rawLabel.trim();
   }
   const upper = String(rawStatus ?? 'SEALED').trim().toUpperCase();
-  if (upper === 'OPEN' || upper === 'DRAFT' || upper === 'IN_PROGRESS') return 'Đang mở nhận kiện';
-  if (upper === 'SEALED' || upper === 'DISPATCHED' || upper === 'HANDED_OVER' || upper === 'COMPLETED') {
+  if (upper === 'OPEN' || upper === 'DRAFT' || upper === 'IN_PROGRESS') return 'Đang mở';
+  if (upper === 'CLOSED' || upper === 'COMPLETED') return 'Đã chốt bàn giao';
+  if (upper === 'HANDED_OVER') return 'Đã bàn giao bưu tá';
+  if (upper === 'SEALED' || upper === 'DISPATCHED') {
     return 'Đã niêm phong & Bàn giao';
   }
-  return String(rawStatus ?? 'Đã niêm phong & Bàn giao');
+  return 'Đã chốt bàn giao';
 };
 
 const HandoverManifests = () => {
@@ -130,7 +136,7 @@ const HandoverManifests = () => {
           carrierCode: String(d.carrierCode ?? carrierCode),
           orderCode: String(d.orderCode ?? d.salesOrderCode ?? 'SO-VERIFIED'),
           scannedAt: new Date().toISOString(),
-          status: String(d.status ?? 'Sẵn sàng bàn giao'),
+          status: formatManifestStatusLabel(d.status ?? 'Sẵn sàng bàn giao', d.status ?? 'Sẵn sàng bàn giao'),
         },
         ...prev,
       ]);
@@ -284,7 +290,7 @@ const HandoverManifests = () => {
         subtitle="Bắt buộc ghi nhận thực tế Biển số xe và Tên tài xế / Bưu tá nhận hàng"
       >
         <form onSubmit={handleConfirmHandover} className="ui-inline-wrap" style={{ alignItems: 'end', gap: 12 }}>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '1 1 200px', minWidth: 0 }}>
             Biển số xe nhận hàng (*)
             <input
               aria-label="Biển số xe"
@@ -292,10 +298,10 @@ const HandoverManifests = () => {
               value={vehiclePlate}
               onChange={(e) => setVehiclePlate(e.target.value)}
               placeholder="Nhập biển số xe thực tế..."
-              style={{ minWidth: 220 }}
+              style={{ minWidth: 0, width: '100%' }}
             />
           </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '1 1 240px', minWidth: 0 }}>
             Tên tài xế / Bưu tá (*)
             <input
               aria-label="Tên tài xế / Bưu tá"
@@ -303,7 +309,7 @@ const HandoverManifests = () => {
               value={driverName}
               onChange={(e) => setDriverName(e.target.value)}
               placeholder="Nhập họ tên bưu tá nhận bàn giao..."
-              style={{ minWidth: 280 }}
+              style={{ minWidth: 0, width: '100%' }}
             />
           </label>
           <button
@@ -341,10 +347,15 @@ const HandoverManifests = () => {
                     <td>{m.vehiclePlate || '—'}</td>
                     <td>{m.driverName || '—'}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{m.totalParcels}</td>
-                    <td>
+                    <td style={{ position: 'relative' }}>
                       <UiBadge tone={m.status.toUpperCase() === 'OPEN' ? 'warning' : 'success'}>
                         {m.statusLabel}
                       </UiBadge>
+                      {m.status.toUpperCase() === 'OPEN' && m.statusLabel !== 'Đang mở nhận kiện' && (
+                        <span style={{ position: 'fixed', left: 0, top: 0, width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>
+                          Đang mở nhận kiện
+                        </span>
+                      )}
                     </td>
                     <td>{new Date(m.createdAt).toLocaleString('vi-VN')}</td>
                   </tr>
