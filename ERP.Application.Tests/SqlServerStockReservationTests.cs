@@ -755,7 +755,9 @@ public sealed class SqlServerStockReservationTests
             await clean.Stocktakes.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
             await clean.ImportReceiptDetails.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
             await clean.ImportReceipts.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
-            await clean.InventoryTransactions.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
+            await clean.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            try { await clean.InventoryTransactions.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync(); }
+            finally { await clean.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;"); }
             await clean.StockReservations.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
             await CleanupAsync(fixture);
         }
@@ -1007,7 +1009,9 @@ public sealed class SqlServerStockReservationTests
             }
 
             await using var clean = CreateContext();
-            await clean.InventoryTransactions.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
+            await clean.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            try { await clean.InventoryTransactions.Where(x => x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync(); }
+            finally { await clean.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;"); }
             await CleanupAsync(fixture);
         }
     }
@@ -1076,7 +1080,9 @@ public sealed class SqlServerStockReservationTests
         var userIds = new[] { f.CreatorId, f.UserId };
         await db.AuditLogs.Where(x => x.UserId.HasValue && userIds.Contains(x.UserId.Value)).ExecuteDeleteAsync();
         var receiptIds = await db.ExportReceipts.Where(x => x.CreatedBy == f.CreatorId).Select(x => x.Id).ToListAsync();
-        await db.InventoryTransactions.Where(x => x.ReferenceType == "ExportReceipt" && x.ReferenceId.HasValue && receiptIds.Contains(x.ReferenceId.Value)).ExecuteDeleteAsync();
+        await db.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+        try { await db.InventoryTransactions.Where(x => x.ReferenceType == "ExportReceipt" && x.ReferenceId.HasValue && receiptIds.Contains(x.ReferenceId.Value)).ExecuteDeleteAsync(); }
+        finally { await db.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;"); }
         await db.StockReservations.Where(x => x.CreatedBy == f.UserId).ExecuteDeleteAsync();
         await db.ExportReceiptDetails.Where(x => receiptIds.Contains(x.ExportReceiptId)).ExecuteDeleteAsync();
         await db.ExportReceipts.Where(x => receiptIds.Contains(x.Id)).ExecuteDeleteAsync();

@@ -13,6 +13,7 @@ internal sealed class OwnedTemporaryMigrationDatabase : IAsyncDisposable
     private readonly string _runId;
     private bool _disposed;
     internal string DatabaseName => _databaseName;
+    internal string DatabaseConnection => _databaseConnection;
     internal string RunId => _runId;
 
     private OwnedTemporaryMigrationDatabase(

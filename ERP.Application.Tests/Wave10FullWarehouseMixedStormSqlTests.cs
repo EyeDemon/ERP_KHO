@@ -1027,7 +1027,15 @@ public sealed class Wave10FullWarehouseMixedStormSqlTests
             await cleanDb.AuditLogs.Where(x => x.WarehouseId.HasValue && warehouseIds.Contains(x.WarehouseId.Value)).ExecuteDeleteAsync();
             await cleanDb.InventoryLocks.Where(x => warehouseIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
             await cleanDb.InventoryLocationMovements.Where(x => warehouseIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
-            await cleanDb.InventoryTransactions.Where(x => warehouseIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
+            await cleanDb.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            try
+            {
+                await cleanDb.InventoryTransactions.Where(x => warehouseIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
+            }
+            finally
+            {
+                await cleanDb.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            }
             await cleanDb.PutawayTaskItems.Where(x => warehouseIds.Contains(x.PutawayTask.WarehouseId)).ExecuteDeleteAsync();
             await cleanDb.PutawayTasks.Where(x => warehouseIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
             var lineIds = await cleanDb.PickingTaskLines.Where(x => warehouseIds.Contains(x.PickingTask.WarehouseId)).Select(x => x.Id).ToArrayAsync();

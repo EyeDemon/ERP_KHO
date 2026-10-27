@@ -1477,7 +1477,15 @@ public sealed class Wave7FullChaosLifecycleSqlTests
             await db.PurchaseOrderLines.Where(x => whIds.Contains(x.PurchaseOrder.WarehouseId)).ExecuteDeleteAsync();
             await db.PurchaseOrders.Where(x => whIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
 
-            await db.InventoryTransactions.Where(x => whIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
+            await db.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            try
+            {
+                await db.InventoryTransactions.Where(x => whIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
+            }
+            finally
+            {
+                await db.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            }
             await db.InventoryStocks.Where(x => whIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
 
             await db.WarehouseCalendarDays.Where(x => whIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();

@@ -38,7 +38,7 @@ public sealed class BusinessPartnerService(ErpKhoDbContext context, IWarehouseAu
     {
         if(dto.CreditLimit<0)throw new BusinessRuleException("Hạn mức tín dụng không được âm.");
         if(dto.PaymentTermDays is <0 or >3650)throw new BusinessRuleException("Kỳ hạn thanh toán phải từ 0 đến 3650 ngày.");
-        await using var tx=await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable,ct);
+        await using var tx=context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable,ct) : null;
         var entity=await context.BusinessPartners.SingleOrDefaultAsync(x=>x.Id==id,ct)??throw new NotFoundException($"Không tìm thấy đối tác id {id}");
         if(Code(dto.Code)!=entity.Code)throw new BusinessRuleException("Mã đối tác không được thay đổi.");
         Roles(dto.IsSupplier,dto.IsCustomer);
@@ -48,7 +48,7 @@ public sealed class BusinessPartnerService(ErpKhoDbContext context, IWarehouseAu
         var expected=RequiredRowVersion(dto.RowVersion);
         context.Entry(entity).Property(x=>x.RowVersion).OriginalValue=expected;
         entity.Name=Text(dto.Name,200,"Tên đối tác");entity.IsSupplier=dto.IsSupplier;entity.IsCustomer=dto.IsCustomer;entity.IsActive=dto.IsActive;entity.Phone=Optional(dto.Phone,50,"Điện thoại");entity.Email=Optional(dto.Email,254,"Email");entity.Address=Optional(dto.Address,500,"Địa chỉ");entity.CreditLimit=dto.CreditLimit;entity.PaymentTermDays=dto.PaymentTermDays;entity.UpdatedAt=DateTime.UtcNow;
-        await Save("Đối tác đã được thay đổi đồng thời.",ct);await tx.CommitAsync(ct);
+        await Save("Đối tác đã được thay đổi đồng thời.",ct);if(tx is not null)await tx.CommitAsync(ct);
     }
 
     public async Task DeleteAsync(int id,CancellationToken ct=default)
@@ -74,7 +74,7 @@ public sealed class BusinessPartnerService(ErpKhoDbContext context, IWarehouseAu
 
     private async Task SetReceiptPartner(int receiptId,int? partnerId,bool supplier,CancellationToken ct)
     {
-        await using var tx=await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable,ct);
+        await using var tx=context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable,ct) : null;
         var import = supplier ? await context.ImportReceipts.SingleOrDefaultAsync(x=>x.Id==receiptId,ct) : null;
         var export = supplier ? null : await context.ExportReceipts.SingleOrDefaultAsync(x=>x.Id==receiptId,ct);
         var warehouseId = import?.WarehouseId ?? export?.WarehouseId
@@ -87,7 +87,7 @@ public sealed class BusinessPartnerService(ErpKhoDbContext context, IWarehouseAu
         if(supplier) import!.SupplierId=partnerId;
         else export!.CustomerId=partnerId;
         context.AuditLogs.Add(new AuditLog{UserId=currentUser.UserId,Action=supplier?"ImportReceipt.SupplierChanged":"ExportReceipt.CustomerChanged",EntityName=supplier?"ImportReceipt":"ExportReceipt",EntityId=receiptId,WarehouseId=warehouseId,NewValues=partnerId.HasValue?$"PartnerId: {partnerId}":"PartnerId: null",Result="Success",Severity="Information",Timestamp=DateTime.UtcNow});
-        await Save("Liên kết đối tác không còn khả dụng hoặc chứng từ đã thay đổi.",ct);await tx.CommitAsync(ct);
+        await Save("Liên kết đối tác không còn khả dụng hoặc chứng từ đã thay đổi.",ct);if(tx is not null)await tx.CommitAsync(ct);
     }
 
     private async Task Save(string message,CancellationToken ct){try{await context.SaveChangesAsync(ct);}catch(DbUpdateConcurrencyException ex){throw Conflict(message,ex);}catch(DbUpdateException ex)when(ex.InnerException is SqlException{Number:2601 or 2627 or 547}){throw Conflict(message,ex);}}

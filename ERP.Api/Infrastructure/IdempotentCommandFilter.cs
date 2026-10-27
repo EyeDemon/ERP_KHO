@@ -52,12 +52,6 @@ public sealed class IdempotentCommandFilter(
         var rawKey = actionContext.HttpContext.Request.Headers[HeaderName].FirstOrDefault();
         if (string.IsNullOrWhiteSpace(rawKey))
         {
-            if (IsOptionalHeaderScope(commandScope))
-            {
-                await next();
-                return;
-            }
-
             actionContext.Result = new BadRequestObjectResult(new { message = "Idempotency-Key là bắt buộc và không được vượt quá 128 ký tự." });
             return;
         }
@@ -323,32 +317,11 @@ public sealed class IdempotentCommandFilter(
 
     public static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
-    public static bool IsOptionalHeaderScope(string scope) =>
-        scope.StartsWith("BusinessPartner.", StringComparison.Ordinal)
-        || scope.StartsWith("Product.", StringComparison.Ordinal)
-        || scope.StartsWith("Warehouse.", StringComparison.Ordinal)
-        || scope.StartsWith("Unit.", StringComparison.Ordinal)
-        || scope.StartsWith("ProductCategory.", StringComparison.Ordinal)
-        || scope.StartsWith("ProductBarcode.", StringComparison.Ordinal)
-        || scope.StartsWith("PutawayLocation.", StringComparison.Ordinal)
-        || scope.StartsWith("WarehouseCalendar.", StringComparison.Ordinal)
-        || scope is "DockYard.Dock.Update" or "DockYard.YardSlot.Update"
-            or "ImportReceipt.SetSupplier" or "ImportReceipt.RmaIntakeCheck" or "ImportReceipt.ExecuteRtvRefurbish"
-            or "ExportReceipt.SetCustomer"
-            or "Approval.EscalateOverdue"
-            or "PackingSession.ExecuteKittingVas"
-            or "PickingTask.SyncAutomationTelemetry"
-            or "PurchaseOrder.ExpediteOverdue" or "PurchaseOrder.GenerateProcurementRecommendations"
-            or "SalesOrder.ExpediteBackorder"
-            or "Shipment.SyncTmsManifest"
-            or "Stocktake.CreateAdjustmentProposal"
-            or "OperationalException.Acknowledge"
-            or "InventoryReservation.Release" or "InventoryReservation.Expire";
-
     public static bool RequiresSerializableIsolation(string scope) =>
         scope is not ("DockYard.Appointment.Confirm" or "StockTransfer.Approve") &&
         (scope.StartsWith("ImportReceipt.", StringComparison.Ordinal)
         || scope.StartsWith("ExportReceipt.", StringComparison.Ordinal)
+        || scope.StartsWith("BusinessPartner.", StringComparison.Ordinal)
         || scope.StartsWith("Inbound.", StringComparison.Ordinal)
         || scope.StartsWith("Outbound.", StringComparison.Ordinal)
         || scope.StartsWith("SalesOrder.", StringComparison.Ordinal)

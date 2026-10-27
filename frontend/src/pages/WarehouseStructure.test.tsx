@@ -1,50 +1,93 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
-import WarehouseStructure from './WarehouseStructure';
+import { cleanup, fireEvent, render } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import WarehouseLocations from './WarehouseLocations';
+import apiClient from '../services/apiClient';
 
-afterEach(cleanup);
+vi.mock('../services/apiClient', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn() } }));
 
-describe('Cấu trúc vị trí kho mock-only', () => {
-  it('renders canonical hierarchy, system, unmapped and lifecycle examples without mutation controls', () => {
-    const view = render(<WarehouseStructure />);
+const get = vi.mocked(apiClient.get);
 
-    expect(view.container.firstElementChild?.classList.contains('production-ui')).toBe(true);
-    expect(view.container.firstElementChild?.classList.contains('warehouse-structure-surface')).toBe(true);
-    expect(view.getByText(/frontend mock-only/i)).toBeTruthy();
-    expect(view.getAllByText('A01-R02-L03-B04').length).toBeGreaterThan(0);
-    expect(view.getAllByText('ZONE-A / A01 / R02 / L03 / B04').length).toBeGreaterThan(0);
-    expect(view.getByText('RECEIVING')).toBeTruthy();
-    expect(view.getByText('LEGACY')).toBeTruthy();
-    expect(view.getByText('LEGACY-UNMAPPED-01')).toBeTruthy();
-    expect(view.getAllByText('Bị khóa').length).toBeGreaterThan(0);
-    expect(view.getAllByText('Ngừng hoạt động').length).toBeGreaterThan(0);
+const warehouses = [{ id: 1, code: 'WH01', name: 'Kho Trung Tâm TP.HCM' }];
+const capacities = [
+  {
+    locationId: 101,
+    code: 'A01-R02-L03-B04',
+    name: 'Kệ lưu trữ chính B04',
+    structurePath: 'ZONE-A/A01/R02/L03/B04',
+    storageClass: 'AMBIENT',
+    maxWeightKg: 1500,
+    usedWeightKg: 600,
+    maxVolumeM3: 10,
+    usedVolumeM3: 4,
+    maxPalletEquivalent: 5,
+    usedPalletEquivalent: 2,
+    profileIncomplete: false,
+    compatibilityConflict: false,
+    isActive: true,
+    isBlocked: false,
+    state: 'Available',
+  },
+];
 
-    const damagedRow = view.getAllByText('A01-R02-L03-B08')[0].closest('tr');
-    const rejectedRow = view.getAllByText('A01-R02-L03-B09')[0].closest('tr');
-    expect(damagedRow).toBeTruthy();
-    expect(rejectedRow).toBeTruthy();
-    expect(within(damagedRow as HTMLTableRowElement).getByText('Không pick')).toBeTruthy();
-    expect(within(rejectedRow as HTMLTableRowElement).getByText('Không pick')).toBeTruthy();
+const locations = [
+  {
+    id: 101,
+    warehouseId: 1,
+    code: 'A01-R02-L03-B04',
+    name: 'Kệ lưu trữ chính B04',
+    structurePath: 'ZONE-A/A01/R02/L03/B04',
+    storageClass: 'AMBIENT',
+    maxWeightKg: 1500,
+    maxVolumeM3: 10,
+    maxPalletEquivalent: 5,
+    locationType: 'Storage',
+    isActive: true,
+    isBlocked: false,
+    isPickable: true,
+    isReceivable: false,
+    isSystemManaged: false,
+    rowVersion: 'AQ==',
+  },
+  {
+    id: 1,
+    warehouseId: 1,
+    code: 'RECEIVING',
+    name: 'Cửa nhận hàng',
+    structurePath: null,
+    locationType: 'Receiving',
+    isActive: true,
+    isBlocked: false,
+    isPickable: false,
+    isReceivable: true,
+    isSystemManaged: true,
+    rowVersion: null,
+  },
+];
 
-    expect(view.queryByText('Thêm cấu trúc vật lý')).toBeNull();
-    expect(view.queryByText('Tạo vị trí')).toBeNull();
-    expect(view.queryByText('Lưu vị trí')).toBeNull();
-    expect(view.getByText('Mã QR vị trí kệ')).toBeTruthy();
-    expect(view.container.textContent).not.toContain('QR GS1');
+describe('Cấu trúc vị trí kho định tuyến về WarehouseLocations API thật', () => {
+  afterEach(cleanup);
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    localStorage.clear();
+    localStorage.setItem('role', 'Admin');
+    localStorage.setItem('permissions', '["location.read","location.manage"]');
+    get.mockImplementation(async (url) => {
+      if (url === '/api/putaway-tasks/location-warehouses') return { data: warehouses } as never;
+      if (url === '/api/putaway-tasks/locations') return { data: locations } as never;
+      if (url === '/api/putaway-tasks/location-capacity') return { data: capacities } as never;
+      return { data: [] } as never;
+    });
   });
 
-  it('filters local mock data without requiring an external API', () => {
-    const view = render(<WarehouseStructure />);
+  it('renders live API warehouse hierarchy and system locations via WarehouseLocations', async () => {
+    const view = render(<WarehouseLocations />);
+    expect((await view.findAllByText('ZONE-A')).length).toBeGreaterThan(0);
+    expect(view.getAllByText('A01-R02-L03-B04').length).toBeGreaterThan(0);
 
-    fireEvent.change(view.getByLabelText('Trạng thái vị trí'), { target: { value: 'blocked' } });
-    const table = view.getByRole('table', { name: 'Vị trí vật lý theo bộ lọc' });
-    expect(within(table).getByText('A01-R02-L03-B06')).toBeTruthy();
-    expect(within(table).queryByText('A01-R02-L03-B04')).toBeNull();
-
-    fireEvent.change(view.getByLabelText('Trạng thái vị trí'), { target: { value: 'all' } });
-    fireEvent.change(view.getByLabelText('Loại vị trí'), { target: { value: 'Damaged' } });
-    expect(within(table).getByText('A01-R02-L03-B08')).toBeTruthy();
-    expect(within(table).queryByText('A01-R02-L03-B09')).toBeNull();
+    fireEvent.click(view.getByTestId('tab-view-system'));
+    expect(view.getAllByText('RECEIVING').length).toBeGreaterThan(0);
+    expect(get).toHaveBeenCalledWith('/api/putaway-tasks/locations', { params: { warehouseId: 1 } });
   });
 });

@@ -28,6 +28,8 @@ public class InventoryTransaction : ITenantEntity
     public int? ReversalOfTransactionId { get; set; }
     public int? CorrectiveTransactionId { get; set; }
     public DateTime TransactionDate { get; set; } = DateTime.UtcNow;
+    public DateTime ActualOccurredAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime PostedAtUtc { get; set; } = DateTime.UtcNow;
     public int CreatedBy { get; set; }
     public string? Note { get; set; }
     // Present on reversal markers only; legacy history stays null.

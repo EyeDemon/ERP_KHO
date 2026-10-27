@@ -8,13 +8,15 @@ public class InventoryTransactionConfiguration : IEntityTypeConfiguration<Invent
 {
     public void Configure(EntityTypeBuilder<InventoryTransaction> builder)
     {
-        builder.ToTable("InventoryTransactions");
+        builder.ToTable("InventoryTransactions", t => t.HasTrigger("TR_InventoryTransactions_Immutable_AppendOnly"));
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Quantity).HasPrecision(19, 4);
         builder.Property(x => x.UnitCost).HasPrecision(19, 4);
         builder.Property(x => x.ReferenceType).HasMaxLength(50);
         builder.Property(x => x.Note).HasMaxLength(500);
         builder.Property(x => x.ReasonCode).HasMaxLength(40);
+        builder.Property(x => x.ActualOccurredAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
+        builder.Property(x => x.PostedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
         builder.Property(x => x.InventoryStatus).HasConversion<int>();
         builder.Property(x => x.FromInventoryStatus).HasConversion<int?>();
         builder.Property(x => x.ToInventoryStatus).HasConversion<int?>();

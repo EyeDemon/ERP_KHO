@@ -2902,11 +2902,6 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         });
         await context.SaveChangesAsync();
     }
-    else
-    {
-        await context.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE InventoryTransactions SET LocationId = {receivingLocation.Id}, LotId = {lotQa002.Id}, InventoryStatus = {(int)InventoryStatus.Available}, Quantity = 65, Note = N'Ghi sổ phiếu nhập kho IR-QA-001 cho lô cảm biến LOT-QA-002 tại khu tiếp nhận RECEIVING' WHERE WarehouseId = {primaryWarehouse.Id} AND ProductId = {lotProduct.Id} AND TransactionType = {(int)TransactionType.Import} AND ReferenceType = 'ImportReceipt' AND ReferenceId = {irQa001.Id}");
-    }
 
     // Ensure ER-QA-001 -> RSV-QA-LOT-002 -> ALC-QA-LOT-002 -> PICK-QA-003 -> PACK-QA-002 -> HU-QA-002 -> SHP-QA-002 outbound genealogy for LOT-QA-002 (5 units)
     var erQa001Lot = await context.ExportReceipts.IgnoreQueryFilters()
@@ -3276,11 +3271,6 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             });
             await context.SaveChangesAsync();
         }
-        else
-        {
-            await context.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE InventoryTransactions SET LocationId = {storageBin.Id}, LotId = {lotQa002.Id}, InventoryStatus = {(int)InventoryStatus.Available}, Quantity = 5, Note = N'Xuất giao 5 hộp cảm biến nhiệt độ QA-02 (lô LOT-QA-002) trên chuyến giao SHP-QA-002 theo phiếu xuất ER-QA-001' WHERE WarehouseId = {primaryWarehouse.Id} AND ProductId = {lotProduct.Id} AND TransactionType = {(int)TransactionType.Ship} AND ReferenceType = 'Shipment' AND ReferenceId = {shpQa002.Id}");
-        }
     }
 
     var activeQcLock = await context.InventoryLocks.IgnoreQueryFilters()
@@ -3427,11 +3417,6 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             Note = "Điều chuyển nội bộ 5 hộp cảm biến nhiệt độ QA-02 (lô LOT-QA-002) từ RECEIVING vào kệ BIN-A01-01"
         });
     }
-    else
-    {
-        await context.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE InventoryTransactions SET LotId = {lotQa002.Id}, LocationId = {storageBin.Id}, FromLocationId = {receivingLocation.Id}, ToLocationId = {storageBin.Id} WHERE WarehouseId = {primaryWarehouse.Id} AND TransactionType = {(int)TransactionType.Move} AND ReferenceType = 'InternalMove' AND ReferenceId = 9002");
-    }
 
     var allAllocations = await context.StockAllocations.IgnoreQueryFilters()
         .OrderBy(a => a.Id)
@@ -3485,11 +3470,6 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
 
     await context.Database.ExecuteSqlRawAsync(
         "UPDATE InventoryLocationMovements SET EnteredUnitCode = N'THÙNG' WHERE EnteredUnitCode IN ('QA_UNIT', 'QA-PCS') OR EnteredUnitCode IS NULL; " +
-        "UPDATE InventoryTransactions SET CorrectiveTransactionId = NULL, Note = N'Điều chuyển nội bộ 10 thùng linh kiện QA-01 từ khu tiếp nhận RECEIVING vào kệ lưu trữ BIN-A01-01' WHERE ReferenceType = 'InternalMove' AND ReferenceId = 9001; " +
-        "UPDATE InventoryTransactions SET CorrectiveTransactionId = NULL, Note = N'Điều chuyển nội bộ 5 hộp cảm biến nhiệt độ QA-02 (lô LOT-QA-002) từ khu tiếp nhận RECEIVING vào kệ BIN-A01-01' WHERE ReferenceType = 'InternalMove' AND ReferenceId = 9002; " +
-        "UPDATE InventoryTransactions SET Note = N'Tồn kho tại khu tiếp nhận RECEIVING cho nhiệm vụ cất hàng PUT-QA-001' WHERE Note = N'Tồn kho tại RECEIVING cho nhiệm vụ cất hàng PUT-QA-001'; " +
-        "UPDATE InventoryTransactions SET Note = REPLACE(Note, N'chờ QC', N'chờ kiểm định chất lượng') WHERE Note LIKE N'%chờ QC%'; " +
-        "UPDATE InventoryTransactions SET Note = REPLACE(Note, N'(100% Match)', N'(Khớp 100%)') WHERE Note LIKE N'%(100% Match)%'; " +
         "UPDATE ImportReceipts SET ApprovedAt = DATEADD(MINUTE, 150, CreatedAt) WHERE Status IN (1, 2) AND (ApprovedAt IS NULL OR DATEDIFF(MINUTE, CreatedAt, ApprovedAt) < 30); " +
         "UPDATE ExportReceipts SET ApprovedAt = DATEADD(MINUTE, 60, CreatedAt), DispatchedAt = DATEADD(MINUTE, 90, CreatedAt) WHERE Status IN (1, 2, 4) AND (DispatchedAt IS NULL OR DATEDIFF(MINUTE, CreatedAt, DispatchedAt) < 30);");
 
@@ -3712,7 +3692,6 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
 
     await context.Database.ExecuteSqlInterpolatedAsync($@"
-        DELETE FROM InventoryTransactions WHERE ReferenceType IN ('HandlingUnitPalletSeed', 'HandlingUnitLpnMove');
         DELETE FROM InventoryLocationMovements WHERE ReferenceType = 'HandlingUnitMove';
         DELETE FROM InventoryStocks WHERE HandlingUnitId = {palletLpn001.Id};");
 
@@ -3744,40 +3723,44 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     };
     lpnStock2.RefreshGrainHash();
     context.InventoryStocks.AddRange(lpnStock1, lpnStock2);
-    context.InventoryTransactions.AddRange(
-        new InventoryTransaction
-        {
-            WarehouseId = primaryWarehouse.Id,
-            ProductId = product.Id,
-            LocationId = rcv01Location.Id,
-            HandlingUnitId = palletLpn001.Id,
-            InventoryStatus = InventoryStatus.Available,
-            TransactionType = TransactionType.Import,
-            Quantity = 8m,
-            UnitCost = 250000m,
-            ReferenceType = "HandlingUnitPalletSeed",
-            ReferenceId = palletLpn001.Id,
-            TransactionDate = DateTime.UtcNow.AddMinutes(-20),
-            CreatedBy = qaAdmin.Id,
-            Note = "Nhập kiện Pallet PALLET-LPN-001 (8 thùng linh kiện QA-01) tại cửa tiếp nhận RCV-01"
-        },
-        new InventoryTransaction
-        {
-            WarehouseId = primaryWarehouse.Id,
-            ProductId = lotProduct.Id,
-            LocationId = rcv01Location.Id,
-            LotId = lotQa002.Id,
-            HandlingUnitId = palletLpn001.Id,
-            InventoryStatus = InventoryStatus.Available,
-            TransactionType = TransactionType.Import,
-            Quantity = 6m,
-            UnitCost = 420000m,
-            ReferenceType = "HandlingUnitPalletSeed",
-            ReferenceId = palletLpn001.Id,
-            TransactionDate = DateTime.UtcNow.AddMinutes(-20),
-            CreatedBy = qaAdmin.Id,
-            Note = "Nhập kiện Pallet PALLET-LPN-001 (6 hộp cảm biến LOT-QA-002) tại cửa tiếp nhận RCV-01"
-        });
+    if (!await context.InventoryTransactions.IgnoreQueryFilters().AsNoTracking().AnyAsync(
+            t => t.ReferenceType == "HandlingUnitPalletSeed" && t.ReferenceId == palletLpn001.Id))
+    {
+        context.InventoryTransactions.AddRange(
+            new InventoryTransaction
+            {
+                WarehouseId = primaryWarehouse.Id,
+                ProductId = product.Id,
+                LocationId = rcv01Location.Id,
+                HandlingUnitId = palletLpn001.Id,
+                InventoryStatus = InventoryStatus.Available,
+                TransactionType = TransactionType.Import,
+                Quantity = 8m,
+                UnitCost = 250000m,
+                ReferenceType = "HandlingUnitPalletSeed",
+                ReferenceId = palletLpn001.Id,
+                TransactionDate = DateTime.UtcNow.AddMinutes(-20),
+                CreatedBy = qaAdmin.Id,
+                Note = "Nhập kiện Pallet PALLET-LPN-001 (8 thùng linh kiện QA-01) tại cửa tiếp nhận RCV-01"
+            },
+            new InventoryTransaction
+            {
+                WarehouseId = primaryWarehouse.Id,
+                ProductId = lotProduct.Id,
+                LocationId = rcv01Location.Id,
+                LotId = lotQa002.Id,
+                HandlingUnitId = palletLpn001.Id,
+                InventoryStatus = InventoryStatus.Available,
+                TransactionType = TransactionType.Import,
+                Quantity = 6m,
+                UnitCost = 420000m,
+                ReferenceType = "HandlingUnitPalletSeed",
+                ReferenceId = palletLpn001.Id,
+                TransactionDate = DateTime.UtcNow.AddMinutes(-20),
+                CreatedBy = qaAdmin.Id,
+                Note = "Nhập kiện Pallet PALLET-LPN-001 (6 hộp cảm biến LOT-QA-002) tại cửa tiếp nhận RCV-01"
+            });
+    }
     await context.SaveChangesAsync();
 
     var wh02StorageBin = await context.WarehouseLocations.IgnoreQueryFilters()
@@ -3840,7 +3823,6 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
 
     // 7. Idempotent Inventory Reconciliation pass — ensure 100% Match across all (WarehouseId, ProductId, Status) pairs
     await context.Database.ExecuteSqlRawAsync(
-        "DELETE FROM InventoryTransactions WHERE ReferenceType = 'QASeedReconcile' OR Quantity <= 0 OR TransactionType = 6; " +
         "DELETE FROM InventoryStocks WHERE Status <> 0 AND Quantity <= 0 AND ReservedQuantity <= 0;");
 
     var allStocks = await context.InventoryStocks.IgnoreQueryFilters().ToListAsync();
@@ -3935,9 +3917,6 @@ UPDATE dbo.Products SET UnitVolumeM3 = 0.0024 WHERE UnitVolumeM3 IS NULL OR Unit
 UPDATE dbo.InventoryStocks SET MovingAverageCost = 250000 WHERE ProductId = {product.Id};
 UPDATE dbo.InventoryStocks SET MovingAverageCost = 420000 WHERE ProductId = {lotProduct.Id};
 UPDATE dbo.InventoryStocks SET MovingAverageCost = 250000 WHERE MovingAverageCost <= 0;
-
-UPDATE dbo.InventoryTransactions SET UnitCost = 250000 WHERE ProductId = {product.Id} AND UnitCost <= 0;
-UPDATE dbo.InventoryTransactions SET UnitCost = 420000 WHERE ProductId = {lotProduct.Id} AND UnitCost <= 0;
 
 UPDATE dbo.StockReservations
 SET BaseUomIdSnapshot = {unit.Id},

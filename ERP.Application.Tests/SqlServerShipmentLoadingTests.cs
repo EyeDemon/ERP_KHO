@@ -1279,9 +1279,11 @@ public sealed class SqlServerShipmentLoadingTests
     {
         await using var db = CreateContext();
         await db.AuditLogs.Where(x => x.UserId == fixture.UserId).ExecuteDeleteAsync();
+        await db.Database.ExecuteSqlRawAsync("DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
         await db.InventoryTransactions
             .Where(x => x.WarehouseId == fixture.WarehouseId && x.ProductId == fixture.ProductId)
             .ExecuteDeleteAsync();
+        await db.Database.ExecuteSqlRawAsync("ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
         await db.ShipmentProofOfDeliveries
             .Where(x => x.Shipment.WarehouseId == fixture.WarehouseId)
             .ExecuteDeleteAsync();

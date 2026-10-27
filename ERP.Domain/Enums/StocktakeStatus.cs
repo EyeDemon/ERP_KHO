@@ -10,7 +10,8 @@ namespace ERP.Domain.Enums
         PendingApproval = 5,
         Completed = 6,
         Posted = 6,
-        Rejected = 7
+        Rejected = 7,
+        PendingRecount = 8
     }
 }
 

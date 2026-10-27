@@ -1247,8 +1247,10 @@ public sealed class SqlServerInventoryLockMoveTests
             if (otherWarehouseId > 0)
             {
                 await using var cleanupOther = CreateContext();
+                await cleanupOther.Database.ExecuteSqlRawAsync("DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
                 await cleanupOther.InventoryTransactions.Where(x =>
                     x.WarehouseId == otherWarehouseId).ExecuteDeleteAsync();
+                await cleanupOther.Database.ExecuteSqlRawAsync("ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
                 await cleanupOther.Warehouses.Where(x => x.Id == otherWarehouseId)
                     .ExecuteDeleteAsync();
             }
@@ -1358,8 +1360,10 @@ public sealed class SqlServerInventoryLockMoveTests
             if (hiddenId > 0)
             {
                 await using var clear = CreateContext();
+                await clear.Database.ExecuteSqlRawAsync("DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
                 await clear.InventoryTransactions
                     .Where(x => x.WarehouseId == hiddenId).ExecuteDeleteAsync();
+                await clear.Database.ExecuteSqlRawAsync("ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
                 await clear.Warehouses.Where(x => x.Id == hiddenId).ExecuteDeleteAsync();
             }
             await CleanupAsync(fixture);
@@ -2095,9 +2099,13 @@ public sealed class SqlServerInventoryLockMoveTests
             // ledger history; deriving stock buckets from events would
             // incorrectly return an empty warehouse inventory snapshot.
             await using (var seed = CreateContext())
+            {
+                await seed.Database.ExecuteSqlRawAsync("DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
                 await seed.InventoryTransactions.Where(x =>
                     x.ProductId == fixture.ProductId &&
                     x.WarehouseId == fixture.WarehouseId).ExecuteDeleteAsync();
+                await seed.Database.ExecuteSqlRawAsync("ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            }
 
             await using var queryDb = CreateContext();
             var query = new ERP.Infrastructure.Queries.InventoryTraceabilityQueryService(
@@ -2442,7 +2450,9 @@ public sealed class SqlServerInventoryLockMoveTests
     {
         await using var db = CreateContext();
         await db.AuditLogs.Where(x => x.UserId == f.UserId).ExecuteDeleteAsync();
-        await db.InventoryTransactions.Where(x => x.ProductId == f.ProductId && x.WarehouseId == f.WarehouseId).ExecuteDeleteAsync();
+        await db.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+        try { await db.InventoryTransactions.Where(x => x.ProductId == f.ProductId && x.WarehouseId == f.WarehouseId).ExecuteDeleteAsync(); }
+        finally { await db.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;"); }
         await db.InventoryLocationMovements.Where(x => x.ProductId == f.ProductId && x.WarehouseId == f.WarehouseId).ExecuteDeleteAsync();
         await db.InventoryLocks.Where(x => x.WarehouseId == f.WarehouseId).ExecuteDeleteAsync();
         await db.StockAllocations.Where(x => x.ProductId == f.ProductId && x.WarehouseId == f.WarehouseId).ExecuteDeleteAsync();

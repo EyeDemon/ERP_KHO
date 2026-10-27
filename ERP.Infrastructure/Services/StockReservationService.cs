@@ -714,7 +714,6 @@ public class StockReservationService(
             stocksQuery = stocksQuery.Where(x => x.ProductId == productId.Value);
 
         var stocks = await stocksQuery.OrderBy(x => x.WarehouseId).ThenBy(x => x.ProductId).ThenBy(x => x.Id).ToListAsync(cancellationToken);
-        if (stocks.Count == 0) return 0;
 
         var activeAllocations = await context.StockAllocations.AsNoTracking()
             .Where(x => allowed.Contains(x.WarehouseId) &&
@@ -744,6 +743,88 @@ public class StockReservationService(
             .Where(x => allowed.Contains(x.WarehouseId) &&
                         (!productId.HasValue || x.ProductId == productId.Value))
             .ToListAsync(cancellationToken);
+
+        foreach (var txGroup in ledgerTransactions.GroupBy(t => (t.WarehouseId, t.ProductId)))
+        {
+            var existingGroupStocks = stocks
+                .Where(s => s.WarehouseId == txGroup.Key.WarehouseId && s.ProductId == txGroup.Key.ProductId)
+                .ToList();
+            var enforceHu = txGroup.Any(t => t.HandlingUnitId.HasValue) &&
+                            existingGroupStocks.Select(b => b.HandlingUnitId).Distinct().Count() > 1;
+            var enforceOwner = txGroup.Any(t => t.OwnerId.HasValue) &&
+                               existingGroupStocks.Select(b => b.OwnerId).Distinct().Count() > 1;
+
+            var candidateGrains = new List<(int TenantId, int WarehouseId, int? LocationId, int ProductId, int? LotId, int? SerialId, int? HandlingUnitId, InventoryStatus Status, int? OwnerId)>();
+            foreach (var tx in txGroup)
+            {
+                if (tx.TransactionType == TransactionType.TransferAdjustment || tx.TransactionType == TransactionType.Reversal)
+                    continue;
+
+                var huId = enforceHu ? tx.HandlingUnitId : null;
+                var ownId = enforceOwner ? tx.OwnerId : null;
+
+                if (tx.TransactionType == TransactionType.Move)
+                {
+                    if (tx.LocationId.HasValue)
+                        candidateGrains.Add((tx.TenantId, tx.WarehouseId, tx.LocationId, tx.ProductId, tx.LotId, tx.SerialId, huId, tx.InventoryStatus, ownId));
+                    if (tx.FromLocationId.HasValue)
+                        candidateGrains.Add((tx.TenantId, tx.WarehouseId, tx.FromLocationId, tx.ProductId, tx.LotId, tx.SerialId, huId, tx.FromInventoryStatus ?? tx.InventoryStatus, ownId));
+                    if (tx.ToLocationId.HasValue)
+                        candidateGrains.Add((tx.TenantId, tx.WarehouseId, tx.ToLocationId, tx.ProductId, tx.LotId, tx.SerialId, huId, tx.ToInventoryStatus ?? tx.InventoryStatus, ownId));
+                }
+                else if (tx.TransactionType == TransactionType.StatusChange)
+                {
+                    if (tx.LocationId.HasValue && tx.FromInventoryStatus.HasValue)
+                        candidateGrains.Add((tx.TenantId, tx.WarehouseId, tx.LocationId, tx.ProductId, tx.LotId, tx.SerialId, huId, tx.FromInventoryStatus.Value, ownId));
+                    if (tx.LocationId.HasValue && tx.ToInventoryStatus.HasValue)
+                        candidateGrains.Add((tx.TenantId, tx.WarehouseId, tx.LocationId, tx.ProductId, tx.LotId, tx.SerialId, huId, tx.ToInventoryStatus.Value, ownId));
+                }
+                else if (tx.LocationId.HasValue)
+                {
+                    candidateGrains.Add((tx.TenantId, tx.WarehouseId, tx.LocationId, tx.ProductId, tx.LotId, tx.SerialId, huId, tx.InventoryStatus, ownId));
+                }
+            }
+
+            foreach (var candidate in candidateGrains.Distinct())
+            {
+                var exists = stocks.Any(s =>
+                    s.TenantId == candidate.TenantId &&
+                    s.WarehouseId == candidate.WarehouseId &&
+                    s.LocationId == candidate.LocationId &&
+                    s.ProductId == candidate.ProductId &&
+                    s.LotId == candidate.LotId &&
+                    s.SerialId == candidate.SerialId &&
+                    (!enforceHu || s.HandlingUnitId == candidate.HandlingUnitId) &&
+                    s.Status == candidate.Status &&
+                    (!enforceOwner || s.OwnerId == candidate.OwnerId));
+
+                if (!exists)
+                {
+                    var newStock = new InventoryStock
+                    {
+                        TenantId = candidate.TenantId,
+                        WarehouseId = candidate.WarehouseId,
+                        LocationId = candidate.LocationId,
+                        ProductId = candidate.ProductId,
+                        LotId = candidate.LotId,
+                        SerialId = candidate.SerialId,
+                        HandlingUnitId = candidate.HandlingUnitId,
+                        Status = candidate.Status,
+                        OwnerId = candidate.OwnerId,
+                        Quantity = 0m,
+                        ReservedQuantity = 0m,
+                        AllocatedQuantity = 0m,
+                        LockedQuantity = 0m,
+                        LastUpdated = now
+                    };
+                    newStock.RefreshGrainHash();
+                    context.InventoryStocks.Add(newStock);
+                    stocks.Add(newStock);
+                }
+            }
+        }
+
+        if (stocks.Count == 0) return 0;
 
         foreach (var group in stocks.GroupBy(x => (x.WarehouseId, x.ProductId)))
         {
@@ -852,7 +933,9 @@ public class StockReservationService(
                     }
                     else if (ledgerQty < 0m)
                     {
-                        bucket.Quantity = 0m;
+                        throw new ERP.Domain.Exceptions.UnprocessableDomainException(
+                            $"Phát hiện số dư sổ cái 9 chiều bị âm ({ledgerQty:0.0000}) tại Kho #{bucket.WarehouseId}, Sản phẩm #{bucket.ProductId}, Vị trí #{bucket.LocationId}, Lô #{bucket.LotId?.ToString() ?? "NULL"}.",
+                            "INV_NEGATIVE_LEDGER_BUCKET_REBUILD");
                     }
                 }
                 else if (groupTxs.Count > 0 || bucket.Quantity < 0m)

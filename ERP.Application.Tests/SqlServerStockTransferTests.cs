@@ -959,7 +959,9 @@ public sealed class SqlServerStockTransferTests
             .Select(x => x.StockTransferId)
             .Distinct()
             .ToListAsync();
-        await db.InventoryTransactions.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
+        await db.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+        try { await db.InventoryTransactions.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync(); }
+        finally { await db.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;"); }
         await db.AuditLogs.Where(x => x.UserId.HasValue && userIds.Contains(x.UserId.Value)).ExecuteDeleteAsync();
         await db.StockTransferDetails.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
         await db.StockTransfers.Where(x => transferIds.Contains(x.Id)).ExecuteDeleteAsync();

@@ -426,7 +426,9 @@ public sealed class SqlServerInventoryStatusLotSerialTests
     {
         await using var db = CreateContext();
         await db.AuditLogs.Where(x => x.UserId == fixture.UserId).ExecuteDeleteAsync();
-        await db.InventoryTransactions.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
+        await db.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+        try { await db.InventoryTransactions.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync(); }
+        finally { await db.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;"); }
         await db.StockAllocations.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
         await db.StockReservations.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();
         await db.ImportReceiptInventoryIdentities.Where(x => x.ProductId == fixture.ProductId).ExecuteDeleteAsync();

@@ -331,7 +331,15 @@ public sealed class Wave9CrossOperationConcurrencySqlTests
         {
             await using var cleanDb = CreateContext();
             await cleanDb.AuditLogs.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
-            await cleanDb.InventoryTransactions.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
+            await cleanDb.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            try
+            {
+                await cleanDb.InventoryTransactions.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
+            }
+            finally
+            {
+                await cleanDb.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            }
             await cleanDb.PickingTaskLines.Where(x => x.PickingTask.WarehouseId == warehouseId).ExecuteDeleteAsync();
             await cleanDb.PickingTasks.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
             await cleanDb.StockAllocations.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
@@ -765,7 +773,15 @@ public sealed class Wave9CrossOperationConcurrencySqlTests
             await using var cleanDb = CreateContext();
             await cleanDb.AuditLogs.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
             await cleanDb.InventoryLocationMovements.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
-            await cleanDb.InventoryTransactions.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
+            await cleanDb.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            try
+            {
+                await cleanDb.InventoryTransactions.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
+            }
+            finally
+            {
+                await cleanDb.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            }
             await cleanDb.PickingTaskLines.Where(x => x.PickingTask.WarehouseId == warehouseId).ExecuteDeleteAsync();
             await cleanDb.PickingTasks.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
             await cleanDb.StockAllocations.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
@@ -1054,7 +1070,15 @@ public sealed class Wave9CrossOperationConcurrencySqlTests
         {
             await using var cleanDb = CreateContext();
             await cleanDb.AuditLogs.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
-            await cleanDb.InventoryTransactions.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
+            await cleanDb.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            try
+            {
+                await cleanDb.InventoryTransactions.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
+            }
+            finally
+            {
+                await cleanDb.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            }
             await cleanDb.PickingTaskLines.Where(x => x.PickingTask.WarehouseId == warehouseId).ExecuteDeleteAsync();
             await cleanDb.PickingTasks.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
             await cleanDb.StockAllocations.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();

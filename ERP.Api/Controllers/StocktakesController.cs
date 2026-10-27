@@ -983,15 +983,6 @@ namespace ERP.Api.Controllers
 
             if (request?.RecountSubmissions is { Count: > 0 })
             {
-                var detailIds = stocktake.Details.Select(d => d.Id).ToList();
-                var existingRecountLogs = await _db.AuditLogs
-                    .AsNoTracking()
-                    .Where(a => a.EntityName == "StocktakeDetail" &&
-                                a.EntityId.HasValue &&
-                                detailIds.Contains(a.EntityId.Value) &&
-                                a.Action == "STOCKTAKE_RECOUNT_ATTEMPT")
-                    .ToListAsync(cancellationToken);
-
                 foreach (var sub in request.RecountSubmissions)
                 {
                     if (!sub.CountedQuantity.HasValue)
@@ -1032,43 +1023,33 @@ namespace ERP.Api.Controllers
                         continue;
                     }
 
-                    var priorLogCount = existingRecountLogs.Count(a => a.EntityId == targetDetail.Id);
-                    var hadInitialCount = targetDetail.ActualQuantity.HasValue && priorLogCount == 0;
-                    if (hadInitialCount)
+                    if (targetDetail.CountAttemptCount <= 0 && targetDetail.ActualQuantity.HasValue && !targetDetail.CountAttempt1Qty.HasValue)
                     {
-                        var initialAttemptPayload = System.Text.Json.JsonSerializer.Serialize(new
-                        {
-                            stocktakeId = stocktake.Id,
-                            stocktakeDetailId = targetDetail.Id,
-                            attemptNo = 1,
-                            countedQty = targetDetail.ActualQuantity!.Value,
-                            varianceQty = targetDetail.ActualQuantity.Value - targetDetail.SystemQuantity,
-                            counterUserId = stocktake.CreatedBy.ToString(),
-                            countedAtUtc = stocktake.CreatedAt,
-                            note = targetDetail.Note ?? "Đếm lần 1 (Blind Count)"
-                        });
-                        var initialLog = new ERP.Domain.Entities.AuditLog
-                        {
-                            UserId = validAuditUserId,
-                            WarehouseId = stocktake.WarehouseId,
-                            EntityName = "StocktakeDetail",
-                            EntityId = targetDetail.Id,
-                            Action = "STOCKTAKE_RECOUNT_ATTEMPT",
-                            NewValues = initialAttemptPayload,
-                            Reason = "Ghi nhận lịch sử đếm lần 1",
-                            Result = "Success",
-                            Timestamp = stocktake.CreatedAt
-                        };
-                        _db.AuditLogs.Add(initialLog);
-                        existingRecountLogs.Add(initialLog);
-                        priorLogCount++;
+                        targetDetail.CountAttempt1Qty = targetDetail.ActualQuantity.Value;
+                        targetDetail.CountAttemptCount = 1;
                     }
 
-                    var nextAttemptNo = Math.Min(3, priorLogCount + 1);
+                    var nextAttemptNo = Math.Min(3, Math.Max(0, targetDetail.CountAttemptCount) + 1);
+                    if (nextAttemptNo == 1)
+                    {
+                        targetDetail.CountAttempt1Qty = sub.CountedQuantity.Value;
+                    }
+                    else if (nextAttemptNo == 2)
+                    {
+                        targetDetail.CountAttempt2Qty = sub.CountedQuantity.Value;
+                    }
+                    else
+                    {
+                        targetDetail.CountAttempt3Qty = sub.CountedQuantity.Value;
+                    }
+
+                    targetDetail.CountAttemptCount = nextAttemptNo;
+                    targetDetail.LastCountedByUserId = validAuditUserId;
                     targetDetail.ActualQuantity = sub.CountedQuantity.Value;
                     targetDetail.DifferenceQuantity = sub.CountedQuantity.Value - targetDetail.SystemQuantity;
                     if (!string.IsNullOrWhiteSpace(sub.Note))
                     {
+                        targetDetail.RecountReason = sub.Note.Trim();
                         targetDetail.Note = sub.Note.Trim();
                     }
 
@@ -1084,7 +1065,7 @@ namespace ERP.Api.Controllers
                         note = sub.Note ?? $"Đếm lại lần #{nextAttemptNo}"
                     });
 
-                    var attemptAudit = new ERP.Domain.Entities.AuditLog
+                    _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
                     {
                         UserId = validAuditUserId,
                         WarehouseId = stocktake.WarehouseId,
@@ -1095,9 +1076,7 @@ namespace ERP.Api.Controllers
                         Reason = sub.Note ?? $"Nộp kết quả đếm lại lần #{nextAttemptNo}",
                         Result = "Success",
                         Timestamp = now
-                    };
-                    _db.AuditLogs.Add(attemptAudit);
-                    existingRecountLogs.Add(attemptAudit);
+                    });
                 }
 
                 await _db.SaveChangesAsync(cancellationToken);
@@ -1320,14 +1299,6 @@ namespace ERP.Api.Controllers
                     .ToDictionaryAsync(l => l.Id, cancellationToken)
                 : new Dictionary<int, ERP.Domain.Entities.WarehouseLocation>();
 
-            var recountLogs = await _db.AuditLogs
-                .AsNoTracking()
-                .Where(a => (a.EntityName == "StocktakeDetail" && a.EntityId.HasValue && detailIds.Contains(a.EntityId.Value)) ||
-                            (a.EntityName == "Stocktake" && a.EntityId == stocktake.Id && a.Action.Contains("Recount")))
-                .OrderBy(a => a.Timestamp)
-                .ThenBy(a => a.Id)
-                .ToListAsync(cancellationToken);
-
             var result = new List<StocktakeLineAutoApprovalDto>(details.Count);
 
             foreach (var detail in details)
@@ -1351,60 +1322,40 @@ namespace ERP.Api.Controllers
                 var unitCost = product?.MovingAverageCost is > 0m ? product.MovingAverageCost : 0m;
                 var varianceValueVnd = Math.Round(Math.Abs(varianceQty) * unitCost, 0);
 
-                var lineLogs = recountLogs
-                    .Where(a => a.EntityName == "StocktakeDetail" &&
-                                a.EntityId == detail.Id &&
-                                a.Action == "STOCKTAKE_RECOUNT_ATTEMPT")
-                    .ToList();
-
                 var attemptHistory = new List<CountAttemptItemDto>();
-                var seq = 1;
-                foreach (var log in lineLogs)
+                var counterLabel = (detail.LastCountedByUserId ?? stocktake.CreatedBy).ToString();
+
+                if (detail.CountAttempt1Qty.HasValue)
                 {
-                    decimal logCountedQty = countedQty;
-                    decimal logVarianceQty = varianceQty;
-                    string logCounterUser = log.UserId?.ToString() ?? "system";
-                    DateTime logCountedAt = log.Timestamp;
-                    string? logNote = log.Reason;
-
-                    if (!string.IsNullOrWhiteSpace(log.NewValues))
-                    {
-                        try
-                        {
-                            using var doc = System.Text.Json.JsonDocument.Parse(log.NewValues);
-                            var root = doc.RootElement;
-                            if (root.TryGetProperty("countedQty", out var cqEl) && cqEl.TryGetDecimal(out var cq))
-                            {
-                                logCountedQty = cq;
-                                logVarianceQty = cq - systemQty;
-                            }
-                            if (root.TryGetProperty("counterUserId", out var cuEl) && cuEl.ValueKind == System.Text.Json.JsonValueKind.String)
-                            {
-                                logCounterUser = cuEl.GetString() ?? logCounterUser;
-                            }
-                            if (root.TryGetProperty("countedAtUtc", out var caEl) && caEl.ValueKind == System.Text.Json.JsonValueKind.String &&
-                                DateTime.TryParse(caEl.GetString(), out var parsedDt))
-                            {
-                                logCountedAt = parsedDt;
-                            }
-                            if (root.TryGetProperty("note", out var noteEl) && noteEl.ValueKind == System.Text.Json.JsonValueKind.String)
-                            {
-                                logNote = noteEl.GetString();
-                            }
-                        }
-                        catch (System.Text.Json.JsonException)
-                        {
-                            // Fallback to defaults if NewValues is plain text
-                        }
-                    }
-
                     attemptHistory.Add(new CountAttemptItemDto(
-                        attemptNo: seq++,
-                        countedQty: logCountedQty,
-                        counterUserId: logCounterUser,
-                        countedAtUtc: logCountedAt,
-                        varianceQty: logVarianceQty,
-                        note: logNote));
+                        attemptNo: 1,
+                        countedQty: detail.CountAttempt1Qty.Value,
+                        counterUserId: stocktake.CreatedBy.ToString(),
+                        countedAtUtc: stocktake.CreatedAt,
+                        varianceQty: detail.CountAttempt1Qty.Value - systemQty,
+                        note: "Đếm lần 1 (Blind Count)"));
+                }
+
+                if (detail.CountAttempt2Qty.HasValue)
+                {
+                    attemptHistory.Add(new CountAttemptItemDto(
+                        attemptNo: 2,
+                        countedQty: detail.CountAttempt2Qty.Value,
+                        counterUserId: counterLabel,
+                        countedAtUtc: DateTime.UtcNow,
+                        varianceQty: detail.CountAttempt2Qty.Value - systemQty,
+                        note: detail.RecountReason ?? detail.Note ?? "Đếm lại lần #2"));
+                }
+
+                if (detail.CountAttempt3Qty.HasValue)
+                {
+                    attemptHistory.Add(new CountAttemptItemDto(
+                        attemptNo: 3,
+                        countedQty: detail.CountAttempt3Qty.Value,
+                        counterUserId: counterLabel,
+                        countedAtUtc: DateTime.UtcNow,
+                        varianceQty: detail.CountAttempt3Qty.Value - systemQty,
+                        note: detail.RecountReason ?? detail.Note ?? "Đếm lại lần #3"));
                 }
 
                 if (attemptHistory.Count == 0 && detail.ActualQuantity.HasValue)
@@ -1417,20 +1368,22 @@ namespace ERP.Api.Controllers
                         varianceQty: varianceQty,
                         note: detail.Note ?? "Đếm lần 1 (Blind Count)"));
 
-                    if (!string.IsNullOrWhiteSpace(detail.Note) &&
-                        detail.Note.Contains("[RECOUNT_REQUESTED]", StringComparison.OrdinalIgnoreCase))
+                    if (detail.CountAttemptCount >= 2 ||
+                        !string.IsNullOrWhiteSpace(detail.RecountReason) ||
+                        (!string.IsNullOrWhiteSpace(detail.Note) &&
+                         detail.Note.Contains("[RECOUNT_REQUESTED]", StringComparison.OrdinalIgnoreCase)))
                     {
                         attemptHistory.Add(new CountAttemptItemDto(
                             attemptNo: 2,
                             countedQty: countedQty,
-                            counterUserId: stocktake.CreatedBy.ToString(),
+                            counterUserId: counterLabel,
                             countedAtUtc: DateTime.UtcNow,
                             varianceQty: varianceQty,
-                            note: detail.Note));
+                            note: detail.RecountReason ?? detail.Note));
                     }
                 }
 
-                var attemptCount = attemptHistory.Count;
+                var attemptCount = Math.Max(detail.CountAttemptCount, attemptHistory.Count);
                 var autoApproveEligible = Math.Abs(variancePct) <= thresholdPct && varianceValueVnd <= thresholdValueVnd;
                 var requiresManagerApproval = !autoApproveEligible && varianceQty != 0m;
                 var requiresRecount = varianceQty != 0m && attemptCount < 2;

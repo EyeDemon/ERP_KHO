@@ -226,6 +226,10 @@ WHERE TenantId = {tenantId}
     public DbSet<CustomerReturn> CustomerReturns => Set<CustomerReturn>();
     public DbSet<CustomerReturnLine> CustomerReturnLines => Set<CustomerReturnLine>();
     public DbSet<StocktakeAdjustmentProposal> StocktakeAdjustmentProposals => Set<StocktakeAdjustmentProposal>();
+    public DbSet<PickingWave> PickingWaves => Set<PickingWave>();
+    public DbSet<PutToWallSlot> PutToWallSlots => Set<PutToWallSlot>();
+    public DbSet<ThreePlStorageSnapshot> ThreePlStorageSnapshots => Set<ThreePlStorageSnapshot>();
+    public DbSet<ThreePlBillingStatement> ThreePlBillingStatements => Set<ThreePlBillingStatement>();
 
     public override int SaveChanges() => SaveChanges(acceptAllChangesOnSuccess: true);
 

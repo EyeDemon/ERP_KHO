@@ -207,6 +207,29 @@ public sealed class BusinessPartnersController(
                 Timestamp = now
             });
             string? receivableInvoiceCode = null;
+            ERP.Domain.Entities.ThreePlBillingStatement? statementRecord = null;
+            if (summary.partnerId.HasValue && summary.partnerId.Value > 0)
+            {
+                statementRecord = new ERP.Domain.Entities.ThreePlBillingStatement
+                {
+                    WarehouseId = summary.warehouseId,
+                    PartnerId = summary.partnerId.Value,
+                    StatementCode = summary.statementCode,
+                    PeriodFromUtc = now.Date.AddDays(-30),
+                    PeriodToUtc = now,
+                    TotalOnHandQty = summary.totalOnHandUnits,
+                    TotalInboundQty = summary.inboundUnits,
+                    TotalOutboundQty = summary.outboundUnits,
+                    StorageFeeAmount = summary.storageFeeAmount,
+                    InboundHandlingFeeAmount = summary.inboundHandlingFeeAmount,
+                    OutboundHandlingFeeAmount = summary.outboundHandlingFeeAmount,
+                    TotalBillingAmount = summary.totalBillingAmount,
+                    Status = "ISSUED",
+                    CreatedByUserId = actorUserId,
+                    CreatedAtUtc = now
+                };
+                db.ThreePlBillingStatements.Add(statementRecord);
+            }
 
             if (request?.CreateReceivableInvoice == true)
             {
@@ -218,6 +241,7 @@ public sealed class BusinessPartnersController(
                 if (targetPartner != null)
                 {
                     receivableInvoiceCode = $"AR-3PL-{now:yyyyMMdd}";
+                    if (statementRecord != null) { statementRecord.ReceivableInvoiceCode = receivableInvoiceCode; }
                     var existingInvoice = await db.PartnerDebtInvoices
                         .FirstOrDefaultAsync(x => x.Code == receivableInvoiceCode || (x.DebtType == ERP.Domain.Enums.PartnerDebtType.AR && x.SourceType == "ThreePlBilling" && x.SourceId == targetPartner.Id), ct);
 

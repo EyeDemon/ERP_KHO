@@ -33,9 +33,13 @@ public sealed class SqlServerStockTransferReverseDraftLedgerGuardTests
                 new ReceiveStockTransferDto { Details = [new() { ProductId = f.ProductId, ReceivedQuantity = 8 }] });
 
         await using (var db = StockTransferReturnFixture.Db())
+        {
+            await db.Database.ExecuteSqlRawAsync("DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
             await db.InventoryTransactions.Where(x => x.ReferenceType == "StockTransfer" &&
                 x.ReferenceId == id && x.TransactionType == transactionType)
                 .ExecuteUpdateAsync(s => s.SetProperty(x => x.Quantity, 7m));
+            await db.Database.ExecuteSqlRawAsync("ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+        }
 
         await using var verify = StockTransferReturnFixture.Db();
         var action = () => f.Service(verify, f.Checker).CreateReverseDraftAsync(id, Reason());

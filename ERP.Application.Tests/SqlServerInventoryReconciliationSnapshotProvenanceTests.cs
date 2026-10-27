@@ -268,8 +268,10 @@ public sealed class SqlServerInventoryReconciliationSnapshotProvenanceTests
         finally
         {
             await using var cleanup = CreateContext();
+            await cleanup.Database.ExecuteSqlRawAsync("DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
             await cleanup.InventoryTransactions.Where(x =>
                 x.ProductId == product.Id && x.WarehouseId == warehouse.Id).ExecuteDeleteAsync();
+            await cleanup.Database.ExecuteSqlRawAsync("ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
             await cleanup.InventoryStocks.Where(x =>
                 (x.ProductId == product.Id || x.ProductId == unrelatedProduct.Id) &&
                 x.WarehouseId == warehouse.Id).ExecuteDeleteAsync();

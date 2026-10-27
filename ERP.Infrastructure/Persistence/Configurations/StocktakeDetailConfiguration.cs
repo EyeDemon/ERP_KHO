@@ -13,6 +13,11 @@ public class StocktakeDetailConfiguration : IEntityTypeConfiguration<StocktakeDe
         builder.Property(x => x.SystemQuantity).HasPrecision(18, 4);
         builder.Property(x => x.ActualQuantity).HasPrecision(18, 4);
         builder.Property(x => x.DifferenceQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.CountAttempt1Qty).HasPrecision(19, 4);
+        builder.Property(x => x.CountAttempt2Qty).HasPrecision(19, 4);
+        builder.Property(x => x.CountAttempt3Qty).HasPrecision(19, 4);
+        builder.Property(x => x.CountAttemptCount).HasDefaultValue(0);
+        builder.Property(x => x.RecountReason).HasMaxLength(500);
         builder.Property(x => x.Note).HasMaxLength(500);
 
         builder.HasOne(x => x.Stocktake)

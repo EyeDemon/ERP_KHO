@@ -212,6 +212,9 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IReceiptPutawayIntegration
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHostedService<ERP.Api.Hosting.BuyerPiiRetentionAnonymizerJob>();
 builder.Services.AddHostedService<ERP.Api.Hosting.IntegrationOutboxDispatcherJob>();
+builder.Services.AddHostedService<ERP.Api.Hosting.SoftReservationExpiryJob>();
+builder.Services.AddHostedService<ERP.Api.Hosting.DailyInventoryIntegrityJob>();
+builder.Services.AddHostedService<ERP.Api.Hosting.ThreePlDailySnapshotJob>();
 var approvalAgingOptions = builder.Configuration.GetSection("ApprovalAging").Get<ERP.Application.Options.ApprovalAgingOptions>() ?? new ERP.Application.Options.ApprovalAgingOptions();
 approvalAgingOptions.Validate();
 builder.Services.AddSingleton(approvalAgingOptions);

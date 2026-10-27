@@ -299,24 +299,19 @@ public sealed class PickingTasksController(
             }
         }
 
-        var sortAudits = task != null
-            ? await db.AuditLogs
+        var persistedSlots = task != null && db != null
+            ? await db.PutToWallSlots
                 .AsNoTracking()
-                .Where(a => a.EntityName == "PutToWallSortation" &&
-                            a.Action == "PUT_TO_WALL_SLOT_SORTED" &&
-                            a.EntityId == task.Id)
+                .Where(s => s.PickingTaskId == task.Id)
                 .ToListAsync(cancellationToken)
             : [];
 
         var sortedBySlot = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
-        foreach (var audit in sortAudits)
+        foreach (var persisted in persistedSlots)
         {
-            var slotKey = audit.OldValues?.Trim();
-            if (string.IsNullOrWhiteSpace(slotKey)) continue;
-            var parts = (audit.NewValues ?? string.Empty).Split('|');
-            if (parts.Length >= 2 && decimal.TryParse(parts[1], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var q))
+            if (!string.IsNullOrWhiteSpace(persisted.SlotCode))
             {
-                sortedBySlot[slotKey] = sortedBySlot.GetValueOrDefault(slotKey, 0m) + q;
+                sortedBySlot[persisted.SlotCode.Trim()] = persisted.SortedQuantity;
             }
         }
 
@@ -505,6 +500,42 @@ public sealed class PickingTasksController(
                 User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
                 out var uid) ? uid : (int?)null;
 
+            var slotEntity = await db.PutToWallSlots
+                .FirstOrDefaultAsync(s => s.PickingTaskId == task.Id && s.SlotCode == matchedSlot.SlotCode, cancellationToken);
+            var newSortedQty = Math.Min(matchedSlot.RequiredQty, (slotEntity?.SortedQuantity ?? matchedSlot.SortedQty) + sortQty);
+            var newSlotStatus = newSortedQty >= matchedSlot.RequiredQty
+                ? "COMPLETED"
+                : (newSortedQty > 0m ? "IN_PROGRESS" : "WAITING");
+
+            if (slotEntity == null)
+            {
+                slotEntity = new ERP.Domain.Entities.PutToWallSlot
+                {
+                    WarehouseId = task.WarehouseId,
+                    PickingTaskId = task.Id,
+                    PickingTaskLineId = matchedSlot.PickingTaskLineId,
+                    SlotIndex = matchedSlot.SlotIndex,
+                    SlotCode = matchedSlot.SlotCode,
+                    ToteBarcode = matchedSlot.ToteBarcode,
+                    OrderReference = matchedSlot.OrderReference,
+                    ProductId = matchedSlot.ProductId,
+                    ProductCode = matchedSlot.ProductCode,
+                    RequiredQuantity = matchedSlot.RequiredQty,
+                    SortedQuantity = newSortedQty,
+                    SlotStatus = newSlotStatus,
+                    LastSortedByUserId = actorUserId,
+                    UpdatedAtUtc = now
+                };
+                db.PutToWallSlots.Add(slotEntity);
+            }
+            else
+            {
+                slotEntity.SortedQuantity = newSortedQty;
+                slotEntity.SlotStatus = newSlotStatus;
+                slotEntity.LastSortedByUserId = actorUserId;
+                slotEntity.UpdatedAtUtc = now;
+            }
+
             db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
             {
                 UserId = actorUserId,
@@ -632,6 +663,26 @@ public sealed class PickingTasksController(
                     releasedTaskCodes.Add(task.TaskCode);
             }
 
+            var waveNote = !string.IsNullOrWhiteSpace(request?.Note)
+                ? request.Note.Trim()
+                : $"Phát hành sóng lấy hàng {waveCode} ({releasedTasksCount} tác vụ, {totalLinesCount} dòng)";
+
+            db.PickingWaves.Add(new ERP.Domain.Entities.PickingWave
+            {
+                WarehouseId = warehouseId ?? 1,
+                WaveCode = waveCode,
+                PickingType = pickingType,
+                Priority = request?.Priority,
+                ReleasedTasksCount = releasedTasksCount,
+                TotalLinesCount = totalLinesCount,
+                TotalRequestedQuantity = totalRequestedQuantity,
+                AssignedUserId = request?.AssignToUserId ?? actorUserId,
+                ReleasedByUserId = actorUserId,
+                Status = "RELEASED",
+                Note = waveNote,
+                ReleasedAtUtc = now
+            });
+
             db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
             {
                 UserId = actorUserId,
@@ -639,9 +690,7 @@ public sealed class PickingTasksController(
                 EntityName = "PickingWave",
                 Action = "PickingWave.Release",
                 NewValues = waveCode,
-                Reason = !string.IsNullOrWhiteSpace(request?.Note)
-                    ? request.Note.Trim()
-                    : $"Phát hành sóng lấy hàng {waveCode} ({releasedTasksCount} tác vụ, {totalLinesCount} dòng)",
+                Reason = waveNote,
                 Result = "Success",
                 Timestamp = now
             });

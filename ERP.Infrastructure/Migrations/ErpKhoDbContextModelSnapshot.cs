@@ -2530,6 +2530,11 @@ namespace ERP.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime>("ActualOccurredAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
                     b.Property<int?>("CorrectiveTransactionId")
                         .HasColumnType("int");
 
@@ -2560,6 +2565,11 @@ namespace ERP.Infrastructure.Migrations
 
                     b.Property<int?>("OwnerId")
                         .HasColumnType("int");
+
+                    b.Property<DateTime>("PostedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
 
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
@@ -2657,7 +2667,10 @@ namespace ERP.Infrastructure.Migrations
                         .HasDatabaseName("IX_InventoryTransactions_ShipmentReference")
                         .HasFilter("[ReferenceType] = 'Shipment'");
 
-                    b.ToTable("InventoryTransactions", (string)null);
+                    b.ToTable("InventoryTransactions", null, t =>
+                        {
+                            t.HasTrigger("TR_InventoryTransactions_Immutable_AppendOnly");
+                        });
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.MarketplaceShop", b =>
@@ -3245,6 +3258,76 @@ namespace ERP.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.PickingWave", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AssignedUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("PickingType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int?>("Priority")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("ReleasedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ReleasedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ReleasedTasksCount")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<int>("TotalLinesCount")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("TotalRequestedQuantity")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("WaveCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "WarehouseId", "WaveCode");
+
+                    b.ToTable("PickingWaves", (string)null);
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.Product", b =>
                 {
                     b.Property<int>("Id")
@@ -3762,6 +3845,85 @@ namespace ERP.Infrastructure.Migrations
 
                             t.HasCheckConstraint("CK_PurchaseOrderLines_Tolerance", "[AllowedOverReceiptPct] >= 0 AND [AllowedOverReceiptPct] <= 100 AND [AllowedUnderReceiptPct] >= 0 AND [AllowedUnderReceiptPct] <= 100");
                         });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.PutToWallSlot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("LastSortedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("OrderReference")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("PickingTaskId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("PickingTaskLineId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ProductCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("RequiredQuantity")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("SlotCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int>("SlotIndex")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SlotStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<decimal>("SortedQuantity")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<string>("ToteBarcode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "PickingTaskId", "SlotCode")
+                        .IsUnique();
+
+                    b.ToTable("PutToWallSlots", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.PutawayTask", b =>
@@ -5944,9 +6106,29 @@ namespace ERP.Infrastructure.Migrations
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
 
+                    b.Property<decimal?>("CountAttempt1Qty")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal?>("CountAttempt2Qty")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal?>("CountAttempt3Qty")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<int>("CountAttemptCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
                     b.Property<decimal>("DifferenceQuantity")
                         .HasPrecision(18, 4)
                         .HasColumnType("decimal(18,4)");
+
+                    b.Property<int?>("LastCountedByUserId")
+                        .HasColumnType("int");
 
                     b.Property<int?>("LocationId")
                         .HasColumnType("int");
@@ -5957,6 +6139,10 @@ namespace ERP.Infrastructure.Migrations
 
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
+
+                    b.Property<string>("RecountReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<int>("StocktakeId")
                         .HasColumnType("int");
@@ -6097,6 +6283,186 @@ namespace ERP.Infrastructure.Migrations
                         .HasDatabaseName("UX_TenantSubscriptions_TenantId");
 
                     b.ToTable("TenantSubscriptions", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ThreePlBillingStatement", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("InboundHandlingFeeAmount")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal>("OutboundHandlingFeeAmount")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<int>("PartnerId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("PeriodFromUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("PeriodToUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ReceivableInvoiceCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("StatementCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<decimal>("StorageFeeAmount")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<decimal>("TotalBillingAmount")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal>("TotalInboundQty")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal>("TotalOnHandQty")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal>("TotalOutboundQty")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<int?>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "PartnerId", "StatementCode");
+
+                    b.ToTable("ThreePlBillingStatements", (string)null);
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.ThreePlStorageSnapshot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CapturedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CapturedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("DailyBinRateVnd")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal>("DailyCbmRateVnd")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal>("DailyPalletRateVnd")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<int>("DistinctSkuCount")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("EstimatedDailyStorageFeeVnd")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal>("EstimatedMonthlyStorageFeeVnd")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<int>("OccupiedBinCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("OwnerCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int?>("OwnerId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("OwnerName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal>("PalletEquivalentCount")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("SnapshotCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("SnapshotDateUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<decimal>("TotalOnHandQty")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal>("TotalVolumeCbm")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "WarehouseId", "SnapshotDateUtc");
+
+                    b.ToTable("ThreePlStorageSnapshots", (string)null);
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.Unit", b =>

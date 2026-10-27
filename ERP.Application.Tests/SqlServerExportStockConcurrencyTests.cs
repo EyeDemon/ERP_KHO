@@ -340,9 +340,11 @@ public class SqlServerExportStockConcurrencyTests
         public async ValueTask DisposeAsync()
         {
             await using var context = CreateContext(_connectionString);
+            await context.Database.ExecuteSqlRawAsync("DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
             await context.InventoryTransactions
                 .Where(transaction => transaction.ReferenceType == "ExportReceipt" && transaction.ReferenceId.HasValue && ReceiptIds.Contains(transaction.ReferenceId.Value))
                 .ExecuteDeleteAsync();
+            await context.Database.ExecuteSqlRawAsync("ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
             await context.AuditLogs
                 .Where(log => log.EntityName == "ExportReceipt" && log.EntityId.HasValue && ReceiptIds.Contains(log.EntityId.Value))
                 .ExecuteDeleteAsync();

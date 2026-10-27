@@ -357,6 +357,10 @@ public sealed class PackingSessionsController(
 
                 var remainingKitToDeduct = kitQty;
                 ERP.Domain.Entities.InventoryTransaction? firstKitTx = null;
+                int? primaryDeductedLocationId = defaultLocId;
+                int? primaryDeductedLotId = null;
+                int? primaryDeductedHandlingUnitId = null;
+                int? primaryDeductedOwnerId = null;
                 foreach (var ks in kitStocks)
                 {
                     if (remainingKitToDeduct <= 0m) break;
@@ -368,6 +372,10 @@ public sealed class PackingSessionsController(
                     ks.RefreshGrainHash();
                     remainingKitToDeduct -= deduct;
                     kitResultingQuantity = ks.Quantity;
+                    primaryDeductedLocationId = ks.LocationId ?? defaultLocId;
+                    primaryDeductedLotId ??= ks.LotId;
+                    primaryDeductedHandlingUnitId ??= ks.HandlingUnitId;
+                    primaryDeductedOwnerId ??= ks.OwnerId;
 
                     var kTx = new ERP.Domain.Entities.InventoryTransaction
                     {
@@ -376,6 +384,8 @@ public sealed class PackingSessionsController(
                         LocationId = ks.LocationId,
                         LotId = ks.LotId,
                         SerialId = ks.SerialId,
+                        HandlingUnitId = ks.HandlingUnitId,
+                        OwnerId = ks.OwnerId,
                         InventoryStatus = InventoryStatus.Available,
                         FromInventoryStatus = InventoryStatus.Available,
                         TransactionType = TransactionType.TransferOut,
@@ -383,6 +393,8 @@ public sealed class PackingSessionsController(
                         ReferenceId = ks.Id,
                         ReferenceType = "VAS_DEKIT",
                         TransactionDate = now,
+                        ActualOccurredAtUtc = now,
+                        PostedAtUtc = now,
                         CreatedBy = actorId,
                         Note = $"{workOrderId}: Xuất rã bộ KIT (De-kitting) -{deduct:0.##}"
                     };
@@ -394,15 +406,42 @@ public sealed class PackingSessionsController(
                 foreach (var spec in componentSpecs)
                 {
                     var addCompQty = Math.Round(kitQty * spec.Ratio, 4);
+                    var preserveKitGrain = spec.ComponentProductId == targetKitProductId.Value;
+                    var compLocId = preserveKitGrain ? (primaryDeductedLocationId ?? defaultLocId) : defaultLocId;
+                    var compLotId = preserveKitGrain ? primaryDeductedLotId : null;
+                    var compHuId = preserveKitGrain ? primaryDeductedHandlingUnitId : null;
+                    var compOwnerId = preserveKitGrain ? primaryDeductedOwnerId : null;
+
+                    if (!preserveKitGrain && compLotId == null)
+                    {
+                        var existingCompLotStock = await db.InventoryStocks
+                            .Where(s =>
+                                s.WarehouseId == targetWarehouseId &&
+                                s.ProductId == spec.ComponentProductId &&
+                                s.LocationId == compLocId &&
+                                s.SerialId == null &&
+                                s.Status == InventoryStatus.Available &&
+                                s.LotId != null)
+                            .OrderByDescending(s => s.Quantity)
+                            .ThenBy(s => s.Id)
+                            .FirstOrDefaultAsync(cancellationToken);
+                        if (existingCompLotStock != null)
+                        {
+                            compLotId = existingCompLotStock.LotId;
+                            compHuId = existingCompLotStock.HandlingUnitId;
+                            compOwnerId = existingCompLotStock.OwnerId;
+                        }
+                    }
+
                     var compStock = await db.InventoryStocks
                         .FirstOrDefaultAsync(s =>
                             s.WarehouseId == targetWarehouseId &&
                             s.ProductId == spec.ComponentProductId &&
-                            s.LocationId == defaultLocId &&
-                            s.LotId == null &&
+                            s.LocationId == compLocId &&
+                            s.LotId == compLotId &&
                             s.SerialId == null &&
-                            s.HandlingUnitId == null &&
-                            s.OwnerId == null &&
+                            s.HandlingUnitId == compHuId &&
+                            s.OwnerId == compOwnerId &&
                             s.Status == InventoryStatus.Available,
                             cancellationToken);
 
@@ -418,7 +457,10 @@ public sealed class PackingSessionsController(
                         {
                             WarehouseId = targetWarehouseId,
                             ProductId = spec.ComponentProductId,
-                            LocationId = defaultLocId,
+                            LocationId = compLocId,
+                            LotId = compLotId,
+                            HandlingUnitId = compHuId,
+                            OwnerId = compOwnerId,
                             Status = InventoryStatus.Available,
                             Quantity = addCompQty,
                             ReservedQuantity = 0m,
@@ -437,7 +479,10 @@ public sealed class PackingSessionsController(
                     {
                         ProductId = spec.ComponentProductId,
                         WarehouseId = targetWarehouseId,
-                        LocationId = defaultLocId,
+                        LocationId = compLocId,
+                        LotId = compLotId,
+                        HandlingUnitId = compHuId,
+                        OwnerId = compOwnerId,
                         InventoryStatus = InventoryStatus.Available,
                         ToInventoryStatus = InventoryStatus.Available,
                         TransactionType = TransactionType.TransferIn,
@@ -445,6 +490,8 @@ public sealed class PackingSessionsController(
                         ReferenceId = targetKitProductId.Value,
                         ReferenceType = "VAS_DEKIT",
                         TransactionDate = now,
+                        ActualOccurredAtUtc = now,
+                        PostedAtUtc = now,
                         CreatedBy = actorId,
                         Note = $"{workOrderId}: Nhập hoàn nguyên thành phần +{addCompQty:0.##} ({spec.ComponentCode}) từ rã bộ KIT"
                     };

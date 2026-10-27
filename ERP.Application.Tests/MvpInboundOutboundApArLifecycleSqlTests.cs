@@ -1157,7 +1157,15 @@ public sealed class MvpInboundOutboundApArLifecycleSqlTests
             await db.PurchaseOrderLines.Where(x => x.PurchaseOrder.WarehouseId == whId).ExecuteDeleteAsync();
             await db.PurchaseOrders.Where(x => x.WarehouseId == whId).ExecuteDeleteAsync();
 
-            await db.InventoryTransactions.Where(x => x.WarehouseId == whId).ExecuteDeleteAsync();
+            await db.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            try
+            {
+                await db.InventoryTransactions.Where(x => x.WarehouseId == whId).ExecuteDeleteAsync();
+            }
+            finally
+            {
+                await db.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            }
             await db.InventoryStocks.Where(x => x.WarehouseId == whId).ExecuteDeleteAsync();
         }
 

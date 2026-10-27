@@ -1511,7 +1511,11 @@ public sealed class MultiTenantIsolationSqlTests
                 DELETE FROM dbo.ImportReceiptInventoryIdentities WHERE TenantId = {tid};
                 DELETE FROM dbo.ImportReceiptDetails WHERE TenantId = {tid};
                 DELETE FROM dbo.ImportReceipts WHERE TenantId = {tid};
+                IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL
+                    DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;
                 DELETE FROM dbo.InventoryTransactions WHERE TenantId = {tid};
+                IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL
+                    ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;
                 DELETE FROM dbo.InventoryStocks WHERE TenantId = {tid};
                 DELETE FROM dbo.ProductUoms WHERE TenantId = {tid};
                 DELETE FROM dbo.ProductBarcodes WHERE TenantId = {tid};

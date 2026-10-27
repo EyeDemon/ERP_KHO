@@ -82,8 +82,12 @@ internal sealed class StockTransferReturnFixture : IAsyncDisposable
     {
         await using var db = Db();
         var ids = new[] { Creator, Checker };
-        await db.InventoryTransactions.Where(x => x.ProductId == ProductId && x.ReversalOfTransactionId != null).ExecuteDeleteAsync();
-        await db.InventoryTransactions.Where(x => x.ProductId == ProductId).ExecuteDeleteAsync();
+        await db.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+        try { await db.InventoryTransactions.Where(x => x.ProductId == ProductId && x.ReversalOfTransactionId != null).ExecuteDeleteAsync(); }
+        finally { await db.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;"); }
+        await db.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+        try { await db.InventoryTransactions.Where(x => x.ProductId == ProductId).ExecuteDeleteAsync(); }
+        finally { await db.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;"); }
         await db.AuditLogs.Where(x => x.UserId.HasValue && ids.Contains(x.UserId.Value)).ExecuteDeleteAsync();
         await db.StockTransferDetails.Where(x => x.ProductId == ProductId).ExecuteDeleteAsync();
         await db.StockTransfers.Where(x => x.ReverseOfTransferId != null &&

@@ -418,7 +418,15 @@ public sealed class Wave8ParallelConcurrencySqlTests
             {
                 await cleanDb.AuditLogs.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
                 await cleanDb.InventoryLocationMovements.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
-                await cleanDb.InventoryTransactions.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
+                await cleanDb.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+                try
+                {
+                    await cleanDb.InventoryTransactions.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
+                }
+                finally
+                {
+                    await cleanDb.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+                }
                 await cleanDb.PutawayTaskItems.Where(x => x.PutawayTaskId == taskId).ExecuteDeleteAsync();
                 await cleanDb.PutawayTasks.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
                 await cleanDb.ImportReceiptInventoryIdentities.Where(x => x.ProductId == productId).ExecuteDeleteAsync();
@@ -1148,7 +1156,15 @@ public sealed class Wave8ParallelConcurrencySqlTests
             await using var cleanDb = CreateContext();
             int[] whIds = [wh1Id, wh2Id];
             await cleanDb.AuditLogs.Where(x => x.WarehouseId.HasValue && whIds.Contains(x.WarehouseId.Value)).ExecuteDeleteAsync();
-            await cleanDb.InventoryTransactions.Where(x => whIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
+            await cleanDb.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            try
+            {
+                await cleanDb.InventoryTransactions.Where(x => whIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
+            }
+            finally
+            {
+                await cleanDb.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+            }
             await cleanDb.StocktakeDetails.Where(x => x.StocktakeId == stocktakeId).ExecuteDeleteAsync();
             await cleanDb.Stocktakes.Where(x => x.Id == stocktakeId).ExecuteDeleteAsync();
             await cleanDb.StockTransferDetails.Where(x => x.StockTransferId == transferId).ExecuteDeleteAsync();

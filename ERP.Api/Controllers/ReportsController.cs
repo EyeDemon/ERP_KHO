@@ -1697,6 +1697,80 @@ namespace ERP.Api.Controllers
                 if (isPost)
                 {
                     int? actorUserId = int.TryParse(User?.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : null;
+                    var snapshotCode = $"3PL-SNAP-{now:yyyyMMdd}";
+                    var existingSnapshots = await _db.ThreePlStorageSnapshots
+                        .Where(s => s.SnapshotDateUtc == now.Date &&
+                                    (!warehouseId.HasValue || s.WarehouseId == warehouseId.Value) &&
+                                    (!ownerId.HasValue || s.OwnerId == ownerId.Value))
+                        .ToListAsync(cancellationToken);
+
+                    foreach (var g in groupedByOwnerAndWh)
+                    {
+                        string resolvedOwnerCode = "OWN-DEFAULT";
+                        string resolvedOwnerName = "Chủ hàng Mặc định (Tự doanh & 3PL Chính)";
+                        if (g.Key.OwnerId.HasValue && partnersById.TryGetValue(g.Key.OwnerId.Value, out var partnerInfo))
+                        {
+                            resolvedOwnerCode = partnerInfo.Code;
+                            resolvedOwnerName = partnerInfo.Name;
+                        }
+
+                        var distinctSkuCount = g.Select(x => x.ProductId).Distinct().Count();
+                        var occupiedBinCount = g.Where(x => x.LocationId.HasValue).Select(x => x.LocationId!.Value).Distinct().Count();
+                        var ownerOnHandQty = g.Sum(x => x.Quantity);
+                        var ownerVolumeCbm = Math.Round(
+                            g.Sum(x => x.Quantity * (x.Product != null && x.Product.UnitVolumeM3.HasValue && x.Product.UnitVolumeM3.Value > 0m
+                                ? x.Product.UnitVolumeM3.Value
+                                : 0.002m)),
+                            3);
+                        var palletEquivalentCount = Math.Max(1m, Math.Round(ownerVolumeCbm / 1.2m, 2));
+                        const decimal dailyPalletRateVnd = 18000m;
+                        const decimal dailyCbmRateVnd = 15000m;
+                        const decimal dailyBinRateVnd = 5000m;
+                        var estimatedDailyStorageFeeVnd = Math.Round((palletEquivalentCount * dailyPalletRateVnd) + (occupiedBinCount * dailyBinRateVnd), 0);
+                        var estimatedMonthlyStorageFeeVnd = estimatedDailyStorageFeeVnd * 30m;
+
+                        var existingSnap = existingSnapshots.FirstOrDefault(s =>
+                            s.WarehouseId == g.Key.WarehouseId && s.OwnerId == g.Key.OwnerId);
+                        if (existingSnap == null)
+                        {
+                            _db.ThreePlStorageSnapshots.Add(new ERP.Domain.Entities.ThreePlStorageSnapshot
+                            {
+                                WarehouseId = g.Key.WarehouseId,
+                                OwnerId = g.Key.OwnerId,
+                                OwnerCode = resolvedOwnerCode,
+                                OwnerName = resolvedOwnerName,
+                                SnapshotCode = snapshotCode,
+                                SnapshotDateUtc = now.Date,
+                                DistinctSkuCount = distinctSkuCount,
+                                OccupiedBinCount = occupiedBinCount,
+                                TotalOnHandQty = ownerOnHandQty,
+                                TotalVolumeCbm = ownerVolumeCbm,
+                                PalletEquivalentCount = palletEquivalentCount,
+                                DailyPalletRateVnd = dailyPalletRateVnd,
+                                DailyCbmRateVnd = dailyCbmRateVnd,
+                                DailyBinRateVnd = dailyBinRateVnd,
+                                EstimatedDailyStorageFeeVnd = estimatedDailyStorageFeeVnd,
+                                EstimatedMonthlyStorageFeeVnd = estimatedMonthlyStorageFeeVnd,
+                                CapturedByUserId = actorUserId,
+                                CapturedAtUtc = now
+                            });
+                        }
+                        else
+                        {
+                            existingSnap.OwnerCode = resolvedOwnerCode;
+                            existingSnap.OwnerName = resolvedOwnerName;
+                            existingSnap.DistinctSkuCount = distinctSkuCount;
+                            existingSnap.OccupiedBinCount = occupiedBinCount;
+                            existingSnap.TotalOnHandQty = ownerOnHandQty;
+                            existingSnap.TotalVolumeCbm = ownerVolumeCbm;
+                            existingSnap.PalletEquivalentCount = palletEquivalentCount;
+                            existingSnap.EstimatedDailyStorageFeeVnd = estimatedDailyStorageFeeVnd;
+                            existingSnap.EstimatedMonthlyStorageFeeVnd = estimatedMonthlyStorageFeeVnd;
+                            existingSnap.CapturedByUserId = actorUserId;
+                            existingSnap.CapturedAtUtc = now;
+                        }
+                    }
+
                     _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
                     {
                         UserId = actorUserId,
