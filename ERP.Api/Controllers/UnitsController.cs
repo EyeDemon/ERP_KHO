@@ -1,10 +1,9 @@
+using ERP.Api.Authorization;
+using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
-using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using ERP.Api.Authorization;
 
 namespace ERP.Api.Controllers
 {
@@ -15,12 +14,12 @@ namespace ERP.Api.Controllers
     public class UnitsController : ControllerBase
     {
         private readonly IUnitService _unitService;
-        private readonly ErpKhoDbContext? _db;
+        private readonly IWmsGovernanceOperationsService? _govOps;
 
-        public UnitsController(IUnitService unitService, ErpKhoDbContext db = null!)
+        public UnitsController(IUnitService unitService, IWmsGovernanceOperationsService govOps = null!)
         {
             _unitService = unitService;
-            _db = db;
+            _govOps = govOps;
         }
 
         [HttpGet]
@@ -49,31 +48,21 @@ namespace ERP.Api.Controllers
         [PermissionAuthorize(AppPermissions.UomRead)]
         public async Task<IActionResult> VerifyUomIntegrity(CancellationToken cancellationToken = default)
         {
-            var totalUnitsCount = _db != null
-                ? await _db.Units.AsNoTracking().CountAsync(cancellationToken)
-                : (await _unitService.GetAllUnitsAsync()).Count();
-            var activeUnitsCount = _db != null
-                ? await _db.Units.AsNoTracking().CountAsync(u => u.IsActive, cancellationToken)
-                : totalUnitsCount;
-            var productsCount = _db != null
-                ? await _db.Products.AsNoTracking().CountAsync(cancellationToken)
-                : 0;
-            var conversionCount = _db != null
-                ? await _db.ProductUoms.AsNoTracking().CountAsync(cancellationToken)
-                : 0;
-            var invalidConversionCount = _db != null
-                ? await _db.ProductUoms.AsNoTracking().CountAsync(x => x.ConversionFactor <= 0m, cancellationToken)
-                : 0;
+            if (_govOps != null)
+            {
+                return this.ToActionResult(await _govOps.VerifyUomIntegrityAsync(cancellationToken));
+            }
 
+            var totalUnitsCount = (await _unitService.GetAllUnitsAsync()).Count();
             var now = DateTime.UtcNow;
             return Ok(new
             {
                 verificationId = $"UOM-INT-{now:yyyyMMdd-HHmm}",
                 totalUnitsCount,
-                activeUnitsCount,
-                productsCount,
-                conversionCount,
-                invalidConversionCount,
+                activeUnitsCount = totalUnitsCount,
+                productsCount = 0,
+                conversionCount = 0,
+                invalidConversionCount = 0,
                 baseUomImmutability = "Đã khóa bảo vệ đơn vị tính cơ sở khi phát sinh tồn kho",
                 conversionGraphCycles = 0,
                 status = "Đã xác thực toàn vẹn danh mục ĐVT & hệ số quy đổi",
@@ -90,18 +79,17 @@ namespace ERP.Api.Controllers
             CancellationToken cancellationToken = default)
         {
             var productId = request?.ProductId;
-            var checkedProductsCount = _db != null
-                ? await _db.Products.AsNoTracking()
-                    .Where(p => !productId.HasValue || p.Id == productId.Value)
-                    .CountAsync(cancellationToken)
-                : 0;
+            if (_govOps != null)
+            {
+                return this.ToActionResult(await _govOps.VerifyCatchWeightColdChainAsync(productId, cancellationToken));
+            }
 
             var now = DateTime.UtcNow;
             return Ok(new
             {
                 verificationId = $"CW-CC-HAZ-{now:yyyyMMdd-HHmm}",
                 productId,
-                checkedProductsCount,
+                checkedProductsCount = 0,
                 dualUomTolerancePct = 2.5m,
                 catchWeightLedgerTraceability = "Đồng bộ song song đơn vị cơ sở và trọng lượng thực tế",
                 coldChainExcursionStatus = "Không phát sinh vi phạm ngưỡng nhiệt độ kho lạnh",
@@ -121,7 +109,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost]
-        [ERP.Api.Infrastructure.IdempotentCommand("Unit.Create")]
+        [IdempotentCommand("Unit.Create")]
         [PermissionAuthorize(AppPermissions.UomManage)]
         public async Task<IActionResult> Create([FromBody] CreateUnitDto dto)
         {
@@ -131,7 +119,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPut("{id}")]
-        [ERP.Api.Infrastructure.IdempotentCommand("Unit.Update")]
+        [IdempotentCommand("Unit.Update")]
         [PermissionAuthorize(AppPermissions.UomManage)]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateUnitDto dto)
         {
@@ -141,7 +129,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpDelete("{id}")]
-        [ERP.Api.Infrastructure.IdempotentCommand("Unit.Delete")]
+        [IdempotentCommand("Unit.Delete")]
         [PermissionAuthorize(AppPermissions.UomManage)]
         public async Task<IActionResult> Delete(int id)
         {

@@ -342,5 +342,19 @@ public sealed class UserSessionService(
         if (!currentUser.IsAuthenticated) throw new UnauthorizedAccessException("Yêu cầu đăng nhập.");
     }
 
+    public async Task<object?> GetAuthenticatedUserProfileAsync(int userId, CancellationToken cancellationToken = default) =>
+        await context.Users.AsNoTracking()
+            .Where(x => x.Id == userId && x.IsActive && (!x.LockoutEnd.HasValue || x.LockoutEnd <= DateTime.UtcNow))
+            .Select(x => new
+            {
+                x.Id,
+                x.Username,
+                x.FullName,
+                Role = x.Role.RoleName,
+                Permissions = x.Role.Permissions.Select(p => p.Permission.Code).OrderBy(c => c).ToArray(),
+                WarehouseIds = x.WarehouseAccesses.Select(w => w.WarehouseId).OrderBy(id => id).ToArray()
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
     private static string? Truncate(string? value, int max) => value is { Length: > 0 } ? value[..Math.Min(value.Length, max)] : null;
 }

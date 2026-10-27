@@ -2,10 +2,8 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
-using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -18,7 +16,7 @@ public sealed record EscalateOverdueApprovalsRequest(int? WarehouseId);
 [ApprovalAuthorize]
 public sealed class ApprovalsController(
     IApprovalWorkflowService service,
-    ErpKhoDbContext db = null!,
+    IWmsGovernanceOperationsService govOps = null!,
     IWarehouseAuthorizationService warehouseAccess = null!,
     ICurrentUser? currentUser = null) : ControllerBase
 {
@@ -37,66 +35,24 @@ public sealed class ApprovalsController(
 
         var (allItems, _) = await FetchAllQueueItemsAsync(warehouseId, cancellationToken);
         var overdueItems = allItems.Where(x => x.SlaStatus == "Overdue").ToList();
-        var overdueCount = overdueItems.Count;
-        var recentAuditCount = db != null
-            ? await db.AuditLogs.AsNoTracking().CountAsync(x => x.Action.Contains("Approve") || x.Action.Contains("Reject"), cancellationToken)
-            : 0;
-        var now = DateTime.UtcNow;
-        var escalationBatchId = $"ESC-SLA-{now:yyyyMMdd-HHmm}";
-        var newlyEscalatedCount = overdueCount;
-        if (db != null)
+
+        if (govOps != null)
         {
             var actorUserId = int.TryParse(
                 User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
                 out var uid) ? uid : currentUser is { IsAuthenticated: true, UserId: > 0 } ? currentUser.UserId : (int?)null;
 
-            var existingEscalated = await db.AuditLogs.AsNoTracking()
-                .Where(x => x.Action == "Approval.SlaEscalated" && x.EntityId.HasValue)
-                .Select(x => new { x.EntityName, EntityId = x.EntityId!.Value })
-                .ToListAsync(cancellationToken);
-            var escalatedSet = existingEscalated
-                .Select(x => (x.EntityName, x.EntityId))
-                .ToHashSet();
-
-            var unescalatedItems = overdueItems
-                .Where(x => !escalatedSet.Contains((x.DocumentType, x.DocumentId)))
-                .ToList();
-            newlyEscalatedCount = unescalatedItems.Count;
-
-            foreach (var item in unescalatedItems)
-            {
-                db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
-                {
-                    UserId = actorUserId,
-                    WarehouseId = item.WarehouseId,
-                    Action = "Approval.SlaEscalated",
-                    EntityName = item.DocumentType,
-                    EntityId = item.DocumentId,
-                    NewValues = escalationBatchId,
-                    Result = "Success",
-                    Timestamp = now
-                });
-            }
-
-            if (unescalatedItems.Count > 0 || !await db.AuditLogs.AsNoTracking().AnyAsync(
-                x => x.Action == "Approval.EscalateOverdue" && x.WarehouseId == warehouseId && x.NewValues == escalationBatchId,
-                cancellationToken))
-            {
-                db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
-                {
-                    UserId = actorUserId,
-                    WarehouseId = warehouseId,
-                    Action = "Approval.EscalateOverdue",
-                    EntityName = "ApprovalQueue",
-                    NewValues = escalationBatchId,
-                    Result = "Success",
-                    Timestamp = now
-                });
-            }
-
-            await db.SaveChangesAsync(cancellationToken);
+            var outcome = await govOps.EscalateOverdueApprovalsAsync(
+                warehouseId,
+                overdueItems,
+                actorUserId,
+                cancellationToken);
+            return outcome.ToActionResult(this);
         }
 
+        var overdueCount = overdueItems.Count;
+        var now = DateTime.UtcNow;
+        var escalationBatchId = $"ESC-SLA-{now:yyyyMMdd-HHmm}";
         var statusText = overdueCount > 0
             ? "Đã kích hoạt chuyển cấp phê duyệt các hồ sơ quá hạn SLA"
             : "Không có hồ sơ phê duyệt quá hạn SLA cần chuyển cấp";
@@ -106,8 +62,8 @@ public sealed class ApprovalsController(
             escalationBatchId,
             warehouseId = request?.WarehouseId,
             overdueCount,
-            newlyEscalatedCount,
-            recentAuditCount,
+            newlyEscalatedCount = overdueCount,
+            recentAuditCount = 0,
             escalatedStatus = "Đã chuyển cấp quản lý phê duyệt khẩn",
             status = statusText,
             statusLabel = statusText,

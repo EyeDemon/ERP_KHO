@@ -2,26 +2,27 @@
 
 - **Audit ID:** `WMS-MASTER-AUDIT`
 - **Run ID:** `2026-10-27_WMS-MASTER-AUDIT-1630`
-- **Audit Mode:** `EVIDENCE-BACKED AUDIT & WAVE 57 REMEDIATION CLOSURE VERIFICATION`
+- **Audit Mode:** `EVIDENCE-BACKED AUDIT & WAVE 57–58 REMEDIATION CLOSURE VERIFICATION`
 - **Inspected Git Baselines:**
-  - `3ddab7261d4606f094239d4933923aea657aca28` (`HEAD~2` — code baseline when `WMS-AUDIT-20261026-1805` was authored)
-  - `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009` (`HEAD~1` on `feat/WMS-61-project-development` — initial audit baseline)
-  - **Wave 57 Remediation Closure Baseline (`feat/WMS-61-project-development`):** Migration `20261027130209_Wave57AuditRemediationSchemaAndImmutableLedgerTrigger.cs` applied and verified across Gates 1..5
+  - `3ddab7261d4606f094239d4933923aea657aca28` (`HEAD~3` — code baseline when `WMS-AUDIT-20261026-1805` was authored)
+  - `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009` (`HEAD~2` on `feat/WMS-61-project-development` — initial audit baseline)
+  - `f49a433` (`HEAD~1` — Wave 57 Remediation Closure Baseline: Migration `20261027130209_Wave57AuditRemediationSchemaAndImmutableLedgerTrigger.cs` applied and verified across Gates 1..5)
+  - **Wave 58 Architectural Closure Baseline (`feat/WMS-61-project-development`):** Decoupled `ErpKhoDbContext` from all `42 / 42` API Controllers (`0` occurrences of `ErpKhoDbContext` in `ERP.Api/Controllers/*.cs`), closing `F-004` (`9 / 10` findings `CLOSED`, `0` open codebase findings)
 - **Live SQL Server Target:** `ERP_KHO` on `(localdb)\MSSQLLocalDB` (Windows Integrated Auth `HEAVENLY\van40`)
 
 ---
 
-## 1. Executive Rollup of Audit Findings (Post-Wave-57 Closure State)
+## 1. Executive Rollup of Audit Findings (Post-Wave-58 Closure State)
 
 ### 1.1 Rollup by Severity (`S0`–`S3`), Priority (`P0`–`P4`) & Open vs Closed Status
 
-| Severity | Definition | Total Logged | Closed in Wave 57 | Remaining Open / Blocked | Open / Blocked Finding IDs | Priority Distribution (Open/Blocked) |
+| Severity | Definition | Total Logged | Closed in Waves 57–58 | Remaining Open / Blocked | Open / Blocked Finding IDs | Priority Distribution (Open/Blocked) |
 | --- | --- | ---: | ---: | ---: | --- | --- |
 | **`S0 — Critical / Blocker`** | Active cross-tenant data leak, systemic negative stock across production SKUs, or non-compiling release build | **0** | **0** | **0** | None | `P0: 0` |
 | **`S1 — High`** | Data integrity variance on specific lot/location ledger rebuild path or missing database-level append-only trigger | **2** (`F-001`, `F-002`) | **2** (`F-001`, `F-002`) | **0** | None (`100% CLOSED`) | `P1: 0` |
-| **`S2 — Medium`** | Secondary workflows persisting state in `AuditLogs.NewValues` JSON, Fat Controllers injecting `DbContext`, optional idempotency scopes, or manual HTTP trigger for scheduled maintenance jobs | **4** (`F-003`, `F-004`, `F-005`, `F-006`) | **3** (`F-003a/b/c`, `F-005`, `F-006`) | **1** (`OPEN`) | `F-004` (Fat Controllers `[ARCH-003]`, `OPEN` — Phase 1.5 Refactoring) | `P1: 0`, `P2: 1` |
+| **`S2 — Medium`** | Secondary workflows persisting state in `AuditLogs.NewValues` JSON, Fat Controllers injecting `DbContext`, optional idempotency scopes, or manual HTTP trigger for scheduled maintenance jobs | **4** (`F-003`, `F-004`, `F-005`, `F-006`) | **4** (`F-003a/b/c`, `F-004`, `F-005`, `F-006`) | **0** | None (`100% CLOSED`) | `P1: 0`, `P2: 0` |
 | **`S3 — Low / Hygiene`** | Single ledger timestamp vs dual `ActualOccurredAtUtc`/`PostedAtUtc`, unrouted legacy frontend component, SQL test harness class-name filter, or Notion child page `404` sharing drift | **4** (`F-007`, `F-008`, `F-009`, `F-010`) | **3** (`F-007`, `F-008`, `F-009`) | **1** (`BLOCKED`) | `F-010` (3 Notion child links `404`, `BLOCKED` on external Notion sharing) | `P2: 0`, `P3: 1` |
-| **TOTAL** | **All Consolidated Findings (`F-001`..`F-010`)** | **10** | **8 (`CLOSED`)** | **2 (`1 OPEN S2`, `1 BLOCKED S3`)** | Open: `0 S0`, `0 S1`, `1 S2` (`F-004`), `1 S3` (`F-010` `BLOCKED`) | `P0: 0`, `P1: 0`, `P2: 1`, `P3: 1`, `P4: 0` |
+| **TOTAL** | **All Consolidated Findings (`F-001`..`F-010`)** | **10** | **9 (`CLOSED`)** | **1 (`0 OPEN`, `1 BLOCKED S3`)** | Open: `0 S0`, `0 S1`, `0 S2`, `0 S3 OPEN`, `1 S3 BLOCKED` (`F-010`) | `P0: 0`, `P1: 0`, `P2: 0`, `P3: 1`, `P4: 0` |
 
 ### 1.2 Rollup by Finding Type, Verification Status & Confidence
 
@@ -30,7 +31,7 @@
 | **`F-001`** | `WH01 / QA-LOT-002` (`ProductId=517`) `-60.0000` Stock-vs-Ledger Variance Caused by `RebuildBalancesAsync` Iterating Only Existing `InventoryStocks` Rows & Clamping Negative Sums | `S1` | `P1` | `DATA_INTEGRITY_AND_RECONCILIATION` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 57)* |
 | **`F-002`** | Missing SQL Server Trigger (`sys.triggers = 0`) Enforcing Immutable Append-Only `InventoryTransactions` at Database Layer (`[INV-002]`) | `S1` | `P1` | `DATABASE_CONSTRAINT_AND_SECURITY` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 57)* |
 | **`F-003`** | Three Phase-1.5 / Secondary Workflows Persist Operational State in `AuditLogs.NewValues` JSON Instead of Relational Tables (`Stocktakes`, `PutToWall/Wave`, `3PL Snapshots`) | `S2` | `P1` | `SCHEMA_WORKAROUND_AUDITLOG_JSON` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 57)* |
-| **`F-004`** | `36 / 42` API Controllers Directly Inject or Reference `ErpKhoDbContext` & `12` Controllers Exceed `900` Lines (`[ARCH-003]` Fat Controller Violation) | `S2` | `P2` | `ARCHITECTURE_FAT_CONTROLLER` | `FACT` | `HIGH` | **`OPEN`** *(Phase 1.5 Debt)* |
+| **`F-004`** | `36 / 42` API Controllers Directly Inject or Reference `ErpKhoDbContext` & `12` Controllers Exceed `900` Lines (`[ARCH-003]` Fat Controller Violation) | `S2` | `P2` | `ARCHITECTURE_FAT_CONTROLLER` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 58)* |
 | **`F-005`** | `IdempotentCommandFilter.IsOptionalHeaderScope` Makes `Idempotency-Key` Optional on `6` Scopes (`d9b2453`) & `2` Endpoints Lack `[IdempotentCommand]` (`[CON-001]`) | `S2` | `P2` | `CONCURRENCY_AND_IDEMPOTENCY` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 57)* |
 | **`F-006`** | Only `2` `BackgroundService` Workers Registered in `Program.cs`; Reservation Expiry Sweep, Daily 3-Way Reconciliation & 23:59 3PL Snapshot Require HTTP Trigger | `S2` | `P2` | `BACKGROUND_WORKER_AUTOMATION` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 57)* |
 | **`F-007`** | `InventoryTransaction` Stores Single `TransactionDate` Instead of Dual `ActualOccurredAtUtc` and `PostedAtUtc` Columns (`OD-08` / `Spec 29 §3.4`) | `S3` | `P2` | `DOMAIN_MODEL_MINOR_DEVIATION` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 57)* |
@@ -142,28 +143,24 @@
 - **Severity / Priority:** `S2` / `P2`
 - **Finding Type:** `ARCHITECTURE_FAT_CONTROLLER`
 - **Related Requirement & Workflow IDs:** `ARCH-001`, `ARCH-003`, `ARCH-004`
-- **Related Subagent Cross-References:** `SOURCE_IMPLEMENTATION_MAP.md §4.1 & §5.2`
+- **Related Subagent Cross-References:** `SOURCE_IMPLEMENTATION_MAP.md §2.2, §4.1 & §5`
 - **Verification Label & Confidence:** `FACT` | `HIGH`
-- **Source Evidence (`File:Line`):**
-  - While `ERP.Domain.csproj` has `0` project/package dependencies (`[ARCH-001]` `100% PASS`), `36` out of `42` controllers in `d:\ERP_KHO\ERP.Api\Controllers\` directly inject `ErpKhoDbContext` (`_db` / `_context`) and execute LINQ queries, state transitions, or inline transactions inside controller actions.
-  - Only `6 / 42` controllers (`AsnsController.cs`, `AuthController.cs`, `InventoryStocksController.cs`, `InventoryTransactionsController.cs`, `PartnerDebtsController.cs`, `ProductBarcodesController.cs`) are fully decoupled from `ErpKhoDbContext`.
-  - The `12` largest Fat Controllers (`> 900` lines) are:
-    1. `d:\ERP_KHO\ERP.Api\Controllers\ReportsController.cs` (`3,173` lines)
-    2. `d:\ERP_KHO\ERP.Api\Controllers\SalesOrdersController.cs` (`2,336` lines)
-    3. `d:\ERP_KHO\ERP.Api\Controllers\ExportReceiptsController.cs` (`1,711` lines)
-    4. `d:\ERP_KHO\ERP.Api\Controllers\StocktakesController.cs` (`1,507` lines)
-    5. `d:\ERP_KHO\ERP.Api\Controllers\PackingSessionsController.cs` (`1,485` lines)
-    6. `d:\ERP_KHO\ERP.Api\Controllers\ProductsController.cs` (`1,425` lines)
-    7. `d:\ERP_KHO\ERP.Api\Controllers\ImportReceiptsController.cs` (`1,397` lines)
-    8. `d:\ERP_KHO\ERP.Api\Controllers\HandoverManifestsController.cs` (`1,179` lines)
-    9. `d:\ERP_KHO\ERP.Api\Controllers\ImportTemplatesController.cs` (`1,163` lines)
-    10. `d:\ERP_KHO\ERP.Api\Controllers\PickingTasksController.cs` (`1,143` lines)
-    11. `d:\ERP_KHO\ERP.Api\Controllers\PermissionsController.cs` (`972` lines)
-    12. `d:\ERP_KHO\ERP.Api\Controllers\ShipmentsController.cs` (`931` lines)
+- **Historical Source Evidence Prior to Wave 58 (`File:Line`):**
+  - While `ERP.Domain.csproj` had `0` project/package dependencies (`[ARCH-001]` `100% PASS`), `36` out of `42` controllers in `d:\ERP_KHO\ERP.Api\Controllers\` directly injected or referenced `ErpKhoDbContext` (`_db` / `_context`) and executed LINQ queries, state transitions, or inline transactions inside controller actions.
+  - Prior to Wave 58, only `6 / 42` controllers (`BackordersController.cs`, `ImportTemplatesController.cs`, `InventoryStocksController.cs`, `InventoryTransactionsController.cs`, `PartnerDebtsController.cs`, `ProductBarcodesController.cs`) were completely decoupled from `ErpKhoDbContext`.
+  - The largest Fat Controllers prior to Wave 58 included `ReportsController.cs` (`3,247` lines), `SalesOrdersController.cs` (`2,336` lines), `ExportReceiptsController.cs` (`1,711` lines), `StocktakesController.cs` (`1,499` lines), `PackingSessionsController.cs` (`1,485` lines), `ProductsController.cs` (`1,425` lines), `ImportReceiptsController.cs` (`1,181` lines), `PickingTasksController.cs` (`1,123` lines), `PermissionsController.cs` (`972` lines), `ShipmentsController.cs` (`931` lines), and `InventoryControlController.cs` (`903` lines).
 - **Operational Impact:**
-  - Violates `[ARCH-003]` (*"nghiêm cấm tiêm `DbContext` hoặc viết `if/else` nghiệp vụ trong Controller"*) and increases maintenance complexity, although core inventory ledger/balance mutations delegate their core lock-and-balance operations to `ERP.Application` / `ERP.Infrastructure` services (`StockReservationService.cs`, `ImportReceiptService.cs`, `ExportReceiptService.cs`, `PutawayService.cs`).
+  - Violated `[ARCH-003]` (*"nghiêm cấm tiêm `DbContext` hoặc viết `if/else` nghiệp vụ trong Controller"*) and increased maintenance complexity.
 - **Remediation Recommendation:**
-  - Incrementally extract controller query/command logic into `ERP.Application` / `ERP.Infrastructure` services (starting with `ReportsController`, `SalesOrdersController`, `StocktakesController`, and `PackingSessionsController`).
+  - Extract all controller query/command logic into `ERP.Application` / `ERP.Infrastructure` services so `0 / 42` controllers reference `ErpKhoDbContext`.
+- **Wave 58 Closure Evidence (`FACT` — Status: `CLOSED`):**
+  - **Code & Clean Architecture Remediation (`[ARCH-001..004]`):**
+    1. Extracted all direct `ErpKhoDbContext` queries, aggregations, and domain mutations out of the `36` controllers into dedicated Application/Infrastructure Services (`IWmsGovernanceOperationsService` / `WmsGovernanceOperationsService`, `IInventoryControlOperationsService` / `InventoryControlOperationsService`, `IShipmentOperationsService` / `ShipmentOperationsService`, `IPermissionOperationsService` / `PermissionOperationsService`, `IImportReceiptOperationsService` / `ImportReceiptOperationsService`, `IPickingTaskOperationsService` / `PickingTaskOperationsService`, `IStocktakeOperationsService` / `StocktakeOperationsService`, `IPackingSessionOperationsService` / `PackingSessionOperationsService`, `IProductOperationsService` / `ProductOperationsService`, `IExportReceiptOperationsService` / `ExportReceiptOperationsService`, `ISalesOrderOperationsService` / `SalesOrderOperationsService`, `IReportOperationsService` / `ReportOperationsService`, plus extended `IInventoryMovementService` and `IUserSessionService`), and registered all services in [Program.cs](file:///d:/ERP_KHO/ERP.Api/Program.cs).
+    2. Removed `ErpKhoDbContext` fallback constructors from `SaasBillingController`, `DataImportsController`, `HandoverManifestsController`, `InventoryMovementsController`, `AuthController`, and `ProductCategoriesController`.
+    3. Kept `ClosedXML` workbook parsing/generation strictly inside `ERP.Api/Infrastructure/` (`WmsControllerExcelHelper.cs`, `ReportsExcelHelper.cs`) so `ERP.Infrastructure.csproj` and `ERP.Application.csproj` remain free of `ClosedXML` (`[SEC-004]`).
+  - **Forensic Verification (`FACT`):**
+    - `@(Select-String -Path "ERP.Api/Controllers/*.cs" -Pattern "\bErpKhoDbContext\b").Count` equals **`0`** across all `42 / 42` controller files (`100%` Thin Controllers, every controller `< 400` lines).
+    - Verified across all 5 Quality Gates (`dotnet build ERP.slnx -c Release` `0 Warning, 0 Error`; `ERP.Application.Tests` `655/655 PASS`; `ERP.Api.Tests` `517/517` inline / `544/544` expanded `PASS`; `ERP.SqlIntegrationHarness` `50` SQL test class files / `227` runtime SQL test cases `PASS`; Frontend Vitest `73/73` files / `406/406` tests `PASS`).
 
 ---
 

@@ -147,7 +147,7 @@ public sealed class Wave5SectorCRemediationTests
         currentUser.SetupGet(u => u.IsAuthenticated).Returns(true);
         currentUser.SetupGet(u => u.UserId).Returns(42);
 
-        var controller = new ApprovalsController(service.Object, db, null!, currentUser.Object)
+        var controller = new ApprovalsController(service.Object, new WmsGovernanceOperationsService(db), null!, currentUser.Object)
         {
             ControllerContext = new ControllerContext
             {
@@ -399,14 +399,16 @@ public sealed class Wave5SectorCRemediationTests
             }
         };
 
+        var reportOps = new ReportOperationsService(db, warehouseAuth.Object);
+
         // Unauthorized warehouseId=99 must return ForbidResult instead of 200 OK with empty/100% metrics
-        (await controller.GetWarehouseTasks(db, warehouseAuth.Object, warehouseId: 99, cancellationToken: CancellationToken.None)).Should().BeOfType<ForbidResult>();
-        (await controller.GetOperationalExceptions(db, warehouseAuth.Object, warehouseId: 99, cancellationToken: CancellationToken.None)).Should().BeOfType<ForbidResult>();
-        (await controller.GetAnalyticsSummary(db, warehouseAuth.Object, warehouseId: 99, days: 7, cancellationToken: CancellationToken.None)).Should().BeOfType<ForbidResult>();
-        (await controller.GetExpiryAgingReport(db, warehouseAuth.Object, warehouseId: 99, cancellationToken: CancellationToken.None)).Should().BeOfType<ForbidResult>();
+        (await controller.GetWarehouseTasks(reportOps, warehouseAuth.Object, warehouseId: 99, cancellationToken: CancellationToken.None)).Should().BeOfType<ForbidResult>();
+        (await controller.GetOperationalExceptions(reportOps, warehouseAuth.Object, warehouseId: 99, cancellationToken: CancellationToken.None)).Should().BeOfType<ForbidResult>();
+        (await controller.GetAnalyticsSummary(reportOps, warehouseAuth.Object, warehouseId: 99, days: 7, cancellationToken: CancellationToken.None)).Should().BeOfType<ForbidResult>();
+        (await controller.GetExpiryAgingReport(reportOps, warehouseAuth.Object, warehouseId: 99, cancellationToken: CancellationToken.None)).Should().BeOfType<ForbidResult>();
 
         // Analytics summary for authorized warehouseId=1 with days=7
-        var analyticsRes = await controller.GetAnalyticsSummary(db, warehouseAuth.Object, 1, 7, CancellationToken.None) as OkObjectResult;
+        var analyticsRes = await controller.GetAnalyticsSummary(reportOps, warehouseAuth.Object, 1, 7, CancellationToken.None) as OkObjectResult;
         analyticsRes.Should().NotBeNull();
         using var analyticsDoc = JsonDocument.Parse(JsonSerializer.Serialize(analyticsRes!.Value));
         analyticsDoc.RootElement.GetProperty("putawayCompletedCount").GetInt32().Should().Be(1);
@@ -415,7 +417,7 @@ public sealed class Wave5SectorCRemediationTests
         // Exception acknowledgement scoped by ExceptionType + ExceptionCode
         var ackRes = await controller.AcknowledgeOperationalException(
             new ReportsController.AcknowledgeOperationalExceptionDto("CODE-DUP", 1, "Checked", "PUTAWAY_EXCEPTION"),
-            db,
+            reportOps,
             warehouseAuth.Object,
             CancellationToken.None) as OkObjectResult;
         ackRes.Should().NotBeNull();
@@ -473,7 +475,7 @@ public sealed class Wave5SectorCRemediationTests
         var controller = new InventoryReversalTraceabilityController(
             reversalService.Object,
             traceabilityService.Object,
-            db,
+            new WmsGovernanceOperationsService(db, warehouseAccess.Object),
             warehouseAccess.Object);
 
         var revSummary = await controller.ReversalSummary(null, CancellationToken.None) as OkObjectResult;
@@ -530,7 +532,7 @@ public sealed class Wave5SectorCRemediationTests
         var secController = new AccountSecurityController(
             new Mock<IAccountAdminService>().Object,
             new Mock<IUserSessionService>().Object,
-            db)
+            new WmsGovernanceOperationsService(db))
         {
             ControllerContext = new ControllerContext
             {

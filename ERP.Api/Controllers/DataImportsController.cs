@@ -2,8 +2,6 @@ using System.Security.Claims;
 using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.Interfaces;
-using ERP.Infrastructure.Persistence;
-using ERP.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -15,31 +13,27 @@ namespace ERP.Api.Controllers;
 [Route("api/data-imports")]
 public sealed class DataImportsController : ControllerBase
 {
-    private readonly ErpKhoDbContext? _db;
     private readonly IWarehouseAuthorizationService? _warehouseAccess;
     private readonly ICurrentUser? _currentUser;
     private readonly IDataImportService _dataImportService;
 
     [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
     public DataImportsController(
-        ErpKhoDbContext? db = null,
+        IDataImportService dataImportService,
         IWarehouseAuthorizationService? warehouseAccess = null,
-        ICurrentUser? currentUser = null,
-        IDataImportService? dataImportService = null)
+        ICurrentUser? currentUser = null)
     {
-        _db = db;
+        _dataImportService = dataImportService;
         _warehouseAccess = warehouseAccess;
         _currentUser = currentUser;
-        _dataImportService = dataImportService ?? new DataImportService(db);
     }
 
     public DataImportsController(
         IExportReceiptService? exportReceiptService,
-        ErpKhoDbContext? db = null,
         IWarehouseAuthorizationService? warehouseAccess = null,
         ICurrentUser? currentUser = null,
         IDataImportService? dataImportService = null)
-        : this(db, warehouseAccess, currentUser, dataImportService)
+        : this(dataImportService!, warehouseAccess, currentUser)
     {
         _ = exportReceiptService;
     }
@@ -62,7 +56,7 @@ public sealed class DataImportsController : ControllerBase
         if (User?.IsInRole(AppRoles.Viewer) == true)
             return Forbid();
 
-        if (_db == null && request == null && file == null)
+        if (_dataImportService == null && request == null && file == null)
         {
             return StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." });
         }
@@ -132,7 +126,7 @@ public sealed class DataImportsController : ControllerBase
             ?? (_currentUser?.UserId > 0 ? _currentUser.UserId.ToString() : null);
         int? actorUserId = int.TryParse(userIdStr, out var parsedUid) && parsedUid > 0 ? parsedUid : null;
 
-        var res = await _dataImportService.ImportOpeningBalanceAsync(normalizedRequest, actorUserId, cancellationToken);
+        var res = await _dataImportService!.ImportOpeningBalanceAsync(normalizedRequest, actorUserId, cancellationToken);
         return res.StatusCode switch
         {
             200 => Ok(res.Payload),

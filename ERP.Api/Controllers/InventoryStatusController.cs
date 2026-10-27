@@ -2,11 +2,8 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
-using ERP.Domain.Enums;
-using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -16,7 +13,7 @@ namespace ERP.Api.Controllers;
 [Route("api/v1/inventory")]
 public sealed class InventoryStatusController(
     IInventoryStatusService service,
-    ErpKhoDbContext db = null!,
+    IWmsGovernanceOperationsService govOps = null!,
     IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet("statuses")]
@@ -82,63 +79,26 @@ public sealed class InventoryStatusController(
                 accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
         }
 
-        var totalBucketsCount = 0;
-        var violationCount = 0;
-        var nonPickableHoldViolationCount = 0;
-        if (db != null)
-        {
-            var query = db.InventoryStocks.AsNoTracking();
-            if (warehouseId.HasValue)
-                query = query.Where(s => s.WarehouseId == warehouseId.Value);
-            else if (accessibleIds != null)
-                query = query.Where(s => accessibleIds.Contains(s.WarehouseId));
-
-            totalBucketsCount = await query.CountAsync(cancellationToken);
-            violationCount = await query.CountAsync(
-                s => s.Quantity < 0m || s.ReservedQuantity < 0m || s.Quantity < s.ReservedQuantity,
-                cancellationToken);
-            nonPickableHoldViolationCount = await query.CountAsync(
-                s => s.Quantity > 0m
-                     && (s.Status == InventoryStatus.Damaged
-                         || s.Status == InventoryStatus.Quarantine
-                         || s.Status == InventoryStatus.RecallBlocked)
-                     && s.Location != null
-                     && s.Location.IsPickable
-                     && s.ReservedQuantity > 0m,
-                cancellationToken);
-        }
-
-        var now = DateTime.UtcNow;
-        var verificationId = $"BCK-INV-{now:yyyyMMdd-HHmm}";
-        if (db != null)
+        if (govOps != null)
         {
             var actorUserId = int.TryParse(
                 User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
                 out var uid) ? uid : (int?)null;
-            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
-            {
-                UserId = actorUserId,
-                WarehouseId = warehouseId,
-                EntityName = "InventoryStatus",
-                Action = "Inventory.VerifyBucketInvariants",
-                NewValues = verificationId,
-                Reason = $"Xác thực bất biến 5 trạng thái tồn kho ({totalBucketsCount} dòng, {violationCount} vi phạm)",
-                Result = "Success",
-                Timestamp = now
-            });
-            await db.SaveChangesAsync(cancellationToken);
+
+            var outcome = await govOps.VerifyBucketInvariantsAsync(warehouseId, accessibleIds, actorUserId, cancellationToken);
+            return outcome.ToActionResult(this);
         }
 
+        var now = DateTime.UtcNow;
+        var verificationId = $"BCK-INV-{now:yyyyMMdd-HHmm}";
         return Ok(new
         {
             verificationId,
             warehouseId,
-            totalBucketsCount,
-            violationCount,
-            nonPickableHoldViolationCount,
-            fiveBucketEquationStatus = violationCount == 0
-                ? "Cân bằng chính xác tuyệt đối (0 <= Đã giữ <= Tồn vật lý)"
-                : $"Phát hiện {violationCount} lệch bất biến tồn kho",
+            totalBucketsCount = 0,
+            violationCount = 0,
+            nonPickableHoldViolationCount = 0,
+            fiveBucketEquationStatus = "Cân bằng chính xác tuyệt đối (0 <= Đã giữ <= Tồn vật lý)",
             scrapApprovalGuard = "Bắt buộc phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm khi hủy/thanh lý",
             status = "Đã xác thực bất biến 5 trạng thái tồn kho & phân vùng biệt trữ",
             statusLabel = "Đã xác thực bất biến 5 trạng thái tồn kho & phân vùng biệt trữ",
@@ -168,90 +128,30 @@ public sealed class InventoryStatusController(
                 accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
         }
 
-        var now = DateTime.UtcNow;
-        var activeLocksCount = 0;
-        var recallLocksCount = 0;
-        var qualityHoldLocksCount = 0;
-        var countFreezeLocksCount = 0;
-        var manualLocksCount = 0;
-        var leakCount = 0;
-        if (db != null)
-        {
-            var stockQuery = db.InventoryStocks.AsNoTracking();
-            var lockQuery = db.InventoryLocks.AsNoTracking()
-                .Where(l => l.Status == InventoryLockStatus.Active && (!l.ExpiresAt.HasValue || l.ExpiresAt.Value > now));
-
-            if (warehouseId.HasValue)
-            {
-                stockQuery = stockQuery.Where(s => s.WarehouseId == warehouseId.Value);
-                lockQuery = lockQuery.Where(l => l.WarehouseId == warehouseId.Value);
-            }
-            else if (accessibleIds != null)
-            {
-                stockQuery = stockQuery.Where(s => accessibleIds.Contains(s.WarehouseId));
-                lockQuery = lockQuery.Where(l => accessibleIds.Contains(l.WarehouseId));
-            }
-
-            var activeLockTypes = (await lockQuery
-                .Select(l => l.LockType)
-                .ToListAsync(cancellationToken))
-                .Select(t => t.ToString())
-                .ToList();
-
-            activeLocksCount = activeLockTypes.Count;
-            recallLocksCount = activeLockTypes.Count(t =>
-                t.Contains("Recall", StringComparison.OrdinalIgnoreCase)
-                || t.Contains("Investigation", StringComparison.OrdinalIgnoreCase));
-            qualityHoldLocksCount = activeLockTypes.Count(t =>
-                t.Contains("Quality", StringComparison.OrdinalIgnoreCase)
-                || t.Contains("Qc", StringComparison.OrdinalIgnoreCase)
-                || t.Contains("Investigation", StringComparison.OrdinalIgnoreCase));
-            countFreezeLocksCount = activeLockTypes.Count(t => t.Contains("Count", StringComparison.OrdinalIgnoreCase));
-            manualLocksCount = activeLockTypes.Count(t =>
-                t.Contains("Manual", StringComparison.OrdinalIgnoreCase)
-                || t.Contains("Maintenance", StringComparison.OrdinalIgnoreCase));
-
-            leakCount = await stockQuery.CountAsync(
-                s => s.Quantity < 0m || s.ReservedQuantity < 0m || s.Quantity < s.ReservedQuantity,
-                cancellationToken);
-        }
-
-        var verificationId = $"LCK-PRC-{now:yyyyMMdd-HHmm}";
-        if (db != null)
+        if (govOps != null)
         {
             var actorUserId = int.TryParse(
                 User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
                 out var uid) ? uid : (int?)null;
-            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
-            {
-                UserId = actorUserId,
-                WarehouseId = warehouseId,
-                EntityName = "InventoryLock",
-                Action = "Inventory.VerifyLockPrecedence",
-                NewValues = verificationId,
-                Reason = $"Xác thực thứ tự ưu tiên khóa tồn kho ({activeLocksCount} khóa đang hiệu lực)",
-                Result = "Success",
-                Timestamp = now
-            });
-            await db.SaveChangesAsync(cancellationToken);
+
+            var outcome = await govOps.VerifyLockPrecedenceAsync(warehouseId, accessibleIds, actorUserId, cancellationToken);
+            return outcome.ToActionResult(this);
         }
 
-        var statusText = leakCount == 0
-            ? "Đã xác thực thứ tự ưu tiên khóa tồn kho (0 rò rỉ xuất hàng)"
-            : "Phát hiện xung đột khóa tồn kho";
-
+        var now = DateTime.UtcNow;
+        var verificationId = $"LCK-PRC-{now:yyyyMMdd-HHmm}";
         return Ok(new
         {
             verificationId,
             warehouseId,
-            activeLocksCount,
-            recallLocksCount,
-            qualityHoldLocksCount,
-            countFreezeLocksCount,
-            manualLocksCount,
-            leakCount,
+            activeLocksCount = 0,
+            recallLocksCount = 0,
+            qualityHoldLocksCount = 0,
+            countFreezeLocksCount = 0,
+            manualLocksCount = 0,
+            leakCount = 0,
             overlappingHoldPrecedence = "Thu hồi lô hàng > Kiểm định chất lượng > Đóng băng kiểm kê > Khóa vận hành",
-            status = statusText,
+            status = "Đã xác thực thứ tự ưu tiên khóa tồn kho (0 rò rỉ xuất hàng)",
             statusLabel = "Đã xác thực thứ tự ưu tiên khóa tồn kho (0 rò rỉ xuất hàng)",
             verifiedAtUtc = now
         });

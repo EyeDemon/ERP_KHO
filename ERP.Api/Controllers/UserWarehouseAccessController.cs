@@ -2,10 +2,8 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
-using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -19,7 +17,7 @@ namespace ERP.Api.Controllers;
 [Authorize]
 public sealed class UserWarehouseAccessController(
     IUserWarehouseAccessService service,
-    ErpKhoDbContext db = null!,
+    IWmsGovernanceOperationsService govOps = null!,
     IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet, PermissionAuthorize(AppPermissions.UserWarehouseRead)]
@@ -63,29 +61,10 @@ public sealed class UserWarehouseAccessController(
 
     private async Task EnsureTenantUserOwnershipAsync(int userId, int? warehouseId, CancellationToken cancellationToken)
     {
-        if (db is null)
+        if (govOps is null)
             return;
 
-        if (!await db.Users.IgnoreQueryFilters().AnyAsync(cancellationToken))
-            return;
-
-        var activeTenantId = db.CurrentTenantId;
-        var userOwnedByTenant = await db.Users
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .AnyAsync(u => u.Id == userId && u.TenantId == activeTenantId, cancellationToken);
-        if (!userOwnedByTenant)
-            throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.");
-
-        if (warehouseId.HasValue)
-        {
-            var warehouseOwnedByTenant = await db.Warehouses
-                .IgnoreQueryFilters()
-                .AsNoTracking()
-                .AnyAsync(w => w.Id == warehouseId.Value && w.TenantId == activeTenantId, cancellationToken);
-            if (!warehouseOwnedByTenant)
-                throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.");
-        }
+        await govOps.EnsureTenantUserOwnershipAsync(userId, warehouseId, cancellationToken);
     }
 
     [HttpPost("verify-sod-isolation")]
@@ -105,32 +84,22 @@ public sealed class UserWarehouseAccessController(
                 accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
         }
 
-        var activeMemberships = 0;
-        var invalidMemberships = 0;
-        if (db is not null)
+        if (govOps is not null)
         {
-            var query = db.UserWarehouses.AsNoTracking();
-            if (warehouseId.HasValue)
-                query = query.Where(uw => uw.WarehouseId == warehouseId.Value);
-            else if (accessibleIds is not null)
-                query = query.Where(uw => accessibleIds.Contains(uw.WarehouseId));
-
-            activeMemberships = await query.CountAsync(cancellationToken);
-            invalidMemberships = await query.CountAsync(
-                uw => !uw.User.IsActive || !uw.Warehouse.IsActive,
-                cancellationToken);
+            var outcome = await govOps.VerifySodIsolationAsync(warehouseId, accessibleIds, cancellationToken);
+            return outcome.ToActionResult(this);
         }
 
         return Ok(new
         {
             auditId = $"SOD-ISO-{DateTime.UtcNow:yyyyMMdd-HHmm}",
             warehouseId,
-            activeMemberships,
-            sodConflictCount = invalidMemberships,
+            activeMemberships = 0,
+            sodConflictCount = 0,
             multiWarehouseIsolationEnforced = true,
-            status = invalidMemberships == 0 ? "ZERO_PRIVILEGE_ESCALATION_VERIFIED" : "INACTIVE_MEMBERSHIP_DETECTED",
-            crossSiteLeakageDetected = invalidMemberships > 0,
-            sodPolicyStatus = invalidMemberships == 0 ? "STRICT_ISOLATION_VERIFIED" : "INACTIVE_MEMBERSHIP_DETECTED",
+            status = "ZERO_PRIVILEGE_ESCALATION_VERIFIED",
+            crossSiteLeakageDetected = false,
+            sodPolicyStatus = "STRICT_ISOLATION_VERIFIED",
             auditedAtUtc = DateTime.UtcNow
         });
     }

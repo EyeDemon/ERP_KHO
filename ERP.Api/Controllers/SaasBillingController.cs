@@ -2,8 +2,6 @@ using System.Security.Claims;
 using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.Interfaces;
-using ERP.Infrastructure.Persistence;
-using ERP.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -13,16 +11,9 @@ namespace ERP.Api.Controllers;
 [ApiController]
 [Route("api/v1/saas-billing")]
 [Route("api/saas-billing")]
-public sealed class SaasBillingController : ControllerBase
+public sealed class SaasBillingController(ISaasBillingService billingService) : ControllerBase
 {
-    private readonly ISaasBillingService _billingService;
-
-    public SaasBillingController(
-        ErpKhoDbContext? db = null,
-        ISaasBillingService? billingService = null)
-    {
-        _billingService = billingService ?? new SaasBillingService(db);
-    }
+    private readonly ISaasBillingService _billingService = billingService;
 
     [HttpGet("plans")]
     [PermissionAuthorize(AppPermissions.PermissionRead)]

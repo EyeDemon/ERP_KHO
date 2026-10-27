@@ -4,12 +4,12 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
 using ERP.Application.Common;
-using ERP.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace ERP.Api.Controllers
 {
+    public sealed record RefreshRequestDto(string? RefreshToken = null);
+
     [ApiController]
     [Route("api/[controller]")]
     [Route("api/v1/auth")]
@@ -52,14 +52,16 @@ namespace ERP.Api.Controllers
         [HttpPost("refresh")]
         [AllowAnonymous]
         [EnableRateLimiting("Refresh")]
-        public async Task<IActionResult> Refresh(CancellationToken cancellationToken)
+        public async Task<IActionResult> Refresh([FromBody] RefreshRequestDto? request = null, CancellationToken cancellationToken = default)
         {
             try
             {
-                var refreshToken = Request.Cookies[RefreshCookieName] ?? string.Empty;
-                var result = await _sessionService.RefreshAsync(refreshToken, RequestContext(), cancellationToken);
+                var refreshToken = Request.Cookies[RefreshCookieName];
+                if (string.IsNullOrWhiteSpace(refreshToken))
+                    refreshToken = request?.RefreshToken;
+                var result = await _sessionService.RefreshAsync(refreshToken ?? string.Empty, RequestContext(), cancellationToken);
                 SetRefreshCookie(result.RefreshToken, result.RefreshTokenExpiresAtUtc);
-                return Ok(new { token = result.AccessToken, accessTokenExpiresAtUtc = result.AccessTokenExpiresAtUtc });
+                return Ok(new { token = result.AccessToken, accessToken = result.AccessToken, accessTokenExpiresAtUtc = result.AccessTokenExpiresAtUtc });
             }
             catch (UnauthorizedAccessException)
             {
@@ -81,15 +83,11 @@ namespace ERP.Api.Controllers
 
         [HttpGet("me")]
         [Authorize]
-        public async Task<IActionResult> Me([FromServices] ErpKhoDbContext db, CancellationToken cancellationToken)
+        public async Task<IActionResult> Me(CancellationToken cancellationToken)
         {
             if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
                 return Unauthorized(new { message = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." });
-            var user = await db.Users.AsNoTracking().Where(x => x.Id == userId && x.IsActive && (!x.LockoutEnd.HasValue || x.LockoutEnd <= DateTime.UtcNow))
-                .Select(x => new { x.Id, x.Username, x.FullName, Role = x.Role.RoleName,
-                    Permissions = x.Role.Permissions.Select(p => p.Permission.Code).OrderBy(c => c).ToArray(),
-                    WarehouseIds = x.WarehouseAccesses.Select(w => w.WarehouseId).OrderBy(id => id).ToArray() })
-                .SingleOrDefaultAsync(cancellationToken);
+            var user = await _sessionService.GetAuthenticatedUserProfileAsync(userId, cancellationToken);
             return user is null ? Unauthorized(new { message = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." }) : Ok(user);
         }
 

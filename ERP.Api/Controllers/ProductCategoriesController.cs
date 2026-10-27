@@ -1,10 +1,8 @@
 using ERP.Api.Authorization;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
-using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -13,8 +11,7 @@ namespace ERP.Api.Controllers;
 [Route("api/product-categories")]
 [Route("api/v1/product-categories")]
 public sealed class ProductCategoriesController(
-    IProductCatalogService service,
-    ErpKhoDbContext db = null!) : ControllerBase
+    IProductCatalogService service) : ControllerBase
 {
     [HttpGet, PermissionAuthorize(AppPermissions.CategoryRead)]
     public async Task<IActionResult> GetAll(CancellationToken ct) => Ok(await service.GetCategoriesAsync(ct));
@@ -38,9 +35,7 @@ public sealed class ProductCategoriesController(
     [PermissionAuthorize(AppPermissions.CategoryRead)]
     public async Task<IActionResult> VerifyStoragePolicy(CancellationToken ct = default)
     {
-        var checkedCategoriesCount = db != null
-            ? await db.ProductCategories.AsNoTracking().CountAsync(ct)
-            : (await service.GetCategoriesAsync(ct)).Count;
+        var checkedCategoriesCount = (await service.GetCategoriesAsync(ct)).Count;
 
         var now = DateTime.UtcNow;
         return Ok(new

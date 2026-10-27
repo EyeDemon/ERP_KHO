@@ -3,10 +3,8 @@ using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Common;
 using ERP.Application.Interfaces;
-using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -18,7 +16,7 @@ namespace ERP.Api.Controllers;
 public sealed class InventoryReversalTraceabilityController(
     IInventoryReversalService reversalService,
     IInventoryTraceabilityQueryService traceabilityService,
-    ErpKhoDbContext db = null!,
+    IWmsGovernanceOperationsService govOps = null!,
     IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet("reversal-reasons")]
@@ -57,37 +55,11 @@ public sealed class InventoryReversalTraceabilityController(
                 accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
         }
 
-        if (db != null && await db.InventoryTransactions.AsNoTracking().AnyAsync(cancellationToken))
+        if (govOps != null)
         {
-            var candidateQuery = db.InventoryTransactions.AsNoTracking()
-                .Where(t => (t.TransactionType == ERP.Domain.Enums.TransactionType.Move ||
-                             t.TransactionType == ERP.Domain.Enums.TransactionType.StatusChange) &&
-                            t.ReversalOfTransactionId == null);
-            if (warehouseId.HasValue)
-                candidateQuery = candidateQuery.Where(t => t.WarehouseId == warehouseId.Value);
-            else if (accessibleIds != null)
-                candidateQuery = candidateQuery.Where(t => accessibleIds.Contains(t.WarehouseId));
-
-            var totalCandidates = await candidateQuery.CountAsync(cancellationToken);
-            var alreadyReversed = await candidateQuery.CountAsync(
-                t => t.CorrectiveTransactionId != null ||
-                     db.InventoryTransactions.Any(r => r.ReversalOfTransactionId == t.Id),
-                cancellationToken);
-            var moveCount = await candidateQuery.CountAsync(
-                t => t.TransactionType == ERP.Domain.Enums.TransactionType.Move,
-                cancellationToken);
-            var statusChangeCount = await candidateQuery.CountAsync(
-                t => t.TransactionType == ERP.Domain.Enums.TransactionType.StatusChange,
-                cancellationToken);
-
-            return Ok(new
-            {
-                totalCandidatesInWindow = totalCandidates,
-                reversibleCount = totalCandidates - alreadyReversed,
-                alreadyReversedCount = alreadyReversed,
-                moveTransactionCount = moveCount,
-                statusChangeTransactionCount = statusChangeCount,
-            });
+            var dbOutcome = await govOps.TryGetReversalSummaryFromDbAsync(warehouseId, accessibleIds, cancellationToken);
+            if (dbOutcome != null)
+                return dbOutcome.ToActionResult(this);
         }
 
         const int pageSize = 100;
@@ -161,47 +133,11 @@ public sealed class InventoryReversalTraceabilityController(
                 accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
         }
 
-        if (db != null && (await db.InventoryStocks.AsNoTracking().AnyAsync(cancellationToken) ||
-                           await db.InventoryTransactions.AsNoTracking().AnyAsync(cancellationToken)))
+        if (govOps != null)
         {
-            var bucketQuery = db.InventoryStocks.AsNoTracking()
-                .Where(s => s.Quantity > 0 || s.ReservedQuantity > 0);
-            var eventQuery = db.InventoryTransactions.AsNoTracking().AsQueryable();
-
-            if (warehouseId.HasValue)
-            {
-                bucketQuery = bucketQuery.Where(s => s.WarehouseId == warehouseId.Value);
-                eventQuery = eventQuery.Where(t => t.WarehouseId == warehouseId.Value);
-            }
-            else if (accessibleIds != null)
-            {
-                bucketQuery = bucketQuery.Where(s => accessibleIds.Contains(s.WarehouseId));
-                eventQuery = eventQuery.Where(t => accessibleIds.Contains(t.WarehouseId));
-            }
-
-            if (productId.HasValue)
-            {
-                bucketQuery = bucketQuery.Where(s => s.ProductId == productId.Value);
-                eventQuery = eventQuery.Where(t => t.ProductId == productId.Value);
-            }
-
-            var totalBuckets = await bucketQuery.CountAsync(cancellationToken);
-            var totalEvents = await eventQuery.CountAsync(cancellationToken);
-            var lotTrackedBucketCount = await bucketQuery.CountAsync(s => s.LotId != null, cancellationToken);
-            var serialTrackedBucketCount = await bucketQuery.CountAsync(s => s.SerialId != null, cancellationToken);
-            var availableBucketCount = await bucketQuery.CountAsync(
-                s => s.Status == ERP.Domain.Enums.InventoryStatus.Available,
-                cancellationToken);
-
-            return Ok(new
-            {
-                totalBuckets,
-                totalEvents,
-                lotTrackedBucketCount,
-                serialTrackedBucketCount,
-                availableBucketCount,
-                nonAvailableBucketCount = totalBuckets - availableBucketCount,
-            });
+            var dbOutcome = await govOps.TryGetTraceabilitySummaryFromDbAsync(warehouseId, productId, accessibleIds, cancellationToken);
+            if (dbOutcome != null)
+                return dbOutcome.ToActionResult(this);
         }
 
         var trace = await traceabilityService.TraceAsync(
@@ -238,22 +174,17 @@ public sealed class InventoryReversalTraceabilityController(
                 accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
         }
 
-        var ledgerEventsCount = 0;
-        if (db != null)
+        if (govOps != null)
         {
-            var query = db.InventoryTransactions.AsNoTracking();
-            if (warehouseId.HasValue)
-                query = query.Where(t => t.WarehouseId == warehouseId.Value);
-            else if (accessibleIds != null)
-                query = query.Where(t => accessibleIds.Contains(t.WarehouseId));
-            ledgerEventsCount = await query.CountAsync(cancellationToken);
+            var outcome = await govOps.VerifyReversalChainIntegrityAsync(warehouseId, accessibleIds, cancellationToken);
+            return outcome.ToActionResult(this);
         }
 
         return Ok(new
         {
             verificationId = $"REV-INT-{DateTime.UtcNow:yyyyMMdd-HHmm}",
             warehouseId,
-            ledgerEventsCount,
+            ledgerEventsCount = 0,
             duplicateReversalBlocked = true,
             appendOnlyLedgerStatus = "IMMUTABLE_VERIFIED",
             verifiedAtUtc = DateTime.UtcNow
@@ -279,27 +210,18 @@ public sealed class InventoryReversalTraceabilityController(
                 accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
         }
 
-        var queryText = string.IsNullOrWhiteSpace(request?.BatchOrSerialQuery) ? "BATCH-FEFO-2026" : request.BatchOrSerialQuery.Trim();
-        var matchedLotCount = 0;
-        if (db != null)
+        if (govOps != null)
         {
-            var lotQuery = db.InventoryLots.AsNoTracking().Where(l => l.LotNumber.Contains(queryText));
-            if (warehouseId.HasValue)
-            {
-                lotQuery = lotQuery.Where(l => db.InventoryStocks.Any(s => s.LotId == l.Id && s.WarehouseId == warehouseId.Value));
-            }
-            else if (accessibleIds != null)
-            {
-                lotQuery = lotQuery.Where(l => db.InventoryStocks.Any(s => s.LotId == l.Id && accessibleIds.Contains(s.WarehouseId)));
-            }
-            matchedLotCount = await lotQuery.CountAsync(cancellationToken);
+            var outcome = await govOps.SimulateRecallTreeAsync(request?.BatchOrSerialQuery, warehouseId, accessibleIds, cancellationToken);
+            return outcome.ToActionResult(this);
         }
 
+        var queryText = string.IsNullOrWhiteSpace(request?.BatchOrSerialQuery) ? "BATCH-FEFO-2026" : request.BatchOrSerialQuery.Trim();
         return Ok(new
         {
             simulationId = $"TRC-RCL-{DateTime.UtcNow:yyyyMMdd-HHmm}",
             query = queryText,
-            matchedLotCount,
+            matchedLotCount = 0,
             upstreamPoLinked = true,
             downstreamShipmentLinked = true,
             recallContainmentReady = true,

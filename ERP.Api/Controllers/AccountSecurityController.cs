@@ -2,18 +2,12 @@ using ERP.Api.Authorization;
 using ERP.Application.Interfaces;
 using ERP.Application.DTOs;
 using ERP.Api.Infrastructure;
-using ERP.Domain.Entities;
-using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
-public sealed record ResetPasswordAdminRequest(
-    string? TemporaryPassword = null,
-    string? Reason = null,
-    string? RowVersion = null);
+public sealed record ResetPasswordAdminRequest(string? TemporaryPassword = null, string? Reason = null, string? RowVersion = null);
 
 [ApiController]
 [Route("api/users/{userId:int}/security")]
@@ -24,7 +18,7 @@ public sealed record ResetPasswordAdminRequest(
 public sealed class AccountSecurityController(
     IAccountAdminService service,
     IUserSessionService sessionService,
-    ErpKhoDbContext db = null!,
+    IWmsGovernanceOperationsService govOps = null!,
     IPasswordHasherService? passwordHasher = null) : ControllerBase
 {
     [HttpGet]
@@ -38,82 +32,19 @@ public sealed class AccountSecurityController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] AccountSecurityCommandDto? request = null,
         CancellationToken cancellationToken = default)
     {
-        var user = db is not null
-            ? await db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == db.CurrentTenantId, cancellationToken)
-            : null;
-        if (db is not null && user is null && await db.Users.IgnoreQueryFilters().AnyAsync(cancellationToken))
-            throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
-
         var actorUserId = ResolveActorUserId();
+        if (govOps is not null)
+        {
+            var outcome = await govOps.LockUserAccountAsync(userId, request?.RowVersion, actorUserId, sessionService, cancellationToken);
+            return outcome.ToActionResult(this);
+        }
+
         if (actorUserId.HasValue && actorUserId.Value == userId)
             throw new ERP.Application.Exceptions.BusinessRuleException("Không thể tự khóa hoặc đặt lại mật khẩu tài khoản của chính mình.");
+        if (sessionService is not null && !string.IsNullOrWhiteSpace(request?.RowVersion))
+            await sessionService.RevokeUserSessionsAsAdminAsync(userId, request.RowVersion, cancellationToken);
 
-        await using var transaction = db is not null && db.Database.IsRelational() && db.Database.CurrentTransaction is null
-            ? await db.Database.BeginTransactionAsync(cancellationToken)
-            : null;
-
-        try
-        {
-            if (db is not null && db.Database.IsRelational() && db.Database.CurrentTransaction is not null)
-                await ERP.Infrastructure.Services.PermissionAdministrationGuard.LockAsync(db, cancellationToken);
-
-            if (db is not null && user is not null)
-                await EnsureRemainingActiveTenantAdminAsync(user, cancellationToken);
-
-            var revisionBefore = user?.SecurityRevision;
-            if (sessionService is not null && !string.IsNullOrWhiteSpace(request?.RowVersion))
-                await sessionService.RevokeUserSessionsAsAdminAsync(userId, request.RowVersion, cancellationToken);
-
-            var now = DateTime.UtcNow;
-            if (user is not null && !string.IsNullOrWhiteSpace(request?.RowVersion) && user.SecurityRevision == revisionBefore)
-                EnsureMatchingSecurityToken(user, request.RowVersion, now);
-
-            var lockoutEnd = now.AddMinutes(30);
-            if (db is not null)
-            {
-                if (user is not null)
-                {
-                    user.LockoutEnd = lockoutEnd;
-                    if (user.SecurityRevision == revisionBefore)
-                        user.SecurityRevision++;
-                }
-
-                var activeSessions = await db.UserSessions
-                    .Where(s => s.UserId == userId && s.RevokedAt == null)
-                    .ToListAsync(cancellationToken);
-                foreach (var session in activeSessions)
-                {
-                    session.RevokedAt = now;
-                    session.RevokeReason = "AdminLock";
-                }
-
-                db.AuditLogs.Add(new AuditLog
-                {
-                    UserId = actorUserId,
-                    Action = "Authentication.AccountLocked",
-                    EntityName = "User",
-                    EntityId = userId,
-                    Result = "Success",
-                    Timestamp = now
-                });
-                await db.SaveChangesAsync(cancellationToken);
-                if (transaction is not null)
-                    await transaction.CommitAsync(cancellationToken);
-            }
-
-            return Ok(new
-            {
-                userId,
-                isLockedOut = true,
-                lockoutEnd
-            });
-        }
-        catch
-        {
-            if (transaction is not null)
-                await transaction.RollbackAsync(CancellationToken.None);
-            throw;
-        }
+        return Ok(new { userId, isLockedOut = true, lockoutEnd = DateTime.UtcNow.AddMinutes(30) });
     }
 
     [HttpPost("unlock")]
@@ -139,73 +70,35 @@ public sealed class AccountSecurityController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ResetPasswordAdminRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        var user = db is not null
-            ? await db.Users.FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == db.CurrentTenantId, cancellationToken)
-            : null;
-        if (db is not null && user is null && await db.Users.IgnoreQueryFilters().AnyAsync(cancellationToken))
-            throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
-
         var actorUserId = ResolveActorUserId();
+        if (govOps is not null)
+        {
+            var outcome = await govOps.ResetUserPasswordAsync(
+                userId,
+                request?.TemporaryPassword,
+                request?.Reason,
+                request?.RowVersion,
+                actorUserId,
+                sessionService,
+                passwordHasher,
+                cancellationToken);
+            return outcome.ToActionResult(this);
+        }
+
         if (actorUserId.HasValue && actorUserId.Value == userId)
             throw new ERP.Application.Exceptions.BusinessRuleException("Không thể tự khóa hoặc đặt lại mật khẩu tài khoản của chính mình.");
 
         if (string.IsNullOrWhiteSpace(request?.TemporaryPassword) || request.TemporaryPassword.Trim().Length < 8)
             throw new ERP.Application.Exceptions.BusinessRuleException("Mật khẩu tạm thời phải có tối thiểu 8 ký tự.");
 
-        await using var transaction = db is not null && db.Database.IsRelational() && db.Database.CurrentTransaction is null
-            ? await db.Database.BeginTransactionAsync(cancellationToken)
-            : null;
-
-        var revisionBefore = user?.SecurityRevision;
         if (sessionService is not null && !string.IsNullOrWhiteSpace(request.RowVersion))
             await sessionService.RevokeUserSessionsAsAdminAsync(userId, request.RowVersion, cancellationToken);
-
-        var now = DateTime.UtcNow;
-        if (user is not null && !string.IsNullOrWhiteSpace(request.RowVersion) && user.SecurityRevision == revisionBefore)
-            EnsureMatchingSecurityToken(user, request.RowVersion, now);
-
-        if (db is not null)
-        {
-            if (user is not null)
-            {
-                var trimmedPassword = request.TemporaryPassword.Trim();
-                user.PasswordHash = (passwordHasher ?? new ERP.Infrastructure.Services.PasswordHasherService()).HashPassword(trimmedPassword);
-                user.FailedLoginCount = 0;
-                user.LastFailedLoginAt = null;
-                user.LockoutEnd = null;
-                if (user.SecurityRevision == revisionBefore)
-                    user.SecurityRevision++;
-            }
-
-            var activeSessions = await db.UserSessions
-                .Where(s => s.UserId == userId && s.RevokedAt == null)
-                .ToListAsync(cancellationToken);
-            foreach (var session in activeSessions)
-            {
-                session.RevokedAt = now;
-                session.RevokeReason = "PasswordReset";
-            }
-
-            db.AuditLogs.Add(new AuditLog
-            {
-                UserId = actorUserId,
-                Action = "User.PasswordReset",
-                EntityName = "User",
-                EntityId = userId,
-                Reason = request.Reason,
-                Result = "Success",
-                Timestamp = now
-            });
-            await db.SaveChangesAsync(cancellationToken);
-            if (transaction is not null)
-                await transaction.CommitAsync(cancellationToken);
-        }
 
         return Ok(new
         {
             userId,
             status = "PASSWORD_RESET_COMPLETED",
-            resetAtUtc = now
+            resetAtUtc = DateTime.UtcNow
         });
     }
 
@@ -215,67 +108,15 @@ public sealed class AccountSecurityController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] AccountSecurityCommandDto? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (db is null)
+        if (govOps is null)
             return NoContent();
 
-        var user = await db.Users
-            .FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == db.CurrentTenantId, cancellationToken);
-        if (user is null)
-            throw new ERP.Application.Exceptions.NotFoundException("Không tìm thấy người dùng.");
-
-        await using var transaction = db.Database.IsRelational() && db.Database.CurrentTransaction is null
-            ? await db.Database.BeginTransactionAsync(cancellationToken)
-            : null;
-
-        try
-        {
-            if (db.Database.IsRelational() && db.Database.CurrentTransaction is not null)
-                await ERP.Infrastructure.Services.PermissionAdministrationGuard.LockAsync(db, cancellationToken);
-
-            await EnsureRemainingActiveTenantAdminAsync(user, cancellationToken);
-
-            var actorUserId = ResolveActorUserId();
-            if (actorUserId.HasValue && actorUserId.Value == userId)
-                throw new ERP.Application.Exceptions.BusinessRuleException("Không thể tự khóa hoặc vô hiệu hóa tài khoản của chính mình.");
-
-            var now = DateTime.UtcNow;
-            if (!string.IsNullOrWhiteSpace(request?.RowVersion))
-                EnsureMatchingSecurityToken(user, request.RowVersion, now);
-
-            user.IsActive = false;
-            user.SecurityRevision++;
-
-            var activeSessions = await db.UserSessions
-                .Where(s => s.UserId == userId && s.RevokedAt == null)
-                .ToListAsync(cancellationToken);
-            foreach (var session in activeSessions)
-            {
-                session.RevokedAt = now;
-                session.RevokeReason = "AdminDeactivate";
-            }
-
-            db.AuditLogs.Add(new AuditLog
-            {
-                UserId = actorUserId,
-                Action = "Authentication.AccountDeactivated",
-                EntityName = "User",
-                EntityId = userId,
-                Result = "Success",
-                Timestamp = now
-            });
-
-            await db.SaveChangesAsync(cancellationToken);
-            if (transaction is not null)
-                await transaction.CommitAsync(cancellationToken);
-
-            return NoContent();
-        }
-        catch
-        {
-            if (transaction is not null)
-                await transaction.RollbackAsync(CancellationToken.None);
-            throw;
-        }
+        var outcome = await govOps.DeleteUserAccountAsync(
+            userId,
+            request?.RowVersion,
+            ResolveActorUserId(),
+            cancellationToken);
+        return outcome.ToActionResult(this);
     }
 
     public sealed record VerifyTotpRequest(string? Code = null, string? TotpCode = null, string? Base32Secret = null);
@@ -287,10 +128,8 @@ public sealed class AccountSecurityController(
         if (User?.IsInRole(AppRoles.Viewer) == true)
             return Forbid();
 
-        var user = db is not null
-            ? await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
-            : null;
-        var username = !string.IsNullOrWhiteSpace(user?.Username) ? user.Username.Trim() : $"user_{userId}";
+        var resolvedName = govOps is not null ? await govOps.GetUsernameByIdAsync(userId, cancellationToken) : null;
+        var username = !string.IsNullOrWhiteSpace(resolvedName) ? resolvedName.Trim() : $"user_{userId}";
 
         var secretBytes = GetTotpSecretBytes(userId, username);
         var base32Secret = EncodeBase32(secretBytes);
@@ -299,20 +138,16 @@ public sealed class AccountSecurityController(
         var currentTotpCode = ComputeTotpCode(secretBytes, timeStep);
 
         var now = DateTime.UtcNow;
-        if (db is not null)
+        if (govOps is not null)
         {
-            db.AuditLogs.Add(new AuditLog
-            {
-                UserId = ResolveActorUserId(),
-                EntityName = "UserTotpMfa",
-                EntityId = userId,
-                Action = "AccountSecurity.TotpSetup",
-                NewValues = $"{base32Secret[..8]}...",
-                Reason = "Khởi tạo khóa xác thực 2 lớp TOTP MFA chuẩn RFC 6238",
-                Result = "Success",
-                Timestamp = now
-            });
-            await db.SaveChangesAsync(cancellationToken);
+            await govOps.LogTotpAuditAsync(
+                userId,
+                ResolveActorUserId(),
+                "AccountSecurity.TotpSetup",
+                $"{base32Secret[..8]}...",
+                "Khởi tạo khóa xác thực 2 lớp TOTP MFA chuẩn RFC 6238",
+                now,
+                cancellationToken);
         }
 
         return Ok(new
@@ -339,10 +174,8 @@ public sealed class AccountSecurityController(
         if (User?.IsInRole(AppRoles.Viewer) == true)
             return Forbid();
 
-        var user = db is not null
-            ? await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
-            : null;
-        var username = !string.IsNullOrWhiteSpace(user?.Username) ? user.Username.Trim() : $"user_{userId}";
+        var resolvedName = govOps is not null ? await govOps.GetUsernameByIdAsync(userId, cancellationToken) : null;
+        var username = !string.IsNullOrWhiteSpace(resolvedName) ? resolvedName.Trim() : $"user_{userId}";
 
         var secretBytes = GetTotpSecretBytes(userId, username);
         var candidateCode = (request?.Code ?? request?.TotpCode ?? string.Empty).Trim();
@@ -353,22 +186,18 @@ public sealed class AccountSecurityController(
              string.Equals(candidateCode, ComputeTotpCode(secretBytes, timeStep + 1), StringComparison.Ordinal));
 
         var now = DateTime.UtcNow;
-        if (db is not null)
+        if (govOps is not null)
         {
-            db.AuditLogs.Add(new AuditLog
-            {
-                UserId = ResolveActorUserId(),
-                EntityName = "UserTotpMfa",
-                EntityId = userId,
-                Action = "AccountSecurity.TotpVerify",
-                NewValues = isValid ? "VERIFIED" : "INVALID",
-                Reason = isValid
+            await govOps.LogTotpAuditAsync(
+                userId,
+                ResolveActorUserId(),
+                "AccountSecurity.TotpVerify",
+                isValid ? "VERIFIED" : "INVALID",
+                isValid
                     ? $"Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số ({candidateCode}) theo chuẩn RFC 6238"
                     : "Mã bảo mật 2 lớp 6 chữ số không hợp lệ hoặc đã hết hạn",
-                Result = "Success",
-                Timestamp = now
-            });
-            await db.SaveChangesAsync(cancellationToken);
+                now,
+                cancellationToken);
         }
 
         return Ok(new
@@ -406,51 +235,27 @@ public sealed class AccountSecurityController(
         if (User?.IsInRole(AppRoles.Viewer) == true)
             return Forbid();
 
+        if (govOps is not null)
+        {
+            var outcome = await govOps.GrantSupportImpersonationAsync(
+                request?.SupportTicketCode,
+                request?.ExpiresInMinutes,
+                request?.ReadOnlyScope ?? true,
+                request?.SupportAgentUserId,
+                ResolveActorUserId(),
+                cancellationToken);
+            return outcome.ToActionResult(this);
+        }
+
         var now = DateTime.UtcNow;
         var expiresMinutes = Math.Clamp(request?.ExpiresInMinutes ?? 30, 5, 60);
         var expiresAtUtc = now.AddMinutes(expiresMinutes);
         var ticketCode = string.IsNullOrWhiteSpace(request?.SupportTicketCode) ? $"SUP-{now:yyyyMMdd}-01" : request.SupportTicketCode.Trim();
         var supportToken = $"IMP-{Guid.NewGuid():N}".ToUpperInvariant();
-        int? sessionId = null;
-
-        if (db is not null)
-        {
-            var actorId = ResolveActorUserId();
-            var session = new ERP.Domain.Entities.SupportImpersonationSession
-            {
-                TenantId = db.CurrentTenantId,
-                SessionCode = $"IMP-SES-{now:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..32].ToUpperInvariant(),
-                SupportTicketCode = ticketCode,
-                TokenHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(supportToken))),
-                GrantedByUserId = actorId ?? 1,
-                SupportAgentUserId = request?.SupportAgentUserId ?? (actorId ?? 1),
-                ReadOnlyScope = request?.ReadOnlyScope ?? true,
-                GrantedAtUtc = now,
-                ExpiresAtUtc = expiresAtUtc,
-                Status = "ACTIVE"
-            };
-            db.SupportImpersonationSessions.Add(session);
-            await db.SaveChangesAsync(cancellationToken);
-            sessionId = session.Id;
-
-            db.AuditLogs.Add(new AuditLog
-            {
-                UserId = actorId,
-                ImpersonatedBySupportUserId = request?.SupportAgentUserId ?? actorId,
-                EntityName = "SupportImpersonationConsent",
-                EntityId = sessionId ?? db.CurrentTenantId,
-                Action = "AccountSecurity.GrantSupportImpersonation",
-                NewValues = $"Ticket={ticketCode}; ExpiresAtUtc={expiresAtUtc:O}; ReadOnly={request?.ReadOnlyScope ?? true}",
-                Reason = $"Chủ shop cấp quyền hỗ trợ kỹ thuật tạm thời ({expiresMinutes} phút) cho mã yêu cầu {ticketCode}",
-                Result = "Success",
-                Timestamp = now
-            });
-            await db.SaveChangesAsync(cancellationToken);
-        }
 
         return Ok(new
         {
-            sessionId,
+            sessionId = (int?)null,
             supportTicketCode = ticketCode,
             supportImpersonationToken = supportToken,
             readOnlyScope = request?.ReadOnlyScope ?? true,
@@ -467,16 +272,11 @@ public sealed class AccountSecurityController(
     [HttpGet("~/api/account-security/support-impersonation/sessions")]
     public async Task<IActionResult> ListSupportImpersonationSessions(CancellationToken cancellationToken = default)
     {
-        if (db is null)
+        if (govOps is null)
             return Ok(Array.Empty<object>());
 
-        var sessions = await db.SupportImpersonationSessions
-            .AsNoTracking()
-            .OrderByDescending(s => s.Id)
-            .Take(50)
-            .ToListAsync(cancellationToken);
-
-        return Ok(sessions);
+        var outcome = await govOps.ListSupportImpersonationSessionsAsync(cancellationToken);
+        return outcome.ToActionResult(this);
     }
 
     [HttpPost("~/api/v1/security/support-impersonation/{sessionId:int}/revoke")]
@@ -489,38 +289,11 @@ public sealed class AccountSecurityController(
         if (User?.IsInRole(AppRoles.Viewer) == true)
             return Forbid();
 
-        if (db is null)
+        if (govOps is null)
             return NotFound();
 
-        var session = await db.SupportImpersonationSessions.FirstOrDefaultAsync(s => s.Id == sessionId, cancellationToken);
-        if (session == null)
-            return NotFound(new { message = "Không tìm thấy phiên hỗ trợ kỹ thuật." });
-
-        session.Status = "REVOKED";
-        session.RevokedAtUtc = DateTime.UtcNow;
-
-        db.AuditLogs.Add(new AuditLog
-        {
-            UserId = ResolveActorUserId(),
-            ImpersonatedBySupportUserId = session.SupportAgentUserId,
-            EntityName = "SupportImpersonationConsent",
-            EntityId = session.Id,
-            Action = "AccountSecurity.RevokeSupportImpersonation",
-            NewValues = $"SessionId={session.Id}; Status=REVOKED",
-            Reason = $"Thu hồi quyền hỗ trợ kỹ thuật tạm thời cho phiếu {session.SupportTicketCode}",
-            Result = "Success",
-            Timestamp = DateTime.UtcNow
-        });
-        await db.SaveChangesAsync(cancellationToken);
-
-        return Ok(new
-        {
-            sessionId = session.Id,
-            supportTicketCode = session.SupportTicketCode,
-            status = session.Status,
-            revokedAtUtc = session.RevokedAtUtc,
-            statusLabel = $"Đã thu hồi phiên hỗ trợ kỹ thuật #{session.Id} ({session.SupportTicketCode})"
-        });
+        var outcome = await govOps.RevokeSupportImpersonationAsync(sessionId, ResolveActorUserId(), cancellationToken);
+        return outcome.ToActionResult(this);
     }
 
     [HttpPost("~/api/v1/security/anonymize-expired-buyer-pii")]
@@ -536,95 +309,29 @@ public sealed class AccountSecurityController(
         if (User?.IsInRole(AppRoles.Viewer) == true)
             return Forbid();
 
-        var now = DateTime.UtcNow;
-        var retentionDays = Math.Max(1, request?.RetentionDays ?? 90);
-        var cutoffUtc = now.AddDays(-retentionDays);
-        var anonymizedCount = 0;
-        var anonymizedReceiptsCount = 0;
-        var anonymizedOrdersCount = 0;
-        var anonymizedReturnsCount = 0;
-
-        if (db is not null)
+        if (govOps is not null)
         {
-            var expiredReceipts = await db.ExportReceipts
-                .Where(r => r.CreatedAt <= cutoffUtc &&
-                            (r.Status == ERP.Domain.Enums.ReceiptStatus.Dispatched || r.Status == ERP.Domain.Enums.ReceiptStatus.Cancelled) &&
-                            r.CustomerNameSnapshot != null &&
-                            !r.CustomerNameSnapshot.StartsWith("ANONYMIZED_PII_"))
-                .Take(200)
-                .ToListAsync(cancellationToken);
-
-            foreach (var r in expiredReceipts)
-            {
-                r.CustomerNameSnapshot = $"ANONYMIZED_PII_{r.Id}";
-                r.Note = "[PII_REDACTED_DECREE_13_2023]";
-                anonymizedReceiptsCount++;
-                anonymizedCount++;
-            }
-
-            var expiredOrders = await db.SalesOrders
-                .Include(o => o.Customer)
-                .Where(o => o.CreatedAt <= cutoffUtc &&
-                            (o.Status == ERP.Domain.Enums.SalesOrderStatus.Fulfilled ||
-                             o.Status == ERP.Domain.Enums.SalesOrderStatus.Cancelled) &&
-                            (o.CancellationReason == null || !o.CancellationReason.StartsWith("ANONYMIZED_PII_")))
-                .Take(200)
-                .ToListAsync(cancellationToken);
-
-            foreach (var o in expiredOrders)
-            {
-                o.CancellationReason = $"ANONYMIZED_PII_{o.Id}";
-                if (o.Customer != null && !o.Customer.Name.StartsWith("ANONYMIZED_PII_"))
-                {
-                    o.Customer.Name = $"ANONYMIZED_PII_PARTNER_{o.Customer.Id}";
-                    o.Customer.Phone = "***REDACTED***";
-                    o.Customer.Email = null;
-                    o.Customer.Address = "[PII_REDACTED_DECREE_13_2023]";
-                }
-                anonymizedOrdersCount++;
-                anonymizedCount++;
-            }
-
-            var expiredReturns = await db.CustomerReturns
-                .Where(cr => cr.CreatedAtUtc <= cutoffUtc &&
-                             cr.ReturnReason != null &&
-                             !cr.ReturnReason.StartsWith("[PII_REDACTED"))
-                .Take(200)
-                .ToListAsync(cancellationToken);
-
-            foreach (var cr in expiredReturns)
-            {
-                cr.ReturnReason = $"[PII_REDACTED_DECREE_13_2023]_{cr.Id}";
-                anonymizedReturnsCount++;
-                anonymizedCount++;
-            }
-
-            db.AuditLogs.Add(new AuditLog
-            {
-                UserId = ResolveActorUserId(),
-                EntityName = "BuyerPiiRetentionPolicy",
-                EntityId = db.CurrentTenantId,
-                Action = "AccountSecurity.AnonymizeExpiredBuyerPii",
-                NewValues = $"RetentionDays={retentionDays}; AnonymizedTotal={anonymizedCount}; Receipts={anonymizedReceiptsCount}; Orders={anonymizedOrdersCount}; Returns={anonymizedReturnsCount}",
-                Reason = $"Ẩn danh hóa dữ liệu cá nhân người mua (PII) quá hạn {retentionDays} ngày theo Nghị định 13/2023/NĐ-CP",
-                Result = "Success",
-                Timestamp = now
-            });
-            await db.SaveChangesAsync(cancellationToken);
+            var outcome = await govOps.AnonymizeExpiredBuyerPiiAsync(
+                request?.RetentionDays,
+                ResolveActorUserId(),
+                cancellationToken);
+            return outcome.ToActionResult(this);
         }
 
+        var now = DateTime.UtcNow;
+        var retentionDays = Math.Max(1, request?.RetentionDays ?? 90);
         return Ok(new
         {
             retentionDays,
-            cutoffUtc,
-            anonymizedCount,
-            anonymizedReceiptsCount,
-            anonymizedOrdersCount,
-            anonymizedReturnsCount,
+            cutoffUtc = now.AddDays(-retentionDays),
+            anonymizedCount = 0,
+            anonymizedReceiptsCount = 0,
+            anonymizedOrdersCount = 0,
+            anonymizedReturnsCount = 0,
             complianceStandard = "Nghị định 13/2023/NĐ-CP về Bảo vệ dữ liệu cá nhân",
             ledgerIntegrityPreserved = true,
             executedAtUtc = now,
-            statusLabel = $"Đã ẩn danh hóa PII người mua quá hạn {retentionDays} ngày ({anonymizedCount} chứng từ) theo Nghị định 13/2023/NĐ-CP"
+            statusLabel = $"Đã ẩn danh hóa PII người mua quá hạn {retentionDays} ngày (0 chứng từ) theo Nghị định 13/2023/NĐ-CP"
         });
     }
 
@@ -673,50 +380,8 @@ public sealed class AccountSecurityController(
         return otp.ToString("D6");
     }
 
-    private async Task EnsureRemainingActiveTenantAdminAsync(User targetUser, CancellationToken cancellationToken)
-    {
-        if (db is null)
-            return;
-
-        var roleName = targetUser.Role?.RoleName
-            ?? await db.Roles.AsNoTracking()
-                .Where(r => r.Id == targetUser.RoleId)
-                .Select(r => r.RoleName)
-                .FirstOrDefaultAsync(cancellationToken)
-            ?? string.Empty;
-
-        if (!string.Equals(roleName.Trim(), AppRoles.Admin, StringComparison.OrdinalIgnoreCase))
-            return;
-
-        var now = DateTime.UtcNow;
-        var activeTenantId = db.CurrentTenantId;
-        var hasAnotherActiveTenantAdmin = await db.Users
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .AnyAsync(u =>
-                u.TenantId == activeTenantId &&
-                u.Id != targetUser.Id &&
-                u.IsActive &&
-                (u.LockoutEnd == null || u.LockoutEnd <= now) &&
-                u.Role.RoleName.Trim().ToLower() == "admin",
-                cancellationToken);
-
-        if (!hasAnotherActiveTenantAdmin)
-            throw new ERP.Domain.Exceptions.ConcurrencyException("Không thể loại bỏ quản trị viên hợp lệ cuối cùng.");
-    }
-
     private int? ResolveActorUserId() =>
         int.TryParse(
             User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
             out var uid) ? uid : null;
-
-    private static void EnsureMatchingSecurityToken(User user, string rowVersion, DateTime now)
-    {
-        var bytes = new byte[9];
-        System.Buffers.Binary.BinaryPrimitives.WriteInt64BigEndian(bytes, user.SecurityRevision);
-        bytes[8] = (byte)((user.LockoutEnd > now ? 1 : 0) | (user.IsActive ? 2 : 0));
-        var expectedToken = Convert.ToBase64String(bytes);
-        if (!string.Equals(rowVersion, expectedToken, StringComparison.Ordinal))
-            throw new ERP.Domain.Exceptions.ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.");
-    }
 }

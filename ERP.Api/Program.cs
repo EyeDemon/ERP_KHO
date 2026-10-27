@@ -206,6 +206,18 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IReceivingDiscrepancyServi
 builder.Services.AddScoped<ERP.Application.Interfaces.IHandoverManifestService, ERP.Infrastructure.Services.HandoverManifestService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.ISaasBillingService, ERP.Infrastructure.Services.SaasBillingService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IDataImportService, ERP.Infrastructure.Services.DataImportService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IWmsGovernanceOperationsService, ERP.Infrastructure.Services.WmsGovernanceOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryControlOperationsService, ERP.Infrastructure.Services.InventoryControlOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IShipmentOperationsService, ERP.Infrastructure.Services.ShipmentOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPermissionOperationsService, ERP.Infrastructure.Services.PermissionOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IImportReceiptOperationsService, ERP.Infrastructure.Services.ImportReceiptOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPickingTaskOperationsService, ERP.Infrastructure.Services.PickingTaskOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IStocktakeOperationsService, ERP.Infrastructure.Services.StocktakeOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPackingSessionOperationsService, ERP.Infrastructure.Services.PackingSessionOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IProductOperationsService, ERP.Infrastructure.Services.ProductOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IExportReceiptOperationsService, ERP.Infrastructure.Services.ExportReceiptOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.ISalesOrderOperationsService, ERP.Infrastructure.Services.SalesOrderOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IReportOperationsService, ERP.Infrastructure.Services.ReportOperationsService>();
 builder.Services.AddScoped<ERP.Infrastructure.Services.PutawayService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IPutawayService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PutawayService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IReceiptPutawayIntegration>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PutawayService>());

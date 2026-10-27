@@ -4,12 +4,8 @@ using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Exceptions;
 using ERP.Application.Interfaces;
-using ERP.Domain.Entities;
-using ERP.Domain.Exceptions;
-using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -34,7 +30,7 @@ public sealed record WarehouseCalendarExceptionDto(
 [Route("api/v1/warehouse-calendars/{warehouseId:int}")]
 public sealed class WarehouseCalendarsController(
     IWarehouseCalendarService service,
-    ErpKhoDbContext db = null!,
+    IWmsGovernanceOperationsService govOps = null!,
     IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet]
@@ -67,33 +63,9 @@ public sealed class WarehouseCalendarsController(
         if (warehouseAccess is not null)
             await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId, token);
 
-        var configuredShiftsCount = 0;
-        var totalPlannedHeadcount = 0;
-        var totalInboundPalletsPerHour = 0m;
-        var totalOutboundOrdersPerHour = 0m;
-        var totalDockSlots = 0;
-        var openTasksCount = 0;
-
-        if (db is not null)
+        if (govOps is not null)
         {
-            var shifts = await db.WarehouseShifts.AsNoTracking()
-                .Where(s => s.WarehouseId == warehouseId && s.IsActive)
-                .Select(s => new { s.PlannedHeadcount, s.InboundPalletsPerHour, s.OutboundOrdersPerHour, s.DockSlots })
-                .ToListAsync(token);
-
-            configuredShiftsCount = shifts.Count;
-            totalPlannedHeadcount = shifts.Sum(s => s.PlannedHeadcount);
-            totalInboundPalletsPerHour = shifts.Sum(s => s.InboundPalletsPerHour ?? 0m);
-            totalOutboundOrdersPerHour = shifts.Sum(s => s.OutboundOrdersPerHour ?? 0m);
-            totalDockSlots = shifts.Sum(s => s.DockSlots ?? 0);
-
-            var openPutaway = await db.PutawayTasks.AsNoTracking()
-                .CountAsync(t => t.WarehouseId == warehouseId && t.Status != ERP.Domain.Enums.PutawayTaskStatus.Completed && t.Status != ERP.Domain.Enums.PutawayTaskStatus.Cancelled, token);
-            var openPicking = await db.PickingTasks.AsNoTracking()
-                .CountAsync(t => t.WarehouseId == warehouseId && t.Status != ERP.Domain.Enums.PickingTaskStatus.Completed && t.Status != ERP.Domain.Enums.PickingTaskStatus.Cancelled, token);
-            var openPacking = await db.PackingSessions.AsNoTracking()
-                .CountAsync(s => s.WarehouseId == warehouseId && (s.Status == ERP.Domain.Enums.PackingSessionStatus.Open || s.Status == ERP.Domain.Enums.PackingSessionStatus.InProgress), token);
-            openTasksCount = openPutaway + openPicking + openPacking;
+            return this.ToActionResult(await govOps.VerifyShiftCoverageAsync(warehouseId, token));
         }
 
         var now = DateTime.UtcNow;
@@ -101,12 +73,12 @@ public sealed class WarehouseCalendarsController(
         {
             verificationId = $"CAL-VER-{now:yyyyMMdd-HHmm}",
             warehouseId,
-            configuredShiftsCount,
-            totalPlannedHeadcount,
-            totalInboundPalletsPerHour,
-            totalOutboundOrdersPerHour,
-            totalDockSlots,
-            openTasksCount,
+            configuredShiftsCount = 0,
+            totalPlannedHeadcount = 0,
+            totalInboundPalletsPerHour = 0m,
+            totalOutboundOrdersPerHour = 0m,
+            totalDockSlots = 0,
+            openTasksCount = 0,
             shiftCoverageStatus = "Đảm bảo 100% định biên nhân sự & công suất ca làm việc",
             statusLabel = "Đã xác thực độ phủ ca làm việc & khung giờ chốt chuyến",
             cutoffWindowCompliant = true,
@@ -125,53 +97,26 @@ public sealed class WarehouseCalendarsController(
         if (warehouseAccess is not null)
             await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId, token);
 
-        var openPutawayCount = db is not null
-            ? await db.PutawayTasks.AsNoTracking().CountAsync(t => t.WarehouseId == warehouseId && t.Status != ERP.Domain.Enums.PutawayTaskStatus.Completed && t.Status != ERP.Domain.Enums.PutawayTaskStatus.Cancelled, token)
-            : 0;
-        var openPickingCount = db is not null
-            ? await db.PickingTasks.AsNoTracking().CountAsync(t => t.WarehouseId == warehouseId && t.Status != ERP.Domain.Enums.PickingTaskStatus.Completed && t.Status != ERP.Domain.Enums.PickingTaskStatus.Cancelled, token)
-            : 0;
-        var openPackingCount = db is not null
-            ? await db.PackingSessions.AsNoTracking().CountAsync(s => s.WarehouseId == warehouseId && (s.Status == ERP.Domain.Enums.PackingSessionStatus.Open || s.Status == ERP.Domain.Enums.PackingSessionStatus.InProgress), token)
-            : 0;
-        var totalPlannedHeadcount = db is not null
-            ? await db.WarehouseShifts.AsNoTracking().Where(s => s.WarehouseId == warehouseId && s.IsActive).SumAsync(s => (int?)s.PlannedHeadcount, token) ?? 0
-            : 0;
+        var actorUserId = int.TryParse(
+            User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+            out var uid) ? uid : (int?)null;
+
+        if (govOps is not null)
+        {
+            return this.ToActionResult(await govOps.OptimizeLaborInterleavingAsync(warehouseId, actorUserId, token));
+        }
 
         var now = DateTime.UtcNow;
         var optimizationId = $"WLM-INT-{now:yyyyMMdd-HHmm}";
-        if (db is not null)
-        {
-            var actorUserId = int.TryParse(
-                User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
-                out var uid) ? uid : (int?)null;
-            if (actorUserId.HasValue && !await db.Users.AsNoTracking().AnyAsync(u => u.Id == actorUserId.Value, token))
-            {
-                actorUserId = null;
-            }
-            db.AuditLogs.Add(new AuditLog
-            {
-                UserId = actorUserId,
-                WarehouseId = warehouseId,
-                Action = "WarehouseCalendar.OptimizeLaborInterleaving",
-                EntityName = "LaborInterleaving",
-                NewValues = optimizationId,
-                Reason = "Đã tối ưu hóa điều phối nhân sự đan xen",
-                Result = "Success",
-                Timestamp = now
-            });
-            await db.SaveChangesAsync(token);
-        }
-
         return Ok(new
         {
             optimizationId,
             warehouseId,
-            openPutawayCount,
-            openPickingCount,
-            openPackingCount,
-            totalPlannedHeadcount,
-            interleavedTasksEvaluated = openPutawayCount + openPickingCount + openPackingCount,
+            openPutawayCount = 0,
+            openPickingCount = 0,
+            openPackingCount = 0,
+            totalPlannedHeadcount = 0,
+            interleavedTasksEvaluated = 0,
             interleavingMode = "Đan xen tác vụ Cất hàng — Bổ sung kệ — Lấy hàng — Đóng gói",
             deadheadReductionPercent = 34.5m,
             ergonomicSafetyStatus = "Tuân thủ giới hạn tải nâng & luân chuyển chống mỏi ca làm việc",
@@ -186,23 +131,20 @@ public sealed class WarehouseCalendarsController(
     {
         if (warehouseAccess is not null)
             await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId, token);
-        if (db is null)
+        if (govOps is null)
             return Ok(Array.Empty<WarehouseCalendarExceptionDto>());
 
-        var items = await db.AuditLogs.AsNoTracking()
-            .Where(a => a.EntityName == "WarehouseCalendarException" && a.WarehouseId == warehouseId)
-            .OrderByDescending(a => a.Id)
+        var items = await govOps.GetWarehouseCalendarExceptionsAsync(warehouseId, token);
+        return Ok(items
             .Select(a => new WarehouseCalendarExceptionDto(
                 a.Id,
-                warehouseId,
-                a.Action.Trim(),
-                (a.OldValues ?? a.NewValues ?? string.Empty).Trim(),
-                (a.Reason ?? string.Empty).Trim(),
-                a.UserId,
-                a.Timestamp))
-            .ToListAsync(token);
-
-        return Ok(items);
+                a.WarehouseId,
+                a.ExceptionType,
+                a.WindowSummary,
+                a.Reason,
+                a.CreatedBy,
+                a.CreatedAtUtc))
+            .ToList());
     }
 
     [HttpPost("exceptions")]
@@ -230,39 +172,34 @@ public sealed class WarehouseCalendarsController(
 
         var userIdClaim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value;
         int? userId = int.TryParse(userIdClaim, out var parsedId) ? parsedId : null;
-        if (userId.HasValue && db is not null && !await db.Users.AsNoTracking().AnyAsync(u => u.Id == userId.Value, token))
-        {
-            userId = null;
-        }
 
-        var log = new AuditLog
+        if (govOps is not null)
         {
-            UserId = userId,
-            EntityName = "WarehouseCalendarException",
-            EntityId = warehouseId,
-            WarehouseId = warehouseId,
-            Action = exceptionType,
-            OldValues = windowSummary,
-            NewValues = windowSummary,
-            Reason = reason,
-            Result = "Success",
-            Timestamp = DateTime.UtcNow
-        };
+            var created = await govOps.CreateWarehouseCalendarExceptionAsync(
+                warehouseId,
+                exceptionType,
+                windowSummary,
+                reason,
+                userId,
+                token);
 
-        if (db is not null)
-        {
-            db.AuditLogs.Add(log);
-            await db.SaveChangesAsync(token);
+            return Ok(new WarehouseCalendarExceptionDto(
+                created.Id,
+                created.WarehouseId,
+                created.ExceptionType,
+                created.WindowSummary,
+                created.Reason,
+                created.CreatedBy,
+                created.CreatedAtUtc));
         }
 
         return Ok(new WarehouseCalendarExceptionDto(
-            log.Id,
+            0,
             warehouseId,
-            log.Action,
+            exceptionType,
             windowSummary,
-            log.Reason ?? string.Empty,
-            log.UserId,
-            log.Timestamp));
+            reason,
+            userId,
+            DateTime.UtcNow));
     }
 }
-

@@ -2,7 +2,6 @@ using System.Security.Claims;
 using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.Interfaces;
-using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,24 +11,9 @@ namespace ERP.Api.Controllers;
 [ApiController]
 [Route("api/v1/handover-manifests")]
 [Route("api/handover-manifests")]
-public sealed class HandoverManifestsController : ControllerBase
+public sealed class HandoverManifestsController(IHandoverManifestService handoverManifestService) : ControllerBase
 {
-    private readonly IHandoverManifestService _handoverManifestService;
-
-    public HandoverManifestsController(
-        IHandoverManifestService? handoverManifestService = null,
-        ErpKhoDbContext? db = null,
-        IExportReceiptService? exportReceiptService = null,
-        IWarehouseAuthorizationService? warehouseAccess = null,
-        ICurrentUser? currentUser = null)
-    {
-        _handoverManifestService = handoverManifestService
-            ?? new ERP.Infrastructure.Services.HandoverManifestService(
-                db ?? throw new InvalidOperationException("ErpKhoDbContext or IHandoverManifestService is required."),
-                exportReceiptService!,
-                warehouseAccess,
-                currentUser);
-    }
+    private readonly IHandoverManifestService _handoverManifestService = handoverManifestService;
 
     private int? TryGetUserId()
     {

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ERP.Api.Controllers;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
+using ERP.Infrastructure.Services;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -39,10 +40,11 @@ public class Wave44OmnichannelAndSaasTests
             new ERP.Domain.Entities.InventoryStock { Id = 1004, WarehouseId = 1, ProductId = 101, LocationId = 14, Status = ERP.Domain.Enums.InventoryStatus.Quarantine, Quantity = 8m, ReservedQuantity = 0m });
         await db.SaveChangesAsync();
 
+        var controlOps = new InventoryControlOperationsService(db);
         var controlController = new InventoryControlController(
             new Mock<IInventoryLockService>().Object,
             new Mock<IInventoryMovementService>().Object,
-            db);
+            controlOps);
         var repRes = await controlController.ExecuteReplenishment(
             new InventoryControlController.ExecuteReplenishmentRequest(
                 WarehouseId: 1,
@@ -50,7 +52,7 @@ public class Wave44OmnichannelAndSaasTests
                 SourceLocationId: 10,
                 TargetLocationId: 11,
                 Quantity: 10m),
-            db,
+            controlOps,
             null,
             default);
         repRes.Should().BeOfType<OkObjectResult>();
@@ -63,7 +65,7 @@ public class Wave44OmnichannelAndSaasTests
         repMoves.Single(t => t.LocationId == 10).Quantity.Should().Be(-10m);
         repMoves.Single(t => t.LocationId == 11).Quantity.Should().Be(10m);
 
-        var dockController = new DockYardController(new Mock<IDockYardService>().Object, db);
+        var dockController = new DockYardController(new Mock<IDockYardService>().Object, new WmsGovernanceOperationsService(db));
         var xdRes = await dockController.DispatchCrossdock(
             new DispatchCrossdockRequest(
                 WarehouseId: 1,
@@ -83,7 +85,7 @@ public class Wave44OmnichannelAndSaasTests
         xdMoves.Single(t => t.LocationId == 12).Quantity.Should().Be(-6m);
         xdMoves.Single(t => t.LocationId == 13).Quantity.Should().Be(6m);
 
-        var importController = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, null, db);
+        var importController = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, null, new ImportReceiptOperationsService(db));
         var refRes = await importController.ExecuteRtvRefurbish(
             new ImportReceiptsController.ExecuteRtvRefurbishRequest(
                 WarehouseId: 1,
@@ -172,7 +174,7 @@ public class Wave44OmnichannelAndSaasTests
 
         var recController = new InventoryReconciliationController(
             new Mock<IInventoryReconciliationQueryService>().Object,
-            db,
+            new WmsGovernanceOperationsService(db),
             null!,
             new Mock<IStockReservationService>().Object);
         recController.ControllerContext = new ControllerContext
@@ -272,7 +274,7 @@ public class Wave44OmnichannelAndSaasTests
         var soServiceMock = new Mock<ISalesOrderBackorderService>();
         soServiceMock.Setup(s => s.GetSalesOrderAsync(401, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ERP.Application.DTOs.SalesOrderDto { Id = 401, OrderCode = "SO-W44-401", Status = "Cancelled" });
-        var soController = new SalesOrdersController(soServiceMock.Object, db);
+        var soController = new SalesOrdersController(soServiceMock.Object, new SalesOrderOperationsService(db));
         var cancelPutbackRes = await soController.ConfirmCancelPutback(401, new ConfirmCancelPutbackRequest(Note: "Đã cất trả kệ PICK-01"), default);
         cancelPutbackRes.Should().BeOfType<OkObjectResult>();
 
@@ -280,7 +282,7 @@ public class Wave44OmnichannelAndSaasTests
         updatedStock.AllocatedQuantity.Should().Be(0m);
         updatedStock.ReservedQuantity.Should().Be(0m);
 
-        var shpController = new ShipmentsController(new Mock<IShipmentService>().Object, db);
+        var shpController = new ShipmentsController(new Mock<IShipmentService>().Object, new ShipmentOperationsService(db));
         var rtsRes = await shpController.CompleteRtsReturn(
             601,
             new CompleteShipmentRtsReturnRequest(QuarantineLocationId: 14, ProductId: 101, Quantity: 4m),
@@ -293,7 +295,7 @@ public class Wave44OmnichannelAndSaasTests
         var stController = new StocktakesController(
             new Mock<IStocktakeService>().Object,
             new Mock<IStocktakeQueryService>().Object,
-            db);
+            new StocktakeOperationsService(db));
         var smallAdjRes = await stController.CreateAdjustmentProposal(
             new StocktakesController.CreateAdjustmentProposalRequest(
                 WarehouseId: 1,
@@ -333,7 +335,7 @@ public class Wave44OmnichannelAndSaasTests
         await db.SaveChangesAsync();
 
         var soServiceMock = new Mock<ISalesOrderBackorderService>();
-        var soController = new SalesOrdersController(soServiceMock.Object, db);
+        var soController = new SalesOrdersController(soServiceMock.Object, new SalesOrderOperationsService(db));
 
         var connectPrimary = await soController.ConnectMarketplaceShop(new SalesOrdersController.ConnectMarketplaceShopRequest(
             ChannelCode: "SHOPEE",
@@ -470,7 +472,7 @@ public class Wave44OmnichannelAndSaasTests
         [
             new ERP.Application.DTOs.ExportReceiptDto { Id = 701, Code = "EXP-AWB-701", Status = "Approved", MarketplaceOrderId = "SP-ORD-701", MarketplaceShipByUtc = now.AddMinutes(45) }
         ]);
-        var expController = new ExportReceiptsController(expServiceMock.Object, db);
+        var expController = new ExportReceiptsController(expServiceMock.Object, new ExportReceiptOperationsService(db));
 
         var pipeRes = await expController.GetPipelineSummary();
         using var pipeDoc = System.Text.Json.JsonSerializer.SerializeToDocument(pipeRes.Should().BeOfType<OkObjectResult>().Subject.Value);
@@ -523,7 +525,7 @@ public class Wave44OmnichannelAndSaasTests
         db.Products.Add(new ERP.Domain.Entities.Product { Id = 301, Code = "SKU-OPN-301", Name = "Kem Dưỡng Ẩm Đầu Kỳ", UnitId = 1, IsActive = true, MovingAverageCost = 0m });
         await db.SaveChangesAsync();
 
-        var expController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, db);
+        var expController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, new ExportReceiptOperationsService(db));
         var openRes = await expController.ImportOpeningBalance(
             new ExportReceiptsController.ImportOpeningBalanceRequest(
                 WarehouseId: 1,
@@ -541,7 +543,7 @@ public class Wave44OmnichannelAndSaasTests
         stock.MovingAverageCost.Should().Be(115000m);
         (await db.InventoryTransactions.AnyAsync(t => t.ProductId == 301 && t.ReferenceType == "OPENING_BALANCE" && t.UnitCost == 115000m)).Should().BeTrue();
 
-        var permController = new PermissionsController(db);
+        var permController = new PermissionsController(new PermissionOperationsService(db));
         var provRes = await permController.ProvisionSaaSTenant(new PermissionsController.ProvisionTenantRequest(CompanyName: "Mỹ Phẩm Thảo Mộc", PlanCode: "STARTER"), default);
         provRes.Should().BeOfType<OkObjectResult>();
 
@@ -595,7 +597,7 @@ public class Wave44OmnichannelAndSaasTests
         });
         await db.SaveChangesAsync();
 
-        var reportsController = new ReportsController(new Mock<IReportService>().Object, db);
+        var reportsController = new ReportsController(new Mock<IReportService>().Object, new ReportOperationsService(db));
 
         var codVerify = await reportsController.VerifyCodAndSettlementReconciliation(
             new ReportsController.VerifyCodSettlementRequest(
@@ -625,13 +627,13 @@ public class Wave44OmnichannelAndSaasTests
         gpDoc.RootElement.GetProperty("movingAverageCogs").GetDecimal().Should().Be(450000m);
         gpDoc.RootElement.GetProperty("netPocketProfit").GetDecimal().Should().BeGreaterThan(0m);
 
-        var expController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, db);
+        var expController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, new ExportReceiptOperationsService(db));
         var misaRes = await expController.GetMisaExcelExport(1, "json", default);
         using var misaDoc = System.Text.Json.JsonSerializer.SerializeToDocument(misaRes.Should().BeOfType<OkObjectResult>().Subject.Value);
         misaDoc.RootElement.GetProperty("defaultDebitCogsAccount").GetString().Should().Be("632");
         misaDoc.RootElement.GetProperty("defaultCreditInventoryAccount").GetString().Should().Be("1561");
 
-        var packController = new PackingSessionsController(new Mock<IPackingService>().Object, db);
+        var packController = new PackingSessionsController(new Mock<IPackingService>().Object, new PackingSessionOperationsService(db));
         var vidRec = await packController.RecordPackingVideoEvidence(
             new PackingSessionsController.RecordPackingVideoEvidenceRequest(
                 ExportReceiptId: 801,
@@ -648,7 +650,7 @@ public class Wave44OmnichannelAndSaasTests
         var secController = new AccountSecurityController(
             new Mock<IAccountAdminService>().Object,
             new Mock<IUserSessionService>().Object,
-            db);
+            new WmsGovernanceOperationsService(db));
         var impRes = await secController.GrantSupportImpersonation(
             new AccountSecurityController.GrantSupportImpersonationRequest(SupportTicketCode: "SUP-2026-99", ExpiresInMinutes: 30, ReadOnlyScope: true),
             default);
@@ -715,7 +717,7 @@ public class Wave44OmnichannelAndSaasTests
         });
         await db.SaveChangesAsync();
 
-        var permController = new PermissionsController(db);
+        var permController = new PermissionsController(new PermissionOperationsService(db));
 
         var wizRes = await permController.GetSaaSSetupWizard(default);
         using var wizDoc = System.Text.Json.JsonSerializer.SerializeToDocument(wizRes.Should().BeOfType<OkObjectResult>().Subject.Value);
@@ -806,7 +808,7 @@ public class Wave44OmnichannelAndSaasTests
         });
         await db.SaveChangesAsync();
 
-        var expController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, db);
+        var expController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, new ExportReceiptOperationsService(db));
 
         var firstPrint = await expController.BatchPrintAwb(new ExportReceiptsController.BatchPrintAwbRequest(WarehouseId: 1), default);
         using var firstDoc = System.Text.Json.JsonSerializer.SerializeToDocument(firstPrint.Should().BeOfType<OkObjectResult>().Subject.Value);
@@ -926,7 +928,7 @@ public class Wave44OmnichannelAndSaasTests
         });
         await db.SaveChangesAsync();
 
-        var soController = new SalesOrdersController(new Mock<ISalesOrderBackorderService>().Object, db);
+        var soController = new SalesOrdersController(new Mock<ISalesOrderBackorderService>().Object, new SalesOrderOperationsService(db));
         var syncRes = await soController.SyncMarketplaceInventory(
             new SalesOrdersController.SyncMarketplaceInventoryRequest(WarehouseId: 1, ShopId: null),
             default);
@@ -939,7 +941,7 @@ public class Wave44OmnichannelAndSaasTests
         var syncByShopRes = await soController.SyncMarketplaceInventoryByShop(1, null, default);
         syncByShopRes.Should().BeOfType<OkObjectResult>();
 
-        var reportsController = new ReportsController(new Mock<IReportService>().Object, db);
+        var reportsController = new ReportsController(new Mock<IReportService>().Object, new ReportOperationsService(db));
         var codVerifyRes = await reportsController.VerifyCodAndSettlementReconciliation(
             new ReportsController.VerifyCodSettlementRequest(
                 WarehouseId: 1,

@@ -2,11 +2,8 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
-using ERP.Domain.Enums;
-using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -17,7 +14,7 @@ namespace ERP.Api.Controllers;
 [Authorize]
 public sealed class StockAllocationsController(
     IStockAllocationService service,
-    ErpKhoDbContext db = null!,
+    IWmsGovernanceOperationsService govOps = null!,
     IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet]
@@ -66,37 +63,18 @@ public sealed class StockAllocationsController(
         }
 
         var reservations = await service.GetReservationsAsync(warehouseId, cancellationToken);
+        var unallocatedReservationCount = reservations.Count(x => x.AllocatableQuantity > 0);
+        var totalUnallocatedQuantity = reservations.Sum(x => x.AllocatableQuantity);
 
-        if (db != null)
+        if (govOps != null)
         {
-            var query = db.StockAllocations.AsNoTracking();
-            if (warehouseId.HasValue)
-                query = query.Where(a => a.WarehouseId == warehouseId.Value);
-            else if (accessibleIds != null)
-                query = query.Where(a => accessibleIds.Contains(a.WarehouseId));
-
-            var totalAllocations = await query.CountAsync(cancellationToken);
-            var activeAllocations = await query.CountAsync(
-                x => x.Status == StockAllocationStatus.Active || x.Status == StockAllocationStatus.Picking,
+            var outcome = await govOps.GetStockAllocationSummaryAsync(
+                warehouseId,
+                accessibleIds,
+                unallocatedReservationCount,
+                totalUnallocatedQuantity,
                 cancellationToken);
-            var pickedAllocations = await query.CountAsync(
-                x => x.Status == StockAllocationStatus.Picked,
-                cancellationToken);
-            var totalAllocatedQuantity = await query
-                .Where(x => x.Status == StockAllocationStatus.Active
-                            || x.Status == StockAllocationStatus.Picking
-                            || x.Status == StockAllocationStatus.Picked)
-                .SumAsync(x => (decimal?)x.Quantity, cancellationToken) ?? 0m;
-
-            return Ok(new
-            {
-                totalAllocations,
-                activeAllocations,
-                pickedAllocations,
-                totalAllocatedQuantity,
-                unallocatedReservationCount = reservations.Count(x => x.AllocatableQuantity > 0),
-                totalUnallocatedQuantity = reservations.Sum(x => x.AllocatableQuantity)
-            });
+            return outcome.ToActionResult(this);
         }
 
         var page = await service.GetPageAsync(1, int.MaxValue, warehouseId, null, null, cancellationToken);
@@ -106,8 +84,8 @@ public sealed class StockAllocationsController(
             activeAllocations = page.Items.Count(x => x.Status == "Active" || x.Status == "Allocated" || x.Status == "Picking"),
             pickedAllocations = page.Items.Count(x => x.Status == "Picked"),
             totalAllocatedQuantity = page.Items.Where(x => x.Status == "Active" || x.Status == "Allocated" || x.Status == "Picking" || x.Status == "Picked").Sum(x => x.Quantity),
-            unallocatedReservationCount = reservations.Count(x => x.AllocatableQuantity > 0),
-            totalUnallocatedQuantity = reservations.Sum(x => x.AllocatableQuantity)
+            unallocatedReservationCount,
+            totalUnallocatedQuantity
         });
     }
 
@@ -129,40 +107,21 @@ public sealed class StockAllocationsController(
                 accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
         }
 
-        var now = DateTime.UtcNow;
-        var activeAllocationsCount = 0;
-        var binLockConflictCount = 0;
-        var expiringLotsWithin30DaysCount = 0;
-        var expiredLotsCount = 0;
-        if (db != null)
+        if (govOps != null)
         {
-            var allocQuery = db.StockAllocations.AsNoTracking()
-                .Where(a => a.Status == StockAllocationStatus.Active || a.Status == StockAllocationStatus.Picking);
-            if (warehouseId.HasValue)
-                allocQuery = allocQuery.Where(a => a.WarehouseId == warehouseId.Value);
-            else if (accessibleIds != null)
-                allocQuery = allocQuery.Where(a => accessibleIds.Contains(a.WarehouseId));
-
-            activeAllocationsCount = await allocQuery.CountAsync(cancellationToken);
-            binLockConflictCount = await allocQuery.Where(a => a.Location.IsBlocked).CountAsync(cancellationToken);
-            expiringLotsWithin30DaysCount = await db.InventoryLots.AsNoTracking()
-                .CountAsync(l => l.ExpiryDate.HasValue && l.ExpiryDate.Value >= now && l.ExpiryDate.Value <= now.AddDays(30), cancellationToken);
-            expiredLotsCount = await db.InventoryLots.AsNoTracking()
-                .CountAsync(l => l.ExpiryDate.HasValue && l.ExpiryDate.Value < now, cancellationToken);
+            var outcome = await govOps.VerifyAllocationFefoComplianceAsync(warehouseId, accessibleIds, cancellationToken);
+            return outcome.ToActionResult(this);
         }
 
-        var complianceText = binLockConflictCount == 0
-            ? "Tuân thủ nghiêm ngặt chuẩn FEFO/FIFO (0 xung đột khóa kệ)"
-            : $"Phát hiện {binLockConflictCount} phân bổ nằm tại vị trí đang bị khóa";
-
+        const string complianceText = "Tuân thủ nghiêm ngặt chuẩn FEFO/FIFO (0 xung đột khóa kệ)";
         return Ok(new
         {
             verificationId = $"ALC-FEFO-{DateTime.UtcNow:yyyyMMdd-HHmm}",
             warehouseId,
-            activeAllocationsCount,
-            binLockConflictCount,
-            expiringLotsWithin30DaysCount,
-            expiredLotsCount,
+            activeAllocationsCount = 0,
+            binLockConflictCount = 0,
+            expiringLotsWithin30DaysCount = 0,
+            expiredLotsCount = 0,
             fefoComplianceStatus = complianceText,
             status = complianceText,
             statusLabel = complianceText,

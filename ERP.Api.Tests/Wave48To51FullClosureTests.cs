@@ -48,7 +48,7 @@ public class Wave48To51FullClosureTests
         }
 
         // 2. ShipmentsController VN 3-level administrative units & address normalization
-        var shipmentsController = new ShipmentsController(new Mock<IShipmentService>().Object, db);
+        var shipmentsController = new ShipmentsController(new Mock<IShipmentService>().Object, new ShipmentOperationsService(db));
         var vnRes = await shipmentsController.GetVnAdministrativeUnits("79", null, "Bến Nghé", default);
         vnRes.Should().BeOfType<OkObjectResult>();
         (await db.VnAdministrativeUnits.CountAsync()).Should().BeGreaterThan(0);
@@ -75,7 +75,7 @@ public class Wave48To51FullClosureTests
         });
         await db.SaveChangesAsync();
 
-        var exportController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, db);
+        var exportController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, new ExportReceiptOperationsService(db));
         var awbRes = await exportController.BatchPrintAwb(
             new ExportReceiptsController.BatchPrintAwbRequest(ReceiptIds: new List<int> { 951 }, ReprintReason: "Rách tem nhiệt"),
             default);
@@ -84,7 +84,7 @@ public class Wave48To51FullClosureTests
         awbDoc.RootElement.GetProperty("pdfBase64").GetString().Should().NotBeNullOrWhiteSpace();
 
         // 4. PackingSessionsController PackingVideoEvidence table persistence
-        var packingController = new PackingSessionsController(new Mock<IPackingService>().Object, db);
+        var packingController = new PackingSessionsController(new Mock<IPackingService>().Object, new PackingSessionOperationsService(db));
         var recVideoRes = await packingController.RecordPackingVideoEvidence(
             new PackingSessionsController.RecordPackingVideoEvidenceRequest(
                 TrackingNumber: "GHN-VID-501",
@@ -111,7 +111,7 @@ public class Wave48To51FullClosureTests
         });
         await db.SaveChangesAsync();
 
-        var importController = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, null, db);
+        var importController = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, null, new ImportReceiptOperationsService(db));
         var rmaIntakeRes = await importController.RmaIntakeCheck(
             new ImportReceiptsController.RmaIntakeCheckRequest(
                 WarehouseId: 1,
@@ -131,7 +131,7 @@ public class Wave48To51FullClosureTests
         var securityController = new AccountSecurityController(
             new Mock<IAccountAdminService>().Object,
             new Mock<IUserSessionService>().Object,
-            db);
+            new WmsGovernanceOperationsService(db));
         var grantRes = await securityController.GrantSupportImpersonation(
             new AccountSecurityController.GrantSupportImpersonationRequest("SUP-501", 30, true, 99),
             default);
@@ -159,7 +159,7 @@ public class Wave48To51FullClosureTests
         var stocktakesController = new StocktakesController(
             new Mock<IStocktakeService>().Object,
             new Mock<IStocktakeQueryService>().Object,
-            db);
+            new StocktakeOperationsService(db));
         var propRes = await stocktakesController.CreateAdjustmentProposal(
             new StocktakesController.CreateAdjustmentProposalRequest(
                 WarehouseId: 1,
@@ -200,7 +200,7 @@ public class Wave48To51FullClosureTests
         });
         await db.SaveChangesAsync();
 
-        var permissionsController = new PermissionsController(db);
+        var permissionsController = new PermissionsController(new PermissionOperationsService(db));
         var provT1Res = await permissionsController.ProvisionSaaSTenant(
             new PermissionsController.ProvisionTenantRequest("STARTER", "Tenant 1 Shop", "0310000001", AllocateNewTenant: false),
             default);
@@ -437,7 +437,7 @@ public class Wave48To51FullClosureTests
         });
         await db.SaveChangesAsync();
 
-        var controller = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, db);
+        var controller = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, new ExportReceiptOperationsService(db));
         var res = await controller.ConfirmCarrierHandover(
             new ExportReceiptsController.ConfirmCarrierHandoverRequest(
                 WarehouseId: 1,
@@ -726,7 +726,7 @@ public class Wave48To51FullClosureTests
         whAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         // 1. ReportsController.GetOwnerGrossProfit masks COGS & NetPocketProfit for WarehouseStaff
-        var reportsController = new ReportsController(new Mock<IReportService>().Object, db, whAuth.Object, staffUser.Object);
+        var reportsController = new ReportsController(new Mock<IReportService>().Object, new ReportOperationsService(db), whAuth.Object, staffUser.Object);
         var pnlRes = await reportsController.GetOwnerGrossProfit(1, default);
         using var pnlDoc = JsonSerializer.SerializeToDocument(pnlRes.Should().BeOfType<OkObjectResult>().Subject.Value);
         pnlDoc.RootElement.GetProperty("costHiddenByRbac").GetBoolean().Should().BeTrue();
@@ -734,7 +734,7 @@ public class Wave48To51FullClosureTests
         pnlDoc.RootElement.GetProperty("netPocketProfit").ValueKind.Should().Be(JsonValueKind.Null);
 
         // 2. ExportReceiptsController.GetMisaExcelExport masks donGiaVonMac & thanhTienGiaVon for WarehouseStaff
-        var exportController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, db, whAuth.Object, staffUser.Object);
+        var exportController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, new ExportReceiptOperationsService(db), whAuth.Object, staffUser.Object);
         var misaRes = await exportController.GetMisaExcelExport(1, "json", default);
         using var misaDoc = JsonSerializer.SerializeToDocument(misaRes.Should().BeOfType<OkObjectResult>().Subject.Value);
         misaDoc.RootElement.GetProperty("costHiddenByRbac").GetBoolean().Should().BeTrue();
@@ -746,7 +746,7 @@ public class Wave48To51FullClosureTests
         var stocktakesController = new StocktakesController(
             new Mock<IStocktakeService>().Object,
             new Mock<IStocktakeQueryService>().Object,
-            db,
+            new StocktakeOperationsService(db),
             whAuth.Object,
             staffUser.Object);
         var stRes = await stocktakesController.GetReasonCodesAndAdjustments(1, default);
@@ -775,7 +775,7 @@ public class Wave48To51FullClosureTests
         await db.SaveChangesAsync();
 
         // 1. Empty MarketplaceShops -> SyncMarketplaceInventory does NOT auto-seed a fake shop or outbox message
-        var soController = new SalesOrdersController(new Mock<ISalesOrderBackorderService>().Object, db);
+        var soController = new SalesOrdersController(new Mock<ISalesOrderBackorderService>().Object, new SalesOrderOperationsService(db));
         var syncRes = await soController.SyncMarketplaceInventory(
             new SalesOrdersController.SyncMarketplaceInventoryRequest(WarehouseId: 1, ShopId: null),
             default);
@@ -792,7 +792,7 @@ public class Wave48To51FullClosureTests
 
         var recController = new InventoryReconciliationController(
             new Mock<IInventoryReconciliationQueryService>().Object,
-            db,
+            new WmsGovernanceOperationsService(db),
             whAuth.Object);
         var statusRes = await recController.GetOutboxMessages(1, default);
         using var statusDoc = JsonSerializer.SerializeToDocument(statusRes.Should().BeOfType<OkObjectResult>().Subject.Value);
@@ -849,7 +849,7 @@ public class Wave48To51FullClosureTests
             });
         await db.SaveChangesAsync();
 
-        var reportsController = new ReportsController(new Mock<IReportService>().Object, db);
+        var reportsController = new ReportsController(new Mock<IReportService>().Object, new ReportOperationsService(db));
         var res = await reportsController.GetOwnerGrossProfit(1, default);
         using var doc = JsonSerializer.SerializeToDocument(res.Should().BeOfType<OkObjectResult>().Subject.Value);
         doc.RootElement.GetProperty("grossRevenue").GetDecimal().Should().Be(0m);
@@ -868,7 +868,7 @@ public class Wave48To51FullClosureTests
             .Options;
         await using var db = new ErpKhoDbContext(options);
 
-        var controller = new ShipmentsController(new Mock<IShipmentService>().Object, db);
+        var controller = new ShipmentsController(new Mock<IShipmentService>().Object, new ShipmentOperationsService(db));
         var res = await controller.NormalizeVietnameseAddress(
             new NormalizeVnAddressRequest(
                 RawAddress: "Số 999 Đường Không Tồn Tại, Phường Vũ Trụ Sao Hỏa",
@@ -1229,7 +1229,7 @@ public class Wave48To51FullClosureTests
         var exportServiceMock = new Mock<IExportReceiptService>();
 
         // 1. HandoverManifestsController
-        var handoverCtrl = new HandoverManifestsController(null, db, exportServiceMock.Object);
+        var handoverCtrl = new HandoverManifestsController(new HandoverManifestService(db, exportServiceMock.Object));
         var scanRes = await handoverCtrl.ScanHandoverAwb(
             manifestIdRoute: null,
             request: new ExportReceiptsController.ScanHandoverAwbRequest(
@@ -1249,7 +1249,7 @@ public class Wave48To51FullClosureTests
         listDoc.RootElement.GetProperty("totalCount").GetInt32().Should().Be(1);
 
         // 2. DataImportsController
-        var dataImportsCtrl = new DataImportsController(exportServiceMock.Object, db);
+        var dataImportsCtrl = new DataImportsController(new DataImportService(db));
         var tplRes = dataImportsCtrl.GetDataImportTemplates().Should().BeOfType<OkObjectResult>().Subject;
         using var tplDoc = JsonSerializer.SerializeToDocument(tplRes.Value);
         tplDoc.RootElement.GetProperty("templates").GetArrayLength().Should().BeGreaterThan(0);
@@ -1273,7 +1273,7 @@ public class Wave48To51FullClosureTests
         (await db.InventoryStocks.SingleAsync(s => s.ProductId == 201)).Quantity.Should().Be(25m);
 
         // 3. SaasBillingController
-        var saasBillingCtrl = new SaasBillingController(db);
+        var saasBillingCtrl = new SaasBillingController(new SaasBillingService(db));
         var subRes = await saasBillingCtrl.GetSubscription(null, null, default);
         subRes.Should().BeOfType<OkObjectResult>();
 
@@ -1338,7 +1338,7 @@ public class Wave48To51FullClosureTests
                 ]
             });
 
-        var controller = new PickingTasksController(pickingServiceMock.Object, db);
+        var controller = new PickingTasksController(pickingServiceMock.Object, new PickingTaskOperationsService(db));
         var res = await controller.GetAlternateBins(77, productId: 10, excludeLocationId: 101, cancellationToken: default);
         using var doc = JsonSerializer.SerializeToDocument(res.Should().BeOfType<OkObjectResult>().Subject.Value);
 
@@ -1413,7 +1413,7 @@ public class Wave48To51FullClosureTests
         });
         await db.SaveChangesAsync();
 
-        var controller = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, null, db);
+        var controller = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, null, new ImportReceiptOperationsService(db));
         var res = await controller.GetMacPreview(901, default);
         using var doc = JsonSerializer.SerializeToDocument(res.Should().BeOfType<OkObjectResult>().Subject.Value);
 
@@ -1553,7 +1553,7 @@ public class Wave48To51FullClosureTests
         adminUser.SetupGet(x => x.IsGlobalAdmin).Returns(true);
         adminUser.Setup(x => x.HasPermission(ERP.Domain.Security.AppPermissions.InventoryCostRead)).Returns(true);
 
-        var reportsAdminCtrl = new ReportsController(new Mock<IReportService>().Object, db, whAuth.Object, adminUser.Object);
+        var reportsAdminCtrl = new ReportsController(new Mock<IReportService>().Object, new ReportOperationsService(db), whAuth.Object, adminUser.Object);
         var adminRes = await reportsAdminCtrl.GetOwnerGrossProfit(1, default);
         using var adminDoc = JsonSerializer.SerializeToDocument(adminRes.Should().BeOfType<OkObjectResult>().Subject.Value);
 
@@ -1581,7 +1581,7 @@ public class Wave48To51FullClosureTests
         staffUser.SetupGet(x => x.IsGlobalAdmin).Returns(false);
         staffUser.Setup(x => x.HasPermission(ERP.Domain.Security.AppPermissions.InventoryCostRead)).Returns(false);
 
-        var reportsStaffCtrl = new ReportsController(new Mock<IReportService>().Object, db, whAuth.Object, staffUser.Object);
+        var reportsStaffCtrl = new ReportsController(new Mock<IReportService>().Object, new ReportOperationsService(db), whAuth.Object, staffUser.Object);
         var staffRes = await reportsStaffCtrl.GetOwnerGrossProfit(1, default);
         using var staffDoc = JsonSerializer.SerializeToDocument(staffRes.Should().BeOfType<OkObjectResult>().Subject.Value);
 
@@ -1596,7 +1596,7 @@ public class Wave48To51FullClosureTests
         }
 
         // 2. HandoverManifestsController.GetHandoverManifests -> totalPackages >= 1 and Vietnamese statusLabel
-        var handoverCtrl = new HandoverManifestsController(null, db, new Mock<IExportReceiptService>().Object, whAuth.Object, adminUser.Object);
+        var handoverCtrl = new HandoverManifestsController(new HandoverManifestService(db, new Mock<IExportReceiptService>().Object, whAuth.Object, adminUser.Object));
         var manifestRes = await handoverCtrl.GetHandoverManifests(1, null, default);
         using var manifestDoc = JsonSerializer.SerializeToDocument(manifestRes.Should().BeOfType<OkObjectResult>().Subject.Value);
 
@@ -1721,7 +1721,7 @@ public class Wave48To51FullClosureTests
         var controller = new StocktakesController(
             new Mock<IStocktakeService>().Object,
             new Mock<IStocktakeQueryService>().Object,
-            db,
+            new StocktakeOperationsService(db),
             whAuth.Object,
             adminUser.Object);
 
@@ -1854,7 +1854,7 @@ public class Wave48To51FullClosureTests
         adminUser.SetupGet(x => x.IsGlobalAdmin).Returns(true);
         adminUser.Setup(x => x.HasPermission(ERP.Domain.Security.AppPermissions.InventoryCostRead)).Returns(true);
 
-        var reportsController = new ReportsController(new Mock<IReportService>().Object, db, whAuth.Object, adminUser.Object);
+        var reportsController = new ReportsController(new Mock<IReportService>().Object, new ReportOperationsService(db), whAuth.Object, adminUser.Object);
 
         // 1. COD & Settlement Reconciliation verifies 1% VAT + 0.5% PIT = 1.5% and 3,000 VND fixed order fee
         var codRes = await reportsController.GetCodAndSettlementReconciliation(1, null, default);
@@ -1996,7 +1996,7 @@ public class Wave48To51FullClosureTests
         whAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([1]);
         whAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
-        var controller = new PackingSessionsController(new Mock<IPackingService>().Object, db, whAuth.Object);
+        var controller = new PackingSessionsController(new Mock<IPackingService>().Object, new PackingSessionOperationsService(db), whAuth.Object);
 
         // 1. 3D Cartonization & DIM Weight Calculator
         var cartonRes = await controller.RecommendCarton(
@@ -2179,11 +2179,11 @@ public class Wave48To51FullClosureTests
         currentUser.SetupGet(x => x.IsGlobalAdmin).Returns(true);
 
         var controller = new InventoryMovementsController(
-            null!,
-            db,
-            new Mock<IInventoryLockEvaluator>().Object,
-            currentUser.Object,
-            whAuth.Object);
+            new InventoryMovementService(
+                db,
+                whAuth.Object,
+                currentUser.Object,
+                new Mock<IInventoryLockEvaluator>().Object));
 
         // 1. 1-Scan Full Pallet / LPN Move moves both buckets (8 + 6 = 14 units) from RCV-01 to BIN-A01-01
         var moveRes = await controller.MoveHandlingUnit(
@@ -2302,7 +2302,7 @@ public class Wave48To51FullClosureTests
         whAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>())).ReturnsAsync([1]);
         whAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
-        var controller = new PickingTasksController(new Mock<IPickingService>().Object, db, whAuth.Object);
+        var controller = new PickingTasksController(new Mock<IPickingService>().Object, new PickingTaskOperationsService(db), whAuth.Object);
 
         // 1. GetPutToWallSlots returns 8 slots (SLOT-01 .. SLOT-08)
         var slotsRes = await controller.GetPutToWallSlots("301", 1, default);
@@ -2435,7 +2435,7 @@ public class Wave48To51FullClosureTests
         whAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         // 1. CustomerReturns aging > 7 days alert & 48h claim window countdown
-        var importCtrl = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, null, db, whAuth.Object);
+        var importCtrl = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, null, new ImportReceiptOperationsService(db), whAuth.Object);
         var returnsRes = await importCtrl.GetCustomerReturns(1, default);
         using var returnsDoc = JsonSerializer.SerializeToDocument(returnsRes.Should().BeOfType<OkObjectResult>().Subject.Value);
         var returnItems = returnsDoc.RootElement.EnumerateArray().ToList();
@@ -2452,7 +2452,7 @@ public class Wave48To51FullClosureTests
         claimItem.GetProperty("disputeClaimStatus").GetString().Should().Be("PENDING_VIDEO_EVIDENCE");
 
         // 2. Multi-Channel SKU Mapping (1 internal SKU -> Shopee Combo x2)
-        var productsCtrl = new ProductsController(new Mock<IProductService>().Object, db);
+        var productsCtrl = new ProductsController(new Mock<IProductService>().Object, new ProductOperationsService(db));
         var upsertRes = await productsCtrl.UpsertChannelSkuMapping(
             new ProductsController.UpsertChannelSkuMappingRequest(
                 ChannelCode: "SHOPEE",
@@ -2474,7 +2474,7 @@ public class Wave48To51FullClosureTests
         mappingRow.GetProperty("maxChannelSellableQty").GetDecimal().Should().Be(18m); // floor(36 / 2) = 18 combos
 
         // 3. 3PL Daily Storage Billing Snapshot (CBM / Pallet / Bin fee calculation)
-        var reportsCtrl = new ReportsController(new Mock<IReportService>().Object, db, whAuth.Object);
+        var reportsCtrl = new ReportsController(new Mock<IReportService>().Object, new ReportOperationsService(db), whAuth.Object);
         var snapRes = await reportsCtrl.GetOrCaptureThreePlStorageSnapshot(1, 20, default);
         using var snapDoc = JsonSerializer.SerializeToDocument(snapRes.Should().BeOfType<OkObjectResult>().Subject.Value);
         snapDoc.RootElement.GetProperty("ownerCount").GetInt32().Should().Be(1);
@@ -2595,14 +2595,14 @@ public class Wave48To51FullClosureTests
         whAuth.Setup(x => x.EnsureWarehouseAccessAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         // 1. [W60-01] Dashboard Audit Action Translation & Operational Exceptions (Zero .0000 and Zero raw enum integer)
-        var reportsCtrl = new ReportsController(new Mock<IReportService>().Object, db, whAuth.Object);
-        var dashRes = await reportsCtrl.GetOperationalDashboard(db, whAuth.Object, default);
+        var reportsCtrl = new ReportsController(new Mock<IReportService>().Object, new ReportOperationsService(db), whAuth.Object);
+        var dashRes = await reportsCtrl.GetOperationalDashboard(new ReportOperationsService(db), whAuth.Object, default);
         using var dashDoc = JsonSerializer.SerializeToDocument(dashRes.Should().BeOfType<OkObjectResult>().Subject.Value);
         var recentActs = dashDoc.RootElement.GetProperty("recentActivities").EnumerateArray().ToList();
         recentActs.Should().Contain(a => a.GetProperty("Action").GetString() == "Đã xả bộ hàng lắp ráp (De-kitting)");
         recentActs.Should().Contain(a => a.GetProperty("Action").GetString() == "Đã đóng bộ hàng lắp ráp (Kitting)");
 
-        var exRes = await reportsCtrl.GetOperationalExceptions(db, whAuth.Object, null, false, default);
+        var exRes = await reportsCtrl.GetOperationalExceptions(new ReportOperationsService(db), whAuth.Object, null, false, default);
         using var exDoc = JsonSerializer.SerializeToDocument(exRes.Should().BeOfType<OkObjectResult>().Subject.Value);
         var holdEx = exDoc.RootElement.EnumerateArray().Single(x => x.GetProperty("category").GetString() == "INVENTORY_HOLD");
         holdEx.GetProperty("title").GetString().Should().Be("Tồn kho đang bị khóa / biệt trữ");
@@ -2610,7 +2610,7 @@ public class Wave48To51FullClosureTests
         holdEx.GetProperty("summary").GetString().Should().NotContain(".0000");
 
         // 2. [W60-02] 3D Cartonization Catalog Synchronization (CARTON-M 35x25x20 -> 2.92kg, CARTON-L 40x30x30 -> 6.0kg)
-        var packingCtrl = new PackingSessionsController(new Mock<IPackingService>().Object, db, whAuth.Object);
+        var packingCtrl = new PackingSessionsController(new Mock<IPackingService>().Object, new PackingSessionOperationsService(db), whAuth.Object);
         var cartonMRes = await packingCtrl.RecommendCarton(
             "77",
             new PackingSessionsController.RecommendCartonRequest(DimDivisor: 6000m, PreferredCartonCode: "CARTON-M"),
@@ -2637,7 +2637,7 @@ public class Wave48To51FullClosureTests
         cartonLDoc.RootElement.GetProperty("dimWeightKg").GetDecimal().Should().Be(6.0m);
 
         // 3. [W60-03] Smart Multi-Warehouse DOM Order Splitting (SINGLE_WAREHOUSE_MATCH & MULTI_WAREHOUSE_SPLIT)
-        var salesCtrl = new SalesOrdersController(new Mock<ISalesOrderBackorderService>().Object, db, whAuth.Object);
+        var salesCtrl = new SalesOrdersController(new Mock<ISalesOrderBackorderService>().Object, new SalesOrderOperationsService(db), whAuth.Object);
         var singleDomRes = await salesCtrl.EvaluateAtpRouting(
             new EvaluateAtpRoutingRequest(
                 OrderCode: "SO-QA-001",
@@ -2705,7 +2705,7 @@ public class Wave48To51FullClosureTests
 
         // 1. [W60-ARCH-01] ISaasBillingService & SaasBillingController (Zero PermissionsController coupling)
         ISaasBillingService billingService = new SaasBillingService(db);
-        var saasCtrl = new SaasBillingController(db, billingService);
+        var saasCtrl = new SaasBillingController(billingService);
         var subRes = await saasCtrl.GetSubscription(420, 1000, default);
         using var subDoc = JsonSerializer.SerializeToDocument(subRes.Should().BeOfType<OkObjectResult>().Subject.Value);
         subDoc.RootElement.GetProperty("usagePct").GetDecimal().Should().Be(42m);
@@ -2729,7 +2729,7 @@ public class Wave48To51FullClosureTests
         var whAuth = new Mock<IWarehouseAuthorizationService>();
         whAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         IDataImportService dataImportService = new DataImportService(db);
-        var importCtrl = new DataImportsController(db, whAuth.Object, null, dataImportService);
+        var importCtrl = new DataImportsController(dataImportService, whAuth.Object, null);
 
         var obRes = await importCtrl.ImportOpeningBalance(
             new DataImportOpeningBalanceRequest(
@@ -2755,7 +2755,7 @@ public class Wave48To51FullClosureTests
 
         // 3. [W60-DOMAIN-02] WarehouseCalendarsController Exception Safety with non-existent UserId claim
         var calSvc = new Mock<IWarehouseCalendarService>();
-        var calCtrl = new WarehouseCalendarsController(calSvc.Object, db, whAuth.Object)
+        var calCtrl = new WarehouseCalendarsController(calSvc.Object, new WmsGovernanceOperationsService(db), whAuth.Object)
         {
             ControllerContext = new ControllerContext
             {

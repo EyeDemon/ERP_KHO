@@ -13,4 +13,5 @@ public interface IUserSessionService
     Task RevokeSessionAsync(Guid sessionId, CancellationToken cancellationToken = default);
     Task RevokeUserSessionsAsAdminAsync(int userId, string? rowVersion, CancellationToken cancellationToken = default);
     Task<int> CleanupAsync(DateTime cutoffUtc, CancellationToken cancellationToken = default);
+    Task<object?> GetAuthenticatedUserProfileAsync(int userId, CancellationToken cancellationToken = default);
 }

@@ -1,10 +1,9 @@
+using ERP.Api.Authorization;
+using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
-using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using ERP.Api.Authorization;
 
 namespace ERP.Api.Controllers
 {
@@ -15,16 +14,16 @@ namespace ERP.Api.Controllers
     public class WarehousesController : ControllerBase
     {
         private readonly IWarehouseService _warehouseService;
-        private readonly ErpKhoDbContext? _db;
+        private readonly IWmsGovernanceOperationsService? _govOps;
         private readonly IWarehouseAuthorizationService? _warehouseAccess;
 
         public WarehousesController(
             IWarehouseService warehouseService,
-            ErpKhoDbContext db = null!,
+            IWmsGovernanceOperationsService govOps = null!,
             IWarehouseAuthorizationService warehouseAccess = null!)
         {
             _warehouseService = warehouseService;
-            _db = db;
+            _govOps = govOps;
             _warehouseAccess = warehouseAccess;
         }
 
@@ -66,29 +65,9 @@ namespace ERP.Api.Controllers
                     accessibleIds = await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
             }
 
-            var activeBinCount = 0;
-            var storageBinCount = 0;
-            var totalMaxWeightKg = 0m;
-            var totalMaxVolumeM3 = 0m;
-            var totalMaxPalletEquivalent = 0m;
-
-            if (_db != null)
+            if (_govOps != null)
             {
-                var query = _db.WarehouseLocations.AsNoTracking().Where(l => l.IsActive && !l.IsBlocked);
-                if (warehouseId.HasValue)
-                    query = query.Where(l => l.WarehouseId == warehouseId.Value);
-                else if (accessibleIds != null)
-                    query = query.Where(l => accessibleIds.Contains(l.WarehouseId));
-
-                var bins = await query
-                    .Select(l => new { l.LocationType, l.MaxWeightKg, l.MaxVolumeM3, l.MaxPalletEquivalent })
-                    .ToListAsync(cancellationToken);
-
-                activeBinCount = bins.Count;
-                storageBinCount = bins.Count(b => b.LocationType == ERP.Domain.Enums.WarehouseLocationType.Storage);
-                totalMaxWeightKg = bins.Sum(b => b.MaxWeightKg ?? 0m);
-                totalMaxVolumeM3 = bins.Sum(b => b.MaxVolumeM3 ?? 0m);
-                totalMaxPalletEquivalent = bins.Sum(b => b.MaxPalletEquivalent ?? 0m);
+                return this.ToActionResult(await _govOps.VerifyTopologyCapacityAsync(warehouseId, accessibleIds, cancellationToken));
             }
 
             var now = DateTime.UtcNow;
@@ -96,11 +75,11 @@ namespace ERP.Api.Controllers
             {
                 verificationId = $"TOP-CAP-{now:yyyyMMdd-HHmm}",
                 warehouseId,
-                activeBinCount,
-                storageBinCount,
-                totalMaxWeightKg,
-                totalMaxVolumeM3,
-                totalMaxPalletEquivalent,
+                activeBinCount = 0,
+                storageBinCount = 0,
+                totalMaxWeightKg = 0m,
+                totalMaxVolumeM3 = 0m,
+                totalMaxPalletEquivalent = 0m,
                 zoneBinHierarchyStatus = "Đã xác thực cấu trúc 5 cấp (Khu/Dãy/Kệ/Tầng/Ô) & giới hạn tải trọng",
                 statusLabel = "Đã xác thực cấu trúc 5 cấp & sức chứa vị trí",
                 capacityGuardrailActive = true,
@@ -125,32 +104,10 @@ namespace ERP.Api.Controllers
                     accessibleIds = await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
             }
 
-            var configuredVirtualBins = 9;
-            var receivingLocationsCount = 0;
-            var stagingLocationsCount = 0;
-            var damagedQuarantineLocationsCount = 0;
-            var legacyLocationsCount = 0;
-
-            if (_db != null)
+            if (_govOps != null)
             {
-                var query = _db.WarehouseLocations.AsNoTracking();
-                if (warehouseId.HasValue)
-                    query = query.Where(l => l.WarehouseId == warehouseId.Value);
-                else if (accessibleIds != null)
-                    query = query.Where(l => accessibleIds.Contains(l.WarehouseId));
-
-                var locs = await query
-                    .Select(l => new { l.Code, l.LocationType })
-                    .ToListAsync(cancellationToken);
-
-                configuredVirtualBins = locs.Count;
-                receivingLocationsCount = locs.Count(l => l.LocationType == ERP.Domain.Enums.WarehouseLocationType.Receiving || l.Code.Contains("RECV", StringComparison.OrdinalIgnoreCase) || l.Code.Contains("RECEIVING", StringComparison.OrdinalIgnoreCase));
-                stagingLocationsCount = locs.Count(l => l.LocationType == ERP.Domain.Enums.WarehouseLocationType.Staging || l.Code.Contains("STAG", StringComparison.OrdinalIgnoreCase));
-                damagedQuarantineLocationsCount = locs.Count(l => l.LocationType is ERP.Domain.Enums.WarehouseLocationType.Damaged or ERP.Domain.Enums.WarehouseLocationType.Rejected || l.Code.Contains("DAMAG", StringComparison.OrdinalIgnoreCase) || l.Code.Contains("QC", StringComparison.OrdinalIgnoreCase) || l.Code.Contains("QUAR", StringComparison.OrdinalIgnoreCase));
-                legacyLocationsCount = locs.Count(l => l.Code.Contains("LEGACY", StringComparison.OrdinalIgnoreCase));
+                return this.ToActionResult(await _govOps.VerifyVirtualLocationsAsync(warehouseId, accessibleIds, cancellationToken));
             }
-            if (configuredVirtualBins == 0)
-                configuredVirtualBins = 9;
 
             var now = DateTime.UtcNow;
             return Ok(new
@@ -158,11 +115,11 @@ namespace ERP.Api.Controllers
                 verificationId = $"VLOC-AUD-{now:yyyyMMdd-HHmm}",
                 warehouseId,
                 requiredVirtualBins = 9,
-                configuredVirtualBins,
-                receivingLocationsCount,
-                stagingLocationsCount,
-                damagedQuarantineLocationsCount,
-                legacyLocationsCount,
+                configuredVirtualBins = 9,
+                receivingLocationsCount = 0,
+                stagingLocationsCount = 0,
+                damagedQuarantineLocationsCount = 0,
+                legacyLocationsCount = 0,
                 status = "Đã sẵn sàng đầy đủ các phân khu chức năng (Tiếp nhận, Tập kết, Biệt trữ, Hàng hỏng)",
                 statusLabel = "Đã xác thực đầy đủ các vị trí chức năng & khu vực xử lý",
                 verifiedAtUtc = now
@@ -185,47 +142,9 @@ namespace ERP.Api.Controllers
                     accessibleIds = await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
             }
 
-            var activeWarehousesCount = 1;
-            var totalLocationsCount = 0;
-            var totalMaxWeightKg = 0m;
-            var totalMaxVolumeM3 = 0m;
-            var totalOnHandQuantity = 0m;
-            var openTasksCount = 0;
-
-            if (_db != null)
+            if (_govOps != null)
             {
-                var whQuery = _db.Warehouses.AsNoTracking().Where(w => w.IsActive);
-                var locQuery = _db.WarehouseLocations.AsNoTracking().Where(l => l.IsActive);
-                var stockQuery = _db.InventoryStocks.AsNoTracking();
-                var putawayQuery = _db.PutawayTasks.AsNoTracking().Where(t => t.Status != ERP.Domain.Enums.PutawayTaskStatus.Completed && t.Status != ERP.Domain.Enums.PutawayTaskStatus.Cancelled);
-                var pickingQuery = _db.PickingTasks.AsNoTracking().Where(t => t.Status != ERP.Domain.Enums.PickingTaskStatus.Completed && t.Status != ERP.Domain.Enums.PickingTaskStatus.Cancelled);
-
-                if (warehouseId.HasValue)
-                {
-                    whQuery = whQuery.Where(w => w.Id == warehouseId.Value);
-                    locQuery = locQuery.Where(l => l.WarehouseId == warehouseId.Value);
-                    stockQuery = stockQuery.Where(s => s.WarehouseId == warehouseId.Value);
-                    putawayQuery = putawayQuery.Where(t => t.WarehouseId == warehouseId.Value);
-                    pickingQuery = pickingQuery.Where(t => t.WarehouseId == warehouseId.Value);
-                }
-                else if (accessibleIds != null)
-                {
-                    whQuery = whQuery.Where(w => accessibleIds.Contains(w.Id));
-                    locQuery = locQuery.Where(l => accessibleIds.Contains(l.WarehouseId));
-                    stockQuery = stockQuery.Where(s => accessibleIds.Contains(s.WarehouseId));
-                    putawayQuery = putawayQuery.Where(t => accessibleIds.Contains(t.WarehouseId));
-                    pickingQuery = pickingQuery.Where(t => accessibleIds.Contains(t.WarehouseId));
-                }
-
-                activeWarehousesCount = await whQuery.CountAsync(cancellationToken);
-                var locStats = await locQuery
-                    .Select(l => new { l.MaxWeightKg, l.MaxVolumeM3 })
-                    .ToListAsync(cancellationToken);
-                totalLocationsCount = locStats.Count;
-                totalMaxWeightKg = locStats.Sum(x => x.MaxWeightKg ?? 0m);
-                totalMaxVolumeM3 = locStats.Sum(x => x.MaxVolumeM3 ?? 0m);
-                totalOnHandQuantity = await stockQuery.SumAsync(s => (decimal?)s.Quantity, cancellationToken) ?? 0m;
-                openTasksCount = (await putawayQuery.CountAsync(cancellationToken)) + (await pickingQuery.CountAsync(cancellationToken));
+                return this.ToActionResult(await _govOps.EvaluateNetworkMheAsync(warehouseId, accessibleIds, cancellationToken));
             }
 
             var now = DateTime.UtcNow;
@@ -233,12 +152,12 @@ namespace ERP.Api.Controllers
             {
                 evaluationId = $"NET-MHE-{now:yyyyMMdd-HHmm}",
                 warehouseId,
-                activeWarehousesCount,
-                totalLocationsCount,
-                totalMaxWeightKg,
-                totalMaxVolumeM3,
-                totalOnHandQuantity,
-                openTasksCount,
+                activeWarehousesCount = 1,
+                totalLocationsCount = 0,
+                totalMaxWeightKg = 0m,
+                totalMaxVolumeM3 = 0m,
+                totalOnHandQuantity = 0m,
+                openTasksCount = 0,
                 networkTopologyMode = "Mô hình kho trung tâm & kho vệ tinh cân bằng tải",
                 capacityForecastStatus = "Công suất lưu trữ & dư địa vận hành đạt mức tối ưu",
                 mheFleetReadiness = "Đội xe nâng, băng chuyền & thiết bị phân loại sẵn sàng 100%",
@@ -256,7 +175,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost]
-        [ERP.Api.Infrastructure.IdempotentCommand("Warehouse.Create")]
+        [IdempotentCommand("Warehouse.Create")]
         [PermissionAuthorize(AppPermissions.WarehouseManage)]
         public async Task<IActionResult> Create([FromBody] CreateWarehouseDto dto)
         {
@@ -266,7 +185,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPut("{id}")]
-        [ERP.Api.Infrastructure.IdempotentCommand("Warehouse.Update")]
+        [IdempotentCommand("Warehouse.Update")]
         [PermissionAuthorize(AppPermissions.WarehouseManage)]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateWarehouseDto dto)
         {
@@ -276,7 +195,7 @@ namespace ERP.Api.Controllers
         }
 
         [HttpDelete("{id}")]
-        [ERP.Api.Infrastructure.IdempotentCommand("Warehouse.Delete")]
+        [IdempotentCommand("Warehouse.Delete")]
         [PermissionAuthorize(AppPermissions.WarehouseManage)]
         public async Task<IActionResult> Delete(int id)
         {

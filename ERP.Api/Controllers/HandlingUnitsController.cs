@@ -1,11 +1,9 @@
 using ERP.Api.Authorization;
+using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
-using ERP.Domain.Enums;
-using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers;
 
@@ -16,7 +14,7 @@ namespace ERP.Api.Controllers;
 [PermissionAuthorize(AppPermissions.HandlingUnitRead)]
 public sealed class HandlingUnitsController(
     IPackingService service,
-    ErpKhoDbContext db = null!,
+    IWmsGovernanceOperationsService govOps = null!,
     IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     [HttpGet]
@@ -69,38 +67,24 @@ public sealed class HandlingUnitsController(
                 accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
         }
 
-        var code = string.IsNullOrWhiteSpace(request?.TransferCode) ? "TRF-IN-TRANSIT" : request.TransferCode.Trim();
-        var activeInTransitTransfers = 0;
-        var sealedHuCount = 0;
-        var unsealedInTransitCount = 0;
-        if (db is not null)
+        if (govOps is not null)
         {
-            var transferQuery = db.StockTransfers.AsNoTracking().Where(t => t.Status == StockTransferStatus.InTransit);
-            var huQuery = db.HandlingUnits.AsNoTracking();
-            if (warehouseId.HasValue)
-            {
-                transferQuery = transferQuery.Where(t => t.SourceWarehouseId == warehouseId.Value || t.DestinationWarehouseId == warehouseId.Value);
-                huQuery = huQuery.Where(h => h.WarehouseId == warehouseId.Value);
-            }
-            else if (accessibleIds is not null)
-            {
-                transferQuery = transferQuery.Where(t => accessibleIds.Contains(t.SourceWarehouseId) || accessibleIds.Contains(t.DestinationWarehouseId));
-                huQuery = huQuery.Where(h => accessibleIds.Contains(h.WarehouseId));
-            }
-
-            activeInTransitTransfers = await transferQuery.CountAsync(cancellationToken);
-            sealedHuCount = await huQuery.CountAsync(h => h.SealedAt != null, cancellationToken);
-            unsealedInTransitCount = await huQuery.CountAsync(h => h.Status == HandlingUnitStatus.Shipped && h.SealedAt == null, cancellationToken);
+            return this.ToActionResult(await govOps.VerifyInTransitSealAsync(
+                request?.TransferCode,
+                warehouseId,
+                accessibleIds,
+                cancellationToken));
         }
 
+        var code = string.IsNullOrWhiteSpace(request?.TransferCode) ? "TRF-IN-TRANSIT" : request.TransferCode.Trim();
         return Ok(new
         {
             sealVerificationId = $"HU-SEAL-{DateTime.UtcNow:yyyyMMdd-HHmm}",
             transferCode = code,
-            activeInTransitTransfers,
-            sealedHuCount,
-            inTransitBalanceMatched = unsealedInTransitCount == 0,
-            sealStatus = unsealedInTransitCount == 0 ? "SEAL_INTACT_VERIFIED" : "UNSEALED_HU_DETECTED",
+            activeInTransitTransfers = 0,
+            sealedHuCount = 0,
+            inTransitBalanceMatched = true,
+            sealStatus = "SEAL_INTACT_VERIFIED",
             verifiedAtUtc = DateTime.UtcNow
         });
     }

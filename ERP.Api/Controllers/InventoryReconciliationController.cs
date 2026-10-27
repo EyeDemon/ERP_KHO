@@ -1,12 +1,11 @@
 using System.Threading;
 using System.Threading.Tasks;
 using ERP.Api.Authorization;
+using ERP.Api.Infrastructure;
 using ERP.Application.Interfaces;
 using ERP.Application.DTOs;
-using ERP.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Controllers
 {
@@ -18,18 +17,18 @@ namespace ERP.Api.Controllers
     public class InventoryReconciliationController : ControllerBase
     {
         private readonly IInventoryReconciliationQueryService _queryService;
-        private readonly ErpKhoDbContext? _db;
+        private readonly IWmsGovernanceOperationsService? _govOps;
         private readonly IWarehouseAuthorizationService? _warehouseAccess;
         private readonly IStockReservationService? _reservationService;
 
         public InventoryReconciliationController(
             IInventoryReconciliationQueryService queryService,
-            ErpKhoDbContext db = null!,
+            IWmsGovernanceOperationsService govOps = null!,
             IWarehouseAuthorizationService warehouseAccess = null!,
             IStockReservationService reservationService = null!)
         {
             _queryService = queryService;
-            _db = db;
+            _govOps = govOps;
             _warehouseAccess = warehouseAccess;
             _reservationService = reservationService;
         }
@@ -60,14 +59,9 @@ namespace ERP.Api.Controllers
             {
                 rebuiltBucketsCount = await _reservationService.RebuildBalancesAsync(effectiveWarehouseId, effectiveProductId, cancellationToken);
             }
-            else if (_db != null)
+            else if (_govOps != null)
             {
-                var stockQuery = _db.InventoryStocks.AsNoTracking().AsQueryable();
-                if (effectiveWarehouseId.HasValue)
-                    stockQuery = stockQuery.Where(s => s.WarehouseId == effectiveWarehouseId.Value);
-                if (effectiveProductId.HasValue)
-                    stockQuery = stockQuery.Where(s => s.ProductId == effectiveProductId.Value);
-                rebuiltBucketsCount = await stockQuery.CountAsync(cancellationToken);
+                rebuiltBucketsCount = await _govOps.CountInventoryStocksAsync(effectiveWarehouseId, effectiveProductId, cancellationToken);
             }
 
             return Ok(new
@@ -91,56 +85,13 @@ namespace ERP.Api.Controllers
             if (warehouseId.HasValue && _warehouseAccess != null)
                 await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
-            if (_db == null)
+            if (_govOps == null)
             {
                 return Ok(new { items = System.Array.Empty<object>(), totalValuation = 0m });
             }
 
-            var query = _db.InventoryStocks.AsNoTracking()
-                .Include(s => s.Product)
-                .Include(s => s.Warehouse)
-                .Where(s => s.Quantity > 0m);
-            if (warehouseId.HasValue)
-                query = query.Where(s => s.WarehouseId == warehouseId.Value);
-            if (productId.HasValue)
-                query = query.Where(s => s.ProductId == productId.Value);
-
-            var stocks = await query.ToListAsync(cancellationToken);
-            var items = stocks
-                .GroupBy(s => new { s.WarehouseId, WarehouseCode = s.Warehouse?.Code ?? "", s.ProductId, ProductCode = s.Product?.Code ?? "", ProductName = s.Product?.Name ?? "", ProductMac = s.Product?.MovingAverageCost ?? 0m })
-                .Select(g =>
-                {
-                    var onHandQty = g.Sum(x => x.Quantity);
-                    var mac = g.Where(x => x.MovingAverageCost > 0m).Select(x => x.MovingAverageCost).FirstOrDefault();
-                    if (mac <= 0m) mac = g.Key.ProductMac;
-                    var totalValue = decimal.Round(onHandQty * mac, 2, System.MidpointRounding.AwayFromZero);
-                    return new
-                    {
-                        warehouseId = g.Key.WarehouseId,
-                        warehouseCode = g.Key.WarehouseCode.Trim(),
-                        productId = g.Key.ProductId,
-                        productCode = g.Key.ProductCode.Trim(),
-                        productName = g.Key.ProductName.Trim(),
-                        onHandQuantity = onHandQty,
-                        movingAverageCost = mac,
-                        totalValuation = totalValue
-                    };
-                })
-                .OrderBy(x => x.warehouseId)
-                .ThenBy(x => x.productId)
-                .ToList();
-
-            var totalValuation = items.Sum(x => x.totalValuation);
-            var totalOnHandQuantity = items.Sum(x => x.onHandQuantity);
-            return Ok(new
-            {
-                valuationMethod = "MOVING_AVERAGE_COST",
-                totalOnHandQuantity,
-                totalInventoryValue = totalValuation,
-                totalValuation,
-                currency = "VND",
-                items
-            });
+            var outcome = await _govOps.GetInventoryValuationAsync(warehouseId, productId, cancellationToken);
+            return outcome.ToActionResult(this);
         }
 
         [HttpGet("warehouses")]
@@ -197,18 +148,9 @@ namespace ERP.Api.Controllers
 
             var page = await _queryService.GetReconciliationsAsync(warehouseId, null, null, 1, int.MaxValue);
             var items = page.Items;
-            var totalReservedQuantity = 0m;
-            if (_db != null)
-            {
-                var stockQuery = _db.InventoryStocks.AsNoTracking().AsQueryable();
-                if (warehouseId.HasValue)
-                    stockQuery = stockQuery.Where(s => s.WarehouseId == warehouseId.Value);
-                else if (accessibleIds != null)
-                    stockQuery = stockQuery.Where(s => accessibleIds.Contains(s.WarehouseId));
-
-                totalReservedQuantity = await stockQuery
-                    .SumAsync(s => (decimal?)s.ReservedQuantity, cancellationToken) ?? 0m;
-            }
+            var totalReservedQuantity = _govOps != null
+                ? await _govOps.SumReservedQuantityAsync(warehouseId, accessibleIds, cancellationToken)
+                : 0m;
 
             return Ok(new
             {
@@ -238,11 +180,10 @@ namespace ERP.Api.Controllers
             var totalTransactionsCount = 0;
             var totalAuditLogsCount = 0;
             var idempotencyRecordsCount = 0;
-            if (_db != null)
+            if (_govOps != null)
             {
-                totalTransactionsCount = await _db.InventoryTransactions.AsNoTracking().CountAsync(cancellationToken);
-                totalAuditLogsCount = await _db.AuditLogs.AsNoTracking().CountAsync(cancellationToken);
-                idempotencyRecordsCount = await _db.IdempotencyRecords.AsNoTracking().CountAsync(cancellationToken);
+                (totalTransactionsCount, totalAuditLogsCount, idempotencyRecordsCount) =
+                    await _govOps.GetIntegrationHubCountsAsync(null, cancellationToken);
             }
 
             return Ok(new
@@ -307,24 +248,21 @@ namespace ERP.Api.Controllers
             if (warehouseId.HasValue && _warehouseAccess != null)
                 await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
-            var (messages, _) = await BuildOutboxMessagesAsync(warehouseId, false, status, eventType, cancellationToken);
-            var dispatchedCount = messages.Count(m => string.Equals(m.status, "DISPATCHED", System.StringComparison.OrdinalIgnoreCase));
-            var failedCount = messages.Count(m => string.Equals(m.status, "FAILED", System.StringComparison.OrdinalIgnoreCase));
-            var pendingCount = messages.Count(m => string.Equals(m.status, "PENDING", System.StringComparison.OrdinalIgnoreCase));
-            var overallStatus = failedCount > 0
-                ? "FAILED"
-                : (pendingCount > 0 ? "PENDING" : (dispatchedCount > 0 ? "DISPATCHED" : "IDLE"));
+            if (_govOps != null)
+            {
+                var outcome = await _govOps.GetOutboxMessagesAsync(warehouseId, status, eventType, cancellationToken);
+                return outcome.ToActionResult(this);
+            }
+
             return Ok(new
             {
-                totalMessages = messages.Length,
-                dispatchedCount,
-                pendingCount,
-                dlqFailedCount = failedCount,
-                status = overallStatus,
-                statusLabel = pendingCount > 0
-                    ? $"Còn {pendingCount}/{messages.Length} bản tin tích hợp đang chờ chuyển phát."
-                    : $"Đã đồng bộ {dispatchedCount}/{messages.Length} bản tin tích hợp trong hàng đợi.",
-                messages
+                totalMessages = 0,
+                dispatchedCount = 0,
+                pendingCount = 0,
+                dlqFailedCount = 0,
+                status = "IDLE",
+                statusLabel = "Đã đồng bộ 0/0 bản tin tích hợp trong hàng đợi.",
+                messages = System.Array.Empty<OutboxMessageDto>()
             });
         }
 
@@ -344,236 +282,29 @@ namespace ERP.Api.Controllers
             if (effectiveWarehouseId.HasValue && _warehouseAccess != null)
                 await _warehouseAccess.EnsureWarehouseAccessAsync(effectiveWarehouseId.Value, cancellationToken);
 
-            var (messages, newlyDispatchedCount) = await BuildOutboxMessagesAsync(effectiveWarehouseId, true, null, null, cancellationToken);
-            var now = System.DateTime.UtcNow;
-            var batchCode = $"OUTBOX-BATCH-{now:yyyyMMdd}-01";
-
-            if (_db != null)
+            if (_govOps != null)
             {
                 var actorUserId = int.TryParse(
                     User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
                     out var uid) ? uid : (int?)null;
-                if (actorUserId.HasValue && !await _db.Users.AsNoTracking().AnyAsync(u => u.Id == actorUserId.Value, cancellationToken))
-                {
-                    actorUserId = null;
-                }
 
-                _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
-                {
-                    UserId = actorUserId,
-                    WarehouseId = effectiveWarehouseId,
-                    EntityName = "IntegrationOutboxBatch",
-                    Action = "InventoryReconciliation.DispatchOutbox",
-                    NewValues = $"{batchCode}: Dispatched={newlyDispatchedCount}",
-                    Reason = "Chuyển phát các bản tin tích hợp đang chờ trong hàng đợi sang hệ thống kế toán và vận tải",
-                    Result = "Success",
-                    Timestamp = now
-                });
-                await _db.SaveChangesAsync(cancellationToken);
-            }
-
-            var pendingCount = messages.Count(m => string.Equals(m.status, "PENDING", System.StringComparison.OrdinalIgnoreCase));
-            var failedCount = messages.Count(m => string.Equals(m.status, "FAILED", System.StringComparison.OrdinalIgnoreCase));
-            return Ok(new
-            {
-                batchCode,
-                dispatchedCount = newlyDispatchedCount,
-                totalDispatchedCount = messages.Count(m => string.Equals(m.status, "DISPATCHED", System.StringComparison.OrdinalIgnoreCase)),
-                pendingCount,
-                dlqFailedCount = failedCount,
-                status = pendingCount == 0 && failedCount == 0 ? "DISPATCHED" : (failedCount > 0 ? "FAILED" : "PENDING"),
-                statusLabel = $"Đã chuyển phát {newlyDispatchedCount} bản tin tích hợp đang chờ sang hệ thống kế toán và vận tải.",
-                messages,
-                dispatchedAtUtc = now
-            });
-        }
-
-        private async Task<(OutboxMessageDto[] Messages, int DispatchedInRunCount)> BuildOutboxMessagesAsync(
-            int? warehouseId,
-            bool dispatchPending,
-            string? statusFilter,
-            string? eventTypeFilter,
-            CancellationToken cancellationToken)
-        {
-            if (_db == null)
-            {
-                return (System.Array.Empty<OutboxMessageDto>(), 0);
+                var outcome = await _govOps.DispatchPendingOutboxMessagesAsync(effectiveWarehouseId, actorUserId, cancellationToken);
+                return outcome.ToActionResult(this);
             }
 
             var now = System.DateTime.UtcNow;
-            var tenantId = _db.CurrentTenantId > 0 ? _db.CurrentTenantId : 1;
-            var dispatchedInRunCount = 0;
-
-            if (dispatchPending)
+            return Ok(new
             {
-                var pendingEntities = await _db.IntegrationOutboxMessages
-                    .Where(x => x.TenantId == tenantId &&
-                        (x.Status == "PENDING" || x.Status == "Pending" || x.Status == "RETRYING"))
-                    .OrderBy(x => x.Id)
-                    .ToListAsync(cancellationToken);
-
-                foreach (var msg in pendingEntities)
-                {
-                    if (warehouseId.HasValue && !PayloadMatchesWarehouse(msg.PayloadJson, warehouseId.Value))
-                    {
-                        continue;
-                    }
-
-                    msg.Status = "DISPATCHED";
-                    msg.PublishedAt = now;
-                    msg.RetryCount += 1;
-                    msg.LastError = null;
-                    dispatchedInRunCount++;
-                }
-
-                if (dispatchedInRunCount > 0)
-                {
-                    await _db.SaveChangesAsync(cancellationToken);
-                }
-            }
-
-            var query = _db.IntegrationOutboxMessages
-                .AsNoTracking()
-                .Where(x => x.TenantId == tenantId);
-
-            if (!string.IsNullOrWhiteSpace(eventTypeFilter))
-            {
-                var evtTrimmed = eventTypeFilter.Trim();
-                query = query.Where(x => x.EventType == evtTrimmed);
-            }
-
-            var dbMessages = await query
-                .OrderByDescending(x => x.Id)
-                .Take(500)
-                .ToListAsync(cancellationToken);
-
-            if (warehouseId.HasValue)
-            {
-                dbMessages = dbMessages
-                    .Where(m => PayloadMatchesWarehouse(m.PayloadJson, warehouseId.Value))
-                    .ToList();
-            }
-
-            var mapped = dbMessages.Select(m =>
-            {
-                var normalizedStatus = NormalizeOutboxStatus(m.Status);
-                var referenceCode = ExtractPayloadProperty(m.PayloadJson, "referenceCode")
-                    ?? ExtractPayloadProperty(m.PayloadJson, "code")
-                    ?? $"{m.AggregateType}-{m.AggregateId}";
-                var targetFromPayload = ExtractPayloadProperty(m.PayloadJson, "targetSystem");
-
-                var (label, defaultTarget) = m.EventType switch
-                {
-                    "ERP_GL_JOURNAL_SYNC" => ("Kết chuyển Bút toán Sổ cái Chung", "Phân hệ Kế toán Tài chính"),
-                    "TMS_SHIPMENT_DISPATCH" => ("Điều phối Vận đơn & Xuất bến", "Hệ thống Quản lý Vận tải"),
-                    "AP_AR_INVOICE_POST" => ("Hạch toán Hóa đơn Công nợ", "Sổ phụ Công nợ Đối tác"),
-                    "WMS_LEDGER_SNAPSHOT" => ("Chốt Số dư Sổ cái Kho Cuối kỳ", "Kho Dữ liệu Đối soát Tập trung"),
-                    _ => ("Kết chuyển Bút toán Định giá Tồn kho", "Phân hệ Kế toán Tài chính")
-                };
-
-                var statusLabel = normalizedStatus switch
-                {
-                    "DISPATCHED" => "Đã chuyển phát thành công",
-                    "FAILED" => string.IsNullOrWhiteSpace(m.LastError) ? "Chuyển phát thất bại" : $"Lỗi: {m.LastError}",
-                    _ => "Đang chờ chuyển phát trong hàng đợi"
-                };
-
-                var signature = ComputeHmacSha256Hex(m.PayloadJson ?? string.Empty);
-
-                return new OutboxMessageDto(
-                    string.IsNullOrWhiteSpace(m.EventId) ? $"OUTBOX-{m.Id:D3}" : m.EventId,
-                    m.EventType,
-                    label,
-                    referenceCode,
-                    string.IsNullOrWhiteSpace(targetFromPayload) ? defaultTarget : targetFromPayload,
-                    normalizedStatus,
-                    statusLabel,
-                    m.PublishedAt,
-                    m.RetryCount,
-                    signature);
+                batchCode = $"OUTBOX-BATCH-{now:yyyyMMdd}-01",
+                dispatchedCount = 0,
+                totalDispatchedCount = 0,
+                pendingCount = 0,
+                dlqFailedCount = 0,
+                status = "DISPATCHED",
+                statusLabel = "Đã chuyển phát 0 bản tin tích hợp đang chờ sang hệ thống kế toán và vận tải.",
+                messages = System.Array.Empty<OutboxMessageDto>(),
+                dispatchedAtUtc = now
             });
-
-            if (!string.IsNullOrWhiteSpace(statusFilter))
-            {
-                var normalizedFilter = NormalizeOutboxStatus(statusFilter);
-                mapped = mapped.Where(m => string.Equals(m.status, normalizedFilter, System.StringComparison.OrdinalIgnoreCase));
-            }
-
-            return (mapped.ToArray(), dispatchedInRunCount);
-        }
-
-        private static string NormalizeOutboxStatus(string? rawStatus)
-        {
-            if (string.IsNullOrWhiteSpace(rawStatus))
-                return "PENDING";
-
-            if (string.Equals(rawStatus, "DISPATCHED", System.StringComparison.OrdinalIgnoreCase)
-                || string.Equals(rawStatus, "Published", System.StringComparison.OrdinalIgnoreCase))
-            {
-                return "DISPATCHED";
-            }
-
-            if (string.Equals(rawStatus, "FAILED", System.StringComparison.OrdinalIgnoreCase)
-                || string.Equals(rawStatus, "DeadLetter", System.StringComparison.OrdinalIgnoreCase))
-            {
-                return "FAILED";
-            }
-
-            return "PENDING";
-        }
-
-        private static bool PayloadMatchesWarehouse(string? payloadJson, int warehouseId)
-        {
-            if (string.IsNullOrWhiteSpace(payloadJson))
-                return true;
-
-            try
-            {
-                using var doc = System.Text.Json.JsonDocument.Parse(payloadJson);
-                if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object &&
-                    doc.RootElement.TryGetProperty("warehouseId", out var whProp) &&
-                    whProp.TryGetInt32(out var payloadWarehouseId))
-                {
-                    return payloadWarehouseId == warehouseId;
-                }
-            }
-            catch
-            {
-                // Ignore malformed JSON filter check
-            }
-
-            return true;
-        }
-
-        private static string? ExtractPayloadProperty(string? payloadJson, string propertyName)
-        {
-            if (string.IsNullOrWhiteSpace(payloadJson))
-                return null;
-
-            try
-            {
-                using var doc = System.Text.Json.JsonDocument.Parse(payloadJson);
-                if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object &&
-                    doc.RootElement.TryGetProperty(propertyName, out var prop) &&
-                    prop.ValueKind == System.Text.Json.JsonValueKind.String)
-                {
-                    return prop.GetString();
-                }
-            }
-            catch
-            {
-                // Ignore malformed JSON
-            }
-
-            return null;
-        }
-
-        private static string ComputeHmacSha256Hex(string payload)
-        {
-            var keyBytes = System.Text.Encoding.UTF8.GetBytes("ERP_KHO_OUTBOX_SIGNING_SECRET_2026");
-            var payloadBytes = System.Text.Encoding.UTF8.GetBytes(payload);
-            var hash = System.Security.Cryptography.HMACSHA256.HashData(keyBytes, payloadBytes);
-            return System.Convert.ToHexString(hash).ToLowerInvariant();
         }
 
         public sealed record VerifySiteReadinessRequest(int? WarehouseId = null);
@@ -599,53 +330,33 @@ namespace ERP.Api.Controllers
             var mismatchCount = rows.Count(r => r.Status != "Match" && r.Difference != 0m);
             var matchedCount = rows.Count - mismatchCount;
 
-            var totalTransactionsCount = 0;
-            var totalAuditLogsCount = 0;
-            var idempotencyRecordsCount = 0;
-            if (_db != null)
-            {
-                var txQuery = _db.InventoryTransactions.AsNoTracking();
-                if (effectiveWarehouseId.HasValue)
-                    txQuery = txQuery.Where(t => t.WarehouseId == effectiveWarehouseId.Value);
-                totalTransactionsCount = await txQuery.CountAsync(cancellationToken);
-                totalAuditLogsCount = await _db.AuditLogs.AsNoTracking().CountAsync(cancellationToken);
-                idempotencyRecordsCount = await _db.IdempotencyRecords.AsNoTracking().CountAsync(cancellationToken);
-            }
-
-            var now = DateTime.UtcNow;
-            var journalBatchId = $"GL-JRN-{now:yyyyMMdd-HHmm}";
-            if (_db != null)
+            if (_govOps != null)
             {
                 var actorUserId = int.TryParse(
                     User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
                     out var uid) ? uid : (int?)null;
-                if (actorUserId.HasValue && !await _db.Users.AsNoTracking().AnyAsync(u => u.Id == actorUserId.Value, cancellationToken))
-                {
-                    actorUserId = null;
-                }
-                _db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
-                {
-                    UserId = actorUserId,
-                    WarehouseId = effectiveWarehouseId,
-                    EntityName = "InventoryReconciliation",
-                    Action = "Reconciliation.VerifySiteReadiness",
-                    NewValues = journalBatchId,
-                    Reason = $"Đối soát sổ cái bất biến & sẵn sàng đóng/mở kỳ ({rows.Count} dòng, lệch {mismatchCount})",
-                    Result = "Success",
-                    Timestamp = now
-                });
-                await _db.SaveChangesAsync(cancellationToken);
+
+                var outcome = await _govOps.VerifySiteReadinessAsync(
+                    effectiveWarehouseId,
+                    rows.Count,
+                    matchedCount,
+                    mismatchCount,
+                    actorUserId,
+                    cancellationToken);
+                return outcome.ToActionResult(this);
             }
 
+            var now = System.DateTime.UtcNow;
+            var journalBatchId = $"GL-JRN-{now:yyyyMMdd-HHmm}";
             return Ok(new
             {
                 journalBatchId,
                 checkedRows = rows.Count,
                 matchedCount,
                 mismatchCount,
-                totalTransactionsCount,
-                totalAuditLogsCount,
-                idempotencyRecordsCount,
+                totalTransactionsCount = 0,
+                totalAuditLogsCount = 0,
+                idempotencyRecordsCount = 0,
                 outboxSyncStatus = "Đã đồng bộ Outbox chống trùng lặp giao dịch",
                 glReconciliationStatus = mismatchCount == 0
                     ? "Cân bằng 100% giữa Sổ cái Kho & Tồn vật lý"

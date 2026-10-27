@@ -317,20 +317,21 @@ public sealed class Wave4SectorBRemediationTests
         warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(42, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new ForbiddenException("Bạn không có quyền truy cập kho được yêu cầu."));
 
+        var controlOps = new InventoryControlOperationsService(db);
         var controller = new InventoryControlController(
             new Mock<IInventoryLockService>().Object,
             new Mock<IInventoryMovementService>().Object,
-            db,
+            controlOps,
             warehouseAuth.Object);
 
-        Func<Task> actReplenishment = () => controller.ReplenishmentSuggestions(db, warehouseAuth.Object, warehouseId: 42, cancellationToken: CancellationToken.None);
+        Func<Task> actReplenishment = () => controller.ReplenishmentSuggestions(controlOps, warehouseAuth.Object, warehouseId: 42, cancellationToken: CancellationToken.None);
         await actReplenishment.Should().ThrowAsync<ForbiddenException>();
 
-        Func<Task> actPlanning = () => controller.AdvancedPlanningSuite(db, warehouseAuth.Object, warehouseId: 42, cancellationToken: CancellationToken.None);
+        Func<Task> actPlanning = () => controller.AdvancedPlanningSuite(controlOps, warehouseAuth.Object, warehouseId: 42, cancellationToken: CancellationToken.None);
         await actPlanning.Should().ThrowAsync<ForbiddenException>();
 
         Func<Task> actSimulation = () => controller.RunWhatIfSimulation(
-            db,
+            controlOps,
             warehouseAuth.Object,
             new InventoryControlController.WhatIfSimulationRequest(WarehouseId: 42, DemandMultiplier: 1.5m),
             CancellationToken.None);
@@ -369,7 +370,7 @@ public sealed class Wave4SectorBRemediationTests
         var controller = new AccountSecurityController(
             new Mock<IAccountAdminService>().Object,
             sessionService.Object,
-            db);
+            new WmsGovernanceOperationsService(db));
 
         await controller.Lock(77, new AccountSecurityCommandDto(rowVersionBase64));
         var afterLock = await db.Users.SingleAsync(u => u.Id == 77);

@@ -3,8 +3,6 @@ using ERP.Api.Authorization;
 using ERP.Api.Infrastructure;
 using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
-using ERP.Infrastructure.Persistence;
-using ERP.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -15,11 +13,7 @@ namespace ERP.Api.Controllers;
 [Route("api/v1/inventory-movements")]
 [Route("api/inventory-movements")]
 public sealed class InventoryMovementsController(
-    IInventoryMovementService movementService,
-    ErpKhoDbContext db = null!,
-    IInventoryLockEvaluator lockEvaluator = null!,
-    ICurrentUser currentUser = null!,
-    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
+    IInventoryMovementService movementService) : ControllerBase
 {
     public sealed record FlexibleMoveHandlingUnitRequest(
         JsonElement? HandlingUnitId = null,
@@ -29,10 +23,6 @@ public sealed class InventoryMovementsController(
         JsonElement? DestinationLocationId = null,
         string? DestinationLocationCode = null,
         string? Reason = null);
-
-    private InventoryMovementService ResolveConcreteService() =>
-        movementService as InventoryMovementService
-        ?? new InventoryMovementService(db, warehouseAccess, currentUser, lockEvaluator);
 
     private static int? ParseOptionalInt(JsonElement? element, out string? stringFallback)
     {
@@ -91,8 +81,7 @@ public sealed class InventoryMovementsController(
             DestinationLocationCode: resolvedDestCode,
             Reason: request?.Reason ?? "Di chuyển nguyên Pallet 1 chạm (1-Scan LPN Move)");
 
-        var service = ResolveConcreteService();
-        var result = await service.MoveHandlingUnitAsync(dto, cancellationToken);
+        var result = await movementService.MoveHandlingUnitAsync(dto, cancellationToken);
 
         var statusLabel = string.IsNullOrWhiteSpace(result.StatusLabel)
             ? $"Đã di chuyển nguyên kiện {result.HandlingUnitCode} sang vị trí {result.DestinationLocationCode} ({result.MovedBucketCount} dòng tồn kho, tổng {result.TotalMovedQuantity:0.##} đơn vị cơ sở) trong 1 giao dịch nguyên tử."
@@ -137,8 +126,7 @@ public sealed class InventoryMovementsController(
             MinPickFaceThresholdQty: request?.MinPickFaceThresholdQty ?? 50m,
             ExecuteImmediately: effectiveExecute);
 
-        var service = ResolveConcreteService();
-        var result = await service.AutoBreakBulkReplenishAsync(effectiveRequest, cancellationToken);
+        var result = await movementService.AutoBreakBulkReplenishAsync(effectiveRequest, cancellationToken);
 
         var mappedItems = result.BreakBulkPlan.Select(item => new
         {
