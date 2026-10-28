@@ -86,28 +86,20 @@ describe('InventoryMovements',()=>{
           }
         } as never;
       }
-      if(url==='/api/v1/inventory-movements/auto-break-bulk-replenish'||url==='/api/v1/inventory/movements/auto-break-bulk-replenish'){
+      if(url==='/api/v1/inventory-control/replenishment/break-bulk'||url==='/api/v1/inventory-movements/auto-break-bulk-replenish'||url==='/api/v1/inventory/movements/auto-break-bulk-replenish'){
         return {
           data:{
-            executedImmediately:true,
-            replenishedCount:1,
-            totalCartonQty:1,
-            totalBaseUnitQty:24,
-            message:'Đã xả 1 thùng (quy đổi 24 đơn vị lẻ) từ Khu Lưu Trữ Bổ Sung sang Kệ Nhặt Lẻ.',
-            tasks:[
-              {
-                taskId:701,
-                productCode:'SKU-10',
-                productName:'Sản phẩm 10',
-                sourceReserveLocationCode:'RCV-01',
-                targetPickFaceLocationCode:'BIN-A01-01',
-                cartonUomCode:'THUNG24',
-                conversionFactor:24,
-                cartonQtyUnpacked:1,
-                baseUnitsReplenished:24,
-                status:'COMPLETED_BREAK_BULK',
-              }
-            ]
+            replenishmentId:'BB-REPL-20261028-TEST',
+            productCode:'QA-E2E-001',
+            productName:'Thùng linh kiện điện tử QA-01',
+            sourceLocationCode:'BIN-A01',
+            targetLocationCode:'BIN-A01-01',
+            sourcePackQty:1,
+            conversionFactor:12,
+            movedBaseQty:12,
+            sourceUomCode:'CASE',
+            baseUomCode:'THÙNG',
+            baseUomDelta:0,
           }
         } as never;
       }
@@ -128,8 +120,10 @@ describe('InventoryMovements',()=>{
     fireEvent.click(view.getByTestId('btn-auto-break-bulk'));
     expect(await view.findByTestId('break-bulk-replenish-notice')).toBeTruthy();
     const bbTable=await view.findByTestId('break-bulk-conversion-table');
-    expect(bbTable.textContent).toContain('1 Thùng = 24 ĐV');
-    expect(bbTable.textContent).toContain('+24 ĐV');
-    expect(bbTable.textContent).toContain('Khớp 2 bút toán (-1 Thùng / +24 ĐV)');
+    expect(bbTable.textContent).toContain('BIN-A01');
+    expect(bbTable.textContent).toContain('BIN-A01-01');
+    expect(bbTable.textContent).toContain('1 Thùng = 12 ĐV');
+    expect(bbTable.textContent).toContain('+12 ĐV');
+    expect(bbTable.textContent).toContain('Khớp 2 bút toán (-1 THÙNG / +12 ĐV • Δ = 0.0000)');
   });
 });

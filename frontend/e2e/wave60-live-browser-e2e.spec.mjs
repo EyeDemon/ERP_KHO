@@ -185,13 +185,20 @@ test('Wave 60 Live Browser E2E: Login -> Dashboard -> Epic 60.1 Kitting -> Epic 
 
   const breakBulkTable = page.getByTestId('break-bulk-conversion-table');
   await expect(breakBulkTable).toBeVisible();
-  await expect(breakBulkTable).toContainText('Δ = 0.0000');
+  await expect(breakBulkTable).toContainText('Khớp 2 bút toán (-1 THÙNG / +12 ĐV • Δ = 0.0000)');
 
   const movementsOverflow1440 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(movementsOverflow1440, 'InventoryMovements 1440x900 must have 0px horizontal overflow').toBeLessThanOrEqual(0);
   await page.screenshot({ path: path.join(ARTIFACT_DIR, 'wave60_e2e_4_epic60_3_breakbulk_1440x900.png'), fullPage: false });
 
-  // Reverse the Break-Bulk Replenishment after capturing screenshot so bins return to exact baseline
+  // Capture Mobile PDA 390x844 on /inventory-movements immediately so notice & badge are visible
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(250);
+  const ovMovementsMobile = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(ovMovementsMobile, 'Mobile PDA 390x844 on /inventory-movements must have 0px horizontal overflow').toBeLessThanOrEqual(0);
+  await page.screenshot({ path: path.join(ARTIFACT_DIR, 'wave60_e2e_5_mobile_pda_390x844.png'), fullPage: false });
+
+  // Reverse the Break-Bulk Replenishment after capturing screenshots so bins return to exact baseline
   const revBreakBulkRes = await request.post(`${API_BASE}/api/v1/inventory-control/replenishment/break-bulk`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -214,18 +221,26 @@ test('Wave 60 Live Browser E2E: Login -> Dashboard -> Epic 60.1 Kitting -> Epic 
   expect(revBreakBulkRes.status(), 'Reverse Break-Bulk Replenishment API must return 200 OK').toBe(200);
 
   // =========================================================================
-  // 5. MOBILE PDA VIEWPORT (390x844) - 0px HORIZONTAL OVERFLOW VERIFICATION
+  // 5. MOBILE PDA VIEWPORT (390x844) - ALL 4 ROUTES + SCREENSHOTS 6, 7, 8
   // =========================================================================
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const routePath of ['/dashboard', '/products', '/putaway-tasks', '/inventory-movements']) {
-    await page.goto(`${FRONTEND_BASE}${routePath}`, { waitUntil: 'networkidle' });
-    await assertNo404Page(`Mobile PDA 390x844 on ${routePath}`);
-    const overflow390 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    expect(overflow390, `Mobile PDA 390x844 on ${routePath} must have 0px horizontal overflow`).toBeLessThanOrEqual(0);
-  }
-  await page.getByTestId('tab-replenishment').click();
-  await expect(page.getByTestId('break-bulk-conversion-table')).toBeVisible({ timeout: 15_000 });
-  await page.screenshot({ path: path.join(ARTIFACT_DIR, 'wave60_e2e_5_mobile_pda_390x844.png'), fullPage: false });
+
+  await page.goto(`${FRONTEND_BASE}/dashboard`, { waitUntil: 'networkidle' });
+  await assertNo404Page('Mobile PDA 390x844 on /dashboard');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+  await page.screenshot({ path: path.join(ARTIFACT_DIR, 'wave60_e2e_6_mobile_dashboard_390x844.png'), fullPage: false });
+
+  await page.goto(`${FRONTEND_BASE}/products`, { waitUntil: 'networkidle' });
+  await assertNo404Page('Mobile PDA 390x844 on /products');
+  await page.getByTestId('tab-bundle-gift').click();
+  await page.waitForTimeout(250);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+  await page.screenshot({ path: path.join(ARTIFACT_DIR, 'wave60_e2e_7_mobile_products_390x844.png'), fullPage: false });
+
+  await page.goto(`${FRONTEND_BASE}/putaway-tasks`, { waitUntil: 'networkidle' });
+  await assertNo404Page('Mobile PDA 390x844 on /putaway-tasks');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+  await page.screenshot({ path: path.join(ARTIFACT_DIR, 'wave60_e2e_8_mobile_putaway_390x844.png'), fullPage: false });
 
   expect(pageErrors, 'Zero unhandled page runtime errors across E2E journey').toEqual([]);
   expect(server5xxErrors, 'Zero HTTP 5xx responses across E2E journey').toEqual([]);

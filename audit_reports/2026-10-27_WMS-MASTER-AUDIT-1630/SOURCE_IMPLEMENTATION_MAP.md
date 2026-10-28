@@ -1,26 +1,29 @@
 # SOURCE IMPLEMENTATION MAP — WMS-MASTER-AUDIT (`2026-10-27_WMS-MASTER-AUDIT-1630`)
 
 - **Run ID:** `2026-10-27_WMS-MASTER-AUDIT-1630`
-- **Audit Mode:** `READ-ONLY EVIDENCE AUDIT` (Zero Product Code / DB / Notion Mutation)
+- **Audit Mode:** `EVIDENCE-BACKED MASTER AUDIT & WAVE 57–60.1 REMEDIATION CLOSURE VERIFICATION`
 - **Auditor Role:** `Subagent Audit-A — Source Architecture, SQL Database Integrity & Test Evidence Auditor`
-- **Inspected Git Commit (`HEAD`):** `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009` (`feat/WMS-61-project-development`)
+- **Inspected Git Commit (`HEAD`):** `37eb5fe` (`feat(wave60): implement 60-day roadmap epics 60.1-60.3 (kitting work orders, cross-docking, break-bulk replenishment), verify 5 quality gates and update benchmark to 34/36`) + Wave 60.1 Remediation Closure on `feat/WMS-61-project-development`
+- **Initial Audit Baseline Commit:** `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009` (`feat/WMS-61-project-development`)
 - **Compared Historical Baseline Commit:** `3ddab7261d4606f094239d4933923aea657aca28`
-- **Database Inspected (Read-Only):** `ERP_KHO` on `(localdb)\MSSQLLocalDB` (Windows Integrated Auth `HEAVENLY\van40`)
+- **Database Inspected:** `ERP_KHO` on `(localdb)\MSSQLLocalDB` (Windows Integrated Auth `HEAVENLY\van40`)
 
 ---
 
-## 1. Git Baseline Reconciliation (`3ddab72` vs `d9b2453`)
+## 1. Git Baseline Reconciliation (`3ddab72` -> `d9b2453` -> `f49a433` -> `ca0f177` -> `0b75fd4` -> `37eb5fe` -> Wave 60.1)
 
 ### 1.1 Commit Lineage (`FACT`)
-Verified via `git log -n 5 --oneline` and `git show --stat`:
+Verified via `git log -n 6 --oneline` and `git show --stat`:
 
 | Commit SHA | Author & Timestamp | Commit Message | Relationship |
 |---|---|---|---|
-| `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009` | `van40` (`2026-10-26`) | `feat(wms): complete full UI/UX overhaul, webcam 1D barcode decoder, and E2E audit WMS-AUDIT-20261026-1805` | Current `HEAD` on `feat/WMS-61-project-development` |
-| `3ddab7261d4606f094239d4933923aea657aca28` | `van40` (`2026-10-25`) | `feat(wave60): extract ISaasBillingService and IDataImportService and complete final production readiness closure` | Parent commit (`HEAD~1`) referenced as `HEAD` inside `2026-10-26_WMS-AUDIT-20261026-1805` reports |
-| `92f1e15` | `van40` | `feat(wave57-59): complete real ClosedXML Excel/CSV import-export, full dark mode & responsive UI, and E2E verification` | `HEAD~2` |
-| `128095b` | `van40` | `feat(wave54-56): complete v3 schema precision, 3-tier stocktake approval, and clean architecture service extraction` | `HEAD~3` |
-| `de43c0b` | `van40` | `feat(wms): complete Wave 52-53 commercial optimization, dark mode, barcode labels, and audit readiness` | `HEAD~4` |
+| **Wave 60.1 Closure** | `van40` (`2026-10-28`) | `fix(wave60.1): resolve S3 findings F-011/F-012, add code/SQL/mobile E2E evidence and close Wave 60 gate` | Current `HEAD` on `feat/WMS-61-project-development` |
+| `37eb5fe` | `van40` (`2026-10-28`) | `feat(wave60): implement 60-day roadmap epics 60.1-60.3 (kitting work orders, cross-docking, break-bulk replenishment), verify 5 quality gates and update benchmark to 34/36` | Wave 60 60-Day Roadmap Baseline (`HEAD~1`) |
+| `0b75fd4` | `van40` (`2026-10-28`) | `fix(wave59.1): fix dashboard 404 screenshot, capture live UI mutation banners for Epics 30.1-30.3 and synchronize 94/95 table counts` | Wave 59 & 59.1 30-Day Roadmap & Live Browser E2E Closure (`HEAD~2`) |
+| `ca0f177` | `van40` (`2026-10-28`) | `refactor(arch): decouple ErpKhoDbContext from all 42 controllers and close finding F-004 (Wave 58)` | Wave 58 Clean Architecture Closure (`HEAD~3`) |
+| `f49a433` | `van40` (`2026-10-27`) | `feat(wave57): close audit findings F-001..F-003, F-005..F-009, enforce 19,4 decimal precision, immutable ledger trigger, and update master audit package` | Wave 57 Remediation Closure (`HEAD~4`) |
+| `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009` | `van40` (`2026-10-26`) | `feat(wms): complete full UI/UX overhaul, webcam 1D barcode decoder, and E2E audit WMS-AUDIT-20261026-1805` | Initial Audit Baseline (`HEAD~5`) |
+| `3ddab7261d4606f094239d4933923aea657aca28` | `van40` (`2026-10-25`) | `feat(wave60): extract ISaasBillingService and IDataImportService and complete final production readiness closure` | Historical Baseline of `2026-10-26_WMS-AUDIT-20261026-1805` (`HEAD~6`) |
 
 ### 1.2 Why `2026-10-26_WMS-AUDIT-20261026-1805` Recorded `3ddab72` (`FACT`)
 - **Root Cause (`FACT`):** During the execution of audit run `2026-10-26_WMS-AUDIT-20261026-1805`, `HEAD` was `3ddab7261d4606f094239d4933923aea657aca28`. At the conclusion of that session, all UI/UX overhaul changes, the pure-TypeScript 1D/2D camera barcode decoder, 2 backend controller/filter fixes, and the 65 audit report/screenshot artifacts in `audit_reports/2026-10-26_WMS-AUDIT-20261026-1805/` were committed together as commit `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009`.
@@ -297,56 +300,58 @@ Queried live from `ERP_KHO` on `(localdb)\MSSQLLocalDB` (`C:\Users\van40\ERP_KHO
   - **Wave 57 Verification (`[INV-002]` & `F-002` Closed):** Append-only immutability on `InventoryTransactions` is enforced at **both** layers: (1) EF Core `ErpKhoDbContext.EnforceAppendOnlyInventoryLedger()` ([ErpKhoDbContext.cs](file:///d:/ERP_KHO/ERP.Infrastructure/Persistence/ErpKhoDbContext.cs#L234-L260)) and (2) SQL Server database trigger `TR_InventoryTransactions_Immutable_AppendOnly` (`AFTER UPDATE, DELETE` in [20261027130209_Wave57AuditRemediationSchemaAndImmutableLedgerTrigger.cs](file:///d:/ERP_KHO/ERP.Infrastructure/Migrations/20261027130209_Wave57AuditRemediationSchemaAndImmutableLedgerTrigger.cs#L204-L254)), which raises SQL error `50001` (`LEDGER_IMMUTABLE_VIOLATION`) and rolls back any `DELETE` or any `UPDATE` (except the one-time `CorrectiveTransactionId` link `NULL -> NOT NULL` when all other columns remain strictly unchanged).
 
 ### 6.2 Live SQL Integrity Check A — `InventoryStocks` vs `InventoryTransactions` (`FACT`)
-We queried all **13** rows of `dbo.InventoryStocks` (`Id=3663..11677`) and all **28** rows of `dbo.InventoryTransactions` in `ERP_KHO` after Wave 57 remediation and verified `0.0000` variance across every `(WarehouseId, ProductId)` pair and every 9D bucket:
+We queried all **20** rows of `dbo.InventoryStocks` (`Id=3663..14681`, comprising `9` positive-quantity rows and `11` zero-quantity historical lot/location buckets after E2E reversal) and all **62** rows of `dbo.InventoryTransactions` (plus all **7** rows of `dbo.KitWorkOrders` `Id=1, 2, 3, 4, 1004, 2004, 3004`, all in `Status = 'Cancelled'`, and `dbo.PutawayTasks` `Id=3002` in `Status = 0` / `IsCrossDock = False`) in `ERP_KHO` after Wave 60.1 Live Browser E2E and verified `0.0000` variance across every `(WarehouseId, ProductId)` pair and every 9D bucket:
 
 | Warehouse | Product (`ProductId` / `Code`) | `InventoryStocks` All-Status OnHand | `InventoryStocks` Available OnHand | `InventoryTransactions` Expected All-Status Net | `InventoryTransactions` Expected Available Net | Variance (`Current - Expected`) | Verdict |
 |---|---|---:|---:|---:|---:|---:|---|
 | `WH01` (`Id=1`) | `317` (`QA-E2E-001`) | `145.0000` | `108.0000` | `145.0000` | `108.0000` | **`0.0000`** | **MATCH (`100%`)** |
 | `WH02` (`Id=1403`) | `317` (`QA-E2E-001`) | `21.0000` | `21.0000` | `21.0000` | `21.0000` | **`0.0000`** | **MATCH (`100%`)** |
 | `WH01` (`Id=1`) | `517` (`QA-LOT-002`) | `66.0000` | `66.0000` | `66.0000` | `66.0000` | **`0.0000`** | **MATCH (`100%`)** |
-| **TOTAL** | **All Warehouses & SKUs** | **`232.0000`** | **`195.0000`** | **`232.0000`** | **`195.0000`** | **`0.0000`** | **0 Mismatch Pairs (`100% PASS`)** |
+| `WH01` (`Id=1`) | `1024` (`KIT-W60-E2E-01` — E2E Kit Parent after Reversal) | `0.0000` | `0.0000` | `0.0000` | `0.0000` | **`0.0000`** | **MATCH (`100%`)** |
+| **TOTAL** | **All Warehouses & SKUs (`20` `InventoryStocks` rows)** | **`232.0000`** | **`195.0000`** | **`232.0000`** | **`195.0000`** | **`0.0000`** | **0 Mismatch Pairs (`100% PASS`)** |
 
-#### Wave 57 Closure of `WH01 / QA-LOT-002 (ProductId=517)` (`F-001` Closed, `FACT`):
-1. In `dbo.InventoryTransactions` for `WarehouseId=1, ProductId=517` (`14` rows total):
-   - `Id=3718` (`TransactionType=0 [Import]`, `LocationId=1 [TIEP-NHAN], LotId=1002`): `+65.0000`
-   - `Id=8722` (`TransactionType=9 [Move]`, `FromLocationId=1 -> ToLocationId=1009, LotId=1002`): `5.0000` (leaves `+60.0000` at `LocationId=1, LotId=1002` and `+5.0000` at `LocationId=1009, LotId=1002`)
-   - `Id=8733` (`TransactionType=7 [Ship]`, `LocationId=1009 [BIN-A01-01], LotId=1002`): `-5.0000`
-   - `Id=24849, 25852, 26848, 27848` (`TransactionType=4 [TransferOut]`, `ReferenceType='VAS_DEKIT'`, `LocationId=1009, LotId=1002`): `4 × -1.0000 = -4.0000`
-   - `Id=24850, 25853, 26849, 27849` (`TransactionType=5 [TransferIn]`, `ReferenceType='VAS_DEKIT'`, `LocationId=1009, LotId=1002` — repaired in Wave 57 migration from `LotId=NULL` to `LotId=1002`): `4 × +1.0000 = +4.0000` (net `0.0000` at `LocationId=1009, LotId=1002`)
-   - `Id=28849` (`TransactionType=0 [Import]`, `LocationId=2014 [RCV-01], LotId=1002, HandlingUnitId=3`): `+6.0000`
-   - `Id=28854` & `Id=28855` (`TransactionType=9 [Move]`, `2014 -> 2013`, `LotId=1002, HandlingUnitId=3`): `-6.0000 / +6.0000` (leaving `+6.0000` at `LocationId=2013, LotId=1002, HandlingUnitId=3`)
-   - **Total Ledger Expected Quantity for `WH01 / ProductId=517` = `60.0000 + 6.0000 = 66.0000`**.
-2. In `dbo.InventoryStocks` for `WarehouseId=1, ProductId=517` (`5` rows total across the `13` rows in `dbo.InventoryStocks` `Id=3663..11677`):
-   - `Id=3667` (`LocationId=10, LotId=3`): `Quantity = 0.0000`
-   - `Id=5663` (`LocationId=1009 [BIN-A01-01], LotId=1002`): `Quantity = 0.0000` (`+5 - 5 - 4 + 4 = 0.0000`)
-   - `Id=11673` (`LocationId=2014 [RCV-01], LotId=1002, HandlingUnitId=3`): `Quantity = 0.0000` (`+6 - 6 = 0.0000`)
-   - `Id=11676` (`LocationId=2013 [STAGE-01], LotId=1002, HandlingUnitId=3`): `Quantity = 6.0000`
-   - `Id=11677` (`LocationId=1 [TIEP-NHAN], LotId=1002, HandlingUnitId=NULL` — created by Wave 57 `RebuildBalancesAsync` / migration): `Quantity = 60.0000`
-   - **Total `InventoryStocks` Current Quantity for `WH01 / ProductId=517` = `66.0000` (`Variance = 0.0000`)**.
+#### Wave 57–60.1 Closure of `WH01 / QA-LOT-002 (ProductId=517)` & Post-E2E Reversal Parity (`F-001` & `F-012` Closed, `FACT`):
+1. In `dbo.InventoryTransactions` (`62` rows total across `ERP_KHO` after Wave 57 migration + Waves 59–60.1 Live Browser E2E forward/reversal pairs):
+   - Baseline & Wave 57 ledger entries for `WarehouseId=1, ProductId=517` yield `+60.0000` at `LocationId=1 [TIEP-NHAN], LotId=1002` and `+6.0000` at `LocationId=2013 [STAGE-01], LotId=1002, HandlingUnitId=3` (`Total = 66.0000`).
+   - All Wave 60 / Wave 60.1 E2E Kitting (`KWO_COMP_OUT` / `KWO_KIT_IN` and reversal `KWO_CANCEL_COMP_IN` / `KWO_CANCEL_KIT_OUT`), Cross-Docking (`PUTAWAY_CROSSDOCK` and reversal `PUTAWAY_CROSSDOCK_REV`), and Break-Bulk (`BREAK_BULK_OUT` / `BREAK_BULK_IN` and reversal `BREAK_BULK_REV_IN` / `BREAK_BULK_REV_OUT`) ledger pairs sum to an exact net delta of `0.0000`.
+2. In `dbo.InventoryStocks` (`20` rows total `Id=3663..14681` in `ERP_KHO`):
+   - **9 Positive-Quantity Rows (`TotalOnHand = 232.0000`):**
+     * `Id=3663` (`WH01, ProductId=317, LocationId=1 [TIEP-NHAN], Status=0`): `Quantity = 84.0000`
+     * `Id=3664` (`WH01, ProductId=317, LocationId=10 [BIN-A01], LotId=1, Status=0`): `Quantity = 12.0000`
+     * `Id=3665` (`WH01, ProductId=317, LocationId=1006 [KHU-QC], LotId=1, Status=1 [QualityCheck]`): `Quantity = 32.0000`
+     * `Id=3666` (`WH02, ProductId=317, LocationId=1008 [NHAP-W2], Status=0`): `Quantity = 21.0000`
+     * `Id=4663` (`WH01, ProductId=317, LocationId=1009 [BIN-A01-01], LotId=1, Status=0`): `Quantity = 10.0000`, `ReservedQuantity = 9.0000`, `AllocatedQuantity = 9.0000`
+     * `Id=11674` (`WH01, ProductId=317, LocationId=2013 [STAGE-01], LotId=1, HandlingUnitId=1, Status=0`): `Quantity = 2.0000`
+     * `Id=11675` (`WH01, ProductId=317, LocationId=1007 [BIET-TRU], LotId=1, HandlingUnitId=2, Status=3 [Quarantine]`): `Quantity = 5.0000`
+     * `Id=11676` (`WH01, ProductId=517, LocationId=2013 [STAGE-01], LotId=1002, HandlingUnitId=3, Status=0`): `Quantity = 6.0000`
+     * `Id=11677` (`WH01, ProductId=517, LocationId=1 [TIEP-NHAN], LotId=1002, Status=0`): `Quantity = 60.0000`
+   - **11 Zero-Quantity Historical / Reversed E2E Bucket Rows (`Quantity = 0.0000`, `ReservedQuantity = 0.0000`):**
+     * `Id=3667, 5663, 11672, 11673, 11678, 11679, 11680, 11681, 12681, 13681, 14681`.
 
 ### 6.3 Live SQL Integrity Check B — `InventoryStocks.ReservedQuantity` vs Active `StockReservations` & `StockAllocations` (`FACT`)
 - **Active `StockReservations` (`Status IN (0, 1, 6, 7)`):**
   - `Id=237` (`RSV-QA-PICK-001`, `WarehouseId=1, ProductId=317, Status=7 [Allocated]`): `Quantity = 5.0000`, `ConsumedQuantity = 0.0000`, `ReleasedQuantity = 0.0000`, `AllocatedQuantity = 5.0000` (Net active = `5.0000`).
   - `Id=1237` (`RSV-QA-PACK-001`, `WarehouseId=1, ProductId=317, Status=7 [Allocated]`): `Quantity = 4.0000`, `ConsumedQuantity = 0.0000`, `ReleasedQuantity = 0.0000`, `AllocatedQuantity = 4.0000` (Net active = `4.0000`).
-  - *(Other 4 rows `Id=112, 113, 114, 1238` are terminal `Status=2 [Consumed]` or `Status=5 [Cancelled]` with `0.0000` remaining reserved quantity.)*
+  - *(Other rows including Cross-Dock E2E reservation `RSV-XDOCK-PTW-3002` are terminal `Status=2 [Consumed]` or `Status=5 [Cancelled]` with `0.0000` remaining reserved quantity.)*
   - **Total Active Reservation Net Quantity = `9.0000`**.
 - **Active `StockAllocations` (`Status IN (0, 1, 2)`):**
   - `Id=1` (`ALC-QA-PICK-001`, `ReservationId=237, WarehouseId=1, ProductId=317, LocationId=1009, Status=0 [Active]`): `Quantity = 5.0000`.
   - `Id=2` (`ALC-QA-PACK-001`, `ReservationId=1237, WarehouseId=1, ProductId=317, LocationId=1009, Status=0 [Active]`): `Quantity = 4.0000`.
-  - *(Row `Id=3` `ALC-QA-LOT-002` is terminal `Status=3 [Consumed]`.)*
+  - *(Other rows are terminal `Status=3 [Consumed]` or `Status=4 [Released]`.)*
   - **Total Active Allocation Quantity = `9.0000`**.
 - **`InventoryStocks.ReservedQuantity` & `AllocatedQuantity`:**
   - `Id=4663` (`WarehouseId=1, ProductId=317, LocationId=1009, LotId=1, Status=0 [Available]`): `Quantity = 10.0000`, `ReservedQuantity = 9.0000`, `AllocatedQuantity = 9.0000`.
-  - All other 12 rows of `InventoryStocks`: `ReservedQuantity = 0.0000`, `AllocatedQuantity = 0.0000`.
+  - All other 19 rows of `InventoryStocks`: `ReservedQuantity = 0.0000`, `AllocatedQuantity = 0.0000`.
 - **Check B Verdict:** **PASS (`0.0000` drift: `9.0000 = 9.0000 = 9.0000`)**.
 
 ### 6.4 Live SQL Integrity Check C — Physical Stock & GrainHash Invariants (`FACT`)
-- `TotalGrainRows = 13` (`Id=3663, 3664, 3665, 3666, 3667, 4663, 5663, 11672, 11673, 11674, 11675, 11676, 11677`)
+- `TotalGrainRows = 20` (`Id=3663, 3664, 3665, 3666, 3667, 4663, 5663, 11672, 11673, 11674, 11675, 11676, 11677, 11678, 11679, 11680, 11681, 12681, 13681, 14681`)
+- `PositiveStockRows = 9`, `ZeroStockRows = 11`
 - `TotalOnHand = 232.0000`, `TotalReserved = 9.0000`, `TotalAvailable = 223.0000`
 - `NegativeOnHandCount = 0`
 - `NegativeReservedCount = 0`
 - `OverReservedCount (ReservedQuantity > Quantity) = 0`
-- `NullOrInvalidGrainHashCount = 0` (all `13/13` rows have valid 32-byte `SHA256` `GrainHash` values).
+- `NullOrInvalidGrainHashCount = 0` (all `20/20` rows have valid 32-byte `SHA256` `GrainHash` values).
 - **Check C Verdict:** **PASS (`100%`)**.
 
 ---

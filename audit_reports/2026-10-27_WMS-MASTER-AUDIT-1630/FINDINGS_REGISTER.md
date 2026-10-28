@@ -2,29 +2,30 @@
 
 - **Audit ID:** `WMS-MASTER-AUDIT`
 - **Run ID:** `2026-10-27_WMS-MASTER-AUDIT-1630`
-- **Audit Mode:** `EVIDENCE-BACKED AUDIT & WAVE 57–60 REMEDIATION CLOSURE VERIFICATION`
+- **Audit Mode:** `EVIDENCE-BACKED AUDIT & WAVE 57–60.1 REMEDIATION CLOSURE VERIFICATION`
 - **Inspected Git Baselines:**
-  - `3ddab7261d4606f094239d4933923aea657aca28` (`HEAD~5` — code baseline when `WMS-AUDIT-20261026-1805` was authored)
-  - `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009` (`HEAD~4` on `feat/WMS-61-project-development` — initial audit baseline)
-  - `f49a433` (`HEAD~3` — Wave 57 Remediation Closure Baseline: Migration `20261027130209_Wave57AuditRemediationSchemaAndImmutableLedgerTrigger.cs` applied and verified across Gates 1..5)
-  - `ca0f177` (`HEAD~2` — Wave 58 Architectural Closure Baseline: Decoupled `ErpKhoDbContext` from all `42 / 42` API Controllers, closing `F-004`)
-  - `0b75fd4` (`HEAD~1` — Wave 59 & 59.1 30-Day Roadmap Epics `30.1..30.3` & Live Browser E2E `UNV-02` Closure Baseline)
-  - **Wave 60 60-Day Roadmap Closure Baseline (`feat/WMS-61-project-development`):** Implements `Epic 60.1` (`KitWorkOrder`), `Epic 60.2` (Cross-Docking), and `Epic 60.3` (Break-Bulk Replenishment) while maintaining `0 / 42` `ErpKhoDbContext` references across all Controllers (`9 / 10` findings `CLOSED`, `0` open codebase findings)
+  - `3ddab7261d4606f094239d4933923aea657aca28` (`HEAD~6` — code baseline when `WMS-AUDIT-20261026-1805` was authored)
+  - `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009` (`HEAD~5` on `feat/WMS-61-project-development` — initial audit baseline)
+  - `f49a433` (`HEAD~4` — Wave 57 Remediation Closure Baseline: Migration `20261027130209_Wave57AuditRemediationSchemaAndImmutableLedgerTrigger.cs` applied and verified across Gates 1..5)
+  - `ca0f177` (`HEAD~3` — Wave 58 Architectural Closure Baseline: Decoupled `ErpKhoDbContext` from all `42 / 42` API Controllers, closing `F-004`)
+  - `0b75fd4` (`HEAD~2` — Wave 59 & 59.1 30-Day Roadmap Epics `30.1..30.3` & Live Browser E2E `UNV-02` Closure Baseline)
+  - `37eb5fe` (`HEAD~1` — Wave 60 60-Day Roadmap Epics `60.1..60.3` Implementation Baseline: `KitWorkOrder`, Cross-Docking, and Break-Bulk Replenishment)
+  - **Wave 60.1 Remediation & Gate Closure Baseline (`feat/WMS-61-project-development`):** Resolves `F-011` (`S3` UI Break-Bulk badge UOM display & bin consistency on `/inventory-movements`) and `F-012` (`S3` report metadata & post-Wave-60 SQL snapshot synchronization across all 12 audit files + `WAVE60_CODE_AND_SQL_EVIDENCE.md`), achieving **`11 / 12` findings `CLOSED` (`F-001..F-009, F-011, F-012`), `0` `OPEN`, and `1` `BLOCKED` (`F-010` external Notion `404`)**
 - **Live SQL Server Target:** `ERP_KHO` on `(localdb)\MSSQLLocalDB` (Windows Integrated Auth `HEAVENLY\van40`)
 
 ---
 
-## 1. Executive Rollup of Audit Findings (Post-Wave-58 Closure State)
+## 1. Executive Rollup of Audit Findings (Post-Wave-60.1 Closure State)
 
 ### 1.1 Rollup by Severity (`S0`–`S3`), Priority (`P0`–`P4`) & Open vs Closed Status
 
-| Severity | Definition | Total Logged | Closed in Waves 57–58 | Remaining Open / Blocked | Open / Blocked Finding IDs | Priority Distribution (Open/Blocked) |
+| Severity | Definition | Total Logged | Closed in Waves 57–60.1 | Remaining Open / Blocked | Open / Blocked Finding IDs | Priority Distribution (Open/Blocked) |
 | --- | --- | ---: | ---: | ---: | --- | --- |
 | **`S0 — Critical / Blocker`** | Active cross-tenant data leak, systemic negative stock across production SKUs, or non-compiling release build | **0** | **0** | **0** | None | `P0: 0` |
 | **`S1 — High`** | Data integrity variance on specific lot/location ledger rebuild path or missing database-level append-only trigger | **2** (`F-001`, `F-002`) | **2** (`F-001`, `F-002`) | **0** | None (`100% CLOSED`) | `P1: 0` |
 | **`S2 — Medium`** | Secondary workflows persisting state in `AuditLogs.NewValues` JSON, Fat Controllers injecting `DbContext`, optional idempotency scopes, or manual HTTP trigger for scheduled maintenance jobs | **4** (`F-003`, `F-004`, `F-005`, `F-006`) | **4** (`F-003a/b/c`, `F-004`, `F-005`, `F-006`) | **0** | None (`100% CLOSED`) | `P1: 0`, `P2: 0` |
-| **`S3 — Low / Hygiene`** | Single ledger timestamp vs dual `ActualOccurredAtUtc`/`PostedAtUtc`, unrouted legacy frontend component, SQL test harness class-name filter, or Notion child page `404` sharing drift | **4** (`F-007`, `F-008`, `F-009`, `F-010`) | **3** (`F-007`, `F-008`, `F-009`) | **1** (`BLOCKED`) | `F-010` (3 Notion child links `404`, `BLOCKED` on external Notion sharing) | `P2: 0`, `P3: 1` |
-| **TOTAL** | **All Consolidated Findings (`F-001`..`F-010`)** | **10** | **9 (`CLOSED`)** | **1 (`0 OPEN`, `1 BLOCKED S3`)** | Open: `0 S0`, `0 S1`, `0 S2`, `0 S3 OPEN`, `1 S3 BLOCKED` (`F-010`) | `P0: 0`, `P1: 0`, `P2: 0`, `P3: 1`, `P4: 0` |
+| **`S3 — Low / Hygiene`** | Single ledger timestamp vs dual `ActualOccurredAtUtc`/`PostedAtUtc`, unrouted legacy frontend component, SQL test harness class-name filter, Notion child page `404` sharing drift, UI Break-Bulk badge UOM label, or audit report metadata drift | **6** (`F-007`, `F-008`, `F-009`, `F-010`, `F-011`, `F-012`) | **5** (`F-007`, `F-008`, `F-009`, `F-011`, `F-012`) | **1** (`BLOCKED`) | `F-010` (3 Notion child links `404`, `BLOCKED` on external Notion sharing) | `P2: 0`, `P3: 1` |
+| **TOTAL** | **All Consolidated Findings (`F-001`..`F-012`)** | **12** | **11 (`CLOSED`)** | **1 (`0 OPEN`, `1 BLOCKED S3`)** | Open: `0 S0`, `0 S1`, `0 S2`, `0 S3 OPEN`, `1 S3 BLOCKED` (`F-010`) | `P0: 0`, `P1: 0`, `P2: 0`, `P3: 1`, `P4: 0` |
 
 ### 1.2 Rollup by Finding Type, Verification Status & Confidence
 
@@ -40,10 +41,12 @@
 | **`F-008`** | Unrouted Legacy `WarehouseStructure.tsx` Still Imports Static `demoWarehouseStructures` (`[FE-002]`) & `18` Frontend Pages Exceed `500` Lines | `S3` | `P2` | `FRONTEND_ORPHAN_MOCK_AND_GOD_COMPONENTS` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 57)* |
 | **`F-009`** | `ERP.SqlIntegrationHarness` Class-Name Filter (`Contains("SqlServer")`) Selects `34` of `49` SQL Test Classes (Skipping `15` Classes / `38` Methods) & Prior Browser Audit Header Counted `98` vs `109` Rows | `S3` | `P3` | `TEST_HARNESS_AND_REPORT_DISCREPANCY` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 57)* |
 | **`F-010`** | Three Priority Notion Child Page Links (`Spec 28`, `Spec 37`, `Spec 39`) Return HTTP `404 object_not_found` via Notion API | `S3` | `P3` | `DOCUMENTATION_ACCESS_DRIFT` | `FACT` | `HIGH` | **`BLOCKED`** *(Notion 404)* |
+| **`F-011`** | Break-Bulk Replenishment Badge on `/inventory-movements` (`InventoryMovements.tsx`) Displays `+12 THÙNG` Instead of Base UOM `+12 ĐV` When Breaking `1 Thùng = 12 ĐV` | `S3` | `P3` | `FRONTEND_UOM_LABEL_DISPLAY_DEFECT` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 60.1)* |
+| **`F-012`** | Audit Package Metadata Drift in `SOURCE_IMPLEMENTATION_MAP.md`, `TEST_COVERAGE_GAPS.md`, `AUDIT_STATE.md` & `EXECUTIVE_SUMMARY.md` (`d9b2453` Header, Missing `37eb5fe` SHA, Wave 57 SQL Row Counts & Roadmap Name Alignment) | `S3` | `P3` | `AUDIT_REPORT_METADATA_SYNCHRONIZATION` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 60.1)* |
 
 ---
 
-## 2. Detailed Forensic Findings (`F-001` through `F-010`)
+## 2. Detailed Forensic Findings (`F-001` through `F-012`)
 
 ### `F-001` — `WH01 / QA-LOT-002` (`ProductId=517`) `-60.0000` Stock-vs-Ledger Variance Caused by `RebuildBalancesAsync` Iterating Only Existing `InventoryStocks` Rows & Clamping Negative Sums
 - **Severity / Priority:** `S1` / `P1`
@@ -294,3 +297,38 @@
   - Automated Notion API audits cannot read the standalone body text of `Spec 28`, `Spec 37`, and `Spec 39` until they are re-shared with the Notion integration or their dead links on the Root Page are updated.
 - **Remediation Recommendation:**
   - Re-share pages `28`, `37`, and `39` with the Notion MCP integration or update their page IDs on the Notion Root Page (`SD-06`).
+
+---
+
+### `F-011` — Break-Bulk Replenishment Badge on `/inventory-movements` (`InventoryMovements.tsx`) Displays `+12 THÙNG` Instead of Base UOM `+12 ĐV` When Breaking `1 Thùng = 12 ĐV`
+- **Severity / Priority:** `S3` / `P3`
+- **Finding Type:** `FRONTEND_UOM_LABEL_DISPLAY_DEFECT`
+- **Related Requirement & Workflow IDs:** `Epic 60.3`, `BM-14`, `INV-005`, `FE-001`
+- **Related Subagent Cross-References:** `COMPETITIVE_GAP_AND_ROADMAP.md §2 Epic 60.3`, `wave60_e2e_4_epic60_3_breakbulk_1440x900.png`, `wave60_e2e_5_mobile_pda_390x844.png`
+- **Verification Label & Confidence:** `FACT` | `HIGH`
+- **Source & Visual Evidence (`File:Line`):**
+  1. In Wave 60 (`37eb5fe`), [InventoryMovements.tsx](file:///d:/ERP_KHO/frontend/src/pages/InventoryMovements.tsx) rendered the `TRẠNG THÁI SỔ CÁI NGUYÊN TỬ` badge on the Break-Bulk replenishment table (`Epic 60.3`) using the pack UOM (`THÙNG`) for both the Reserve deduction (`-1 THÙNG`) and the Forward-Pick addition (`+12 THÙNG`) instead of the base UOM (`+12 ĐV`), even though `conversionRate = 12` (`1 Thùng = 12 ĐV`) and `movedBaseQty = 12`.
+  2. Additionally, when the fallback/initial row rendered before/after the E2E call, the source Reserve bin label needed explicit normalization (`BIN-A01 -> BIN-A01-01`) across Desktop (`1440x900`) and Mobile PDA (`390x844`).
+- **Operational Impact:**
+  - Purely visual UOM label discrepancy on the UI badge (`+12 THÙNG` vs `+12 ĐV`); backend `InventoryControlOperationsService.ExecuteBreakBulkReplenishmentAsync` correctly deducted and added `12.0000` base units (`Δ = 0.0000`).
+- **Wave 60.1 Closure Evidence (`FACT` — Status: `CLOSED`):**
+  - **Code & Test Remediation:**
+    1. Updated [InventoryMovements.tsx](file:///d:/ERP_KHO/frontend/src/pages/InventoryMovements.tsx#L82-L110) and [InventoryMovements.tsx](file:///d:/ERP_KHO/frontend/src/pages/InventoryMovements.tsx#L159-L208) so `caseUom` (`THÙNG`) is used for the Reserve deduction (`-1 THÙNG`) and `baseUom` (`ĐV`) is used for the Forward-Pick addition (`+12 ĐV`), rendering **`Khớp 2 bút toán (-1 THÙNG / +12 ĐV • Δ = 0.0000)`** consistently across both the confirmation banner and the `TRẠNG THÁI SỔ CÁI NGUYÊN TỬ` badge, with source location `BIN-A01 -> BIN-A01-01` unified across Desktop (`1440x900`) and Mobile PDA (`390x844`).
+    2. Added explicit unit-level assertion in [InventoryMovements.test.tsx](file:///d:/ERP_KHO/frontend/src/pages/InventoryMovements.test.tsx) (`4/4 PASS` in Vitest) and re-verified on live Chromium screenshots `wave60_e2e_4_epic60_3_breakbulk_1440x900.png` and `wave60_e2e_5_mobile_pda_390x844.png`.
+
+---
+
+### `F-012` — Audit Package Metadata Drift in `SOURCE_IMPLEMENTATION_MAP.md`, `TEST_COVERAGE_GAPS.md`, `AUDIT_STATE.md` & `EXECUTIVE_SUMMARY.md` (`d9b2453` Header, Missing `37eb5fe` SHA, Wave 57 SQL Row Counts & Roadmap Name Alignment)
+- **Severity / Priority:** `S3` / `P3`
+- **Finding Type:** `AUDIT_REPORT_METADATA_SYNCHRONIZATION`
+- **Related Requirement & Workflow IDs:** `REP-001`, `REP-002`
+- **Related Subagent Cross-References:** `SOURCE_IMPLEMENTATION_MAP.md §6.2–6.4`, `TEST_COVERAGE_GAPS.md`, `AUDIT_STATE.md §2.6–2.7`, `EXECUTIVE_SUMMARY.md`
+- **Verification Label & Confidence:** `FACT` | `HIGH`
+- **Source Evidence:**
+  1. Top headers of `SOURCE_IMPLEMENTATION_MAP.md` and `TEST_COVERAGE_GAPS.md` retained `Inspected Git Commit (HEAD): d9b24530ba5826ae0d5f4f107e8f91be3f6f6009` in line 5 instead of reflecting the Wave 60 (`37eb5fe`) / Wave 60.1 commit lineage.
+  2. Section 2.6 of `AUDIT_STATE.md` omitted the explicit Wave 60 commit SHA (`37eb5fe`), and Sections 6.2–6.4 of `SOURCE_IMPLEMENTATION_MAP.md` still displayed the Wave 57 SQL row count (`13` rows in `dbo.InventoryStocks` and `26` rows in `dbo.InventoryTransactions`) rather than the post-Wave-60.1 `ERP_KHO` snapshot (`20` rows in `dbo.InventoryStocks` `Id=3663..14681`, `62` rows in `dbo.InventoryTransactions`, `7` rows in `dbo.KitWorkOrders` all `Cancelled`, `TotalOnHand = 232.0000`, `TotalReserved = 9.0000`, `TotalAvailable = 223.0000`, `Variance = 0.0000`).
+  3. Abbreviated summary references to `BM-04`, `BM-36`, and the 90-Day Roadmap (`Epic 90.1..90.3`) in `EXECUTIVE_SUMMARY.md` needed 100% verbatim alignment with `COMPETITIVE_WMS_BENCHMARK.md` and `COMPETITIVE_GAP_AND_ROADMAP.md`.
+- **Wave 60.1 Closure Evidence (`FACT` — Status: `CLOSED`):**
+  - **Documentation & Evidence Package Remediation:**
+    1. Created [WAVE60_CODE_AND_SQL_EVIDENCE.md](file:///d:/ERP_KHO/audit_reports/2026-10-27_WMS-MASTER-AUDIT-1630/WAVE60_CODE_AND_SQL_EVIDENCE.md) containing verbatim C# implementations of `ProductOperationsService.CompleteKitWorkOrderAsync` & `CancelKitWorkOrderAsync`, `PutawayService.EvaluateAndExecuteCrossDockAsync`, `InventoryControlOperationsService.ExecuteBreakBulkReplenishmentAsync`, `SqlServerWave60RoadmapEpicsTests.cs`, and live SQL 3-Way Check A/B/C console outputs.
+    2. Synchronized all 12 `.md` audit files (`AUDIT_STATE.md`, `SOURCE_IMPLEMENTATION_MAP.md`, `TEST_COVERAGE_GAPS.md`, `EXECUTIVE_SUMMARY.md`, `FINDINGS_REGISTER.md`, `BLOCKERS_AND_UNVERIFIED.md`, `COMPETITIVE_WMS_BENCHMARK.md`, `COMPETITIVE_GAP_AND_ROADMAP.md`, `BUSINESS_REQUIREMENT_TRACEABILITY.md`, `BUSINESS_WORKFLOW_AUDIT.md`, `NOTION_SOURCE_INVENTORY.md`, `SPEC_CONFLICTS_AND_OWNER_DECISIONS.md`) with the Wave 60 (`37eb5fe`) + Wave 60.1 commit lineage, Post-Wave-60.1 SQL row counts, and canonical benchmark/roadmap naming.

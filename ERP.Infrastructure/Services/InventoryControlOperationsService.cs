@@ -1058,13 +1058,23 @@ public sealed class InventoryControlOperationsService(
             int? origInTxId = null;
             if (request.OriginalReferenceId.HasValue)
             {
+                var alreadyReversedTxIds = await db.InventoryTransactions
+                    .AsNoTracking()
+                    .Where(t => t.WarehouseId == targetWarehouseId &&
+                                t.ProductId == resolvedProductId.Value &&
+                                t.ReversalOfTransactionId != null)
+                    .Select(t => t.ReversalOfTransactionId!.Value)
+                    .ToListAsync(cancellationToken);
+
                 var origTxs = await db.InventoryTransactions
                     .AsNoTracking()
                     .Where(t => t.WarehouseId == targetWarehouseId &&
                                 t.ProductId == resolvedProductId.Value &&
+                                t.TransactionType != TransactionType.Reversal &&
                                 t.ReferenceType == "BreakBulkReplenishment" &&
-                                t.ReferenceId == request.OriginalReferenceId.Value)
-                    .OrderBy(t => t.Id)
+                                t.ReferenceId == request.OriginalReferenceId.Value &&
+                                !alreadyReversedTxIds.Contains(t.Id))
+                    .OrderByDescending(t => t.Id)
                     .ToListAsync(cancellationToken);
 
                 origOutTxId = origTxs.FirstOrDefault(t => t.Quantity < 0)?.Id;

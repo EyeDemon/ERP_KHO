@@ -803,16 +803,13 @@ public sealed class PutawayService(
                 throw new BusinessRuleException("Số lượng Cross-Dock phải lớn hơn 0.");
             }
 
-            var rsvSourceType = matchedExportReceiptId.HasValue
-                ? "ExportReceipt"
-                : (matchedSalesOrderId.HasValue ? "SalesOrder" : "CrossDock");
-            var rsvSourceId = matchedExportReceiptId ?? matchedSalesOrderId ?? task.Id;
+            var rsvSourceType = "CrossDockPutawayTask";
+            var rsvSourceId = task.Id;
             var reservation = await context.StockReservations
                 .FirstOrDefaultAsync(r =>
                     r.ProductId == item.ProductId &&
-                    r.SourceCode == $"CD-TASK-{task.Id}" &&
-                    r.Status != StockReservationStatus.Released &&
-                    r.Status != StockReservationStatus.Cancelled,
+                    r.SourceType == rsvSourceType &&
+                    r.SourceId == rsvSourceId,
                     token);
             if (reservation is null)
             {
@@ -841,8 +838,21 @@ public sealed class PutawayService(
             }
             else
             {
-                reservation.Quantity = Math.Round(reservation.Quantity + crossDockQty, 4);
-                reservation.AllocatedQuantity = Math.Round(reservation.AllocatedQuantity + crossDockQty, 4);
+                if (reservation.Status is StockReservationStatus.Released or StockReservationStatus.Cancelled)
+                {
+                    reservation.Quantity = crossDockQty;
+                    reservation.AllocatedQuantity = crossDockQty;
+                    reservation.ConsumedQuantity = 0m;
+                    reservation.ReleasedQuantity = 0m;
+                    reservation.ReleasedAt = null;
+                    reservation.ReleasedBy = null;
+                    reservation.ReleaseReason = null;
+                }
+                else
+                {
+                    reservation.Quantity = Math.Round(reservation.Quantity + crossDockQty, 4);
+                    reservation.AllocatedQuantity = Math.Round(reservation.AllocatedQuantity + crossDockQty, 4);
+                }
                 reservation.Status = StockReservationStatus.Allocated;
                 reservation.AllocationVersion += 1;
             }

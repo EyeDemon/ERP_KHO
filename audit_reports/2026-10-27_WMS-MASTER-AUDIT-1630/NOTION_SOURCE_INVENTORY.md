@@ -2,7 +2,7 @@
 
 - **Audit ID:** `WMS-MASTER-AUDIT`
 - **Run ID:** `2026-10-27_WMS-MASTER-AUDIT-1630`
-- **Audit Mode:** `READ-ONLY EVIDENCE AUDIT`
+- **Audit Mode:** `EVIDENCE-BACKED MASTER AUDIT & WAVE 57–60.1 REMEDIATION CLOSURE VERIFICATION`
 - **Root Notion Page ID:** `3de558fb617480b98a4ae4b7694b3c63` (`ERP — HỆ THỐNG QUẢN LÝ KHO HÀNG (WMS)`)
 - **Notion Read-Only Status:** `100% READ-ONLY` (`0` pages created, updated, moved, or commented on)
 

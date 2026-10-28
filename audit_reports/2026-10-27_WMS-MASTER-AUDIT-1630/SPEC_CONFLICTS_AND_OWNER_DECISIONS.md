@@ -2,14 +2,14 @@
 
 - **Audit ID:** `WMS-MASTER-AUDIT`
 - **Run ID:** `2026-10-27_WMS-MASTER-AUDIT-1630`
-- **Audit Mode:** `READ-ONLY EVIDENCE AUDIT`
+- **Audit Mode:** `EVIDENCE-BACKED MASTER AUDIT & WAVE 57–60.1 REMEDIATION CLOSURE VERIFICATION`
 - **Rule Compliance:** Per `[WF-003]` and `[DOC-001]`, the Audit Agent **never** auto-resolves spec conflicts, **never** edits Notion pages, and **never** changes DB schema, API contracts (`/api/v1`), or RBAC permission codes without explicit Project Owner approval.
 
 ---
 
 ## 1. Verification of 14 Binding Owner Decisions (`OD-01`..`OD-14`) & `Q1`..`Q5`
 
-The Notion Root Page (`3de558fb617480b98a4ae4b7694b3c63`), `Spec 14` (`3de558fb61748143ac80cca2343a2cde`), `Spec 01` (`3de558fb6174809c9ad3dc5d0dfd377c`), `Spec 135` (`3de558fb617481c49426d68c6d52e6b0`), and `AUDIT-OOAD-001` (`3f9558fb617481778290dc6269a0b941`) establish **14 Binding Owner Decisions (`OD-01`..`OD-14`)** and **5 Architectural Clarifications (`Q1`..`Q5` = Option A)** that resolved the 24 historical specification issues (`ISS-01`..`ISS-24`). Below is the forensic verification of each binding decision against the current `ERP_KHO` codebase (`HEAD` `d9b2453`):
+The Notion Root Page (`3de558fb617480b98a4ae4b7694b3c63`), `Spec 14` (`3de558fb61748143ac80cca2343a2cde`), `Spec 01` (`3de558fb6174809c9ad3dc5d0dfd377c`), `Spec 135` (`3de558fb617481c49426d68c6d52e6b0`), and `AUDIT-OOAD-001` (`3f9558fb617481778290dc6269a0b941`) establish **14 Binding Owner Decisions (`OD-01`..`OD-14`)** and **5 Architectural Clarifications (`Q1`..`Q5` = Option A)** that resolved the 24 historical specification issues (`ISS-01`..`ISS-24`). Below is the forensic verification of each binding decision against the current `ERP_KHO` codebase (`HEAD` `37eb5fe` + Wave 60.1 Closure):
 
 | Decision ID | Binding Owner Decision Summary | Target Spec(s) | Implementation Status in `ERP_KHO` (Post-Wave-57) | Code & DB Evidence (`File:Line`) |
 | --- | --- | --- | :---: | --- |

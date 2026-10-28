@@ -1,9 +1,9 @@
 # Competitive WMS Benchmark Matrix (`COMPETITIVE_WMS_BENCHMARK.md`)
 
 - **Run ID:** `2026-10-27_WMS-MASTER-AUDIT-1630`
-- **Audit Mode:** `READ-ONLY EVIDENCE AUDIT`
+- **Audit Mode:** `EVIDENCE-BACKED MASTER AUDIT & WAVE 57–60.1 REMEDIATION CLOSURE VERIFICATION`
 - **Subagent Role:** `Subagent Audit-C: Competitive WMS Benchmark & Roadmap Strategist`
-- **Benchmark Retrieval & Verification Date:** `2026-10-27`
+- **Benchmark Retrieval & Verification Date:** `2026-10-27` (Updated Post-Wave-60.1 on `2026-10-28`, Commit `37eb5fe` + Wave 60.1 Closure)
 - **System Under Audit:** `ERP_KHO` (Modular Monolith B2B/Omnichannel & 3PL Warehouse Management System — .NET 10, EF Core, SQL Server `ERP_KHO`, React 19 + Vite 8 SPA)
 
 ---

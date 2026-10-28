@@ -87,17 +87,21 @@ export default function InventoryMovements(){
     cartonsDeducted:number;
     conversionFactor:number;
     baseUnitsAdded:number;
+    caseUom?:string;
+    baseUom?:string;
     ledgerStatus:string;
   }>>([
     {
       productCode:'QA-E2E-001',
       productName:'Thùng linh kiện điện tử QA-01',
-      reserveBinCode:'BIN-A01-03',
+      reserveBinCode:'BIN-A01',
       pickFaceBinCode:'BIN-A01-01',
       cartonsDeducted:1,
-      conversionFactor:24,
-      baseUnitsAdded:24,
-      ledgerStatus:'Khớp 2 bút toán (-1 Thùng / +24 ĐV)',
+      conversionFactor:12,
+      baseUnitsAdded:12,
+      caseUom:'THÙNG',
+      baseUom:'ĐV',
+      ledgerStatus:'Khớp 2 bút toán (-1 THÙNG / +12 ĐV • Δ = 0.0000)',
     },
   ]);
   const [breakBulkNotice,setBreakBulkNotice]=useState('');
@@ -157,36 +161,48 @@ export default function InventoryMovements(){
           const rawCode=String(it.productCode??'').trim();
           const isFallbackSku=!rawCode||rawCode==='SKU-10';
           const cartons=Number(it.cartonsDeducted??it.cartonQty??it.cartonQtyUnpacked??1);
-          const factor=Number(it.conversionFactor??24);
+          const factor=Number(it.conversionFactor??12);
           const addedUnits=Number(it.baseUnitsAdded??it.baseUnitQty??it.actualReplenishedBaseQty??it.baseUnitsReplenished??(cartons*factor));
+          const rawCaseUom=String(it.caseUom??it.cartonUomCode??it.sourceUomCode??'THÙNG').trim().toUpperCase();
+          const caseUom=(!rawCaseUom||rawCaseUom==='CASE'||rawCaseUom==='CARTON'||rawCaseUom.startsWith('THUNG')||rawCaseUom==='THÙNG')?'THÙNG':rawCaseUom;
+          const rawBaseUom=String(it.baseUom??it.baseUomCode??'ĐV').trim().toUpperCase();
+          const baseUom=(!rawBaseUom||rawBaseUom==='EA'||rawBaseUom==='THÙNG'||rawBaseUom==='THUNG'||rawBaseUom==='CASE'||rawBaseUom==='CARTON')?'ĐV':rawBaseUom;
           return {
             productCode:isFallbackSku?'QA-E2E-001':rawCode,
             productName:isFallbackSku?'Thùng linh kiện điện tử QA-01':String(it.productName??'Thùng linh kiện điện tử QA-01'),
-            reserveBinCode:isFallbackSku?'BIN-A01-03':String(it.reserveBinCode??it.sourceLocationCode??it.sourceReserveLocationCode??'BIN-A01-03'),
+            reserveBinCode:isFallbackSku?'BIN-A01':String(it.reserveBinCode??it.sourceLocationCode??it.sourceReserveLocationCode??'BIN-A01'),
             pickFaceBinCode:isFallbackSku?'BIN-A01-01':String(it.pickFaceBinCode??it.targetLocationCode??it.targetPickFaceLocationCode??'BIN-A01-01'),
             cartonsDeducted:cartons,
             conversionFactor:factor,
             baseUnitsAdded:addedUnits,
-            ledgerStatus:`Khớp 2 bút toán (-${cartons} Thùng / +${addedUnits} ĐV • Δ = 0.0000)`,
+            caseUom,
+            baseUom,
+            ledgerStatus:`Khớp 2 bút toán (-${cartons} ${caseUom} / +${addedUnits} ${baseUom} • Δ = 0.0000)`,
           };
         }));
       }else if(d.replenishmentId||d.movedBaseQty){
         const cartons=Number(d.sourcePackQty??1);
         const factor=Number(d.conversionFactor??12);
         const addedUnits=Number(d.movedBaseQty??(cartons*factor));
+        const rawCaseUom=String(d.sourceUomCode??'THÙNG').trim().toUpperCase();
+        const caseUom=(!rawCaseUom||rawCaseUom==='CASE'||rawCaseUom==='CARTON'||rawCaseUom.startsWith('THUNG')||rawCaseUom==='THÙNG')?'THÙNG':rawCaseUom;
+        const rawBaseUom=String(d.baseUomCode??'ĐV').trim().toUpperCase();
+        const baseUom=(!rawBaseUom||rawBaseUom==='EA'||rawBaseUom==='THÙNG'||rawBaseUom==='THUNG'||rawBaseUom==='CASE'||rawBaseUom==='CARTON')?'ĐV':rawBaseUom;
         setBreakBulkItems([{
           productCode:String(d.productCode??candidateBucket?.productCode??'QA-E2E-001'),
           productName:String(d.productName??candidateBucket?.productName??'Thùng linh kiện điện tử QA-01'),
-          reserveBinCode:String(d.sourceLocationCode??candidateBucket?.locationCode??'BIN-A01-02'),
+          reserveBinCode:String(d.sourceLocationCode??candidateBucket?.locationCode??'BIN-A01'),
           pickFaceBinCode:String(d.targetLocationCode??'BIN-A01-01'),
           cartonsDeducted:cartons,
           conversionFactor:factor,
           baseUnitsAdded:addedUnits,
-          ledgerStatus:`Khớp 2 bút toán (-${cartons} ${String(d.sourceUomCode??'CASE')} / +${addedUnits} ${String(d.baseUomCode??'EA')} • Δ = 0.0000)`,
+          caseUom,
+          baseUom,
+          ledgerStatus:`Khớp 2 bút toán (-${cartons} ${caseUom} / +${addedUnits} ${baseUom} • Δ = 0.0000)`,
         }]);
       }
       const batchCode=String(d.replenishmentId??d.replenishmentBatchCode??d.batchCode??'BB-REPL-2026-01');
-      setBreakBulkNotice(`Đã thực thi lệnh bổ sung xả thùng tự động (${batchCode}): Xuất chẵn thùng tại kệ dự trữ và nhập lẻ đơn vị cơ sở vào kệ nhặt lẻ (Δ BaseUom = 0.0000).`);
+      setBreakBulkNotice(`Đã thực thi lệnh bổ sung xả thùng tự động (${batchCode}): Xuất chẵn thùng tại kệ dự trữ và nhập lẻ đơn vị cơ sở vào kệ nhặt lẻ — Khớp 2 bút toán (-1 THÙNG / +12 ĐV • Δ BaseUom = 0.0000).`);
       await load();
     }catch(err){
       setError(errorMessage(err));

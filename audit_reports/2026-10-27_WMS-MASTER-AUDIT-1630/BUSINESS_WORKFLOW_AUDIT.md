@@ -1,7 +1,7 @@
 # END-TO-END BUSINESS WORKFLOW AUDIT (`WMS-MASTER-AUDIT`)
 
 - **Run ID:** `2026-10-27_WMS-MASTER-AUDIT-1630`
-- **Audit Mode:** `READ-ONLY EVIDENCE AUDIT` (Forensic End-to-End Traceability: `React UI -> REST API -> Application/Infrastructure Service -> 9-Dim SQL Lock -> Ledger/Balance/Audit/Outbox -> Real SQL & Browser Verification`)
+- **Audit Mode:** `EVIDENCE-BACKED MASTER AUDIT & WAVE 57–60.1 REMEDIATION CLOSURE VERIFICATION` (Forensic End-to-End Traceability: `React UI -> REST API -> Application/Infrastructure Service -> 9-Dim SQL Lock -> Ledger/Balance/Audit/Outbox -> Real SQL & Browser Verification` at Commit `37eb5fe` + Wave 60.1 Closure)
 - **Subagent:** `Audit-B (Business Requirements & End-to-End Workflow Traceability Auditor)`
 - **Target Database:** `ERP_KHO` (Strict Isolation Enforced)
 

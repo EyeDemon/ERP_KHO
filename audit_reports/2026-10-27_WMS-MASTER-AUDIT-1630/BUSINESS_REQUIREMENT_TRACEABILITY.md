@@ -1,7 +1,7 @@
 # BUSINESS REQUIREMENT TRACEABILITY MATRIX (`WMS-MASTER-AUDIT`)
 
 - **Run ID:** `2026-10-27_WMS-MASTER-AUDIT-1630`
-- **Audit Mode:** `READ-ONLY EVIDENCE AUDIT` (Forensic Line-by-Line Code, Schema, API, UI & Test Verification)
+- **Audit Mode:** `EVIDENCE-BACKED MASTER AUDIT & WAVE 57–60.1 REMEDIATION CLOSURE VERIFICATION` (Forensic Line-by-Line Code, Schema, API, UI & Test Verification at Commit `37eb5fe` + Wave 60.1 Closure)
 - **Subagent:** `Audit-B (Business Requirements & End-to-End Workflow Traceability Auditor)`
 - **Target Database:** `ERP_KHO` (Strict Isolation Enforced; Blacklisted Databases & `OWN-OOAD-001..004` Untouched)
 - **Canonical Scope:** 75 Normative Requirements (`TR-001` .. `TR-075`) spanning all 29 Fetched Notion Specifications (`Root Page`, `Spec 01..05`, `08`, `14`, `17`, `18`, `25`, `26`, `29..32`, `34..36`, `38`, `40`, `41`, `82`, `88`, `99`, `100`, `135`, `212`, `214`, `283`, `ARCH-P4-01..05`), all 14 Owner Decisions (`OD-01..OD-14`), all 15 `Spec 212` Operational Gaps (`GAP-001..GAP-015`), `Spec 40 §5A/§8A` Cycle Count Multi-Attempt & Auto-Approval Rules, and `Spec 283 §7.3` E-Commerce Tax & 3PL Billing Rules.

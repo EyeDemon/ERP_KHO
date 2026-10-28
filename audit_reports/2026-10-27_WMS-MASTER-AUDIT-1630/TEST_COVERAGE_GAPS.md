@@ -1,15 +1,16 @@
 # TEST COVERAGE GAPS & FORENSIC EVIDENCE RECONCILIATION — WMS-MASTER-AUDIT (`2026-10-27_WMS-MASTER-AUDIT-1630`)
 
 - **Run ID:** `2026-10-27_WMS-MASTER-AUDIT-1630`
-- **Audit Mode:** `READ-ONLY EVIDENCE AUDIT` (Zero Product Code / DB / Notion Mutation)
+- **Audit Mode:** `EVIDENCE-BACKED MASTER AUDIT & WAVE 57–60.1 REMEDIATION CLOSURE VERIFICATION`
 - **Auditor Role:** `Subagent Audit-A — Source Architecture, SQL Database Integrity & Test Evidence Auditor`
-- **Inspected Git Commit (`HEAD`):** `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009`
+- **Inspected Git Commit (`HEAD`):** `37eb5fe` (`feat(wave60): implement 60-day roadmap epics 60.1-60.3 (kitting work orders, cross-docking, break-bulk replenishment), verify 5 quality gates and update benchmark to 34/36`) + Wave 60.1 Remediation Closure on `feat/WMS-61-project-development`
+- **Initial Audit Baseline Commit:** `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009`
 
 ---
 
 ## 1. Complete Automated Test Inventory & Historical Count Reconciliation
 
-### 1.1 Exact Test File & Method Inventory Post-Wave-60 (`FACT`)
+### 1.1 Exact Test File & Method Inventory Post-Wave-60.1 (`FACT`)
 
 | Test Suite / Project | Total Test Files | Standard `[Fact]` / `it()` | `[SqlServerFact]` / `[ApprovalSqlServerFact]` | `[Theory]` / `[SqlServerTheory]` Methods (`[InlineData]` Rows) | Total Decorated Test Methods | Total Runtime Test Cases (`Inline` / `Expanded`) |
 |---|---:|---:|---:|---:|---:|---:|
@@ -135,6 +136,6 @@ Per `[TST-001]`, every inventory-mutating workflow must have automated tests cov
 - **Wave 57–60 Closure Evidence (`FACT`):**
   - [ERP.SqlIntegrationHarness/Program.cs](file:///d:/ERP_KHO/tools/ERP.SqlIntegrationHarness/Program.cs) discovers every test class containing methods decorated with `[SqlServerFactAttribute]`, `[ApprovalSqlServerFactAttribute]`, or `[SqlServerTheoryAttribute]`, executing all **`52` SQL test class files (`49` public classes / `227` decorated methods / `233` runtime SQL test cases: `212` in `ERP.Application.Tests` + `21` in `ERP.Api.Tests`, `0 Failed, 0 Skipped`)**.
 
-### `GAP-TST-06` (`Severity: P1 — High` | **Status: `RESOLVED_AND_VERIFIED_IN_WAVES_59_AND_60`**) — Live Browser E2E Verification (`UNV-02`) & Wave 59–60 Roadmap Epics (`Epic 30.1..30.3`, `Epic 60.1..60.3`)
-- **Wave 59–60 Closure Evidence (`FACT`):**
-  - Executed interactive Playwright Live Browser E2E ([wave59-live-browser-e2e.spec.mjs](file:///d:/ERP_KHO/frontend/e2e/wave59-live-browser-e2e.spec.mjs) and [wave60-live-browser-e2e.spec.mjs](file:///d:/ERP_KHO/frontend/e2e/wave60-live-browser-e2e.spec.mjs)) against running `ERP.Api` (`http://localhost:5260`) and Vite (`http://localhost:5173`) connected to `ERP_KHO`, verifying Desktop (`1440x900`) and Mobile PDA (`390x844`, `0px` horizontal overflow) across Login, Dashboard, `Epic 30.1..30.3`, `Epic 60.1` (`KitWorkOrder` assembly on `/products`), `Epic 60.2` (`RECEIVING-STAGE -> SHIPPING-STAGE` cross-docking on `/putaway-tasks`), and `Epic 60.3` (Case-to-Each break-bulk replenishment on `/inventory-movements`), followed by post-E2E SQL 3-Way Integrity Checks (`Variance = 0.0000`).
+### `GAP-TST-06` (`Severity: P1 — High` | **Status: `RESOLVED_AND_VERIFIED_IN_WAVES_59_60_AND_60_1`**) — Live Browser E2E Verification (`UNV-02`) & Wave 59–60.1 Roadmap Epics (`Epic 30.1..30.3`, `Epic 60.1..60.3`)
+- **Wave 59–60.1 Closure Evidence (`FACT`):**
+  - Executed interactive Playwright Live Browser E2E ([wave59-live-browser-e2e.spec.mjs](file:///d:/ERP_KHO/frontend/e2e/wave59-live-browser-e2e.spec.mjs) and [wave60-live-browser-e2e.spec.mjs](file:///d:/ERP_KHO/frontend/e2e/wave60-live-browser-e2e.spec.mjs)) against running `ERP.Api` (`http://localhost:5260`) and Vite (`http://localhost:5173`) connected to `ERP_KHO`, verifying all 8 Desktop (`1440x900`) and Mobile PDA (`390x844`, `0px` horizontal overflow across all 4 routes) screenshots (`wave60_e2e_1..8.png`) covering Login, `/dashboard` (`wave60_e2e_1_dashboard_1440x900.png` & `wave60_e2e_6_mobile_dashboard_390x844.png`), `Epic 60.1` (`KitWorkOrder` assembly on `/products` — `wave60_e2e_2_epic60_1_kitting_1440x900.png` & `wave60_e2e_7_mobile_products_390x844.png`), `Epic 60.2` (`RECEIVING-STAGE -> SHIPPING-STAGE` cross-docking on `/putaway-tasks` — `wave60_e2e_3_epic60_2_crossdock_1440x900.png` & `wave60_e2e_8_mobile_putaway_390x844.png`), and `Epic 60.3` (Case-to-Each break-bulk replenishment on `/inventory-movements` showing `Khớp 2 bút toán (-1 THÙNG / +12 ĐV • Δ = 0.0000)` and `BIN-A01 -> BIN-A01-01` — `wave60_e2e_4_epic60_3_breakbulk_1440x900.png` & `wave60_e2e_5_mobile_pda_390x844.png`), followed by post-E2E SQL 3-Way Integrity Checks (`Variance = 0.0000`, `7/7` `KitWorkOrders` `Cancelled`).
