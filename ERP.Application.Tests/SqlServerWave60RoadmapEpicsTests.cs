@@ -487,6 +487,20 @@ public sealed class SqlServerWave60RoadmapEpicsTests
                 revDoc.RootElement.GetProperty("sourceRemainingQuantity").GetDecimal().Should().Be(36m);
                 revDoc.RootElement.GetProperty("targetResultingQuantity").GetDecimal().Should().Be(0m);
 
+                var reserveBuckets = await db.InventoryStocks.AsNoTracking()
+                    .Where(s => s.WarehouseId == fx.WarehouseId && s.LocationId == fx.ReserveLocationId)
+                    .ToListAsync();
+                reserveBuckets.Should().ContainSingle();
+                reserveBuckets[0].HandlingUnitId.Should().Be(603);
+                reserveBuckets[0].Quantity.Should().Be(36m);
+
+                var revInTxs = await db.InventoryTransactions.AsNoTracking()
+                    .Where(t => t.WarehouseId == fx.WarehouseId &&
+                                t.ReferenceType == "BreakBulkReplenishmentReversal" &&
+                                t.Quantity > 0m)
+                    .ToListAsync();
+                revInTxs.Should().NotBeEmpty().And.OnlyContain(t => t.HandlingUnitId == 603);
+
                 var dupRevEx = await Assert.ThrowsAsync<ConflictException>(() =>
                     svc.ExecuteBreakBulkReplenishmentAsync(
                         new ExecuteBreakBulkReplenishmentInput(
@@ -992,8 +1006,9 @@ public sealed class SqlServerWave60RoadmapEpicsTests
             ProductId = prod.Id,
             LocationId = reserveLoc.Id,
             LotId = lot.Id,
+            HandlingUnitId = 603,
             Status = InventoryStatus.Available,
-            Quantity = 36m // 3 Cases x 12 EA
+            Quantity = 36m // 3 Cases x 12 EA on LPN #603
         };
         reserveStock.RefreshGrainHash();
         db.InventoryStocks.Add(reserveStock);
@@ -1003,6 +1018,7 @@ public sealed class SqlServerWave60RoadmapEpicsTests
             ProductId = prod.Id,
             LocationId = reserveLoc.Id,
             LotId = lot.Id,
+            HandlingUnitId = 603,
             InventoryStatus = InventoryStatus.Available,
             TransactionType = TransactionType.Import,
             Quantity = 36m,

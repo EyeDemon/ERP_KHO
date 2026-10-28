@@ -127,8 +127,20 @@ public sealed class SqlServerWave61RoadmapEpicsTests
                 doc.RootElement.GetProperty("evaluatedSkuCount").GetInt32().Should().Be(3);
                 doc.RootElement.GetProperty("classACount").GetInt32().Should().BeGreaterThanOrEqualTo(1);
                 doc.RootElement.GetProperty("reslottingRecommendationCount").GetInt32().Should().BeGreaterThanOrEqualTo(1);
+                doc.RootElement.GetProperty("executedReslottingBaseQuantity").GetDecimal().Should().Be(10m);
                 doc.RootElement.GetProperty("interleavedTaskPairCount").GetInt32().Should().BeGreaterThanOrEqualTo(1);
                 doc.RootElement.GetProperty("averageDeadheadSavedPercent").GetDecimal().Should().Be(38.50m);
+
+                var reserveProdA = await db.InventoryStocks.AsNoTracking()
+                    .SingleAsync(s => s.WarehouseId == fx.WarehouseId && s.ProductId == fx.ProdAId && s.LocationId == fx.ReserveBinId);
+                var goldenProdA = await db.InventoryStocks.AsNoTracking()
+                    .SingleAsync(s => s.WarehouseId == fx.WarehouseId && s.ProductId == fx.ProdAId && s.LocationId == fx.GoldenBinId);
+                reserveProdA.Quantity.Should().Be(40m);
+                goldenProdA.Quantity.Should().Be(10m);
+
+                var locMoveCount = await db.InventoryLocationMovements.AsNoTracking()
+                    .CountAsync(m => m.WarehouseId == fx.WarehouseId && m.ReferenceType == "AbcSlottingReSlotting");
+                locMoveCount.Should().Be(1);
             }
 
             // (b) Duplicate Evaluation Guard
@@ -146,7 +158,7 @@ public sealed class SqlServerWave61RoadmapEpicsTests
                 dupEx.ErrorCode.Should().Be("ABC_SLOTTING_EVALUATION_ALREADY_COMPLETED");
             }
 
-            // (c) Parallel Concurrency contention on a 2nd EvaluationId
+            // (c) Parallel Concurrency contention on a 2nd EvaluationId (strictly 1 x 200 and 1 x 409)
             var concEvalId = $"ABC-CONC-{fx.Suffix}";
             var concResults = await Task.WhenAll(
                 Task.Run(async () =>
@@ -178,9 +190,10 @@ public sealed class SqlServerWave61RoadmapEpicsTests
                     catch (DbUpdateException) { return 409; }
                 }));
 
-            concResults.Count(c => c == 200).Should().BeGreaterThanOrEqualTo(1);
+            concResults.Count(c => c == 200).Should().Be(1);
+            concResults.Count(c => c == 409).Should().Be(1);
 
-            // (d) Reversal of Evaluations & duplicate reversal guard
+            // (d) Reversal of Evaluations & duplicate reversal guard + 9D balance conservation
             await using (var db = CreateContext())
             {
                 var svc = new InventoryControlOperationsService(db, new AllowAllWarehouseAuth(), new FakeUser(fx.UserId));
@@ -194,6 +207,18 @@ public sealed class SqlServerWave61RoadmapEpicsTests
                         new EvaluateAbcSlottingInput(fx.WarehouseId, 90, null, true, Reverse: true, OriginalEvaluationId: evalId),
                         fx.UserId));
                 dupRevEx.ErrorCode.Should().Be("ABC_SLOTTING_EVALUATION_ALREADY_REVERSED");
+
+                var rev2 = await svc.EvaluateAbcSlottingAndTaskInterleavingAsync(
+                    new EvaluateAbcSlottingInput(fx.WarehouseId, 90, null, true, Reverse: true, OriginalEvaluationId: concEvalId),
+                    fx.UserId);
+                rev2.StatusCode.Should().Be(200);
+
+                var reserveProdAAfter = await db.InventoryStocks.AsNoTracking()
+                    .SingleAsync(s => s.WarehouseId == fx.WarehouseId && s.ProductId == fx.ProdAId && s.LocationId == fx.ReserveBinId);
+                var goldenProdAAfter = await db.InventoryStocks.AsNoTracking()
+                    .SingleAsync(s => s.WarehouseId == fx.WarehouseId && s.ProductId == fx.ProdAId && s.LocationId == fx.GoldenBinId);
+                reserveProdAAfter.Quantity.Should().Be(50m);
+                goldenProdAAfter.Quantity.Should().Be(0m);
             }
         }
         finally
@@ -353,6 +378,16 @@ public sealed class SqlServerWave61RoadmapEpicsTests
             await using (var db = CreateContext())
             {
                 var svc = new ExportReceiptOperationsService(db, new AllowAllWarehouseAuth(), new FakeUser(fx.UserId));
+
+                // 0. Non-existent ExportReceiptId must throw KeyNotFoundException (no fake SKU-DEFAULT fallback)
+                var notFoundEx = await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+                    svc.SyncAccountingAndEInvoiceOutboxAsync(
+                        new SyncAccountingAndEInvoiceInput(
+                            ExportReceiptId: 99999999,
+                            WarehouseId: fx.WarehouseId,
+                            PersistOutboxAndAudit: true),
+                        fx.UserId));
+                notFoundEx.Message.Should().Contain("EXPORT_RECEIPT_NOT_FOUND");
 
                 // 1. Export goods awaiting customs clearance must be blocked with EINVOICE_EXPORT_AWAITING_CUSTOMS_CLEARANCE
                 var customsEx = await Assert.ThrowsAsync<BusinessRuleException>(() =>
@@ -807,8 +842,10 @@ public sealed class SqlServerWave61RoadmapEpicsTests
         await using var db = CreateContext();
         await db.Database.ExecuteSqlInterpolatedAsync($@"
             DISABLE TRIGGER TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;
+            UPDATE dbo.InventoryTransactions SET CorrectiveTransactionId = NULL, ReversalOfTransactionId = NULL WHERE WarehouseId = {fx.WarehouseId};
             DELETE FROM dbo.InventoryTransactions WHERE WarehouseId = {fx.WarehouseId};
             ENABLE TRIGGER TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;
+            DELETE FROM dbo.InventoryLocationMovements WHERE WarehouseId = {fx.WarehouseId};
             DELETE FROM dbo.PutawayTaskItems WHERE PutawayTaskId = {fx.PutawayTaskId};
             DELETE FROM dbo.PutawayTasks WHERE Id = {fx.PutawayTaskId};
             DELETE FROM dbo.ImportReceiptDetails WHERE ImportReceiptId = {fx.ImportReceiptId};

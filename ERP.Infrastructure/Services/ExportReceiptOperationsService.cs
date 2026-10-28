@@ -1133,9 +1133,13 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
         {
             exportQuery = exportQuery.Where(r => r.Id == request.ExportReceiptId.Value);
         }
-        else if (request?.WarehouseId.HasValue == true)
+        else
         {
-            exportQuery = exportQuery.Where(r => r.WarehouseId == request.WarehouseId.Value);
+            if (request?.WarehouseId.HasValue == true)
+            {
+                exportQuery = exportQuery.Where(r => r.WarehouseId == request.WarehouseId.Value);
+            }
+            exportQuery = exportQuery.Where(r => r.Details.Any());
         }
 
         var exportReceipt = await exportQuery.OrderByDescending(r => r.Id).FirstOrDefaultAsync(cancellationToken);
@@ -1198,10 +1202,23 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
             });
         }
 
+        if (exportReceipt == null)
+        {
+            throw new KeyNotFoundException(
+                $"EXPORT_RECEIPT_NOT_FOUND: Không tìm thấy phiếu xuất kho #{request?.ExportReceiptId ?? 0} để đồng bộ kế toán & phát hành hóa đơn điện tử.");
+        }
+
+        if (exportReceipt.Details == null || exportReceipt.Details.Count == 0)
+        {
+            throw new ERP.Domain.Exceptions.ConflictException(
+                "EXPORT_RECEIPT_HAS_NO_LINES_FOR_ACCOUNTING_SYNC",
+                $"Phiếu xuất {receiptCode} (#{targetReceiptId}) không có dòng hàng chi tiết để hạch toán kế toán & phát hành HĐĐT.");
+        }
+
         if (request?.PersistOutboxAndAudit != false && request?.IssueAdjustmentForm04SS != true)
         {
             var isRelational = _db.Database.IsRelational();
-            var lockProductIds = exportReceipt?.Details.Select(d => d.ProductId).Distinct().OrderBy(x => x).ToList() ?? new List<int>();
+            var lockProductIds = exportReceipt.Details.Select(d => d.ProductId).Distinct().OrderBy(x => x).ToList();
             if (isRelational && lockProductIds.Count > 0)
             {
                 await _db.AcquireInventoryAllocationLocksAsync(targetWarehouseId, lockProductIds, cancellationToken);
@@ -1227,50 +1244,27 @@ body {{ margin: 0; font-family: Arial, sans-serif; font-size: 11px; }}
         decimal totalRevenueAmount = 0m;
         var lineDetails = new List<object>();
 
-        if (exportReceipt != null && exportReceipt.Details.Count > 0)
+        foreach (var d in exportReceipt.Details)
         {
-            foreach (var d in exportReceipt.Details)
-            {
-                var mac = d.Product?.MovingAverageCost is > 0m ? d.Product.MovingAverageCost : 50000m;
-                var unitPrice = d.UnitPrice > 0m ? d.UnitPrice : Math.Round(mac * 1.25m, 4, MidpointRounding.AwayFromZero);
-                var qty = Math.Round(d.Quantity, 4, MidpointRounding.AwayFromZero);
-                var lineCogs = Math.Round(qty * mac, 4, MidpointRounding.AwayFromZero);
-                var lineRev = Math.Round(qty * unitPrice, 4, MidpointRounding.AwayFromZero);
+            var mac = d.Product?.MovingAverageCost is > 0m ? d.Product.MovingAverageCost : 50000m;
+            var unitPrice = d.UnitPrice > 0m ? d.UnitPrice : Math.Round(mac * 1.25m, 4, MidpointRounding.AwayFromZero);
+            var qty = Math.Round(d.Quantity, 4, MidpointRounding.AwayFromZero);
+            var lineCogs = Math.Round(qty * mac, 4, MidpointRounding.AwayFromZero);
+            var lineRev = Math.Round(qty * unitPrice, 4, MidpointRounding.AwayFromZero);
 
-                totalCogsAmount = Math.Round(totalCogsAmount + lineCogs, 4, MidpointRounding.AwayFromZero);
-                totalRevenueAmount = Math.Round(totalRevenueAmount + lineRev, 4, MidpointRounding.AwayFromZero);
+            totalCogsAmount = Math.Round(totalCogsAmount + lineCogs, 4, MidpointRounding.AwayFromZero);
+            totalRevenueAmount = Math.Round(totalRevenueAmount + lineRev, 4, MidpointRounding.AwayFromZero);
 
-                lineDetails.Add(new
-                {
-                    productId = d.ProductId,
-                    productCode = d.Product?.Code?.Trim() ?? $"SKU-{d.ProductId}",
-                    productName = d.Product?.Name?.Trim() ?? $"Sản phẩm #{d.ProductId}",
-                    quantity = qty,
-                    unitCostMac = canReadCost ? (decimal?)mac : null,
-                    cogsAmount = canReadCost ? (decimal?)lineCogs : null,
-                    unitSellingPrice = unitPrice,
-                    revenueAmount = lineRev,
-                    debitCogsAccount = "632",
-                    creditInventoryAccount = "1561",
-                    debitReceivableAccount = "131",
-                    creditRevenueAccount = "5111"
-                });
-            }
-        }
-        else
-        {
-            totalCogsAmount = 500000.0000m;
-            totalRevenueAmount = 650000.0000m;
             lineDetails.Add(new
             {
-                productId = 1,
-                productCode = "SKU-DEFAULT",
-                productName = "Hàng hóa xuất kho tiêu chuẩn",
-                quantity = 10.0000m,
-                unitCostMac = canReadCost ? (decimal?)50000.0000m : null,
-                cogsAmount = canReadCost ? (decimal?)500000.0000m : null,
-                unitSellingPrice = 65000.0000m,
-                revenueAmount = 650000.0000m,
+                productId = d.ProductId,
+                productCode = d.Product?.Code?.Trim() ?? $"SKU-{d.ProductId}",
+                productName = d.Product?.Name?.Trim() ?? $"Sản phẩm #{d.ProductId}",
+                quantity = qty,
+                unitCostMac = canReadCost ? (decimal?)mac : null,
+                cogsAmount = canReadCost ? (decimal?)lineCogs : null,
+                unitSellingPrice = unitPrice,
+                revenueAmount = lineRev,
                 debitCogsAccount = "632",
                 creditInventoryAccount = "1561",
                 debitReceivableAccount = "131",

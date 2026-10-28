@@ -1072,51 +1072,81 @@ public sealed class InventoryControlOperationsService(
             pickStock.LastUpdated = now;
             pickStock.RefreshGrainHash();
 
-            var reserveStock = await db.InventoryStocks
-                .FirstOrDefaultAsync(s =>
-                    s.WarehouseId == targetWarehouseId &&
-                    s.ProductId == resolvedProductId.Value &&
-                    s.LocationId == resolvedSourceLocationId.Value &&
-                    s.LotId == pickStock.LotId &&
-                    s.SerialId == pickStock.SerialId &&
-                    s.HandlingUnitId == request.SourceHandlingUnitId &&
-                    s.OwnerId == pickStock.OwnerId &&
-                    s.Status == InventoryStatus.Available,
-                    cancellationToken);
-
-            if (reserveStock == null)
-            {
-                reserveStock = new ERP.Domain.Entities.InventoryStock
-                {
-                    WarehouseId = targetWarehouseId,
-                    ProductId = resolvedProductId.Value,
-                    LocationId = resolvedSourceLocationId.Value,
-                    LotId = pickStock.LotId,
-                    SerialId = pickStock.SerialId,
-                    HandlingUnitId = request.SourceHandlingUnitId,
-                    OwnerId = pickStock.OwnerId,
-                    Status = InventoryStatus.Available,
-                    Quantity = movedBaseQty,
-                    ReservedQuantity = 0m,
-                    LastUpdated = now
-                };
-                reserveStock.RefreshGrainHash();
-                db.InventoryStocks.Add(reserveStock);
-            }
-            else
-            {
-                reserveStock.Quantity = Math.Round(reserveStock.Quantity + movedBaseQty, 4, MidpointRounding.AwayFromZero);
-                reserveStock.LastUpdated = now;
-                reserveStock.RefreshGrainHash();
-            }
-
             var revId = $"BB-REV-{now:yyyyMMdd-HHmmss}";
             var revNote = $"{revId}: Đảo bút toán xả thùng {sourcePackQty:0.####} {resolvedSourceUomCode} (x{conversionFactor:0.####} = {movedBaseQty:0.####} {baseUomCode})";
+            ERP.Domain.Entities.InventoryStock? lastReserveStock = null;
 
             foreach (var (origOut, origIn, legQty) in matchedOrigPairs)
             {
                 int origOutTxId = origOut.Id;
                 int origInTxId = origIn.Id;
+                var targetHuId = request.SourceHandlingUnitId ?? origOut.HandlingUnitId;
+                var targetLotId = origOut.LotId ?? pickStock.LotId;
+                var targetSerialId = origOut.SerialId ?? pickStock.SerialId;
+                var targetOwnerId = origOut.OwnerId ?? pickStock.OwnerId;
+
+                var reserveStock = db.InventoryStocks.Local.FirstOrDefault(s =>
+                        s.WarehouseId == targetWarehouseId &&
+                        s.ProductId == resolvedProductId.Value &&
+                        s.LocationId == resolvedSourceLocationId.Value &&
+                        s.LotId == targetLotId &&
+                        s.SerialId == targetSerialId &&
+                        s.HandlingUnitId == targetHuId &&
+                        s.OwnerId == targetOwnerId &&
+                        s.Status == InventoryStatus.Available)
+                    ?? await db.InventoryStocks.FirstOrDefaultAsync(s =>
+                        s.WarehouseId == targetWarehouseId &&
+                        s.ProductId == resolvedProductId.Value &&
+                        s.LocationId == resolvedSourceLocationId.Value &&
+                        s.LotId == targetLotId &&
+                        s.SerialId == targetSerialId &&
+                        s.HandlingUnitId == targetHuId &&
+                        s.OwnerId == targetOwnerId &&
+                        s.Status == InventoryStatus.Available,
+                        cancellationToken);
+
+                if (reserveStock == null)
+                {
+                    reserveStock = new ERP.Domain.Entities.InventoryStock
+                    {
+                        WarehouseId = targetWarehouseId,
+                        ProductId = resolvedProductId.Value,
+                        LocationId = resolvedSourceLocationId.Value,
+                        LotId = targetLotId,
+                        SerialId = targetSerialId,
+                        HandlingUnitId = targetHuId,
+                        OwnerId = targetOwnerId,
+                        Status = InventoryStatus.Available,
+                        Quantity = legQty,
+                        ReservedQuantity = 0m,
+                        LastUpdated = now
+                    };
+                    reserveStock.RefreshGrainHash();
+                    db.InventoryStocks.Add(reserveStock);
+                }
+                else
+                {
+                    reserveStock.Quantity = Math.Round(reserveStock.Quantity + legQty, 4, MidpointRounding.AwayFromZero);
+                    reserveStock.LastUpdated = now;
+                    reserveStock.RefreshGrainHash();
+                }
+
+                lastReserveStock = reserveStock;
+
+                if (targetHuId.HasValue)
+                {
+                    var huContent = db.HandlingUnitContents.Local.FirstOrDefault(c =>
+                            c.HandlingUnitId == targetHuId.Value &&
+                            c.ProductId == resolvedProductId.Value)
+                        ?? await db.HandlingUnitContents.FirstOrDefaultAsync(c =>
+                            c.HandlingUnitId == targetHuId.Value &&
+                            c.ProductId == resolvedProductId.Value,
+                            cancellationToken);
+                    if (huContent != null)
+                    {
+                        huContent.Quantity = Math.Round(huContent.Quantity + legQty, 4, MidpointRounding.AwayFromZero);
+                    }
+                }
 
                 var revOutTx = new ERP.Domain.Entities.InventoryTransaction
                 {
@@ -1125,10 +1155,10 @@ public sealed class InventoryControlOperationsService(
                     LocationId = resolvedTargetLocationId.Value,
                     FromLocationId = resolvedTargetLocationId.Value,
                     ToLocationId = resolvedSourceLocationId.Value,
-                    LotId = pickStock.LotId,
-                    SerialId = pickStock.SerialId,
+                    LotId = targetLotId,
+                    SerialId = targetSerialId,
                     HandlingUnitId = null,
-                    OwnerId = pickStock.OwnerId,
+                    OwnerId = targetOwnerId,
                     InventoryStatus = InventoryStatus.Available,
                     FromInventoryStatus = InventoryStatus.Available,
                     ToInventoryStatus = InventoryStatus.Available,
@@ -1151,10 +1181,10 @@ public sealed class InventoryControlOperationsService(
                     LocationId = resolvedSourceLocationId.Value,
                     FromLocationId = resolvedTargetLocationId.Value,
                     ToLocationId = resolvedSourceLocationId.Value,
-                    LotId = pickStock.LotId,
-                    SerialId = pickStock.SerialId,
-                    HandlingUnitId = request.SourceHandlingUnitId,
-                    OwnerId = pickStock.OwnerId,
+                    LotId = targetLotId,
+                    SerialId = targetSerialId,
+                    HandlingUnitId = targetHuId,
+                    OwnerId = targetOwnerId,
                     InventoryStatus = InventoryStatus.Available,
                     FromInventoryStatus = InventoryStatus.Available,
                     ToInventoryStatus = InventoryStatus.Available,
@@ -1197,7 +1227,7 @@ public sealed class InventoryControlOperationsService(
                 conversionFactor,
                 movedBaseQty,
                 baseUomDelta = 0.0000m,
-                sourceRemainingQuantity = reserveStock.Quantity,
+                sourceRemainingQuantity = lastReserveStock?.Quantity ?? 0m,
                 targetResultingQuantity = pickStock.Quantity,
                 reversed = true,
                 status = "REVERSED",
@@ -1274,6 +1304,7 @@ public sealed class InventoryControlOperationsService(
 
         sourceStockBucket.Quantity = Math.Round(sourceStockBucket.Quantity - movedBaseQty, 4, MidpointRounding.AwayFromZero);
         sourceStockBucket.LastUpdated = now;
+        sourceStockBucket.RefreshGrainHash();
 
         if (detachedHandlingUnitId.HasValue)
         {
@@ -1315,12 +1346,14 @@ public sealed class InventoryControlOperationsService(
                 ReservedQuantity = 0m,
                 LastUpdated = now
             };
+            targetStockBucket.RefreshGrainHash();
             db.InventoryStocks.Add(targetStockBucket);
         }
         else
         {
             targetStockBucket.Quantity = Math.Round(targetStockBucket.Quantity + movedBaseQty, 4, MidpointRounding.AwayFromZero);
             targetStockBucket.LastUpdated = now;
+            targetStockBucket.RefreshGrainHash();
         }
 
         var breakBulkId = $"BB-REPL-{now:yyyyMMdd-HHmmss}";
@@ -1467,6 +1500,30 @@ public sealed class InventoryControlOperationsService(
         var lookbackDays = Math.Clamp(request?.LookbackDays ?? 90, 7, 365);
         var cutoffUtc = now.AddDays(-lookbackDays);
 
+        var isMutationOrReversal = request?.Reverse == true || request?.PersistAuditAndOutbox != false;
+        var isSqlServer = db.Database.IsRelational() && db.Database.IsSqlServer();
+        var ownTx = isMutationOrReversal && isSqlServer && db.Database.CurrentTransaction == null;
+        await using var tx = ownTx
+            ? await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, cancellationToken)
+            : null;
+
+        if (isMutationOrReversal && isSqlServer)
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT 1 FROM dbo.Warehouses WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE Id = {targetWarehouseId};",
+                cancellationToken);
+            var whProductIds = await db.InventoryStocks.AsNoTracking()
+                .Where(s => s.WarehouseId == targetWarehouseId)
+                .Select(s => s.ProductId)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToListAsync(cancellationToken);
+            if (whProductIds.Count > 0)
+            {
+                await db.AcquireInventoryAllocationLocksAsync(targetWarehouseId, whProductIds, cancellationToken);
+            }
+        }
+
         if (request?.Reverse == true)
         {
             var evalIdToReverse = request.OriginalEvaluationId?.Trim();
@@ -1484,6 +1541,150 @@ public sealed class InventoryControlOperationsService(
                 throw new ERP.Domain.Exceptions.ConflictException(
                     "ABC_SLOTTING_EVALUATION_ALREADY_REVERSED",
                     "Phiên đánh giá tối ưu ABC Slotting & Task Interleaving không tồn tại hoặc đã được hoàn tác trước đó.");
+            }
+
+            var alreadyRevIds = await db.InventoryTransactions.AsNoTracking()
+                .Where(t => t.WarehouseId == targetWarehouseId && t.ReversalOfTransactionId != null)
+                .Select(t => t.ReversalOfTransactionId!.Value)
+                .ToListAsync(cancellationToken);
+
+            var origSlottingTxs = await db.InventoryTransactions.AsNoTracking()
+                .Where(t => t.WarehouseId == targetWarehouseId &&
+                            t.ReferenceType == "AbcSlottingReSlotting" &&
+                            t.TransactionType != TransactionType.Reversal &&
+                            t.Note != null &&
+                            t.Note.StartsWith(origOutbox.EventId + ":") &&
+                            !alreadyRevIds.Contains(t.Id))
+                .OrderBy(t => t.Id)
+                .ToListAsync(cancellationToken);
+
+            var slottingOuts = origSlottingTxs.Where(t => t.Quantity < 0m).ToList();
+            var slottingIns = origSlottingTxs.Where(t => t.Quantity > 0m).ToList();
+            var slottingPairCount = Math.Min(slottingOuts.Count, slottingIns.Count);
+            decimal totalReversedQty = 0m;
+
+            for (var pIdx = 0; pIdx < slottingPairCount; pIdx++)
+            {
+                var origOut = slottingOuts[pIdx];
+                var origIn = slottingIns[pIdx];
+                var revQty = Math.Round(Math.Min(Math.Abs(origOut.Quantity), origIn.Quantity), 4, MidpointRounding.AwayFromZero);
+                if (revQty <= 0m) continue;
+
+                var destStock = await db.InventoryStocks.FirstOrDefaultAsync(s =>
+                    s.WarehouseId == origIn.WarehouseId &&
+                    s.ProductId == origIn.ProductId &&
+                    s.LocationId == origIn.LocationId &&
+                    s.LotId == origIn.LotId &&
+                    s.SerialId == origIn.SerialId &&
+                    s.HandlingUnitId == origIn.HandlingUnitId &&
+                    s.OwnerId == origIn.OwnerId &&
+                    s.Status == origIn.InventoryStatus,
+                    cancellationToken);
+
+                var destAvailable = destStock != null ? destStock.Quantity - destStock.ReservedQuantity : 0m;
+                if (destStock == null || destAvailable < revQty)
+                {
+                    throw new ERP.Domain.Exceptions.ConflictException(
+                        "SLOTTING_REVERSAL_INSUFFICIENT_DEST_AVAILABLE_STOCK",
+                        $"Tồn khả dụng tại kệ đích không đủ để hoàn tác đảo kệ động ABC Slotting ({destAvailable:0.####} < {revQty:0.####}).");
+                }
+
+                destStock.Quantity = Math.Round(destStock.Quantity - revQty, 4, MidpointRounding.AwayFromZero);
+                destStock.LastUpdated = now;
+                destStock.RefreshGrainHash();
+
+                var srcStock = await db.InventoryStocks.FirstOrDefaultAsync(s =>
+                    s.WarehouseId == origOut.WarehouseId &&
+                    s.ProductId == origOut.ProductId &&
+                    s.LocationId == origOut.LocationId &&
+                    s.LotId == origOut.LotId &&
+                    s.SerialId == origOut.SerialId &&
+                    s.HandlingUnitId == origOut.HandlingUnitId &&
+                    s.OwnerId == origOut.OwnerId &&
+                    s.Status == origOut.InventoryStatus,
+                    cancellationToken);
+
+                if (srcStock == null)
+                {
+                    srcStock = new ERP.Domain.Entities.InventoryStock
+                    {
+                        WarehouseId = origOut.WarehouseId,
+                        ProductId = origOut.ProductId,
+                        LocationId = origOut.LocationId,
+                        LotId = origOut.LotId,
+                        SerialId = origOut.SerialId,
+                        HandlingUnitId = origOut.HandlingUnitId,
+                        OwnerId = origOut.OwnerId,
+                        Status = origOut.InventoryStatus,
+                        Quantity = revQty,
+                        ReservedQuantity = 0m,
+                        LastUpdated = now
+                    };
+                    srcStock.RefreshGrainHash();
+                    db.InventoryStocks.Add(srcStock);
+                }
+                else
+                {
+                    srcStock.Quantity = Math.Round(srcStock.Quantity + revQty, 4, MidpointRounding.AwayFromZero);
+                    srcStock.LastUpdated = now;
+                    srcStock.RefreshGrainHash();
+                }
+
+                db.InventoryTransactions.Add(new ERP.Domain.Entities.InventoryTransaction
+                {
+                    ProductId = origIn.ProductId,
+                    WarehouseId = origIn.WarehouseId,
+                    LocationId = origIn.LocationId,
+                    FromLocationId = origIn.LocationId,
+                    ToLocationId = origOut.LocationId,
+                    LotId = origIn.LotId,
+                    SerialId = origIn.SerialId,
+                    HandlingUnitId = origIn.HandlingUnitId,
+                    OwnerId = origIn.OwnerId,
+                    InventoryStatus = origIn.InventoryStatus,
+                    FromInventoryStatus = origIn.InventoryStatus,
+                    ToInventoryStatus = origOut.InventoryStatus,
+                    TransactionType = TransactionType.Reversal,
+                    Quantity = -revQty,
+                    ReferenceId = origIn.ReferenceId,
+                    ReferenceType = "AbcSlottingReSlottingReversal",
+                    ReversalOfTransactionId = origIn.Id,
+                    ReasonCode = "ABC_SLOTTING_REVERSAL",
+                    TransactionDate = now,
+                    ActualOccurredAtUtc = now,
+                    PostedAtUtc = now,
+                    CreatedBy = effectiveActorId,
+                    Note = $"{origOutbox.EventId}: Đảo bút toán Re-slotting (-{revQty:0.####})"
+                });
+
+                db.InventoryTransactions.Add(new ERP.Domain.Entities.InventoryTransaction
+                {
+                    ProductId = origOut.ProductId,
+                    WarehouseId = origOut.WarehouseId,
+                    LocationId = origOut.LocationId,
+                    FromLocationId = origIn.LocationId,
+                    ToLocationId = origOut.LocationId,
+                    LotId = origOut.LotId,
+                    SerialId = origOut.SerialId,
+                    HandlingUnitId = origOut.HandlingUnitId,
+                    OwnerId = origOut.OwnerId,
+                    InventoryStatus = origOut.InventoryStatus,
+                    FromInventoryStatus = origIn.InventoryStatus,
+                    ToInventoryStatus = origOut.InventoryStatus,
+                    TransactionType = TransactionType.Reversal,
+                    Quantity = revQty,
+                    ReferenceId = origOut.ReferenceId,
+                    ReferenceType = "AbcSlottingReSlottingReversal",
+                    ReversalOfTransactionId = origOut.Id,
+                    ReasonCode = "ABC_SLOTTING_REVERSAL",
+                    TransactionDate = now,
+                    ActualOccurredAtUtc = now,
+                    PostedAtUtc = now,
+                    CreatedBy = effectiveActorId,
+                    Note = $"{origOutbox.EventId}: Đảo bút toán Re-slotting (+{revQty:0.####})"
+                });
+
+                totalReversedQty = Math.Round(totalReversedQty + revQty, 4, MidpointRounding.AwayFromZero);
             }
 
             origOutbox.Status = "REVERSED";
@@ -1504,10 +1705,16 @@ public sealed class InventoryControlOperationsService(
 
             await db.SaveChangesAsync(cancellationToken);
 
+            if (tx != null)
+            {
+                await tx.CommitAsync(cancellationToken);
+            }
+
             return WmsEndpointOutcome.Ok(new
             {
                 evaluationId = origOutbox.EventId,
                 warehouseId = targetWarehouseId,
+                reversedBaseQuantity = totalReversedQty,
                 reversed = true,
                 status = "REVERSED",
                 statusLabel = $"Đã hoàn tác phiên đánh giá tối ưu vị trí ABC & Task Interleaving ({origOutbox.EventId})",
@@ -1746,8 +1953,178 @@ public sealed class InventoryControlOperationsService(
         var classCCount = abcClassifications.Count(x => ((dynamic)x).abcClass == "C");
         var avgDeadheadSavedPct = interleavedTaskPairs.Count > 0 ? 38.50m : 0m;
 
+        decimal executedReslottingQty = 0m;
         if (request?.PersistAuditAndOutbox != false)
         {
+            if (goldenPickBin != null)
+            {
+                var candidateProductIds = productGroups.Select(p => p.ProductId).ToList();
+                var trackedCandidates = await db.InventoryStocks
+                    .Include(s => s.Product)
+                    .Include(s => s.Location)
+                    .Where(s => s.WarehouseId == targetWarehouseId &&
+                                s.Status == InventoryStatus.Available &&
+                                s.LocationId.HasValue &&
+                                s.LocationId.Value != goldenPickBin.Id &&
+                                (s.Quantity - s.ReservedQuantity) > 0m)
+                    .ToListAsync(cancellationToken);
+
+                var sourceStock = trackedCandidates
+                    .OrderBy(s =>
+                    {
+                        var idx = candidateProductIds.IndexOf(s.ProductId);
+                        return idx >= 0 ? idx : int.MaxValue;
+                    })
+                    .ThenByDescending(s => s.Quantity - s.ReservedQuantity)
+                    .FirstOrDefault();
+
+                if (sourceStock != null && sourceStock.LocationId.HasValue)
+                {
+                    var srcLocId = sourceStock.LocationId.Value;
+                    var srcLocCode = sourceStock.Location?.Code?.Trim() ?? $"LOC-{srcLocId}";
+                    var dstLocCode = goldenPickBin.Code.Trim();
+                    var availToMove = Math.Round(sourceStock.Quantity - sourceStock.ReservedQuantity, 4, MidpointRounding.AwayFromZero);
+                    var moveQty = Math.Round(Math.Min(availToMove, 10m), 4, MidpointRounding.AwayFromZero);
+
+                    if (goldenPickBin.MaxWeightKg is > 0m && sourceStock.Product?.UnitWeightKg is > 0m)
+                    {
+                        var maxByWeight = Math.Floor(goldenPickBin.MaxWeightKg.Value / sourceStock.Product.UnitWeightKg.Value);
+                        if (maxByWeight > 0m)
+                        {
+                            moveQty = Math.Min(moveQty, maxByWeight);
+                        }
+                    }
+
+                    if (goldenPickBin.MaxVolumeM3 is > 0m && sourceStock.Product?.UnitVolumeM3 is > 0m)
+                    {
+                        var maxByVol = Math.Floor(goldenPickBin.MaxVolumeM3.Value / sourceStock.Product.UnitVolumeM3.Value);
+                        if (maxByVol > 0m)
+                        {
+                            moveQty = Math.Min(moveQty, maxByVol);
+                        }
+                    }
+
+                    if (moveQty > 0m)
+                    {
+                        sourceStock.Quantity = Math.Round(sourceStock.Quantity - moveQty, 4, MidpointRounding.AwayFromZero);
+                        sourceStock.LastUpdated = now;
+                        sourceStock.RefreshGrainHash();
+
+                        var destStock = await db.InventoryStocks.FirstOrDefaultAsync(s =>
+                            s.WarehouseId == targetWarehouseId &&
+                            s.ProductId == sourceStock.ProductId &&
+                            s.LocationId == goldenPickBin.Id &&
+                            s.LotId == sourceStock.LotId &&
+                            s.SerialId == sourceStock.SerialId &&
+                            s.HandlingUnitId == sourceStock.HandlingUnitId &&
+                            s.OwnerId == sourceStock.OwnerId &&
+                            s.Status == sourceStock.Status,
+                            cancellationToken);
+
+                        if (destStock == null)
+                        {
+                            destStock = new ERP.Domain.Entities.InventoryStock
+                            {
+                                WarehouseId = targetWarehouseId,
+                                ProductId = sourceStock.ProductId,
+                                LocationId = goldenPickBin.Id,
+                                LotId = sourceStock.LotId,
+                                SerialId = sourceStock.SerialId,
+                                HandlingUnitId = sourceStock.HandlingUnitId,
+                                OwnerId = sourceStock.OwnerId,
+                                Status = sourceStock.Status,
+                                Quantity = moveQty,
+                                ReservedQuantity = 0m,
+                                LastUpdated = now
+                            };
+                            destStock.RefreshGrainHash();
+                            db.InventoryStocks.Add(destStock);
+                        }
+                        else
+                        {
+                            destStock.Quantity = Math.Round(destStock.Quantity + moveQty, 4, MidpointRounding.AwayFromZero);
+                            destStock.LastUpdated = now;
+                            destStock.RefreshGrainHash();
+                        }
+
+                        var skuCode = sourceStock.Product?.Code?.Trim() ?? $"SKU-{sourceStock.ProductId}";
+                        var slotNote = $"{evaluationId}: Re-slotting SKU {skuCode} ({srcLocCode} -> {dstLocCode})";
+
+                        db.InventoryTransactions.Add(new ERP.Domain.Entities.InventoryTransaction
+                        {
+                            ProductId = sourceStock.ProductId,
+                            WarehouseId = targetWarehouseId,
+                            LocationId = srcLocId,
+                            FromLocationId = srcLocId,
+                            ToLocationId = goldenPickBin.Id,
+                            LotId = sourceStock.LotId,
+                            SerialId = sourceStock.SerialId,
+                            HandlingUnitId = sourceStock.HandlingUnitId,
+                            OwnerId = sourceStock.OwnerId,
+                            InventoryStatus = sourceStock.Status,
+                            FromInventoryStatus = sourceStock.Status,
+                            ToInventoryStatus = sourceStock.Status,
+                            TransactionType = TransactionType.Move,
+                            Quantity = -moveQty,
+                            ReferenceId = sourceStock.Id,
+                            ReferenceType = "AbcSlottingReSlotting",
+                            ReasonCode = "ABC_DYNAMIC_RESLOTTING",
+                            TransactionDate = now,
+                            ActualOccurredAtUtc = now,
+                            PostedAtUtc = now,
+                            CreatedBy = effectiveActorId,
+                            Note = slotNote
+                        });
+
+                        db.InventoryTransactions.Add(new ERP.Domain.Entities.InventoryTransaction
+                        {
+                            ProductId = sourceStock.ProductId,
+                            WarehouseId = targetWarehouseId,
+                            LocationId = goldenPickBin.Id,
+                            FromLocationId = srcLocId,
+                            ToLocationId = goldenPickBin.Id,
+                            LotId = sourceStock.LotId,
+                            SerialId = sourceStock.SerialId,
+                            HandlingUnitId = sourceStock.HandlingUnitId,
+                            OwnerId = sourceStock.OwnerId,
+                            InventoryStatus = sourceStock.Status,
+                            FromInventoryStatus = sourceStock.Status,
+                            ToInventoryStatus = sourceStock.Status,
+                            TransactionType = TransactionType.Move,
+                            Quantity = moveQty,
+                            ReferenceId = sourceStock.Id,
+                            ReferenceType = "AbcSlottingReSlotting",
+                            ReasonCode = "ABC_DYNAMIC_RESLOTTING",
+                            TransactionDate = now,
+                            ActualOccurredAtUtc = now,
+                            PostedAtUtc = now,
+                            CreatedBy = effectiveActorId,
+                            Note = slotNote
+                        });
+
+                        db.InventoryLocationMovements.Add(new ERP.Domain.Entities.InventoryLocationMovement
+                        {
+                            WarehouseId = targetWarehouseId,
+                            ProductId = sourceStock.ProductId,
+                            InventoryStatus = sourceStock.Status,
+                            LotId = sourceStock.LotId,
+                            SerialId = sourceStock.SerialId,
+                            FromLocationId = srcLocId,
+                            ToLocationId = goldenPickBin.Id,
+                            BaseQuantity = moveQty,
+                            EnteredQuantity = moveQty,
+                            EnteredUnitCode = "EA",
+                            ReferenceType = "AbcSlottingReSlotting",
+                            ReferenceId = sourceStock.Id,
+                            CreatedBy = effectiveActorId,
+                            CreatedAt = now
+                        });
+
+                        executedReslottingQty = moveQty;
+                    }
+                }
+            }
+
             db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
             {
                 UserId = effectiveActorId,
@@ -1755,7 +2132,7 @@ public sealed class InventoryControlOperationsService(
                 EntityName = "InventoryControl",
                 EntityId = targetWarehouseId,
                 Action = "InventoryControl.AbcSlottingAndTaskInterleaving",
-                NewValues = $"{evaluationId}:A={classACount},B={classBCount},C={classCCount},Pairs={interleavedTaskPairs.Count}",
+                NewValues = $"{evaluationId}:A={classACount},B={classBCount},C={classCCount},Pairs={interleavedTaskPairs.Count},MovedQty={executedReslottingQty:0.####}",
                 Reason = $"Phân tích tối ưu vị trí kệ động ABC Velocity ({abcClassifications.Count} SKU) & ghép cặp Chuyến kép Task Interleaving ({interleavedTaskPairs.Count} cặp, tiết kiệm {avgDeadheadSavedPct:0.##}% quãng đường xe nâng chạy rỗng)",
                 Result = "Success",
                 Timestamp = now
@@ -1776,6 +2153,7 @@ public sealed class InventoryControlOperationsService(
                     classBCount,
                     classCCount,
                     reslottingCount = reslottingRecommendations.Count,
+                    executedReslottingBaseQty = executedReslottingQty,
                     interleavedPairCount = interleavedTaskPairs.Count,
                     averageDeadheadSavedPercent = avgDeadheadSavedPct,
                     evaluatedAtUtc = now
@@ -1785,6 +2163,11 @@ public sealed class InventoryControlOperationsService(
             });
 
             await db.SaveChangesAsync(cancellationToken);
+
+            if (tx != null)
+            {
+                await tx.CommitAsync(cancellationToken);
+            }
         }
 
         return WmsEndpointOutcome.Ok(new
@@ -1797,6 +2180,7 @@ public sealed class InventoryControlOperationsService(
             classBCount,
             classCCount,
             reslottingRecommendationCount = reslottingRecommendations.Count,
+            executedReslottingBaseQuantity = executedReslottingQty,
             interleavedTaskPairCount = interleavedTaskPairs.Count,
             averageDeadheadSavedPercent = avgDeadheadSavedPct,
             abcClassifications,
