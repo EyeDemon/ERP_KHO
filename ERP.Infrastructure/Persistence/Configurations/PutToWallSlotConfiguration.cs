@@ -17,6 +17,7 @@ public class PutToWallSlotConfiguration : IEntityTypeConfiguration<PutToWallSlot
         builder.Property(x => x.RequiredQuantity).HasPrecision(19, 4);
         builder.Property(x => x.SortedQuantity).HasPrecision(19, 4);
         builder.Property(x => x.SlotStatus).HasMaxLength(32).IsRequired();
+        builder.Property(x => x.PackingSessionCode).HasMaxLength(64);
         builder.Property(x => x.RowVersion).IsRowVersion();
         builder.HasIndex(x => new { x.TenantId, x.PickingTaskId, x.SlotCode }).IsUnique();
     }

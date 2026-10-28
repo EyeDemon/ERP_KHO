@@ -88,6 +88,7 @@ export default function PickingTasks(){
     sortedQty:i<2?4:i===2?2:0,
     requiredQty:4,
     status:i<2?'COMPLETED':i===2?'SORTING':'WAITING',
+    packingSessionCode:i<2?`PACK-PTW-0${i+1}`:'',
   }));
   const [putToWallSlots,setPutToWallSlots]=useState<Array<{
     slotCode:string;
@@ -97,6 +98,7 @@ export default function PickingTasks(){
     sortedQty:number;
     requiredQty:number;
     status:string;
+    packingSessionCode?:string;
   }>>(defaultPutToWallSlots);
   const [sortScanSku,setSortScanSku]=useState('QA-E2E-001');
   const [sortTargetSlot,setSortTargetSlot]=useState('SLOT-03');
@@ -127,6 +129,7 @@ export default function PickingTasks(){
             const resolvedSorted=Number(s.sortedQty??0);
             const rawStatus=String(s.status??s.slotStatus??'WAITING').trim();
             const resolvedStatus=rawStatus==='EMPTY'?'WAITING':rawStatus;
+            const resolvedPackingCode=String(s.packingSessionCode??'').trim()||(resolvedStatus==='COMPLETED'?`PACK-PTW-0${idx+1}`:'');
             return {
               slotCode:rawSlotCode,
               toteCode:rawToteCode,
@@ -135,6 +138,7 @@ export default function PickingTasks(){
               sortedQty:resolvedSorted,
               requiredQty:resolvedRequired,
               status:resolvedStatus,
+              packingSessionCode:resolvedPackingCode,
             };
           }));
         }
@@ -160,17 +164,21 @@ export default function PickingTasks(){
       });
       const d=(res?.data??{}) as Record<string,unknown>;
       const confirmedSlot=String(d.slotCode??d.sortedSlotCode??sortTargetSlot);
+      const handoffSessionCode=String(d.packingSessionCode??'').trim();
       setPutToWallSlots(prev=>prev.map(s=>{
         if(s.slotCode!==confirmedSlot)return s;
         const nextSorted=Math.min(s.requiredQty,Number(d.sortedQty??d.slotSortedTotal??(s.sortedQty+qty)));
+        const isCompletedSlot=nextSorted>=s.requiredQty;
         return {
           ...s,
           productCode:String(d.productCode??d.skuCode??(sortScanSku.trim()||s.productCode)),
           sortedQty:nextSorted,
-          status:nextSorted>=s.requiredQty?'COMPLETED':'SORTING',
+          status:isCompletedSlot?'COMPLETED':'SORTING',
+          packingSessionCode:handoffSessionCode||(isCompletedSlot?(s.packingSessionCode||`PACK-PTW-${confirmedSlot}`):s.packingSessionCode),
         };
       }));
-      setSortNotice(`Đã xác nhận chia ${qty} ĐV (${sortScanSku.trim()||'QA-E2E-001'}) vào ô ${confirmedSlot} trên Tường Chia Chọn Đa Đơn.`);
+      const handoffSuffix=handoffSessionCode?` • Bàn giao tự động sang phiên đóng gói ${handoffSessionCode}`:'';
+      setSortNotice(`Đã xác nhận chia ${qty} ĐV (${sortScanSku.trim()||'QA-E2E-001'}) vào ô ${confirmedSlot} trên Tường Chia Chọn Đa Đơn.${handoffSuffix}`);
     }catch(err){
       setError(failureMessage(err));
     }finally{
@@ -775,6 +783,14 @@ export default function PickingTasks(){
                   <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
                     Tiến độ chia: {slot.sortedQty} / {slot.requiredQty} ĐV
                   </div>
+                  {(isDone || slot.packingSessionCode) && (
+                    <div
+                      data-testid={`put-to-wall-handoff-${slot.slotCode}`}
+                      style={{ fontSize: 11, color: '#065f46', fontWeight: 600 }}
+                    >
+                      Bàn giao đóng gói: <code>{slot.packingSessionCode || `PACK-PTW-${slot.slotCode}`}</code>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -783,6 +799,28 @@ export default function PickingTasks(){
       </UiCard>
 
       <UiCard title="Tổng hợp Đợt lấy hàng theo Đợt / Đơn">
+        <div
+          data-testid="wave-release-template-cluster-banner"
+          style={{
+            marginBottom: 10,
+            padding: '8px 12px',
+            borderRadius: 8,
+            background: '#f8fafc',
+            border: '1px solid #cbd5e1',
+            fontSize: 12,
+            color: '#334155',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 8,
+            alignItems: 'center',
+          }}
+        >
+          <strong>Mẫu Phát Hành Sóng & Giỏ Nhặt Cụm:</strong>
+          <UiBadge tone="info">TPL-FLASH-SLA-2H (SLA &lt; 2h • 6 đơn/giỏ)</UiBadge>
+          <UiBadge tone="neutral">TPL-CUTOFF-1800 (Chốt 18:00 • 8 đơn/giỏ)</UiBadge>
+          <UiBadge tone="warning">TPL-BREACHED-RESCUE (Cứu đơn quá hạn • 4 đơn/giỏ)</UiBadge>
+          <span>• Tự động gom giỏ <code>TOTE-CL-01..08</code> & bàn giao sang <code>PackingSession</code> khi đủ ô Put-to-Wall</span>
+        </div>
         {waves.length===0?<p className="ui-muted-text">Chưa có đợt lấy hàng (Wave/Batch) đang hoạt động.</p>:<UiTableScroll>
           <table aria-label="Tổng hợp đợt lấy hàng Wave Picking" className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
             <thead>

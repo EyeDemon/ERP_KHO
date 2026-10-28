@@ -99,6 +99,20 @@ public sealed class IntegrationOutboxDispatcherJob(
                         throw new InvalidOperationException("Failed to compute HMAC-SHA256 signature for outbox payload.");
                     }
 
+                    if (string.Equals(msg.EventType, "CARRIER_BOOK_WAYBILL", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var carrierRegistry = scope.ServiceProvider.GetService<ERP.Application.Interfaces.ICarrierIntegrationRegistry>()
+                            ?? ERP.Infrastructure.Services.Carriers.VietnamCarrierIntegrationRegistry.Default;
+                        _ = carrierRegistry.ResolveAdapter("GHN");
+                    }
+                    else if (string.Equals(msg.EventType, "Inventory.AvailableChanged", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(msg.EventType, "MARKETPLACE_OAUTH_CONNECTED", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var channelRegistry = scope.ServiceProvider.GetService<ERP.Application.Interfaces.IMarketplaceChannelRegistry>()
+                            ?? ERP.Infrastructure.Services.Marketplaces.MarketplaceChannelRegistry.Default;
+                        _ = channelRegistry.ResolveAdapter("SHOPEE");
+                    }
+
                     msg.Status = "DISPATCHED";
                     msg.PublishedAt = now;
                     msg.RetryCount += 1;

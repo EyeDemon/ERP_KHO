@@ -227,7 +227,9 @@ WHERE TenantId = {tenantId}
     public DbSet<CustomerReturnLine> CustomerReturnLines => Set<CustomerReturnLine>();
     public DbSet<StocktakeAdjustmentProposal> StocktakeAdjustmentProposals => Set<StocktakeAdjustmentProposal>();
     public DbSet<PickingWave> PickingWaves => Set<PickingWave>();
+    public DbSet<PickingWaveTemplate> PickingWaveTemplates => Set<PickingWaveTemplate>();
     public DbSet<PutToWallSlot> PutToWallSlots => Set<PutToWallSlot>();
+    public DbSet<CarrierIntegrationConfig> CarrierIntegrationConfigs => Set<CarrierIntegrationConfig>();
     public DbSet<ThreePlStorageSnapshot> ThreePlStorageSnapshots => Set<ThreePlStorageSnapshot>();
     public DbSet<ThreePlBillingStatement> ThreePlBillingStatements => Set<ThreePlBillingStatement>();
 

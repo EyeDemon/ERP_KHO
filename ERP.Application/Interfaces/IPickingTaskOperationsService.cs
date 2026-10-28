@@ -16,13 +16,17 @@ public record PutToWallSlotData(
     decimal RequiredQty,
     decimal SortedQty,
     decimal RemainingQty,
-    string SlotStatus);
+    string SlotStatus,
+    int? PackingSessionId = null,
+    string? PackingSessionCode = null);
 
 public record PutToWallSortInput(
     string? ScannedSkuOrBarcode = null,
     string? ScannedSlotCode = null,
     string? ScannedToteBarcode = null,
-    decimal Quantity = 1m);
+    decimal Quantity = 1m,
+    string? ProductBarcode = null,
+    string? SlotCode = null);
 
 public record ReleasePickingWaveInput(
     int? WarehouseId = null,
@@ -31,7 +35,24 @@ public record ReleasePickingWaveInput(
     int? MaxTasks = null,
     string? WaveCode = null,
     int? AssignToUserId = null,
-    string? Note = null);
+    string? Note = null,
+    string? TemplateCode = null,
+    string? CarrierCutoffWindow = null,
+    string? SlaTierFilter = null,
+    string? ZoneCode = null,
+    int? MaxOrdersPerClusterTote = null,
+    string? ClusterTotePrefix = null);
+
+public record UpsertPickingWaveTemplateInput(
+    int? WarehouseId = null,
+    string? TemplateCode = null,
+    string? TemplateName = null,
+    string? CarrierCutoffWindow = null,
+    string? SlaTierFilter = null,
+    string? ZoneCode = null,
+    int? MaxOrdersPerClusterTote = null,
+    string? PickingType = null,
+    bool? IsActive = null);
 
 public record MobileScanVerifyInput(string? ScanInput = null, int? WarehouseId = null);
 public record SyncAutomationTelemetryInput(int? WarehouseId = null);
@@ -41,6 +62,17 @@ public record VerifyPickingFefoComplianceInput(int? WarehouseId = null);
 
 public interface IPickingTaskOperationsService
 {
+    Task<WmsEndpointOutcome> GetWaveTemplatesAsync(
+        int? warehouseId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> UpsertWaveTemplateAsync(
+        UpsertPickingWaveTemplateInput? request = null,
+        int? actorUserId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default);
+
     Task<WmsEndpointOutcome> GetAlternateBinsAsync(
         PickingTaskDto task,
         int? productId = null,

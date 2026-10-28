@@ -156,7 +156,9 @@ public sealed class HandoverManifestService : IHandoverManifestService
         else if (!string.IsNullOrWhiteSpace(request?.TrackingNumber))
         {
             var tracking = request.TrackingNumber.Trim();
-            receipt = await _db.ExportReceipts.FirstOrDefaultAsync(r => r.TrackingNumber == tracking || r.Code == tracking, cancellationToken);
+            receipt = await _db.ExportReceipts.FirstOrDefaultAsync(
+                r => r.TrackingNumber == tracking || r.Code == tracking || r.MarketplaceOrderId == tracking,
+                cancellationToken);
         }
         else
         {
@@ -195,6 +197,27 @@ public sealed class HandoverManifestService : IHandoverManifestService
                     trackingNumber,
                     exportReceiptId = receipt.Id,
                     receiptStatus = receipt.Status.ToString(),
+                    message = "CẢNH BÁO CHẶN CỔNG: Đơn hàng đã bị khách hủy trên sàn hoặc đang chờ cất trả kệ (CancelPendingPutback). Tuyệt đối không giao kiện này cho bưu tá!"
+                });
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(request?.TrackingNumber))
+        {
+            var cancelledOrder = await _db.SalesOrders
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    o => (o.OrderCode == trackingNumber || o.ExternalOrderId == trackingNumber) &&
+                         (o.Status == SalesOrderStatus.Cancelled || o.Status == SalesOrderStatus.CancelPendingPutback),
+                    cancellationToken);
+            if (cancelledOrder != null)
+            {
+                return HandoverManifestOperationResult.Fail(409, new
+                {
+                    code = "ORDER_CANCELLED_PUTBACK_REQUIRED",
+                    errorCode = "ORDER_CANCELLED_PUTBACK_REQUIRED",
+                    trackingNumber,
+                    salesOrderId = cancelledOrder.Id,
+                    receiptStatus = cancelledOrder.Status.ToString(),
                     message = "CẢNH BÁO CHẶN CỔNG: Đơn hàng đã bị khách hủy trên sàn hoặc đang chờ cất trả kệ (CancelPendingPutback). Tuyệt đối không giao kiện này cho bưu tá!"
                 });
             }

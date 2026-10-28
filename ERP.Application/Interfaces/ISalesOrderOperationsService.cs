@@ -74,7 +74,10 @@ public record BuyerCancellationWebhookInput(
     string? OrderNumber = null,
     string? MarketplaceOrderId = null,
     string? ChannelCode = null,
-    string? BuyerReason = null);
+    string? BuyerReason = null,
+    string? EventId = null,
+    string? RawPayload = null,
+    string? HmacSignature = null);
 
 public record EvaluateGiftRulesInput(
     int? WarehouseId = null,
@@ -150,6 +153,16 @@ public interface ISalesOrderOperationsService
 
     Task<WmsEndpointOutcome> ConnectMarketplaceShopAsync(
         ConnectMarketplaceShopInput? request,
+        IWarehouseAuthorizationService? warehouseAccessOverride = null,
+        CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> ExchangeMarketplaceOAuthAsync(
+        MarketplaceOAuthExchangeInput? request,
+        IWarehouseAuthorizationService? warehouseAccessOverride = null,
+        CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> RefreshMarketplaceOAuthTokenAsync(
+        int shopId,
         IWarehouseAuthorizationService? warehouseAccessOverride = null,
         CancellationToken cancellationToken = default);
 

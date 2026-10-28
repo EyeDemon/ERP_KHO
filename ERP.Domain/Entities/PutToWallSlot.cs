@@ -18,6 +18,8 @@ public class PutToWallSlot : ITenantEntity
     public decimal RequiredQuantity { get; set; }
     public decimal SortedQuantity { get; set; }
     public string SlotStatus { get; set; } = "WAITING";
+    public int? PackingSessionId { get; set; }
+    public string? PackingSessionCode { get; set; }
     public int? LastSortedByUserId { get; set; }
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public byte[] RowVersion { get; set; } = [];

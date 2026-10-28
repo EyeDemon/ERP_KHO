@@ -12,6 +12,291 @@ public sealed class PickingTaskOperationsService(
     IWarehouseAuthorizationService? warehouseAccess = null,
     ICurrentUser? currentUser = null) : IPickingTaskOperationsService
 {
+    private async Task EnsureDefaultWaveTemplatesAsync(int targetWarehouseId, CancellationToken cancellationToken)
+    {
+        if (db == null) return;
+
+        var hasAny = await db.PickingWaveTemplates
+            .AsNoTracking()
+            .AnyAsync(t => t.WarehouseId == targetWarehouseId, cancellationToken);
+        if (hasAny) return;
+
+        db.PickingWaveTemplates.AddRange(
+            new ERP.Domain.Entities.PickingWaveTemplate
+            {
+                WarehouseId = targetWarehouseId,
+                TemplateCode = "TPL-FLASH-SLA-2H",
+                TemplateName = "Sóng ưu tiên đơn Flash Sale / SLA < 2 giờ",
+                CarrierCutoffWindow = "14:00",
+                SlaTierFilter = "CRITICAL_UNDER_2H",
+                ZoneCode = "ZONE-A",
+                MaxOrdersPerClusterTote = 6,
+                PickingType = "CLUSTER_TOTE",
+                IsActive = true
+            },
+            new ERP.Domain.Entities.PickingWaveTemplate
+            {
+                WarehouseId = targetWarehouseId,
+                TemplateCode = "TPL-CUTOFF-1800",
+                TemplateName = "Sóng chốt bàn giao ĐVVC ca chiều 18:00",
+                CarrierCutoffWindow = "18:00",
+                SlaTierFilter = "ALL",
+                ZoneCode = "ALL",
+                MaxOrdersPerClusterTote = 8,
+                PickingType = "CLUSTER_TOTE",
+                IsActive = true
+            },
+            new ERP.Domain.Entities.PickingWaveTemplate
+            {
+                WarehouseId = targetWarehouseId,
+                TemplateCode = "TPL-BREACHED-RESCUE",
+                TemplateName = "Sóng cứu đơn quá hạn SLA khẩn cấp",
+                CarrierCutoffWindow = "12:00",
+                SlaTierFilter = "BREACHED",
+                ZoneCode = "FAST-PICK",
+                MaxOrdersPerClusterTote = 4,
+                PickingType = "BATCH_EXPRESS",
+                IsActive = true
+            });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<WmsEndpointOutcome> GetWaveTemplatesAsync(
+        int? warehouseId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        var effectiveAuth = warehouseAuth ?? warehouseAccess;
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (effectiveAuth != null)
+        {
+            if (warehouseId.HasValue)
+                await effectiveAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await effectiveAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
+
+        var targetWarehouseId = warehouseId ?? (accessibleIds is { Count: > 0 } ? accessibleIds.First() : 1);
+        if (db == null)
+        {
+            var fallbackTemplates = new[]
+            {
+                new
+                {
+                    id = 1,
+                    warehouseId = targetWarehouseId,
+                    templateCode = "TPL-FLASH-SLA-2H",
+                    templateName = "Sóng ưu tiên đơn Flash Sale / SLA < 2 giờ",
+                    carrierCutoffWindow = "14:00",
+                    slaTierFilter = "CRITICAL_UNDER_2H",
+                    zoneCode = "ZONE-A",
+                    maxOrdersPerClusterTote = 6,
+                    pickingType = "CLUSTER_TOTE",
+                    isActive = true
+                },
+                new
+                {
+                    id = 2,
+                    warehouseId = targetWarehouseId,
+                    templateCode = "TPL-CUTOFF-1800",
+                    templateName = "Sóng chốt bàn giao ĐVVC ca chiều 18:00",
+                    carrierCutoffWindow = "18:00",
+                    slaTierFilter = "ALL",
+                    zoneCode = "ALL",
+                    maxOrdersPerClusterTote = 8,
+                    pickingType = "CLUSTER_TOTE",
+                    isActive = true
+                },
+                new
+                {
+                    id = 3,
+                    warehouseId = targetWarehouseId,
+                    templateCode = "TPL-BREACHED-RESCUE",
+                    templateName = "Sóng cứu đơn quá hạn SLA khẩn cấp",
+                    carrierCutoffWindow = "12:00",
+                    slaTierFilter = "BREACHED",
+                    zoneCode = "FAST-PICK",
+                    maxOrdersPerClusterTote = 4,
+                    pickingType = "BATCH_EXPRESS",
+                    isActive = true
+                }
+            };
+            return WmsEndpointOutcome.Ok(new
+            {
+                warehouseId = targetWarehouseId,
+                totalCount = fallbackTemplates.Length,
+                templates = fallbackTemplates,
+                items = fallbackTemplates,
+                statusLabel = $"Đã tải {fallbackTemplates.Length} mẫu cấu hình phát hành sóng lấy hàng"
+            });
+        }
+
+        if (!warehouseId.HasValue && accessibleIds is not { Count: > 0 })
+        {
+            var firstWhId = await db.Warehouses
+                .AsNoTracking()
+                .OrderBy(w => w.Id)
+                .Select(w => (int?)w.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (firstWhId.HasValue)
+                targetWarehouseId = firstWhId.Value;
+        }
+
+        await EnsureDefaultWaveTemplatesAsync(targetWarehouseId, cancellationToken);
+
+        var query = db.PickingWaveTemplates.AsNoTracking();
+        if (warehouseId.HasValue)
+            query = query.Where(t => t.WarehouseId == warehouseId.Value);
+        else if (accessibleIds is { Count: > 0 })
+            query = query.Where(t => accessibleIds.Contains(t.WarehouseId));
+
+        var templates = await query
+            .OrderBy(t => t.Id)
+            .Select(t => new
+            {
+                id = t.Id,
+                warehouseId = t.WarehouseId,
+                templateCode = t.TemplateCode,
+                templateName = t.TemplateName,
+                carrierCutoffWindow = t.CarrierCutoffWindow,
+                slaTierFilter = t.SlaTierFilter,
+                zoneCode = t.ZoneCode,
+                maxOrdersPerClusterTote = t.MaxOrdersPerClusterTote,
+                pickingType = t.PickingType,
+                isActive = t.IsActive
+            })
+            .ToListAsync(cancellationToken);
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            warehouseId = targetWarehouseId,
+            totalCount = templates.Count,
+            templates,
+            items = templates,
+            statusLabel = $"Đã tải {templates.Count} mẫu cấu hình phát hành sóng lấy hàng"
+        });
+    }
+
+    public async Task<WmsEndpointOutcome> UpsertWaveTemplateAsync(
+        UpsertPickingWaveTemplateInput? request = null,
+        int? actorUserId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        var effectiveAuth = warehouseAuth ?? warehouseAccess;
+        var warehouseId = request?.WarehouseId;
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (effectiveAuth != null)
+        {
+            if (warehouseId.HasValue)
+                await effectiveAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await effectiveAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
+
+        var targetWarehouseId = warehouseId ?? (accessibleIds is { Count: > 0 } ? accessibleIds.First() : 1);
+        var templateCode = !string.IsNullOrWhiteSpace(request?.TemplateCode)
+            ? request.TemplateCode.Trim().ToUpperInvariant()
+            : "TPL-CUSTOM-WAVE";
+        var templateName = !string.IsNullOrWhiteSpace(request?.TemplateName)
+            ? request.TemplateName.Trim()
+            : $"Mẫu sóng {templateCode}";
+        var carrierCutoffWindow = !string.IsNullOrWhiteSpace(request?.CarrierCutoffWindow)
+            ? request.CarrierCutoffWindow.Trim()
+            : "18:00";
+        var slaTierFilter = !string.IsNullOrWhiteSpace(request?.SlaTierFilter)
+            ? request.SlaTierFilter.Trim().ToUpperInvariant()
+            : "ALL";
+        var zoneCode = !string.IsNullOrWhiteSpace(request?.ZoneCode)
+            ? request.ZoneCode.Trim().ToUpperInvariant()
+            : "ALL";
+        var maxOrdersPerClusterTote = request?.MaxOrdersPerClusterTote is > 0 and <= 32
+            ? request.MaxOrdersPerClusterTote.Value
+            : 8;
+        var pickingType = !string.IsNullOrWhiteSpace(request?.PickingType)
+            ? request.PickingType.Trim().ToUpperInvariant()
+            : "CLUSTER_TOTE";
+        var isActive = request?.IsActive ?? true;
+        var now = DateTime.UtcNow;
+        var entityId = 0;
+
+        if (db != null)
+        {
+            if (!warehouseId.HasValue && accessibleIds is not { Count: > 0 })
+            {
+                var firstWhId = await db.Warehouses
+                    .AsNoTracking()
+                    .OrderBy(w => w.Id)
+                    .Select(w => (int?)w.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (firstWhId.HasValue)
+                    targetWarehouseId = firstWhId.Value;
+            }
+
+            var entity = await db.PickingWaveTemplates
+                .FirstOrDefaultAsync(t => t.WarehouseId == targetWarehouseId && t.TemplateCode == templateCode, cancellationToken);
+
+            if (entity == null)
+            {
+                entity = new ERP.Domain.Entities.PickingWaveTemplate
+                {
+                    WarehouseId = targetWarehouseId,
+                    TemplateCode = templateCode,
+                    TemplateName = templateName,
+                    CarrierCutoffWindow = carrierCutoffWindow,
+                    SlaTierFilter = slaTierFilter,
+                    ZoneCode = zoneCode,
+                    MaxOrdersPerClusterTote = maxOrdersPerClusterTote,
+                    PickingType = pickingType,
+                    IsActive = isActive
+                };
+                db.PickingWaveTemplates.Add(entity);
+            }
+            else
+            {
+                entity.TemplateName = templateName;
+                entity.CarrierCutoffWindow = carrierCutoffWindow;
+                entity.SlaTierFilter = slaTierFilter;
+                entity.ZoneCode = zoneCode;
+                entity.MaxOrdersPerClusterTote = maxOrdersPerClusterTote;
+                entity.PickingType = pickingType;
+                entity.IsActive = isActive;
+            }
+
+            var effectiveActorId = actorUserId ?? (currentUser is { UserId: > 0 } ? currentUser.UserId : null);
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = effectiveActorId,
+                WarehouseId = targetWarehouseId,
+                EntityName = "PickingWaveTemplate",
+                Action = "PickingWaveTemplate.Upsert",
+                NewValues = templateCode,
+                Reason = $"Cập nhật mẫu cấu hình phát hành sóng {templateCode} ({templateName})",
+                Result = "Success",
+                Timestamp = now
+            });
+
+            await db.SaveChangesAsync(cancellationToken);
+            entityId = entity.Id;
+        }
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            id = entityId,
+            warehouseId = targetWarehouseId,
+            templateCode,
+            templateName,
+            carrierCutoffWindow,
+            slaTierFilter,
+            zoneCode,
+            maxOrdersPerClusterTote,
+            pickingType,
+            isActive,
+            updatedAtUtc = now,
+            statusLabel = $"Đã lưu mẫu cấu hình phát hành sóng {templateCode} ({templateName})"
+        });
+    }
+
     public async Task<WmsEndpointOutcome> GetAlternateBinsAsync(
         PickingTaskDto task,
         int? productId = null,
@@ -207,12 +492,12 @@ public sealed class PickingTaskOperationsService(
                 .ToListAsync(cancellationToken)
             : [];
 
-        var sortedBySlot = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        var persistedBySlot = new Dictionary<string, ERP.Domain.Entities.PutToWallSlot>(StringComparer.OrdinalIgnoreCase);
         foreach (var persisted in persistedSlots)
         {
             if (!string.IsNullOrWhiteSpace(persisted.SlotCode))
             {
-                sortedBySlot[persisted.SlotCode.Trim()] = persisted.SortedQuantity;
+                persistedBySlot[persisted.SlotCode.Trim()] = persisted;
             }
         }
 
@@ -221,10 +506,11 @@ public sealed class PickingTaskOperationsService(
         {
             var slotCode = $"SLOT-{i:D2}";
             var toteBarcode = $"TOTE-{i:D2}";
+            var persistedSlot = persistedBySlot.GetValueOrDefault(slotCode);
             if (i <= candidateLines.Count)
             {
                 var (ownerTask, line) = candidateLines[i - 1];
-                var baseSorted = sortedBySlot.GetValueOrDefault(slotCode, 0m);
+                var baseSorted = persistedSlot?.SortedQuantity ?? 0m;
                 var reqQty = line.RequestedQuantity > 0m ? line.RequestedQuantity : 1m;
                 var sortedQty = Math.Min(reqQty, baseSorted);
                 var remQty = Math.Max(0m, reqQty - sortedQty);
@@ -245,7 +531,9 @@ public sealed class PickingTaskOperationsService(
                     reqQty,
                     sortedQty,
                     remQty,
-                    slotStatus));
+                    slotStatus,
+                    persistedSlot?.PackingSessionId,
+                    persistedSlot?.PackingSessionCode));
             }
             else
             {
@@ -262,7 +550,9 @@ public sealed class PickingTaskOperationsService(
                     0m,
                     0m,
                     0m,
-                    "EMPTY"));
+                    "EMPTY",
+                    persistedSlot?.PackingSessionId,
+                    persistedSlot?.PackingSessionCode));
             }
         }
 
@@ -312,7 +602,7 @@ public sealed class PickingTaskOperationsService(
             });
         }
 
-        var rawSku = request?.ScannedSkuOrBarcode?.Trim();
+        var rawSku = (request?.ScannedSkuOrBarcode ?? request?.ProductBarcode)?.Trim();
         PutToWallSlotData? matchedSlot = null;
 
         if (!string.IsNullOrWhiteSpace(rawSku))
@@ -351,7 +641,7 @@ public sealed class PickingTaskOperationsService(
             });
         }
 
-        var scannedSlot = (request?.ScannedSlotCode ?? request?.ScannedToteBarcode)?.Trim().ToUpperInvariant();
+        var scannedSlot = (request?.ScannedSlotCode ?? request?.SlotCode ?? request?.ScannedToteBarcode)?.Trim().ToUpperInvariant();
         if (!string.IsNullOrWhiteSpace(scannedSlot))
         {
             var matchesExpected =
@@ -387,6 +677,8 @@ public sealed class PickingTaskOperationsService(
 
         var sortQty = request?.Quantity is > 0m ? request.Quantity : 1m;
         var now = DateTime.UtcNow;
+        int? resolvedPackingSessionId = null;
+        string? resolvedPackingSessionCode = null;
 
         if (db != null && task != null)
         {
@@ -428,6 +720,47 @@ public sealed class PickingTaskOperationsService(
                 slotEntity.UpdatedAtUtc = now;
             }
 
+            if (newSlotStatus == "COMPLETED")
+            {
+                var packingSession = await db.PackingSessions
+                    .FirstOrDefaultAsync(ps => ps.PickingTaskId == task.Id, cancellationToken);
+                if (packingSession == null)
+                {
+                    packingSession = new ERP.Domain.Entities.PackingSession
+                    {
+                        SessionCode = $"PACK-PTW-{task.Id}-{now:HHmmss}",
+                        PickingTaskId = task.Id,
+                        WarehouseId = task.WarehouseId,
+                        Status = PackingSessionStatus.Open,
+                        CreatedAt = now,
+                        CreatedBy = effectiveActorId ?? 1
+                    };
+                    db.PackingSessions.Add(packingSession);
+                    await db.SaveChangesAsync(cancellationToken);
+                }
+
+                slotEntity.PackingSessionId = packingSession.Id;
+                slotEntity.PackingSessionCode = packingSession.SessionCode;
+
+                var taskSlots = activeSlots.Where(s => s.PickingTaskId == task.Id).ToList();
+                var allTaskSlotsCompleted = taskSlots.Count > 0 && taskSlots.All(s =>
+                    string.Equals(s.SlotCode, matchedSlot.SlotCode, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(s.SlotStatus, "COMPLETED", StringComparison.OrdinalIgnoreCase));
+                if (allTaskSlotsCompleted)
+                {
+                    var trackedTask = await db.PickingTasks
+                        .FirstOrDefaultAsync(t => t.Id == task.Id, cancellationToken);
+                    if (trackedTask != null && trackedTask.Status != PickingTaskStatus.Completed)
+                    {
+                        trackedTask.Status = PickingTaskStatus.Completed;
+                        trackedTask.CompletedAt ??= now;
+                    }
+                }
+            }
+
+            resolvedPackingSessionId = slotEntity.PackingSessionId;
+            resolvedPackingSessionCode = slotEntity.PackingSessionCode;
+
             db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
             {
                 UserId = effectiveActorId,
@@ -446,6 +779,10 @@ public sealed class PickingTaskOperationsService(
 
         var (_, updatedSlots) = await BuildPutToWallGridAsync(task?.Id.ToString() ?? id, task?.WarehouseId, warehouseAuth, cancellationToken);
         var updatedTargetSlot = updatedSlots.First(s => s.SlotCode == matchedSlot.SlotCode);
+        var finalPackingSessionId = resolvedPackingSessionId ?? updatedTargetSlot.PackingSessionId;
+        var finalPackingSessionCode = resolvedPackingSessionCode ?? updatedTargetSlot.PackingSessionCode;
+        var autoCreatedPackingSession = finalPackingSessionId.HasValue;
+        var handoffStatus = autoCreatedPackingSession ? "READY_FOR_PACKING" : "SORTING_IN_PROGRESS";
 
         return WmsEndpointOutcome.Ok(new
         {
@@ -461,8 +798,14 @@ public sealed class PickingTaskOperationsService(
             slotSortedTotal = updatedTargetSlot.SortedQty,
             slotRemainingQty = updatedTargetSlot.RemainingQty,
             slotStatus = updatedTargetSlot.SlotStatus,
+            autoCreatedPackingSession,
+            packingSessionId = finalPackingSessionId,
+            packingSessionCode = finalPackingSessionCode,
+            handoffStatus,
             slots = updatedSlots,
-            statusLabel = $"Đã chia chọn {sortQty} x {updatedTargetSlot.ProductCode} vào ô {updatedTargetSlot.SlotCode} ({updatedTargetSlot.ToteBarcode})"
+            statusLabel = autoCreatedPackingSession && !string.IsNullOrWhiteSpace(finalPackingSessionCode)
+                ? $"Đã chia chọn {sortQty} x {updatedTargetSlot.ProductCode} vào ô {updatedTargetSlot.SlotCode} ({updatedTargetSlot.ToteBarcode}) • Khởi tạo phiên đóng gói {finalPackingSessionCode}"
+                : $"Đã chia chọn {sortQty} x {updatedTargetSlot.ProductCode} vào ô {updatedTargetSlot.SlotCode} ({updatedTargetSlot.ToteBarcode})"
         });
     }
 
@@ -487,21 +830,58 @@ public sealed class PickingTaskOperationsService(
         var waveCode = !string.IsNullOrWhiteSpace(request?.WaveCode)
             ? request.WaveCode.Trim()
             : $"WAVE-{now:yyyyMMdd-HHmm}";
-        var pickingType = string.IsNullOrWhiteSpace(request?.PickingType)
-            ? "STANDARD"
-            : request.PickingType.Trim().ToUpperInvariant();
+
+        ERP.Domain.Entities.PickingWaveTemplate? matchedTemplate = null;
+        var requestedTemplateCode = !string.IsNullOrWhiteSpace(request?.TemplateCode)
+            ? request.TemplateCode.Trim().ToUpperInvariant()
+            : null;
+        if (db != null && !string.IsNullOrWhiteSpace(requestedTemplateCode))
+        {
+            var seedWhId = warehouseId ?? (accessibleIds is { Count: > 0 } ? accessibleIds.First() : 1);
+            await EnsureDefaultWaveTemplatesAsync(seedWhId, cancellationToken);
+            matchedTemplate = await db.PickingWaveTemplates
+                .AsNoTracking()
+                .Where(t => t.TemplateCode == requestedTemplateCode)
+                .OrderByDescending(t => !warehouseId.HasValue || t.WarehouseId == warehouseId.Value)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var templateCode = matchedTemplate?.TemplateCode ?? requestedTemplateCode ?? "TPL-STANDARD";
+        var carrierCutoffWindow = !string.IsNullOrWhiteSpace(request?.CarrierCutoffWindow)
+            ? request.CarrierCutoffWindow.Trim()
+            : (matchedTemplate?.CarrierCutoffWindow ?? "18:00");
+        var slaTierFilter = !string.IsNullOrWhiteSpace(request?.SlaTierFilter)
+            ? request.SlaTierFilter.Trim().ToUpperInvariant()
+            : (matchedTemplate?.SlaTierFilter ?? "ALL");
+        var zoneCode = !string.IsNullOrWhiteSpace(request?.ZoneCode)
+            ? request.ZoneCode.Trim().ToUpperInvariant()
+            : (matchedTemplate?.ZoneCode ?? "ALL");
+        var maxOrdersPerClusterTote = request?.MaxOrdersPerClusterTote is > 0
+            ? request.MaxOrdersPerClusterTote.Value
+            : (matchedTemplate?.MaxOrdersPerClusterTote is > 0 ? matchedTemplate.MaxOrdersPerClusterTote : 8);
+        var clusterTotePrefix = !string.IsNullOrWhiteSpace(request?.ClusterTotePrefix)
+            ? request.ClusterTotePrefix.Trim().ToUpperInvariant()
+            : "TOTE-CL";
+        var pickingType = !string.IsNullOrWhiteSpace(request?.PickingType)
+            ? request.PickingType.Trim().ToUpperInvariant()
+            : (!string.IsNullOrWhiteSpace(matchedTemplate?.PickingType)
+                ? matchedTemplate.PickingType.Trim().ToUpperInvariant()
+                : "STANDARD");
         var maxTasks = request?.MaxTasks is > 0 and <= 200 ? request.MaxTasks.Value : 50;
 
         var releasedTasksCount = 0;
         var totalLinesCount = 0;
         var totalRequestedQuantity = 0m;
         var releasedTaskCodes = new List<string>();
+        var clusterTotes = new List<object>();
+        var optimizedPickRoute = new List<object>();
         var effectiveActorId = actorUserId ?? (currentUser is { UserId: > 0 } ? currentUser.UserId : null);
 
         if (db != null)
         {
             var query = db.PickingTasks
                 .Include(t => t.Lines)
+                    .ThenInclude(l => l.SourceLocation)
                 .Where(t => t.Status == PickingTaskStatus.Open || t.Status == PickingTaskStatus.Assigned);
 
             if (warehouseId.HasValue)
@@ -518,26 +898,85 @@ public sealed class PickingTaskOperationsService(
                 .Take(maxTasks)
                 .ToListAsync(cancellationToken);
 
-            foreach (var task in candidates)
+            var taskToteMap = new Dictionary<int, string>();
+            var chunks = candidates.Chunk(Math.Max(1, maxOrdersPerClusterTote)).ToList();
+            var clusterToteBarcodes = new List<string>();
+
+            for (var clusterIdx = 0; clusterIdx < chunks.Count; clusterIdx++)
             {
-                warehouseId ??= task.WarehouseId;
-                task.PickingType = pickingType;
-                if (request?.AssignToUserId is > 0)
+                var chunk = chunks[clusterIdx];
+                var toteBarcode = $"{clusterTotePrefix}-{clusterIdx + 1:D2}";
+                clusterToteBarcodes.Add(toteBarcode);
+                var chunkTaskCodes = new List<string>();
+
+                foreach (var task in chunk)
                 {
-                    task.AssignedUserId = request.AssignToUserId.Value;
-                    if (task.Status == PickingTaskStatus.Open)
-                        task.Status = PickingTaskStatus.Assigned;
-                }
-                else if (effectiveActorId is > 0 && task.Status == PickingTaskStatus.Open)
-                {
-                    task.AssignedUserId ??= effectiveActorId.Value;
+                    taskToteMap[task.Id] = toteBarcode;
+                    warehouseId ??= task.WarehouseId;
+                    task.PickingType = pickingType;
+                    if (request?.AssignToUserId is > 0)
+                    {
+                        task.AssignedUserId = request.AssignToUserId.Value;
+                        if (task.Status == PickingTaskStatus.Open)
+                            task.Status = PickingTaskStatus.Assigned;
+                    }
+                    else if (effectiveActorId is > 0 && task.Status == PickingTaskStatus.Open)
+                    {
+                        task.AssignedUserId ??= effectiveActorId.Value;
+                    }
+
+                    releasedTasksCount++;
+                    totalLinesCount += task.Lines.Count;
+                    totalRequestedQuantity += task.Lines.Sum(l => l.RequestedQuantity);
+                    if (!string.IsNullOrWhiteSpace(task.TaskCode))
+                    {
+                        releasedTaskCodes.Add(task.TaskCode);
+                        chunkTaskCodes.Add(task.TaskCode);
+                    }
                 }
 
-                releasedTasksCount++;
-                totalLinesCount += task.Lines.Count;
-                totalRequestedQuantity += task.Lines.Sum(l => l.RequestedQuantity);
-                if (!string.IsNullOrWhiteSpace(task.TaskCode))
-                    releasedTaskCodes.Add(task.TaskCode);
+                clusterTotes.Add(new
+                {
+                    clusterToteBarcode = toteBarcode,
+                    orderCount = chunk.Length,
+                    taskCodes = chunkTaskCodes
+                });
+            }
+
+            if (clusterTotes.Count == 0)
+            {
+                var defaultTote = $"{clusterTotePrefix}-01";
+                clusterToteBarcodes.Add(defaultTote);
+                clusterTotes.Add(new
+                {
+                    clusterToteBarcode = defaultTote,
+                    orderCount = 0,
+                    taskCodes = Array.Empty<string>()
+                });
+            }
+
+            var sortedLines = candidates
+                .SelectMany(t => t.Lines.Select(l => (Task: t, Line: l, ToteBarcode: taskToteMap.GetValueOrDefault(t.Id, $"{clusterTotePrefix}-01"))))
+                .OrderBy(x => x.Line.SourceLocation?.Code ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Line.Sequence)
+                .ThenBy(x => x.Line.ProductId)
+                .ToList();
+
+            for (var seq = 0; seq < sortedLines.Count; seq++)
+            {
+                var item = sortedLines[seq];
+                optimizedPickRoute.Add(new
+                {
+                    pickSequence = seq + 1,
+                    taskId = item.Task.Id,
+                    taskCode = item.Task.TaskCode,
+                    lineId = item.Line.Id,
+                    productId = item.Line.ProductId,
+                    locationId = item.Line.SourceLocationId,
+                    locationCode = item.Line.SourceLocation?.Code ?? $"LOC-{item.Line.SourceLocationId}",
+                    requestedQuantity = item.Line.RequestedQuantity,
+                    clusterToteBarcode = item.ToteBarcode
+                });
             }
 
             var waveNote = !string.IsNullOrWhiteSpace(request?.Note)
@@ -557,7 +996,13 @@ public sealed class PickingTaskOperationsService(
                 ReleasedByUserId = effectiveActorId,
                 Status = "RELEASED",
                 Note = waveNote,
-                ReleasedAtUtc = now
+                ReleasedAtUtc = now,
+                TemplateCode = templateCode,
+                CarrierCutoffWindow = carrierCutoffWindow,
+                SlaTierFilter = slaTierFilter,
+                ZoneCode = zoneCode,
+                MaxOrdersPerClusterTote = maxOrdersPerClusterTote,
+                ClusterToteBarcodesCsv = string.Join(",", clusterToteBarcodes)
             });
 
             db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
@@ -574,6 +1019,15 @@ public sealed class PickingTaskOperationsService(
 
             await db.SaveChangesAsync(cancellationToken);
         }
+        else
+        {
+            clusterTotes.Add(new
+            {
+                clusterToteBarcode = $"{clusterTotePrefix}-01",
+                orderCount = 0,
+                taskCodes = Array.Empty<string>()
+            });
+        }
 
         return WmsEndpointOutcome.Ok(new
         {
@@ -585,6 +1039,13 @@ public sealed class PickingTaskOperationsService(
             totalLinesCount,
             totalRequestedQuantity,
             taskCodes = releasedTaskCodes,
+            templateCode,
+            carrierCutoffWindow,
+            slaTierFilter,
+            zoneCode,
+            maxOrdersPerClusterTote,
+            clusterTotes,
+            optimizedPickRoute,
             batchClusterMode = "Gom cụm theo tuyến kệ tối ưu (FEFO/FIFO)",
             status = "Đã phát hành sóng lấy hàng",
             statusLabel = "Đã phát hành sóng lấy hàng",

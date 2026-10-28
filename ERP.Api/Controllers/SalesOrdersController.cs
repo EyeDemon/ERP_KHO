@@ -23,50 +23,46 @@ public sealed record ConfirmCancelPutbackRequest(
     int? SourceLocationId = null, int? DestinationLocationId = null, string? Note = null)
     : ConfirmCancelPutbackInput(SourceLocationId, DestinationLocationId, Note);
 
-[ApiController]
-[Route("api/sales-orders")]
-[Route("api/v1/sales-orders")]
-[Authorize]
+[ApiController, Route("api/sales-orders"), Route("api/v1/sales-orders"), Authorize]
 public sealed class SalesOrdersController(
     ISalesOrderBackorderService service,
     ISalesOrderOperationsService salesOrderOps = null!,
     IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
 {
     public sealed record SplitFulfillmentPlanItemDto(
-        int ProductId, string ProductCode, string ProductName, decimal RequestedQty,
-        int AllocatedWarehouseId, string AllocatedWarehouseCode, string AllocatedWarehouseName,
-        decimal AllocatedQty, decimal UnfulfilledQty, int LegNumber = 1, string OrderCode = "SO-QA-001",
-        string SubOrderCode = "SO-QA-001", int WarehouseId = 1, string WarehouseCode = "WH01",
-        string WarehouseName = "WH01 — Kho Chính TP.HCM", decimal AllocatedQuantity = 0m,
-        decimal AvailableAtpQty = 0m, int DistanceKm = 12, int EstimatedLeadTimeHours = 4,
-        int RoutingPriority = 1, string RoutingNote = "Đủ tồn 1 kho • WH01 — Kho Chính TP.HCM",
-        string RoutingStrategyLabel = "Đủ tồn 1 kho • WH01 — Kho Chính TP.HCM")
-        : SplitFulfillmentPlanItemDtoModel(
-            ProductId, ProductCode, ProductName, RequestedQty, AllocatedWarehouseId,
-            AllocatedWarehouseCode, AllocatedWarehouseName, AllocatedQty, UnfulfilledQty,
-            LegNumber, OrderCode, SubOrderCode, WarehouseId, WarehouseCode, WarehouseName,
-            AllocatedQuantity, AvailableAtpQty, DistanceKm, EstimatedLeadTimeHours,
+        int ProductId, string ProductCode, string ProductName, decimal RequestedQty, int AllocatedWarehouseId,
+        string AllocatedWarehouseCode, string AllocatedWarehouseName, decimal AllocatedQty, decimal UnfulfilledQty,
+        int LegNumber = 1, string OrderCode = "SO-QA-001", string SubOrderCode = "SO-QA-001", int WarehouseId = 1,
+        string WarehouseCode = "WH01", string WarehouseName = "WH01 — Kho Chính TP.HCM", decimal AllocatedQuantity = 0m,
+        decimal AvailableAtpQty = 0m, int DistanceKm = 12, int EstimatedLeadTimeHours = 4, int RoutingPriority = 1,
+        string RoutingNote = "Đủ tồn 1 kho • WH01 — Kho Chính TP.HCM", string RoutingStrategyLabel = "Đủ tồn 1 kho • WH01 — Kho Chính TP.HCM")
+        : SplitFulfillmentPlanItemDtoModel(ProductId, ProductCode, ProductName, RequestedQty, AllocatedWarehouseId,
+            AllocatedWarehouseCode, AllocatedWarehouseName, AllocatedQty, UnfulfilledQty, LegNumber, OrderCode, SubOrderCode,
+            WarehouseId, WarehouseCode, WarehouseName, AllocatedQuantity, AvailableAtpQty, DistanceKm, EstimatedLeadTimeHours,
             RoutingPriority, RoutingNote, RoutingStrategyLabel);
 
     public sealed record ConnectMarketplaceShopRequest(
-        string? ChannelCode = null, string? ShopCode = null, string? ShopName = null,
-        int? DefaultWarehouseId = null, decimal? ReserveRatioPct = null, decimal? SafetyStockBufferPct = null,
-        decimal? SafetyBufferQty = null, decimal? LowStockThreshold = null, bool? IsPrimaryShop = null,
-        string? AccessToken = null, string? RefreshToken = null, string? ChannelSkuCode = null,
-        int? InternalProductId = null, decimal? ConversionFactor = null)
-        : ConnectMarketplaceShopInput(
-            ChannelCode, ShopCode, ShopName, DefaultWarehouseId, ReserveRatioPct,
-            SafetyStockBufferPct, SafetyBufferQty, LowStockThreshold, IsPrimaryShop,
-            AccessToken, RefreshToken, ChannelSkuCode, InternalProductId, ConversionFactor);
+        string? ChannelCode = null, string? ShopCode = null, string? ShopName = null, int? DefaultWarehouseId = null,
+        decimal? ReserveRatioPct = null, decimal? SafetyStockBufferPct = null, decimal? SafetyBufferQty = null,
+        decimal? LowStockThreshold = null, bool? IsPrimaryShop = null, string? AccessToken = null,
+        string? RefreshToken = null, string? ChannelSkuCode = null, int? InternalProductId = null, decimal? ConversionFactor = null)
+        : ConnectMarketplaceShopInput(ChannelCode, ShopCode, ShopName, DefaultWarehouseId, ReserveRatioPct,
+            SafetyStockBufferPct, SafetyBufferQty, LowStockThreshold, IsPrimaryShop, AccessToken, RefreshToken,
+            ChannelSkuCode, InternalProductId, ConversionFactor);
 
     public sealed record SyncMarketplaceInventoryRequest(
         int? WarehouseId = null, int? ShopId = null, int? ProductId = null, decimal? SafetyStockBufferPct = null)
         : SyncMarketplaceInventoryInput(WarehouseId, ShopId, ProductId, SafetyStockBufferPct);
 
+    public sealed record MarketplaceOAuthExchangeRequest(
+        string? ChannelCode = null, string? ShopCode = null, string? ShopName = null,
+        string? AuthCode = null, int? DefaultWarehouseId = null, string? WebhookSecret = null)
+        : MarketplaceOAuthExchangeInput(ChannelCode, ShopCode, ShopName, AuthCode, DefaultWarehouseId, WebhookSecret);
+
     public sealed record BuyerCancellationWebhookRequest(
-        int? SalesOrderId = null, int? ExportReceiptId = null, string? OrderNumber = null,
-        string? MarketplaceOrderId = null, string? ChannelCode = null, string? BuyerReason = null)
-        : BuyerCancellationWebhookInput(SalesOrderId, ExportReceiptId, OrderNumber, MarketplaceOrderId, ChannelCode, BuyerReason);
+        int? SalesOrderId = null, int? ExportReceiptId = null, string? OrderNumber = null, string? MarketplaceOrderId = null,
+        string? ChannelCode = null, string? BuyerReason = null, string? EventId = null, string? RawPayload = null, string? HmacSignature = null)
+        : BuyerCancellationWebhookInput(SalesOrderId, ExportReceiptId, OrderNumber, MarketplaceOrderId, ChannelCode, BuyerReason, EventId, RawPayload, HmacSignature);
 
     public sealed record EvaluateGiftRulesRequest(
         int? WarehouseId = null, int? SalesOrderId = null, decimal? OrderTotalAmount = null,
@@ -74,19 +70,15 @@ public sealed class SalesOrdersController(
         : EvaluateGiftRulesInput(WarehouseId, SalesOrderId, OrderTotalAmount, TriggerProductId, TriggerQuantity, GiftProductId, GiftQuantity);
 
     public sealed record CreatePromotionGiftRuleRequest(
-        string? RuleCode = null, string? RuleName = null, decimal? MinOrderTotalAmount = null,
-        decimal? MinOrderAmount = null, decimal? MinOrderValue = null, int? TriggerProductId = null,
-        decimal? MinTriggerQuantity = null, int GiftProductId = 0, decimal? GiftQuantity = null,
-        decimal? UnitPrice = null, bool? AutoSkipWhenOutOfStock = null, bool? IsActive = null)
-        : CreatePromotionGiftRuleInput(
-            RuleCode, RuleName, MinOrderTotalAmount, MinOrderAmount, MinOrderValue,
-            TriggerProductId, MinTriggerQuantity, GiftProductId, GiftQuantity,
-            UnitPrice, AutoSkipWhenOutOfStock, IsActive);
+        string? RuleCode = null, string? RuleName = null, decimal? MinOrderTotalAmount = null, decimal? MinOrderAmount = null,
+        decimal? MinOrderValue = null, int? TriggerProductId = null, decimal? MinTriggerQuantity = null, int GiftProductId = 0,
+        decimal? GiftQuantity = null, decimal? UnitPrice = null, bool? AutoSkipWhenOutOfStock = null, bool? IsActive = null)
+        : CreatePromotionGiftRuleInput(RuleCode, RuleName, MinOrderTotalAmount, MinOrderAmount, MinOrderValue,
+            TriggerProductId, MinTriggerQuantity, GiftProductId, GiftQuantity, UnitPrice, AutoSkipWhenOutOfStock, IsActive);
 
     public sealed record MarketplaceOrderExcelRowDto(
-        string? ChannelCode = null, string? ExternalOrderId = null, string? BuyerName = null,
-        string? BuyerPhone = null, string? ShippingAddress = null, string? SkuCode = null,
-        decimal Quantity = 1m, decimal UnitPrice = 150000m)
+        string? ChannelCode = null, string? ExternalOrderId = null, string? BuyerName = null, string? BuyerPhone = null,
+        string? ShippingAddress = null, string? SkuCode = null, decimal Quantity = 1m, decimal UnitPrice = 150000m)
         : MarketplaceOrderExcelRowInput(ChannelCode, ExternalOrderId, BuyerName, BuyerPhone, ShippingAddress, SkuCode, Quantity, UnitPrice);
 
     public sealed record ImportMarketplaceOrdersExcelRequest(
@@ -227,6 +219,32 @@ public sealed class SalesOrdersController(
         return (await salesOrderOps.ConnectMarketplaceShopAsync(request, warehouseAccess, cancellationToken)).ToActionResult(this);
     }
 
+    [HttpPost("~/api/v1/marketplace-shops/oauth/exchange")]
+    [HttpPost("~/api/marketplace-shops/oauth/exchange")]
+    [HttpPost("marketplace-shops/oauth/exchange")]
+    [PermissionAuthorize(AppPermissions.SalesOrderCreate)]
+    [IdempotentCommand("MarketplaceShop.OAuthExchange")]
+    public async Task<IActionResult> ExchangeMarketplaceOAuth(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] MarketplaceOAuthExchangeRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (salesOrderOps == null) return ForbidOrStatusCode503();
+        return (await salesOrderOps.ExchangeMarketplaceOAuthAsync(request, warehouseAccess, cancellationToken)).ToActionResult(this);
+    }
+
+    [HttpPost("~/api/v1/marketplace-shops/{shopId:int}/oauth/refresh")]
+    [HttpPost("~/api/marketplace-shops/{shopId:int}/oauth/refresh")]
+    [HttpPost("marketplace-shops/{shopId:int}/oauth/refresh")]
+    [PermissionAuthorize(AppPermissions.SalesOrderCreate)]
+    [IdempotentCommand("MarketplaceShop.OAuthRefresh")]
+    public async Task<IActionResult> RefreshMarketplaceOAuthToken(int shopId, CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (salesOrderOps == null) return ForbidOrStatusCode503();
+        return (await salesOrderOps.RefreshMarketplaceOAuthTokenAsync(shopId, warehouseAccess, cancellationToken)).ToActionResult(this);
+    }
+
     [HttpPost("~/api/v1/marketplace-shops/sync-inventory")]
     [HttpPost("~/api/marketplace-shops/sync-inventory")]
     [HttpPost("marketplace-shops/sync-inventory")]
@@ -269,8 +287,17 @@ public sealed class SalesOrdersController(
     {
         if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
         if (salesOrderOps == null) return Ok(new { decision = "ACCEPT", accepted = true });
+        var hdrSig = Request?.Headers["X-Marketplace-Signature"].FirstOrDefault()
+            ?? Request?.Headers["X-Shopee-Signature"].FirstOrDefault()
+            ?? Request?.Headers["X-TikTok-Signature"].FirstOrDefault();
+        var hdrEvtId = Request?.Headers["X-Webhook-Event-Id"].FirstOrDefault();
+        var effectiveReq = (request ?? new BuyerCancellationWebhookRequest()) with
+        {
+            HmacSignature = !string.IsNullOrWhiteSpace(request?.HmacSignature) ? request.HmacSignature : hdrSig,
+            EventId = !string.IsNullOrWhiteSpace(request?.EventId) ? request.EventId : hdrEvtId
+        };
         return (await salesOrderOps.WebhookBuyerCancellationAsync(
-            channelCode, request, GetCurrentUserId(), warehouseAccess, cancellationToken)).ToActionResult(this);
+            channelCode, effectiveReq, GetCurrentUserId(), warehouseAccess, cancellationToken)).ToActionResult(this);
     }
 
     [HttpPost("{id:int}/webhook-buyer-cancellation")]
@@ -285,9 +312,7 @@ public sealed class SalesOrdersController(
             request is null ? new BuyerCancellationWebhookRequest(SalesOrderId: id) : request with { SalesOrderId = request.SalesOrderId ?? id },
             cancellationToken);
 
-    [HttpGet("~/api/v1/promotions/gift-rules")]
-    [HttpGet("promotions/gift-rules")]
-    [HttpGet("promotion-gift-rules")]
+    [HttpGet("~/api/v1/promotions/gift-rules"), HttpGet("promotions/gift-rules"), HttpGet("promotion-gift-rules")]
     [PermissionAuthorize(AppPermissions.SalesOrderRead)]
     public async Task<IActionResult> GetPromotionGiftRules(
         [FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
@@ -297,11 +322,8 @@ public sealed class SalesOrdersController(
         return (await salesOrderOps.GetPromotionGiftRulesAsync(warehouseId, cancellationToken)).ToActionResult(this);
     }
 
-    [HttpPost("~/api/v1/promotions/gift-rules")]
-    [HttpPost("promotions/gift-rules")]
-    [HttpPost("promotion-gift-rules")]
-    [PermissionAuthorize(AppPermissions.SalesOrderCreate)]
-    [IdempotentCommand("PromotionGiftRule.Create")]
+    [HttpPost("~/api/v1/promotions/gift-rules"), HttpPost("promotions/gift-rules"), HttpPost("promotion-gift-rules")]
+    [PermissionAuthorize(AppPermissions.SalesOrderCreate), IdempotentCommand("PromotionGiftRule.Create")]
     public async Task<IActionResult> CreatePromotionGiftRule(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CreatePromotionGiftRuleRequest? request = null,
         CancellationToken cancellationToken = default)
@@ -311,11 +333,8 @@ public sealed class SalesOrdersController(
         return (await salesOrderOps.CreatePromotionGiftRuleAsync(request, cancellationToken)).ToActionResult(this);
     }
 
-    [HttpPost("~/api/v1/promotions/gift-rules/evaluate")]
-    [HttpPost("promotions/gift-rules/evaluate")]
-    [HttpPost("promotion-gift-rules/evaluate")]
-    [PermissionAuthorize(AppPermissions.SalesOrderRead)]
-    [IdempotentCommand("PromotionGiftRule.Evaluate")]
+    [HttpPost("~/api/v1/promotions/gift-rules/evaluate"), HttpPost("promotions/gift-rules/evaluate"), HttpPost("promotion-gift-rules/evaluate")]
+    [PermissionAuthorize(AppPermissions.SalesOrderRead), IdempotentCommand("PromotionGiftRule.Evaluate")]
     public async Task<IActionResult> EvaluatePromotionGiftRules(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] EvaluateGiftRulesRequest? request = null,
         CancellationToken cancellationToken = default)
@@ -326,8 +345,7 @@ public sealed class SalesOrdersController(
     }
 
     [HttpPost("{id:int}/evaluate-promotion-gifts")]
-    [PermissionAuthorize(AppPermissions.SalesOrderRead)]
-    [IdempotentCommand("PromotionGiftRule.EvaluateByOrder")]
+    [PermissionAuthorize(AppPermissions.SalesOrderRead), IdempotentCommand("PromotionGiftRule.EvaluateByOrder")]
     public Task<IActionResult> EvaluatePromotionGiftRulesByOrder(
         int id,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] EvaluateGiftRulesRequest? request = null,
@@ -336,10 +354,8 @@ public sealed class SalesOrdersController(
             request is null ? new EvaluateGiftRulesRequest(SalesOrderId: id) : request with { SalesOrderId = request.SalesOrderId ?? id },
             cancellationToken);
 
-    [HttpPost("import-marketplace-excel")]
-    [HttpPost("~/api/v1/omnichannel/orders/import-excel")]
-    [PermissionAuthorize(AppPermissions.SalesOrderCreate)]
-    [IdempotentCommand("SalesOrder.ImportMarketplaceExcel")]
+    [HttpPost("import-marketplace-excel"), HttpPost("~/api/v1/omnichannel/orders/import-excel")]
+    [PermissionAuthorize(AppPermissions.SalesOrderCreate), IdempotentCommand("SalesOrder.ImportMarketplaceExcel")]
     public async Task<IActionResult> ImportMarketplaceOrdersExcel(
         [ModelBinder(BinderType = typeof(FlexibleBodyOrFormModelBinder))] ImportMarketplaceOrdersExcelRequest? request = null,
         CancellationToken cancellationToken = default,
@@ -350,23 +366,15 @@ public sealed class SalesOrdersController(
 
         var uploadedFile = file ?? (Request?.HasFormContentType == true && Request.Form.Files.Count > 0 ? Request.Form.Files[0] : null);
         var parsedFileRows = WmsControllerExcelHelper.ParseMarketplaceOrdersExcel(uploadedFile);
-        var mappedInput = request == null
-            ? null
-            : new ImportMarketplaceOrdersExcelInput(
-                request.WarehouseId,
-                request.ChannelCode,
-                request.Rows?.Select(r => (MarketplaceOrderExcelRowInput)r).ToList());
+        var mappedInput = request == null ? null : new ImportMarketplaceOrdersExcelInput(
+            request.WarehouseId, request.ChannelCode, request.Rows?.Select(r => (MarketplaceOrderExcelRowInput)r).ToList());
 
         return (await salesOrderOps.ImportMarketplaceOrdersExcelAsync(
             mappedInput, parsedFileRows, warehouseAccess, cancellationToken)).ToActionResult(this);
     }
 
     private int? GetCurrentUserId() =>
-        int.TryParse(
-            User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
-            out var userId)
-            ? userId
-            : null;
+        int.TryParse(User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value, out var userId) ? userId : null;
 
     private ObjectResult ForbidOrStatusCode503() =>
         StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." });

@@ -208,6 +208,14 @@ builder.Services.AddScoped<ERP.Application.Interfaces.ISaasBillingService, ERP.I
 builder.Services.AddScoped<ERP.Application.Interfaces.IDataImportService, ERP.Infrastructure.Services.DataImportService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IWmsGovernanceOperationsService, ERP.Infrastructure.Services.WmsGovernanceOperationsService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryControlOperationsService, ERP.Infrastructure.Services.InventoryControlOperationsService>();
+builder.Services.AddSingleton<ERP.Application.Interfaces.ICarrierIntegrationAdapter, ERP.Infrastructure.Services.Carriers.GhnCarrierAdapter>();
+builder.Services.AddSingleton<ERP.Application.Interfaces.ICarrierIntegrationAdapter, ERP.Infrastructure.Services.Carriers.GhtkCarrierAdapter>();
+builder.Services.AddSingleton<ERP.Application.Interfaces.ICarrierIntegrationAdapter, ERP.Infrastructure.Services.Carriers.ViettelPostCarrierAdapter>();
+builder.Services.AddSingleton<ERP.Application.Interfaces.ICarrierIntegrationAdapter, ERP.Infrastructure.Services.Carriers.JtExpressCarrierAdapter>();
+builder.Services.AddSingleton<ERP.Application.Interfaces.ICarrierIntegrationRegistry, ERP.Infrastructure.Services.Carriers.VietnamCarrierIntegrationRegistry>();
+builder.Services.AddSingleton<ERP.Application.Interfaces.IMarketplaceChannelAdapter, ERP.Infrastructure.Services.Marketplaces.ShopeeChannelAdapter>();
+builder.Services.AddSingleton<ERP.Application.Interfaces.IMarketplaceChannelAdapter, ERP.Infrastructure.Services.Marketplaces.TikTokShopChannelAdapter>();
+builder.Services.AddSingleton<ERP.Application.Interfaces.IMarketplaceChannelRegistry, ERP.Infrastructure.Services.Marketplaces.MarketplaceChannelRegistry>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IShipmentOperationsService, ERP.Infrastructure.Services.ShipmentOperationsService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IPermissionOperationsService, ERP.Infrastructure.Services.PermissionOperationsService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IImportReceiptOperationsService, ERP.Infrastructure.Services.ImportReceiptOperationsService>();

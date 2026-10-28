@@ -65,4 +65,29 @@ public interface IShipmentOperationsService
     Task<WmsEndpointOutcome> NormalizeVietnameseAddressAsync(
         NormalizeVnAddressInput? request = null,
         CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> GetCarrierConfigsAsync(
+        int? warehouseId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> UpsertCarrierConfigAsync(
+        UpsertCarrierConfigInput? request,
+        int? actorUserId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> BookCarrierWaybillAsync(
+        CarrierWaybillBookingRequest? request,
+        int? actorUserId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> IngestCarrierWebhookAsync(
+        string carrierCode,
+        CarrierWebhookEventInput? request,
+        string? rawBody = null,
+        string? signatureHeader = null,
+        int? actorUserId = null,
+        CancellationToken cancellationToken = default);
 }

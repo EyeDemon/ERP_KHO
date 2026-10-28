@@ -237,6 +237,60 @@ public sealed class ShipmentsController(
         return this.ToActionResult(await shipmentOps.NormalizeVietnameseAddressAsync(request, cancellationToken));
     }
 
+    [HttpGet("carrier-configs"), PermissionAuthorize(AppPermissions.ShipmentRead)]
+    public async Task<IActionResult> GetCarrierConfigs(
+        [FromQuery] int? warehouseId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (shipmentOps == null) return Ok(new { totalCount = 0, items = Array.Empty<object>() });
+        return this.ToActionResult(await shipmentOps.GetCarrierConfigsAsync(warehouseId, warehouseAccess, cancellationToken));
+    }
+
+    [HttpPost("carrier-configs"), IdempotentCommand("Shipment.UpsertCarrierConfig")]
+    [PermissionAuthorize(AppPermissions.ShipmentUpdate, AppPermissions.ShipmentDispatch, AppPermissions.ShipmentRead)]
+    public async Task<IActionResult> UpsertCarrierConfig(
+        [FromBody] UpsertCarrierConfigInput? request,
+        CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (shipmentOps == null) return BadRequest(new { errorCode = "SERVICE_UNAVAILABLE" });
+        return this.ToActionResult(await shipmentOps.UpsertCarrierConfigAsync(request, GetActorUserId(), warehouseAccess, cancellationToken));
+    }
+
+    [HttpPost("book-carrier-waybill"), IdempotentCommand("Shipment.BookCarrierWaybill")]
+    [PermissionAuthorize(AppPermissions.ShipmentDispatch, AppPermissions.ShipmentUpdate, AppPermissions.ShipmentRead)]
+    public async Task<IActionResult> BookCarrierWaybill(
+        [FromBody] CarrierWaybillBookingRequest? request,
+        CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (shipmentOps == null) return BadRequest(new { errorCode = "SERVICE_UNAVAILABLE" });
+        return this.ToActionResult(await shipmentOps.BookCarrierWaybillAsync(request, GetActorUserId(), warehouseAccess, cancellationToken));
+    }
+
+    [HttpPost("webhooks/carrier/{carrierCode}"), AllowAnonymous, IdempotentCommand("Shipment.CarrierWebhook")]
+    [PermissionAuthorize(AppPermissions.ShipmentUpdate, AppPermissions.ShipmentDispatch, AppPermissions.ShipmentRead)]
+    public async Task<IActionResult> CarrierWebhook(
+        [FromRoute] string carrierCode,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CarrierWebhookEventInput? request = null,
+        [FromHeader(Name = "X-Carrier-Signature")] string? signatureHeader = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (shipmentOps == null) return BadRequest(new { errorCode = "SERVICE_UNAVAILABLE" });
+        var effectiveSignature = !string.IsNullOrWhiteSpace(signatureHeader)
+            ? signatureHeader
+            : (HttpContext?.Request?.Headers["X-Carrier-Signature"].FirstOrDefault()
+               ?? HttpContext?.Request?.Headers["X-Hub-Signature-256"].FirstOrDefault());
+
+        return this.ToActionResult(await shipmentOps.IngestCarrierWebhookAsync(
+            carrierCode,
+            request,
+            rawBody: null,
+            signatureHeader: effectiveSignature,
+            actorUserId: GetActorUserId(),
+            cancellationToken: cancellationToken));
+    }
+
     private int? GetActorUserId() =>
         int.TryParse(
             User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,

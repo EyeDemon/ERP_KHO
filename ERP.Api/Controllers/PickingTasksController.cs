@@ -109,18 +109,18 @@ public sealed class PickingTasksController(
     public sealed record PutToWallSlotDto(
         int SlotIndex, string SlotCode, string ToteBarcode, int? PickingTaskId, int? PickingTaskLineId,
         string OrderReference, int? ProductId, string ProductCode, string ProductName,
-        decimal RequiredQty, decimal SortedQty, decimal RemainingQty, string SlotStatus)
-        : PutToWallSlotData(SlotIndex, SlotCode, ToteBarcode, PickingTaskId, PickingTaskLineId, OrderReference, ProductId, ProductCode, ProductName, RequiredQty, SortedQty, RemainingQty, SlotStatus);
+        decimal RequiredQty, decimal SortedQty, decimal RemainingQty, string SlotStatus,
+        int? PackingSessionId = null, string? PackingSessionCode = null)
+        : PutToWallSlotData(SlotIndex, SlotCode, ToteBarcode, PickingTaskId, PickingTaskLineId, OrderReference, ProductId, ProductCode, ProductName, RequiredQty, SortedQty, RemainingQty, SlotStatus, PackingSessionId, PackingSessionCode);
 
     public sealed record PutToWallSortRequest(
-        string? ScannedSkuOrBarcode = null, string? ScannedSlotCode = null, string? ScannedToteBarcode = null, decimal Quantity = 1m)
-        : PutToWallSortInput(ScannedSkuOrBarcode, ScannedSlotCode, ScannedToteBarcode, Quantity);
+        string? ScannedSkuOrBarcode = null, string? ScannedSlotCode = null, string? ScannedToteBarcode = null, decimal Quantity = 1m,
+        string? ProductBarcode = null, string? SlotCode = null)
+        : PutToWallSortInput(ScannedSkuOrBarcode, ScannedSlotCode, ScannedToteBarcode, Quantity, ProductBarcode, SlotCode);
 
     [HttpGet("{id}/put-to-wall-slots"), HttpGet("put-to-wall-slots"), PermissionAuthorize(AppPermissions.PickingRead)]
     public async Task<IActionResult> GetPutToWallSlots(
-        [FromRoute] string? id = null,
-        [FromQuery] int? warehouseId = null,
-        CancellationToken cancellationToken = default)
+        [FromRoute] string? id = null, [FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
     {
         if (pickingOps != null)
             return this.ToActionResult(await pickingOps.GetPutToWallSlotsAsync(id, warehouseId, warehouseAccess, cancellationToken));
@@ -145,22 +145,45 @@ public sealed class PickingTasksController(
     {
         if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
         if (pickingOps == null)
-        {
-            return NotFound(new
-            {
-                code = "PUT_TO_WALL_NO_ACTIVE_SLOTS",
-                errorCode = "PUT_TO_WALL_NO_ACTIVE_SLOTS",
-                message = "Không tìm thấy dòng sản phẩm cần chia chọn trên tường Put-to-Wall."
-            });
-        }
+            return NotFound(new { code = "PUT_TO_WALL_NO_ACTIVE_SLOTS", errorCode = "PUT_TO_WALL_NO_ACTIVE_SLOTS", message = "Không tìm thấy dòng sản phẩm cần chia chọn trên tường Put-to-Wall." });
 
         return this.ToActionResult(await pickingOps.PutToWallSortAsync(id, request, GetActorUserId(), warehouseAccess, cancellationToken));
     }
 
+    public sealed record UpsertPickingWaveTemplateRequest(
+        int? WarehouseId = null, string? TemplateCode = null, string? TemplateName = null,
+        string? CarrierCutoffWindow = null, string? SlaTierFilter = null, string? ZoneCode = null,
+        int? MaxOrdersPerClusterTote = null, string? PickingType = null, bool? IsActive = null)
+        : UpsertPickingWaveTemplateInput(WarehouseId, TemplateCode, TemplateName, CarrierCutoffWindow, SlaTierFilter, ZoneCode, MaxOrdersPerClusterTote, PickingType, IsActive);
+
+    [HttpGet("wave-templates"), PermissionAuthorize(AppPermissions.PickingRead)]
+    public async Task<IActionResult> GetWaveTemplates([FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
+    {
+        if (pickingOps != null)
+            return this.ToActionResult(await pickingOps.GetWaveTemplatesAsync(warehouseId, warehouseAccess, cancellationToken));
+        await EnsureWarehouseScopeAsync(warehouseId, cancellationToken);
+        return Ok(new { warehouseId = warehouseId ?? 1, totalCount = 0, templates = Array.Empty<object>(), items = Array.Empty<object>(), statusLabel = "Đã tải danh sách mẫu cấu hình phát hành sóng lấy hàng" });
+    }
+
+    [HttpPost("wave-templates"), IdempotentCommand("Picking.UpsertWaveTemplate"), PermissionAuthorize(AppPermissions.PickingRead)]
+    public async Task<IActionResult> UpsertWaveTemplate(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] UpsertPickingWaveTemplateRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (pickingOps != null)
+            return this.ToActionResult(await pickingOps.UpsertWaveTemplateAsync(request, GetActorUserId(), warehouseAccess, cancellationToken));
+        await EnsureWarehouseScopeAsync(request?.WarehouseId, cancellationToken);
+        return Ok(new { warehouseId = request?.WarehouseId ?? 1, templateCode = request?.TemplateCode ?? "TPL-CUSTOM-WAVE", statusLabel = "Đã lưu mẫu cấu hình phát hành sóng" });
+    }
+
     public sealed record ReleasePickingWaveRequest(
         int? WarehouseId = null, string? PickingType = null, int? Priority = null,
-        int? MaxTasks = null, string? WaveCode = null, int? AssignToUserId = null, string? Note = null)
-        : ReleasePickingWaveInput(WarehouseId, PickingType, Priority, MaxTasks, WaveCode, AssignToUserId, Note);
+        int? MaxTasks = null, string? WaveCode = null, int? AssignToUserId = null, string? Note = null,
+        string? TemplateCode = null, string? CarrierCutoffWindow = null, string? SlaTierFilter = null,
+        string? ZoneCode = null, int? MaxOrdersPerClusterTote = null, string? ClusterTotePrefix = null)
+        : ReleasePickingWaveInput(WarehouseId, PickingType, Priority, MaxTasks, WaveCode, AssignToUserId, Note,
+            TemplateCode, CarrierCutoffWindow, SlaTierFilter, ZoneCode, MaxOrdersPerClusterTote, ClusterTotePrefix);
 
     [HttpPost("waves/release"), IdempotentCommand("Picking.ReleaseWave"), PermissionAuthorize(AppPermissions.PickingRead)]
     public async Task<IActionResult> ReleaseWave(
@@ -173,13 +196,18 @@ public sealed class PickingTasksController(
 
         await EnsureWarehouseScopeAsync(request?.WarehouseId, cancellationToken);
         var now = DateTime.UtcNow;
+        var totePrefix = !string.IsNullOrWhiteSpace(request?.ClusterTotePrefix) ? request.ClusterTotePrefix.Trim().ToUpperInvariant() : "TOTE-CL";
         return Ok(new
         {
             waveCode = !string.IsNullOrWhiteSpace(request?.WaveCode) ? request.WaveCode.Trim() : $"WAVE-{now:yyyyMMdd-HHmm}",
             warehouseId = request?.WarehouseId,
             pickingType = string.IsNullOrWhiteSpace(request?.PickingType) ? "STANDARD" : request.PickingType.Trim().ToUpperInvariant(),
             priority = request?.Priority ?? 1, releasedTasksCount = 0, totalLinesCount = 0, totalRequestedQuantity = 0m,
-            taskCodes = Array.Empty<string>(), batchClusterMode = "Gom cụm theo tuyến kệ tối ưu (FEFO/FIFO)",
+            taskCodes = Array.Empty<string>(), templateCode = request?.TemplateCode ?? "TPL-STANDARD",
+            carrierCutoffWindow = request?.CarrierCutoffWindow ?? "18:00", slaTierFilter = request?.SlaTierFilter ?? "ALL",
+            zoneCode = request?.ZoneCode ?? "ALL", maxOrdersPerClusterTote = request?.MaxOrdersPerClusterTote ?? 8,
+            clusterTotes = new[] { new { clusterToteBarcode = $"{totePrefix}-01", orderCount = 0, taskCodes = Array.Empty<string>() } },
+            optimizedPickRoute = Array.Empty<object>(), batchClusterMode = "Gom cụm theo tuyến kệ tối ưu (FEFO/FIFO)",
             status = "Đã phát hành sóng lấy hàng", statusLabel = "Đã phát hành sóng lấy hàng", releasedAtUtc = now
         });
     }
@@ -226,53 +254,37 @@ public sealed class PickingTasksController(
         var rawInput = request?.ScanInput ?? string.Empty;
         var input = new string(rawInput.Where(ch => ch >= 32 && ch != 127 && ch != '\u200b' && ch != '\ufeff').ToArray()).Trim();
         var tasks = await service.ListAsync(warehouseId, null, cancellationToken);
-        var match = string.IsNullOrWhiteSpace(input)
-            ? null
-            : tasks.FirstOrDefault(x =>
-                string.Equals(x.TaskCode, input, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(x.SourceCode, input, StringComparison.OrdinalIgnoreCase)
-                || x.TaskCode.Contains(input, StringComparison.OrdinalIgnoreCase));
+        var match = string.IsNullOrWhiteSpace(input) ? null : tasks.FirstOrDefault(x =>
+            string.Equals(x.TaskCode, input, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(x.SourceCode, input, StringComparison.OrdinalIgnoreCase)
+            || x.TaskCode.Contains(input, StringComparison.OrdinalIgnoreCase));
 
         if (match == null && !string.IsNullOrWhiteSpace(input) && pickingOps != null)
         {
             var dbOutcome = await pickingOps.TryMatchMobileScanInDbAsync(input, rawInput, warehouseId, accessibleIds, cancellationToken);
-            if (dbOutcome != null)
-                return this.ToActionResult(dbOutcome);
+            if (dbOutcome != null) return this.ToActionResult(dbOutcome);
         }
 
-        return Ok(new
-        {
-            matched = match != null,
-            scanInput = rawInput,
-            matchedTaskCode = match?.TaskCode,
-            matchedProductCode = match?.SourceCode,
-            matchedLocationCode = match?.WarehouseName,
-            status = match?.Status ?? "NOT_FOUND"
-        });
+        return Ok(new { matched = match != null, scanInput = rawInput, matchedTaskCode = match?.TaskCode, matchedProductCode = match?.SourceCode, matchedLocationCode = match?.WarehouseName, status = match?.Status ?? "NOT_FOUND" });
     }
 
     public sealed record SyncAutomationTelemetryRequest(int? WarehouseId = null) : SyncAutomationTelemetryInput(WarehouseId);
 
     [HttpPost("sync-automation-telemetry"), IdempotentCommand("Picking.SyncAutomationTelemetry"), PermissionAuthorize(AppPermissions.PickingRead)]
     public async Task<IActionResult> SyncAutomationTelemetry(
-        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SyncAutomationTelemetryRequest? request = null,
-        CancellationToken cancellationToken = default)
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SyncAutomationTelemetryRequest? request = null, CancellationToken cancellationToken = default)
     {
         if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (pickingOps != null)
-            return this.ToActionResult(await pickingOps.SyncAutomationTelemetryAsync(request, GetActorUserId(), warehouseAccess, cancellationToken));
-
+        if (pickingOps != null) return this.ToActionResult(await pickingOps.SyncAutomationTelemetryAsync(request, GetActorUserId(), warehouseAccess, cancellationToken));
         await EnsureWarehouseScopeAsync(request?.WarehouseId, cancellationToken);
         var now = DateTime.UtcNow;
         return Ok(new
         {
-            telemetrySyncId = $"WCS-IOT-{now:yyyyMMdd-HHmm}", warehouseId = request?.WarehouseId,
-            activePickingTasksCount = 0, outboundCutoffLocal = "22:00",
+            telemetrySyncId = $"WCS-IOT-{now:yyyyMMdd-HHmm}", warehouseId = request?.WarehouseId, activePickingTasksCount = 0, outboundCutoffLocal = "22:00",
             wcsRoboticsState = "Đã đồng bộ lộ trình lấy hàng (0 tác vụ đang mở, giờ chốt xuất 22:00)",
             rfidIotTelemetry = "Cổng kiểm soát & cảm biến kho hoạt động bình thường",
             voicePickToLight = "Thiết bị hướng dẫn lấy hàng theo vị trí kệ sẵn sàng",
-            status = "Đã đồng bộ thiết bị kho & kiểm tra tuân thủ FEFO",
-            statusLabel = "Đã đồng bộ thiết bị kho & kiểm tra tuân thủ FEFO", syncedAtUtc = now
+            status = "Đã đồng bộ thiết bị kho & kiểm tra tuân thủ FEFO", statusLabel = "Đã đồng bộ thiết bị kho & kiểm tra tuân thủ FEFO", syncedAtUtc = now
         });
     }
 
@@ -280,12 +292,9 @@ public sealed class PickingTasksController(
 
     [HttpPost("verify-dispatch-cutoff"), PermissionAuthorize(AppPermissions.PickingRead)]
     public async Task<IActionResult> VerifyDispatchCutoff(
-        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyPickingDispatchCutoffRequest? request = null,
-        CancellationToken cancellationToken = default)
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyPickingDispatchCutoffRequest? request = null, CancellationToken cancellationToken = default)
     {
-        if (pickingOps != null)
-            return this.ToActionResult(await pickingOps.VerifyDispatchCutoffAsync(request, warehouseAccess, cancellationToken));
-
+        if (pickingOps != null) return this.ToActionResult(await pickingOps.VerifyDispatchCutoffAsync(request, warehouseAccess, cancellationToken));
         await EnsureWarehouseScopeAsync(request?.WarehouseId, cancellationToken);
         return Ok(new
         {
@@ -293,8 +302,7 @@ public sealed class PickingTasksController(
             checkedExportReceiptsCount = 0, openPickingTasksCount = 0, outboundCutoffLocal = "22:00",
             singleShipDeductionGuard = "Chốt trừ tồn kho 1 lần duy nhất khi xác nhận xuất",
             cutoffComplianceStatus = "Đạt chuẩn giờ chốt xuất kho (22:00)",
-            status = "Đã đối soát giờ chốt xuất kho & khóa trừ tồn đơn nhất",
-            statusLabel = "Đã đối soát giờ chốt xuất kho & khóa trừ tồn đơn nhất", verifiedAtUtc = DateTime.UtcNow
+            status = "Đã đối soát giờ chốt xuất kho & khóa trừ tồn đơn nhất", statusLabel = "Đã đối soát giờ chốt xuất kho & khóa trừ tồn đơn nhất", verifiedAtUtc = DateTime.UtcNow
         });
     }
 
@@ -302,42 +310,25 @@ public sealed class PickingTasksController(
 
     [HttpPost("sweep-expired-preview"), PermissionAuthorize(AppPermissions.PickingRead)]
     public async Task<IActionResult> SweepExpiredPreview(
-        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SweepPickingExpiredReservationsRequest? request = null,
-        CancellationToken cancellationToken = default)
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SweepPickingExpiredReservationsRequest? request = null, CancellationToken cancellationToken = default)
     {
         if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (pickingOps != null)
-            return this.ToActionResult(await pickingOps.SweepExpiredPreviewAsync(request, GetActorUserId(), warehouseAccess, cancellationToken));
-
+        if (pickingOps != null) return this.ToActionResult(await pickingOps.SweepExpiredPreviewAsync(request, GetActorUserId(), warehouseAccess, cancellationToken));
         await EnsureWarehouseScopeAsync(request?.WarehouseId, cancellationToken);
         var now = DateTime.UtcNow;
-        return Ok(new
-        {
-            sweepId = $"RSV-SWP-{now:yyyyMMdd-HHmm}", warehouseId = request?.WarehouseId,
-            activeReservationsCount = 0, expiredCandidateCount = 0, expiringWithin24hCount = 0,
-            status = "Đã rà soát giữ hàng quá hạn & cam kết tồn kho",
-            statusLabel = "Đã rà soát giữ hàng quá hạn & cam kết tồn kho", ledgerMutated = false, checkedAtUtc = now
-        });
+        return Ok(new { sweepId = $"RSV-SWP-{now:yyyyMMdd-HHmm}", warehouseId = request?.WarehouseId, activeReservationsCount = 0, expiredCandidateCount = 0, expiringWithin24hCount = 0, status = "Đã rà soát giữ hàng quá hạn & cam kết tồn kho", statusLabel = "Đã rà soát giữ hàng quá hạn & cam kết tồn kho", ledgerMutated = false, checkedAtUtc = now });
     }
 
     public sealed record VerifyPickingFefoComplianceRequest(int? WarehouseId = null) : VerifyPickingFefoComplianceInput(WarehouseId);
 
     [HttpPost("verify-fefo-compliance"), PermissionAuthorize(AppPermissions.PickingRead)]
     public async Task<IActionResult> VerifyFefoCompliance(
-        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyPickingFefoComplianceRequest? request = null,
-        CancellationToken cancellationToken = default)
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyPickingFefoComplianceRequest? request = null, CancellationToken cancellationToken = default)
     {
-        if (pickingOps != null)
-            return this.ToActionResult(await pickingOps.VerifyFefoComplianceAsync(request, warehouseAccess, cancellationToken));
-
+        if (pickingOps != null) return this.ToActionResult(await pickingOps.VerifyFefoComplianceAsync(request, warehouseAccess, cancellationToken));
         await EnsureWarehouseScopeAsync(request?.WarehouseId, cancellationToken);
         const string complianceText = "Tuân thủ nghiêm ngặt chuẩn FEFO/FIFO (0 xung đột khóa kệ)";
-        return Ok(new
-        {
-            verificationId = $"ALC-FEFO-{DateTime.UtcNow:yyyyMMdd-HHmm}", warehouseId = request?.WarehouseId,
-            activeAllocationsCount = 0, binLockConflictCount = 0, expiringLotsWithin30DaysCount = 0, expiredLotsCount = 0,
-            fefoComplianceStatus = complianceText, status = complianceText, statusLabel = complianceText, verifiedAtUtc = DateTime.UtcNow
-        });
+        return Ok(new { verificationId = $"ALC-FEFO-{DateTime.UtcNow:yyyyMMdd-HHmm}", warehouseId = request?.WarehouseId, activeAllocationsCount = 0, binLockConflictCount = 0, expiringLotsWithin30DaysCount = 0, expiredLotsCount = 0, fefoComplianceStatus = complianceText, status = complianceText, statusLabel = complianceText, verifiedAtUtc = DateTime.UtcNow });
     }
 
     [HttpGet("{id:int}"), PermissionAuthorize(AppPermissions.PickingRead)]

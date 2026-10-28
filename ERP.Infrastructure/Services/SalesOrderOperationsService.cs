@@ -6,16 +6,20 @@ using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Infrastructure.Persistence;
+using ERP.Infrastructure.Services.Marketplaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Infrastructure.Services;
 
 public sealed class SalesOrderOperationsService(
     ErpKhoDbContext db,
-    IWarehouseAuthorizationService? warehouseAccess = null) : ISalesOrderOperationsService
+    IWarehouseAuthorizationService? warehouseAccess = null,
+    IMarketplaceChannelRegistry? channelRegistry = null) : ISalesOrderOperationsService
 {
+    public const string DefaultWebhookSecret = "ERP_KHO_MARKETPLACE_WEBHOOK_SECRET_2026";
     private readonly ErpKhoDbContext _db = db;
     private readonly IWarehouseAuthorizationService? _warehouseAccess = warehouseAccess;
+    private readonly IMarketplaceChannelRegistry _channelRegistry = channelRegistry ?? MarketplaceChannelRegistry.Default;
 
     public async Task<WmsEndpointOutcome> ExpediteBackorderAsync(
         ExpediteBackorderInput? request,
@@ -845,6 +849,7 @@ public sealed class SalesOrderOperationsService(
                 EncryptedAccessToken = request?.AccessToken ?? $"ENC_TOK_{Guid.NewGuid():N}",
                 EncryptedRefreshToken = request?.RefreshToken ?? $"ENC_REF_{Guid.NewGuid():N}",
                 TokenExpiresAtUtc = now.AddDays(30),
+                WebhookSecret = DefaultWebhookSecret,
                 IsActive = true,
                 CreatedAtUtc = now
             };
@@ -860,6 +865,7 @@ public sealed class SalesOrderOperationsService(
             shop.LowStockThreshold = lowStockThreshold;
             shop.IsPrimaryShop = isPrimaryShop;
             shop.TokenExpiresAtUtc = now.AddDays(30);
+            shop.WebhookSecret ??= DefaultWebhookSecret;
             shop.IsActive = true;
         }
 
@@ -904,6 +910,213 @@ public sealed class SalesOrderOperationsService(
             shop.IsPrimaryShop,
             shop.TokenExpiresAtUtc,
             statusLabel = $"Đã kết nối & cấu hình gian hàng {shop.ChannelCode} ({shop.ShopCode})"
+        });
+    }
+
+    public async Task<WmsEndpointOutcome> ExchangeMarketplaceOAuthAsync(
+        MarketplaceOAuthExchangeInput? request,
+        IWarehouseAuthorizationService? warehouseAccessOverride = null,
+        CancellationToken cancellationToken = default)
+    {
+        var rawChannel = string.IsNullOrWhiteSpace(request?.ChannelCode) ? "SHOPEE" : request.ChannelCode.Trim().ToUpperInvariant();
+        var adapter = _channelRegistry.ResolveAdapter(rawChannel);
+        var channelCode = rawChannel;
+        var shopCode = string.IsNullOrWhiteSpace(request?.ShopCode)
+            ? $"SHOP-{channelCode}-01"
+            : request.ShopCode.Trim().ToUpperInvariant();
+        var shopName = string.IsNullOrWhiteSpace(request?.ShopName)
+            ? $"Gian hàng {adapter.ChannelDisplayName} ({shopCode})"
+            : request.ShopName.Trim();
+        var authCode = string.IsNullOrWhiteSpace(request?.AuthCode)
+            ? $"OAUTH-CODE-{channelCode}-{Guid.NewGuid():N}"[..28]
+            : request.AuthCode.Trim();
+        var warehouseId = request?.DefaultWarehouseId ?? 1;
+
+        var effectiveWhAccess = warehouseAccessOverride ?? _warehouseAccess;
+        if (effectiveWhAccess != null)
+        {
+            await effectiveWhAccess.EnsureWarehouseAccessAsync(warehouseId, cancellationToken);
+        }
+
+        var now = DateTime.UtcNow;
+        var tokenResult = adapter.ExchangeAuthCode(shopCode, authCode, now);
+        var webhookSecret = !string.IsNullOrWhiteSpace(request?.WebhookSecret)
+            ? request.WebhookSecret.Trim()
+            : DefaultWebhookSecret;
+
+        var shop = await _db.MarketplaceShops
+            .FirstOrDefaultAsync(
+                s => (s.ChannelCode == channelCode || s.ChannelCode == adapter.ChannelCode) && s.ShopCode == shopCode,
+                cancellationToken);
+
+        if (shop == null)
+        {
+            shop = new MarketplaceShop
+            {
+                ChannelCode = channelCode,
+                ShopCode = shopCode,
+                ShopName = shopName,
+                DefaultWarehouseId = warehouseId,
+                ReserveRatioPct = 100m,
+                SafetyBufferQty = 0m,
+                LowStockThreshold = 5m,
+                IsPrimaryShop = true,
+                EncryptedAccessToken = tokenResult.EncryptedAccessToken,
+                EncryptedRefreshToken = tokenResult.EncryptedRefreshToken,
+                TokenExpiresAtUtc = tokenResult.TokenExpiresAtUtc,
+                WebhookSecret = webhookSecret,
+                IsActive = true,
+                CreatedAtUtc = now
+            };
+            _db.MarketplaceShops.Add(shop);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            if (!string.IsNullOrWhiteSpace(request?.ShopName))
+            {
+                shop.ShopName = shopName;
+            }
+            if (request?.DefaultWarehouseId.HasValue == true)
+            {
+                shop.DefaultWarehouseId = warehouseId;
+            }
+            shop.EncryptedAccessToken = tokenResult.EncryptedAccessToken;
+            shop.EncryptedRefreshToken = tokenResult.EncryptedRefreshToken;
+            shop.TokenExpiresAtUtc = tokenResult.TokenExpiresAtUtc;
+            shop.WebhookSecret = !string.IsNullOrWhiteSpace(request?.WebhookSecret)
+                ? webhookSecret
+                : (shop.WebhookSecret ?? DefaultWebhookSecret);
+            shop.IsActive = true;
+        }
+
+        _db.IntegrationOutboxMessages.Add(new IntegrationOutboxMessage
+        {
+            EventId = $"MP-OAUTH-{shop.Id}-{now.Ticks}",
+            EventType = "MARKETPLACE_OAUTH_CONNECTED",
+            AggregateType = "MarketplaceShop",
+            AggregateId = shop.Id,
+            PayloadJson = JsonSerializer.Serialize(new
+            {
+                shopId = shop.Id,
+                shop.ChannelCode,
+                adapterChannelCode = adapter.ChannelCode,
+                adapter.ChannelDisplayName,
+                shop.ShopCode,
+                shop.ShopName,
+                shop.DefaultWarehouseId,
+                tokenResult.OpenPlatformPartnerId,
+                tokenResult.Scope,
+                tokenResult.TokenExpiresAtUtc,
+                connectedAtUtc = now
+            }),
+            Status = "PENDING",
+            CreatedAt = now
+        });
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            WarehouseId = shop.DefaultWarehouseId,
+            Action = "MarketplaceShop.OAuthExchange",
+            EntityName = "MarketplaceShop",
+            EntityId = shop.Id,
+            NewValues = tokenResult.OpenPlatformPartnerId,
+            Reason = $"Trao đổi mã ủy quyền OAuth 2.0 thành công cho gian hàng {adapter.ChannelDisplayName} ({shop.ShopCode})",
+            Result = "Success",
+            Timestamp = now
+        });
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            id = shop.Id,
+            shopId = shop.Id,
+            channelCode = shop.ChannelCode,
+            adapterChannelCode = adapter.ChannelCode,
+            channelDisplayName = adapter.ChannelDisplayName,
+            shopCode = shop.ShopCode,
+            shopName = shop.ShopName,
+            defaultWarehouseId = shop.DefaultWarehouseId,
+            encryptedAccessToken = shop.EncryptedAccessToken,
+            encryptedRefreshToken = shop.EncryptedRefreshToken,
+            tokenExpiresAtUtc = shop.TokenExpiresAtUtc,
+            openPlatformPartnerId = tokenResult.OpenPlatformPartnerId,
+            scope = tokenResult.Scope,
+            webhookHmacEnabled = !string.IsNullOrWhiteSpace(shop.WebhookSecret),
+            oauthConnected = true,
+            outboxEventType = "MARKETPLACE_OAUTH_CONNECTED",
+            statusLabel = $"Đã xác thực OAuth 2.0 & lưu khóa bảo mật gian hàng {adapter.ChannelDisplayName} ({shop.ShopCode})"
+        });
+    }
+
+    public async Task<WmsEndpointOutcome> RefreshMarketplaceOAuthTokenAsync(
+        int shopId,
+        IWarehouseAuthorizationService? warehouseAccessOverride = null,
+        CancellationToken cancellationToken = default)
+    {
+        var shop = await _db.MarketplaceShops.FirstOrDefaultAsync(s => s.Id == shopId, cancellationToken);
+        if (shop == null)
+        {
+            return WmsEndpointOutcome.Json(404, new
+            {
+                code = "MARKETPLACE_SHOP_NOT_FOUND",
+                errorCode = "MARKETPLACE_SHOP_NOT_FOUND",
+                shopId,
+                message = $"Không tìm thấy gian hàng TMĐT #{shopId}."
+            });
+        }
+
+        var effectiveWhAccess = warehouseAccessOverride ?? _warehouseAccess;
+        if (effectiveWhAccess != null)
+        {
+            await effectiveWhAccess.EnsureWarehouseAccessAsync(shop.DefaultWarehouseId, cancellationToken);
+        }
+
+        var now = DateTime.UtcNow;
+        var adapter = _channelRegistry.ResolveAdapter(shop.ChannelCode);
+        var previousExpiresAtUtc = shop.TokenExpiresAtUtc;
+        var refreshed = adapter.RefreshAccessToken(shop.ShopCode, shop.EncryptedRefreshToken ?? string.Empty, now);
+
+        shop.EncryptedAccessToken = refreshed.EncryptedAccessToken;
+        shop.EncryptedRefreshToken = refreshed.EncryptedRefreshToken;
+        shop.TokenExpiresAtUtc = refreshed.TokenExpiresAtUtc;
+        shop.WebhookSecret ??= DefaultWebhookSecret;
+        shop.IsActive = true;
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            WarehouseId = shop.DefaultWarehouseId,
+            Action = "MarketplaceShop.OAuthRefresh",
+            EntityName = "MarketplaceShop",
+            EntityId = shop.Id,
+            OldValues = previousExpiresAtUtc?.ToString("O"),
+            NewValues = refreshed.TokenExpiresAtUtc.ToString("O"),
+            Reason = $"Gia hạn tự động OAuth 2.0 Access/Refresh Token cho gian hàng {adapter.ChannelDisplayName} ({shop.ShopCode})",
+            Result = "Success",
+            Timestamp = now
+        });
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            id = shop.Id,
+            shopId = shop.Id,
+            channelCode = shop.ChannelCode,
+            adapterChannelCode = adapter.ChannelCode,
+            channelDisplayName = adapter.ChannelDisplayName,
+            shopCode = shop.ShopCode,
+            shopName = shop.ShopName,
+            defaultWarehouseId = shop.DefaultWarehouseId,
+            encryptedAccessToken = shop.EncryptedAccessToken,
+            encryptedRefreshToken = shop.EncryptedRefreshToken,
+            previousExpiresAtUtc,
+            tokenExpiresAtUtc = shop.TokenExpiresAtUtc,
+            openPlatformPartnerId = refreshed.OpenPlatformPartnerId,
+            scope = refreshed.Scope,
+            tokenRotated = true,
+            statusLabel = $"Đã làm mới (Refresh) cặp khóa OAuth 2.0 cho gian hàng {adapter.ChannelDisplayName} ({shop.ShopCode})"
         });
     }
 
@@ -979,6 +1192,7 @@ public sealed class SalesOrderOperationsService(
                 shop.ReserveRatioPct = Math.Clamp(100m - request.SafetyStockBufferPct.Value, 0m, 100m);
             }
 
+            var adapter = _channelRegistry.ResolveAdapter(shop.ChannelCode);
             var mappings = shop.SkuMappings.Where(m => m.IsActive).ToList();
             if (mappings.Count == 0 && !anyMappingsInDb && request?.ShopId.HasValue != true)
             {
@@ -1016,29 +1230,26 @@ public sealed class SalesOrderOperationsService(
                 mapping.LastPushedQty = pushedQty;
                 mapping.LastPushedAtUtc = now;
 
-                var payload = JsonSerializer.Serialize(new
-                {
-                    shopId = shop.Id,
-                    shop.ChannelCode,
+                var envelope = adapter.BuildInventoryPushEnvelope(
+                    shop.Id,
                     shop.ShopCode,
+                    mapping.ChannelItemId,
                     mapping.ChannelSkuCode,
                     mapping.InternalProductId,
-                    atpBaseQty = atp,
-                    pushedQuantity = pushedQty,
-                    shop.ReserveRatioPct,
+                    atp,
+                    pushedQty,
                     shop.SafetyBufferQty,
-                    shop.LowStockThreshold,
-                    shop.IsPrimaryShop,
-                    syncedAtUtc = now
-                });
+                    shop.ReserveRatioPct,
+                    now);
 
+                var outboxEventId = $"INV-PUSH-{shop.Id}-{mapping.Id}-{mapping.InternalProductId}-{now.Ticks}-{pushedResults.Count + 1}";
                 _db.IntegrationOutboxMessages.Add(new IntegrationOutboxMessage
                 {
-                    EventId = $"INV-PUSH-{shop.Id}-{mapping.Id}-{mapping.InternalProductId}-{now.Ticks}-{pushedResults.Count + 1}",
+                    EventId = outboxEventId,
                     EventType = "Inventory.AvailableChanged",
                     AggregateType = "ChannelSkuMapping",
                     AggregateId = mapping.InternalProductId,
-                    PayloadJson = payload,
+                    PayloadJson = envelope.PayloadJson,
                     Status = "PENDING",
                     CreatedAt = now
                 });
@@ -1047,8 +1258,10 @@ public sealed class SalesOrderOperationsService(
                 {
                     shopId = shop.Id,
                     channelCode = shop.ChannelCode,
+                    channelDisplayName = adapter.ChannelDisplayName,
                     shopCode = shop.ShopCode,
                     isPrimaryShop = shop.IsPrimaryShop,
+                    channelItemId = envelope.ChannelItemId,
                     channelSkuCode = mapping.ChannelSkuCode,
                     productId = mapping.InternalProductId,
                     atpBaseQty = atp,
@@ -1056,7 +1269,8 @@ public sealed class SalesOrderOperationsService(
                     reserveRatioPct = shop.ReserveRatioPct,
                     safetyBufferQty = shop.SafetyBufferQty,
                     lowStockThreshold = shop.LowStockThreshold,
-                    lowStockCutOffApplied = atp <= shop.LowStockThreshold && !shop.IsPrimaryShop
+                    lowStockCutOffApplied = atp <= shop.LowStockThreshold && !shop.IsPrimaryShop,
+                    outboxEventId
                 });
             }
         }
@@ -1083,6 +1297,40 @@ public sealed class SalesOrderOperationsService(
     {
         var now = DateTime.UtcNow;
         var resolvedActorId = actorUserId is > 0 ? actorUserId.Value : 1;
+        var rawChannel = !string.IsNullOrWhiteSpace(channelCode)
+            ? channelCode.Trim()
+            : (!string.IsNullOrWhiteSpace(request?.ChannelCode) ? request.ChannelCode.Trim() : "SHOPEE");
+        var adapter = _channelRegistry.ResolveAdapter(rawChannel);
+        var normChannel = rawChannel.ToUpperInvariant();
+
+        if (!string.IsNullOrWhiteSpace(request?.HmacSignature))
+        {
+            var matchedShop = await _db.MarketplaceShops
+                .AsNoTracking()
+                .Where(s => s.IsActive && (s.ChannelCode == normChannel || s.ChannelCode == adapter.ChannelCode))
+                .OrderByDescending(s => s.IsPrimaryShop)
+                .ThenBy(s => s.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            var secret = !string.IsNullOrWhiteSpace(matchedShop?.WebhookSecret)
+                ? matchedShop.WebhookSecret
+                : DefaultWebhookSecret;
+            var payloadToVerify = request.RawPayload ?? request.OrderNumber ?? string.Empty;
+            var isSignatureValid = adapter.VerifyWebhookHmacSignature(payloadToVerify, request.HmacSignature, secret)
+                || (secret != DefaultWebhookSecret && adapter.VerifyWebhookHmacSignature(payloadToVerify, request.HmacSignature, DefaultWebhookSecret))
+                || (request.RawPayload == null && request.OrderNumber == null && !string.IsNullOrWhiteSpace(request.MarketplaceOrderId) &&
+                    adapter.VerifyWebhookHmacSignature(request.MarketplaceOrderId, request.HmacSignature, secret));
+
+            if (!isSignatureValid)
+            {
+                return WmsEndpointOutcome.Json(401, new
+                {
+                    code = "MARKETPLACE_WEBHOOK_INVALID_SIGNATURE",
+                    errorCode = "MARKETPLACE_WEBHOOK_INVALID_SIGNATURE",
+                    message = "Chữ ký HMAC-SHA256 của webhook sàn TMĐT không hợp lệ."
+                });
+            }
+        }
 
         SalesOrder? order = null;
         if (request?.SalesOrderId is > 0)
@@ -1115,6 +1363,43 @@ public sealed class SalesOrderOperationsService(
             order = await _db.SalesOrders.Include(o => o.Lines).FirstOrDefaultAsync(o => o.Id == receipt.SalesOrderId.Value, cancellationToken);
         }
 
+        var hasExplicitEventId = !string.IsNullOrWhiteSpace(request?.EventId);
+        var effectiveEventId = hasExplicitEventId
+            ? request!.EventId!.Trim()
+            : $"WHK-CANCEL-{normChannel}-{order?.Id ?? receipt?.Id ?? 0}-{now.Ticks}-{Guid.NewGuid():N}"[..48];
+
+        if (hasExplicitEventId)
+        {
+            var existingInbox = await _db.IntegrationInboxMessages
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    m => (m.SourceSystem == normChannel || m.SourceSystem == adapter.ChannelCode) &&
+                         m.ExternalMessageId == effectiveEventId &&
+                         m.EventType == "ORDER_CANCELLED",
+                    cancellationToken);
+
+            if (existingInbox != null)
+            {
+                var replayStatus = order?.Status.ToString() ?? receipt?.Status.ToString() ?? "Cancelled";
+                var isPendingPutbackReplay = string.Equals(replayStatus, "CancelPendingPutback", StringComparison.OrdinalIgnoreCase);
+                var isRejectedReplay = string.Equals(replayStatus, "Fulfilled", StringComparison.OrdinalIgnoreCase) ||
+                                       string.Equals(replayStatus, "Dispatched", StringComparison.OrdinalIgnoreCase);
+                return WmsEndpointOutcome.Ok(new
+                {
+                    decision = isRejectedReplay ? "REJECT" : (isPendingPutbackReplay ? "ACCEPT_PENDING_PUTBACK" : "ACCEPT"),
+                    accepted = !isRejectedReplay,
+                    requiresPutback = isPendingPutbackReplay,
+                    idempotentReplay = true,
+                    eventId = effectiveEventId,
+                    sourceSystem = existingInbox.SourceSystem,
+                    orderId = order?.Id,
+                    exportReceiptId = receipt?.Id,
+                    orderStatus = replayStatus,
+                    statusLabel = "Bỏ qua webhook trùng lặp (Idempotent Inbox Replay) — Sự kiện hủy đơn đã được xử lý trước đó"
+                });
+            }
+        }
+
         if (order == null && receipt == null)
         {
             return WmsEndpointOutcome.Json(404, new { code = "NOT_FOUND", message = "Không tìm thấy đơn bán hàng hoặc phiếu xuất tương ứng với yêu cầu hủy từ sàn." });
@@ -1126,6 +1411,31 @@ public sealed class SalesOrderOperationsService(
         {
             await effectiveWhAccess.EnsureWarehouseAccessAsync(targetWarehouseId, cancellationToken);
         }
+
+        var inboxPayloadJson = !string.IsNullOrWhiteSpace(request?.RawPayload)
+            ? request.RawPayload
+            : JsonSerializer.Serialize(new
+            {
+                channelCode = normChannel,
+                eventId = effectiveEventId,
+                orderId = order?.Id,
+                exportReceiptId = receipt?.Id,
+                request?.OrderNumber,
+                request?.MarketplaceOrderId,
+                request?.BuyerReason,
+                receivedAtUtc = now
+            });
+
+        _db.IntegrationInboxMessages.Add(new IntegrationInboxMessage
+        {
+            SourceSystem = normChannel,
+            ExternalMessageId = effectiveEventId,
+            EventType = "ORDER_CANCELLED",
+            PayloadJson = inboxPayloadJson,
+            Status = "Processed",
+            ReceivedAt = now,
+            ProcessedAt = now
+        });
 
         var isSealedInManifest = receipt != null && await _db.HandoverManifestLines
             .Include(l => l.Manifest)
@@ -1139,11 +1449,14 @@ public sealed class SalesOrderOperationsService(
 
         if (isAlreadyDispatched)
         {
+            await _db.SaveChangesAsync(cancellationToken);
             return WmsEndpointOutcome.Ok(new
             {
                 decision = "REJECT",
                 accepted = false,
                 requiresPutback = false,
+                idempotentReplay = false,
+                eventId = effectiveEventId,
                 reasonCode = "ALREADY_DISPATCHED_TO_CARRIER",
                 orderId = order?.Id,
                 exportReceiptId = receipt?.Id,
@@ -1235,25 +1548,95 @@ public sealed class SalesOrderOperationsService(
                     }
                 }
 
+                var validAuditUserId = await _db.Users
+                    .AsNoTracking()
+                    .Where(u => u.Id == resolvedActorId)
+                    .Select(u => (int?)u.Id)
+                    .FirstOrDefaultAsync(cancellationToken)
+                    ?? await _db.Users
+                        .AsNoTracking()
+                        .OrderBy(u => u.Id)
+                        .Select(u => (int?)u.Id)
+                        .FirstOrDefaultAsync(cancellationToken);
+
                 if (putbackLines.Count > 0)
                 {
-                    var putbackTask = new PutawayTask
+                    var creatorUserId = validAuditUserId ?? resolvedActorId;
+                    var defaultUnitId = await _db.Units
+                        .AsNoTracking()
+                        .OrderBy(u => u.Id)
+                        .Select(u => u.Id)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    if (defaultUnitId <= 0) defaultUnitId = 1;
+
+                    var putbackReceipt = new ImportReceipt
                     {
-                        TaskType = "Putback",
-                        ReceiptId = receipt?.Id ?? order?.Id ?? 1,
+                        Code = $"PB-{order?.Id ?? receipt?.Id ?? 1}-{now:HHmmssfff}",
                         WarehouseId = targetWarehouseId,
-                        Status = PutawayTaskStatus.Open,
-                        CreatedBy = resolvedActorId,
+                        Status = ReceiptStatus.Received,
+                        CreatedBy = creatorUserId,
                         CreatedAt = now,
-                        ExceptionReason = $"Cất trả hàng cho đơn hủy giữa chừng ({order?.OrderCode ?? receipt?.Code})"
+                        Note = $"Phiếu hoàn kệ nội bộ cho đơn hủy ({order?.OrderCode ?? receipt?.Code})"
                     };
 
                     foreach (var pb in putbackLines)
                     {
-                        putbackTask.Items.Add(new PutawayTaskItem
+                        var prodUnitId = await _db.Products
+                            .AsNoTracking()
+                            .Where(p => p.Id == pb.ProductId && p.UnitId > 0)
+                            .Select(p => (int?)p.UnitId)
+                            .FirstOrDefaultAsync(cancellationToken) ?? defaultUnitId;
+
+                        putbackReceipt.Details.Add(new ImportReceiptDetail
                         {
                             ProductId = pb.ProductId,
+                            Quantity = pb.Quantity,
+                            ExpectedQuantity = pb.Quantity,
+                            ReceivedQuantity = pb.Quantity,
+                            AcceptedQuantity = pb.Quantity,
+                            BaseExpectedQuantity = pb.Quantity,
+                            BaseReceivedQuantity = pb.Quantity,
+                            BaseAcceptedQuantity = pb.Quantity,
+                            OperationUnitId = prodUnitId,
+                            OperationUnitCodeSnapshot = "CÁI",
+                            BaseUnitId = prodUnitId,
+                            BaseUnitCodeSnapshot = "CÁI",
+                            ConversionFactor = 1m,
+                            ConversionVersion = 1
+                        });
+                    }
+
+                    _db.ImportReceipts.Add(putbackReceipt);
+                    await _db.SaveChangesAsync(cancellationToken);
+
+                    var putbackTask = new PutawayTask
+                    {
+                        TaskType = "Putback",
+                        ReceiptId = putbackReceipt.Id,
+                        WarehouseId = targetWarehouseId,
+                        Status = PutawayTaskStatus.Open,
+                        CreatedBy = creatorUserId,
+                        CreatedAt = now,
+                        ExceptionReason = $"Cất trả hàng cho đơn hủy giữa chừng ({order?.OrderCode ?? receipt?.Code})"
+                    };
+
+                    var savedDetails = putbackReceipt.Details.ToList();
+                    for (var idx = 0; idx < putbackLines.Count; idx++)
+                    {
+                        var pb = putbackLines[idx];
+                        var detail = savedDetails[idx];
+                        putbackTask.Items.Add(new PutawayTaskItem
+                        {
+                            ReceiptLineId = detail.Id,
+                            ProductId = pb.ProductId,
                             SourceLocationId = pb.SourceLocationId,
+                            OperationUnitId = detail.OperationUnitId,
+                            OperationUnitCodeSnapshot = detail.OperationUnitCodeSnapshot,
+                            BaseUnitId = detail.BaseUnitId,
+                            BaseUnitCodeSnapshot = detail.BaseUnitCodeSnapshot,
+                            ConversionFactorSnapshot = 1m,
+                            ConversionVersionSnapshot = 1,
+                            RequiredOperationQuantity = pb.Quantity,
                             RequiredBaseQuantity = pb.Quantity,
                             MovedBaseQuantity = 0m
                         });
@@ -1265,7 +1648,7 @@ public sealed class SalesOrderOperationsService(
                 }
             }
 
-            var validAuditUserId = await _db.Users
+            var finalAuditUserId = await _db.Users
                 .AsNoTracking()
                 .Where(u => u.Id == resolvedActorId)
                 .Select(u => (int?)u.Id)
@@ -1278,7 +1661,7 @@ public sealed class SalesOrderOperationsService(
 
             _db.AuditLogs.Add(new AuditLog
             {
-                UserId = validAuditUserId,
+                UserId = finalAuditUserId,
                 WarehouseId = targetWarehouseId,
                 Action = "SalesOrder.WebhookBuyerCancellation.PendingPutback",
                 EntityName = order != null ? "SalesOrder" : "ExportReceipt",
@@ -1295,6 +1678,8 @@ public sealed class SalesOrderOperationsService(
                 decision = "ACCEPT_PENDING_PUTBACK",
                 accepted = true,
                 requiresPutback = true,
+                idempotentReplay = false,
+                eventId = effectiveEventId,
                 orderId = order?.Id,
                 exportReceiptId = receipt?.Id,
                 orderStatus = "CancelPendingPutback",
@@ -1410,6 +1795,8 @@ public sealed class SalesOrderOperationsService(
             decision = "ACCEPT",
             accepted = true,
             requiresPutback = false,
+            idempotentReplay = false,
+            eventId = effectiveEventId,
             orderId = order?.Id,
             exportReceiptId = receipt?.Id,
             orderStatus = "Cancelled",
