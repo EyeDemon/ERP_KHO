@@ -339,4 +339,47 @@ public class ExportReceiptsController : ControllerBase
         var draftCode = $"EINV-ND70-{now:yyyyMMdd}-{receiptId:D4}";
         return Ok(new { exportReceiptId = receiptId, invoiceDraftCode = draftCode, draftNumber = draftCode, buyerTaxCode = string.IsNullOrWhiteSpace(request?.BuyerTaxCode) ? "0318999888" : request.BuyerTaxCode.Trim(), buyerName = string.IsNullOrWhiteSpace(request?.BuyerName) ? "Khách hàng Doanh nghiệp" : request.BuyerName.Trim(), decreeStandard = string.IsNullOrWhiteSpace(request?.DecreeStandard) ? "ND70_2025_TT32_2025" : request.DecreeStandard.Trim(), provider = "MISA_MEINVOICE", status = "DRAFT_ISSUED", statusLabel = $"Đã phát hành Hóa đơn điện tử nháp ({draftCode}) tuân thủ Nghị định 70/2025/NĐ-CP & Thông tư 32/2025/TT-BTC", issuedAtUtc = now });
     }
+
+    [HttpGet("accounting-einvoice/preview"), PermissionAuthorize(AppPermissions.ExportReceiptRead)]
+    public async Task<IActionResult> PreviewAccountingAndEInvoiceOutbox(
+        [FromQuery] int? exportReceiptId = null,
+        [FromQuery] int? importReceiptId = null,
+        [FromQuery] int? warehouseId = null,
+        [FromQuery] string? accountingProvider = "MISA_AMIS",
+        [FromQuery] string? einvoiceProvider = "VIETTEL_SINVOICE",
+        CancellationToken cancellationToken = default)
+    {
+        var canReadCost = CanReadInventoryCost();
+        var outcome = await RequireOps().SyncAccountingAndEInvoiceOutboxAsync(
+            new SyncAccountingAndEInvoiceInput(
+                ExportReceiptId: exportReceiptId,
+                ImportReceiptId: importReceiptId,
+                WarehouseId: warehouseId,
+                AccountingProvider: accountingProvider,
+                EInvoiceProvider: einvoiceProvider,
+                PersistOutboxAndAudit: false),
+            TryGetUserId(out var uid) ? uid : null,
+            canReadCost,
+            _warehouseAccess,
+            _currentUser,
+            cancellationToken);
+        return outcome.ToActionResult(this);
+    }
+
+    [HttpPost("accounting-einvoice/sync"), PermissionAuthorize(AppPermissions.ExportReceiptRead), IdempotentCommand("ExportReceipt.SyncAccountingAndEinvoiceNd70")]
+    public async Task<IActionResult> SyncAccountingAndEInvoiceOutbox(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] SyncAccountingAndEInvoiceInput? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        var canReadCost = CanReadInventoryCost();
+        var outcome = await RequireOps().SyncAccountingAndEInvoiceOutboxAsync(
+            request ?? new SyncAccountingAndEInvoiceInput(),
+            TryGetUserId(out var uid) ? uid : null,
+            canReadCost,
+            _warehouseAccess,
+            _currentUser,
+            cancellationToken);
+        return outcome.ToActionResult(this);
+    }
 }

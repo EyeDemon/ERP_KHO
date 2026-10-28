@@ -143,6 +143,31 @@ const ExportReceipts = () => {
   const [marketplaceOrderId, setMarketplaceOrderId] = useState<string>('');
   const [carrierCode, setCarrierCode] = useState<string>('');
   const [trackingNumber, setTrackingNumber] = useState<string>('');
+  const [accountingEinvoiceData, setAccountingEinvoiceData] = useState<{
+    outboxEventId?: string;
+    exportReceiptCode?: string;
+    accountingProvider?: string;
+    einvoiceProvider?: string;
+    invoiceTemplateCode?: string;
+    invoiceSeries?: string;
+    invoiceNumber?: string;
+    totalCogsAmount?: number | null;
+    totalRevenueAmount?: number;
+    totalVatAmount?: number;
+    totalReceivableAmount?: number;
+    totalDebitAmount?: number | null;
+    totalCreditAmount?: number | null;
+    journalImbalanceDelta?: number;
+    statusLabel?: string;
+    circular200JournalEntries?: Array<{
+      entryType: string;
+      descriptionVi: string;
+      debitAccount: string;
+      creditAccount: string;
+      debitAmount: number | null;
+      creditAmount: number | null;
+    }>;
+  } | null>(null);
   const [details, setDetails] = useState<ReceiptDetailForm[]>([]);
   
   // Stock cache
@@ -653,6 +678,7 @@ const ExportReceipts = () => {
               </button>
               <button
                 type="button"
+                data-testid="btn-sync-accounting-einvoice"
                 onClick={() => {
                   setError('');
                   void Promise.resolve(
@@ -662,6 +688,21 @@ const ExportReceipts = () => {
                   )
                     .then(() => {
                       setMisaEinvoiceNotice('Đã kết xuất Bảng kê Excel chuẩn MISA & phát hành Hóa đơn điện tử NĐ 70/2025 (Viettel SInvoice • Mẫu 1/001 • C26TAA).');
+                      return Promise.resolve(
+                        apiClient.get('/api/v1/export-receipts/accounting-einvoice/preview', {
+                          params: {
+                            exportReceiptId: selectedHandoverReceiptIds[0] ?? receipts[0]?.id ?? 1,
+                            accountingProvider: 'MISA_AMIS',
+                            einvoiceProvider: 'VIETTEL_SINVOICE',
+                          },
+                        }),
+                      )
+                        .then((res) => {
+                          if (res?.data) {
+                            setAccountingEinvoiceData(res.data);
+                          }
+                        })
+                        .catch(() => null);
                     })
                     .catch((err) => {
                       setMisaEinvoiceNotice(null);
@@ -767,6 +808,38 @@ const ExportReceipts = () => {
             {misaEinvoiceNotice && (
               <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
                 {misaEinvoiceNotice}
+              </div>
+            )}
+            {accountingEinvoiceData && (
+              <div
+                role="region"
+                aria-label="Đồng bộ Kế toán Thông tư 200 và Hóa đơn Điện tử Nghị định 70/2025"
+                data-testid="epic90-3-accounting-einvoice-panel"
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 8,
+                  background: '#f0fdf4',
+                  color: '#065f46',
+                  border: '1px solid #86efac',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}
+              >
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                  Đồng bộ Kế toán Thông tư 200 ({accountingEinvoiceData.accountingProvider}) &amp; HĐĐT NĐ 70/2025 ({accountingEinvoiceData.einvoiceProvider} • {accountingEinvoiceData.invoiceTemplateCode} • {accountingEinvoiceData.invoiceSeries} #{accountingEinvoiceData.invoiceNumber})
+                </div>
+                <div style={{ marginBottom: 4 }}>{accountingEinvoiceData.statusLabel}</div>
+                {accountingEinvoiceData.circular200JournalEntries && accountingEinvoiceData.circular200JournalEntries.length > 0 && (
+                  <div style={{ fontSize: 12.5 }}>
+                    <strong>Bút toán Kép Thông tư 200/2014/TT-BTC:</strong>{' '}
+                    {accountingEinvoiceData.circular200JournalEntries.map((j, idx) => (
+                      <span key={idx} style={{ display: 'inline-block', marginRight: 10 }}>
+                        [Nợ TK {j.debitAccount} / Có TK {j.creditAccount}: <strong>{(j.debitAmount ?? 0).toLocaleString('vi-VN')} đ</strong>]
+                      </span>
+                    ))}
+                    <span>• Cân đối Nợ/Có Δ = <strong>{accountingEinvoiceData.journalImbalanceDelta ?? 0}</strong></span>
+                  </div>
+                )}
               </div>
             )}
           </div>

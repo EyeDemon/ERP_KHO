@@ -46,6 +46,22 @@ public record IssueEinvoiceNd70DraftInput(
     string? BuyerName = null,
     string? DecreeStandard = null);
 
+public record SyncAccountingAndEInvoiceInput(
+    int? ExportReceiptId = null,
+    int? ImportReceiptId = null,
+    int? WarehouseId = null,
+    string? AccountingProvider = "MISA_AMIS",
+    string? EInvoiceProvider = "VIETTEL_SINVOICE",
+    string? BuyerTaxCode = "0318999888",
+    string? BuyerName = "Công ty TNHH Thương mại & Logistics Đại Dương",
+    bool IsExportDeclaration = false,
+    bool CustomsCleared = true,
+    bool IssueAdjustmentForm04SS = false,
+    string? AdjustmentReason = null,
+    bool PersistOutboxAndAudit = true,
+    bool Reverse = false,
+    string? OriginalOutboxEventId = null);
+
 public sealed record MisaExcelRowData(
     string SoChungTu,
     string NgayHachToan,
@@ -160,6 +176,14 @@ public interface IExportReceiptOperationsService
         IssueEinvoiceNd70DraftInput? request,
         int? actorUserId,
         bool isAuthenticated,
+        ICurrentUser? currentUserOverride = null,
+        CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> SyncAccountingAndEInvoiceOutboxAsync(
+        SyncAccountingAndEInvoiceInput? request = null,
+        int? actorUserId = null,
+        bool canReadCost = true,
+        IWarehouseAuthorizationService? warehouseAccessOverride = null,
         ICurrentUser? currentUserOverride = null,
         CancellationToken cancellationToken = default);
 }

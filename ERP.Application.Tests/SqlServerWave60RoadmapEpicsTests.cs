@@ -247,7 +247,7 @@ public sealed class SqlServerWave60RoadmapEpicsTests
                 backorder.RecoveredQuantity.Should().Be(6m);
             }
 
-            // (b) Duplicate Idempotency-Key record persistence & replay verification
+            // (b) Duplicate Idempotency-Key record persistence & replay verification + Service-level duplicate Cross-Dock guard
             await using (var db = CreateContext())
             {
                 var record = new IdempotencyRecord
@@ -274,6 +274,17 @@ public sealed class SqlServerWave60RoadmapEpicsTests
                 replayed.Should().NotBeNull();
                 replayed!.Status.Should().Be(IdempotencyStatus.Completed);
                 replayed.ResponseStatusCode.Should().Be(200);
+
+                var putawaySvc = CreatePutawayService(db, fx.UserId);
+                var dupBoEx = await Assert.ThrowsAsync<ConflictException>(() =>
+                    putawaySvc.EvaluateAndExecuteCrossDockAsync(
+                        fx.PutawayTaskId,
+                        new ExecuteCrossDockDto
+                        {
+                            TargetBackorderId = fx.BackorderId,
+                            TargetSalesOrderId = fx.SalesOrderId
+                        }));
+                dupBoEx.ErrorCode.Should().Be("CROSS_DOCK_ALREADY_COMPLETED");
             }
 
             // (c) Parallel Concurrency contention: 2 concurrent Cross-Dock requests competing for the remaining 4 units on the same PutawayTask
@@ -308,6 +319,16 @@ public sealed class SqlServerWave60RoadmapEpicsTests
             concResults.Count(code => code == 200).Should().Be(1);
             concResults.Count(code => code == 422 || code == 409).Should().Be(1);
 
+            await using (var db = CreateContext())
+            {
+                var putawaySvc = CreatePutawayService(db, fx.UserId);
+                var completedEx = await Assert.ThrowsAsync<ConflictException>(() =>
+                    putawaySvc.EvaluateAndExecuteCrossDockAsync(
+                        fx.PutawayTaskId,
+                        new ExecuteCrossDockDto { TargetSalesOrderId = fx.SalesOrderId }));
+                completedEx.ErrorCode.Should().Be("CROSS_DOCK_ALREADY_COMPLETED");
+            }
+
             // (d) Reversal of Cross-Dock (restoring all 10 units back to RECEIVING-STAGE and releasing reservation/allocation)
             await using (var db = CreateContext())
             {
@@ -325,6 +346,12 @@ public sealed class SqlServerWave60RoadmapEpicsTests
                 recvStock.Quantity.Should().Be(10m);
                 shipStock.Quantity.Should().Be(0m);
                 shipStock.ReservedQuantity.Should().Be(0m);
+
+                var dupRevEx = await Assert.ThrowsAsync<ConflictException>(() =>
+                    putawaySvc.EvaluateAndExecuteCrossDockAsync(
+                        fx.PutawayTaskId,
+                        new ExecuteCrossDockDto { Reverse = true }));
+                dupRevEx.ErrorCode.Should().Be("CROSS_DOCK_ALREADY_REVERSED");
             }
         }
         finally
@@ -459,6 +486,23 @@ public sealed class SqlServerWave60RoadmapEpicsTests
                 revDoc.RootElement.GetProperty("reversed").GetBoolean().Should().BeTrue();
                 revDoc.RootElement.GetProperty("sourceRemainingQuantity").GetDecimal().Should().Be(36m);
                 revDoc.RootElement.GetProperty("targetResultingQuantity").GetDecimal().Should().Be(0m);
+
+                var dupRevEx = await Assert.ThrowsAsync<ConflictException>(() =>
+                    svc.ExecuteBreakBulkReplenishmentAsync(
+                        new ExecuteBreakBulkReplenishmentInput(
+                            WarehouseId: fx.WarehouseId,
+                            ProductId: fx.ProductId,
+                            SourceLocationId: fx.ReserveLocationId,
+                            TargetLocationId: fx.PickLocationId,
+                            SourceUomId: fx.CaseUnitId,
+                            SourceUomCode: "CASE",
+                            SourcePackQty: 3m,
+                            ConversionFactor: 12m,
+                            SourceLotId: fx.LotId,
+                            Reverse: true,
+                            OriginalReferenceId: refStockId),
+                        fx.UserId));
+                dupRevEx.ErrorCode.Should().Be("BREAK_BULK_REVERSAL_ORIGINAL_NOT_FOUND_OR_ALREADY_REVERSED");
             }
         }
         finally

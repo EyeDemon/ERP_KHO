@@ -25,6 +25,54 @@ const BusinessPartners = () => {
   const [slaVerified, setSlaVerified] = useState(false);
   const [billingStatementResult, setBillingStatementResult] = useState('');
   const [generated3PlStatementNotice, setGenerated3PlStatementNotice] = useState('');
+  const [depositorPortalData, setDepositorPortalData] = useState<{
+    ownerId?: number;
+    ownerCode?: string;
+    ownerName?: string;
+    billingPeriod?: string;
+    statementCode?: string;
+    crossOwnerLeakCount?: number;
+    tenantAndOwnerIsolationVerified?: boolean;
+    distinctSkuCount?: number;
+    occupiedBinCount?: number;
+    palletEquivalentCount?: number;
+    totalOnHandQty?: number;
+    totalAvailableQty?: number;
+    storageFeeAmount?: number;
+    inboundHandlingFeeAmount?: number;
+    outboundHandlingFeeAmount?: number;
+    vasFeeAmount?: number;
+    subTotalAmount?: number;
+    vatAmount?: number;
+    totalBillingAmount?: number;
+    statusLabel?: string;
+    inventoryBuckets?: Array<{
+      stockId: number;
+      ownerId: number;
+      warehouseCode: string;
+      productCode: string;
+      productName: string;
+      baseUomCode: string;
+      locationCode: string;
+      onHandQty: number;
+      availableQty: number;
+    }>;
+  } | null>(null);
+  const load3PlDepositorPortal = async () => {
+    if (governanceBusy) return;
+    setGovernanceBusy(true);
+    setError('');
+    try {
+      const res = await apiClient.get('/api/v1/inventory-control/3pl-depositor-portal', {
+        params: { billingPeriod: '2026-10' },
+      });
+      setDepositorPortalData(res.data);
+    } catch (e: any) {
+      setError(e?.response?.data?.message || 'Không thể tải Cổng Chủ hàng 3PL.');
+    } finally {
+      setGovernanceBusy(false);
+    }
+  };
   const [billingSummary, setBillingSummary] = useState({
     storageFeeAmount: 3855000,
     inboundHandlingFeeAmount: 1600000,
@@ -350,12 +398,50 @@ const BusinessPartners = () => {
         <button type="button" className="ui-primary-button" disabled={loading || governanceBusy} onClick={() => void generate3PlStatement()}>
           Phát hành Bảng kê &amp; Ghi nhận Công nợ 3PL
         </button>
+        <button
+          type="button"
+          data-testid="btn-load-3pl-depositor-portal"
+          disabled={loading || governanceBusy}
+          onClick={() => void load3PlDepositorPortal()}
+        >
+          Mở Cổng Chủ hàng 3PL (Depositor Portal Cô lập theo OwnerId)
+        </button>
         {generated3PlStatementNotice && (
           <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
             {generated3PlStatementNotice}
           </div>
         )}
       </div>
+      {depositorPortalData && (
+        <div
+          role="region"
+          aria-label="Cổng Chủ hàng 3PL cô lập theo OwnerId"
+          data-testid="epic90-2-3pl-depositor-portal-panel"
+          style={{
+            marginTop: 12,
+            padding: '12px 14px',
+            borderRadius: 10,
+            border: '1px solid #86efac',
+            background: '#f0fdf4',
+            color: '#065f46',
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <strong>
+              Cổng Chủ hàng 3PL (Depositor Portal): {depositorPortalData.ownerCode} — {depositorPortalData.ownerName} (OwnerId={depositorPortalData.ownerId})
+            </strong>
+            <UiBadge tone="success">
+              Cô lập 9 chiều theo OwnerId • Rò rỉ chéo: {depositorPortalData.crossOwnerLeakCount ?? 0}
+            </UiBadge>
+          </div>
+          <div style={{ marginBottom: 6 }}>{depositorPortalData.statusLabel}</div>
+          <div style={{ fontSize: 12.5 }}>
+            Tồn thực tế của chủ hàng: <strong>{depositorPortalData.totalOnHandQty ?? 0}</strong> ĐV ({depositorPortalData.distinctSkuCount ?? 0} SKU • {depositorPortalData.occupiedBinCount ?? 0} vị trí kệ) • Phí lưu kho: <strong>{(depositorPortalData.storageFeeAmount ?? 0).toLocaleString('vi-VN')} đ</strong> • Tổng phí kỳ {depositorPortalData.billingPeriod}: <strong>{(depositorPortalData.totalBillingAmount ?? 0).toLocaleString('vi-VN')} đ</strong>
+          </div>
+        </div>
+      )}
     </UiCard>
   </UiPage>;
 };

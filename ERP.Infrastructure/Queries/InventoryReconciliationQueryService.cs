@@ -183,12 +183,14 @@ namespace ERP.Infrastructure.Queries
                 .GroupBy(x => new
                 {
                     x.InventoryStatus, x.TransactionType,
-                    x.FromInventoryStatus, x.ToInventoryStatus
+                    x.FromInventoryStatus, x.ToInventoryStatus,
+                    HasCorrectiveTransaction = x.CorrectiveTransactionId != null
                 })
                 .Select(g => new
                 {
                     g.Key.InventoryStatus, g.Key.TransactionType,
                     g.Key.FromInventoryStatus, g.Key.ToInventoryStatus,
+                    g.Key.HasCorrectiveTransaction,
                     Quantity = g.Sum(x => x.Quantity), Events = g.Count(),
                     NegativeQuantityEvents = g.Count(x => x.Quantity < 0m),
                     NonPositiveQuantityEvents = g.Count(x => x.Quantity <= 0m),
@@ -284,13 +286,27 @@ namespace ERP.Infrastructure.Queries
                     }
                     continue;
                 }
+                if (group.TransactionType == TransactionType.Reversal && !group.HasCorrectiveTransaction)
+                {
+                    if (group.ZeroQuantityEvents > 0)
+                    {
+                        unclassifiedCount += group.ZeroQuantityEvents;
+                        continue;
+                    }
+                    current.DirectLedgerNetQuantity +=
+                        InventoryLedgerCalculationRules.ComputeAlgebraicDelta(group.TransactionType, group.Quantity, null);
+                    continue;
+                }
                 if (group.NegativeQuantityEvents > 0)
                 {
                     unclassifiedCount += group.NegativeQuantityEvents;
                     continue;
                 }
                 current.DirectLedgerNetQuantity +=
-                    group.TransactionType.ApplySign(group.Quantity);
+                    InventoryLedgerCalculationRules.ComputeAlgebraicDelta(
+                        group.TransactionType,
+                        group.Quantity,
+                        group.HasCorrectiveTransaction ? 1 : null);
             }
 
             var historyInsufficientForNonAvailableStock =
@@ -612,12 +628,14 @@ namespace ERP.Infrastructure.Queries
                 .GroupBy(t => new
                 {
                     t.ProductId, t.WarehouseId, t.TransactionType,
-                    t.InventoryStatus, t.FromInventoryStatus, t.ToInventoryStatus
+                    t.InventoryStatus, t.FromInventoryStatus, t.ToInventoryStatus,
+                    HasCorrectiveTransaction = t.CorrectiveTransactionId != null
                 })
                 .Select(g => new
                 {
                     g.Key.ProductId, g.Key.WarehouseId, g.Key.TransactionType,
                     g.Key.InventoryStatus, g.Key.FromInventoryStatus, g.Key.ToInventoryStatus,
+                    g.Key.HasCorrectiveTransaction,
                     TotalQuantity = g.Sum(t => t.Quantity),
                     EventCount = g.Count(),
                     NegativeQuantityEvents = g.Count(t => t.Quantity < 0m),
@@ -688,6 +706,8 @@ namespace ERP.Infrastructure.Queries
                         return t.EventCount;
                     if (t.TransactionType == TransactionType.Move)
                         return t.ZeroQuantityEvents;
+                    if (t.TransactionType == TransactionType.Reversal && !t.HasCorrectiveTransaction)
+                        return t.ZeroQuantityEvents;
                     if (t.TransactionType != TransactionType.StatusChange)
                         return t.NegativeQuantityEvents;
                     if (t.FromInventoryStatus is not { } from ||
@@ -736,7 +756,11 @@ namespace ERP.Infrastructure.Queries
                             return 0m;
                         }
                         return t.InventoryStatus == InventoryStatus.Available
-                            ? t.TransactionType.ApplySign(t.TotalQuantity) : 0m;
+                            ? InventoryLedgerCalculationRules.ComputeAlgebraicDelta(
+                                t.TransactionType,
+                                t.TotalQuantity,
+                                t.HasCorrectiveTransaction ? 1 : null)
+                            : 0m;
                     });
                 decimal? difference = expectedQuantity.HasValue
                     ? currentQuantity - expectedQuantity.Value : null;
@@ -782,7 +806,10 @@ namespace ERP.Infrastructure.Queries
                         else
                         {
                             expectedByStatus[entry.InventoryStatus] +=
-                                entry.TransactionType.ApplySign(entry.TotalQuantity);
+                                InventoryLedgerCalculationRules.ComputeAlgebraicDelta(
+                                    entry.TransactionType,
+                                    entry.TotalQuantity,
+                                    entry.HasCorrectiveTransaction ? 1 : null);
                         }
                     }
                     allStatusExpected = expectedByStatus.Values.Sum();

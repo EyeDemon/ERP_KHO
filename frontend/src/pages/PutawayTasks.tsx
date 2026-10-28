@@ -57,6 +57,34 @@ export default function PutawayTasks(){
  const [directedSuggestions,setDirectedSuggestions]=useState<Record<number,{recommendedBinCode:string;reasonText:string}>>({});
  const [directedBusyItem,setDirectedBusyItem]=useState<number|null>(null);
  const [crossDockNotice,setCrossDockNotice]=useState('');
+ const [abcInterleavingData,setAbcInterleavingData]=useState<{
+   evaluationId?:string;
+   evaluatedSkuCount?:number;
+   classACount?:number;
+   classBCount?:number;
+   classCCount?:number;
+   reslottingRecommendationCount?:number;
+   interleavedTaskPairCount?:number;
+   averageDeadheadSavedPercent?:number;
+   statusLabel?:string;
+   reslottingRecommendations?:Array<{productCode:string;productName:string;abcClass:string;fromBinCode:string;recommendedBinCode:string;recommendedZoneCode:string;estimatedTravelSavingMeters:number;reasonVi:string}>;
+   interleavedTaskPairs?:Array<{cycleCode:string;putawayProductCode:string;putawayTargetBin:string;pickingProductCode:string;pickingSourceBin:string;interleavedRouteVi:string;estimatedDeadheadSavedPercent:number}>;
+ }|null>(null);
+ const evaluateAbcSlottingInterleaving=async()=>{
+   if(slottingBusy)return;
+   setSlottingBusy(true);
+   setError('');
+   try{
+     const res=await apiClient.get('/api/v1/inventory-control/slotting-interleaving/evaluate',{
+       params:{warehouseId:selected?.warehouseId??tasks[0]?.warehouseId??1,lookbackDays:90}
+     });
+     setAbcInterleavingData(res.data);
+   }catch(e){
+     setError(message(e));
+   }finally{
+     setSlottingBusy(false);
+   }
+ };
  const executeCrossDock=async(taskOverride?:Task)=>{
    const targetTask=taskOverride??selected??tasks.find(x=>x.status!=='Completed'&&x.status!=='Cancelled')??tasks[0];
    if(!targetTask||busy)return;
@@ -236,6 +264,14 @@ export default function PutawayTasks(){
          >
            Thực thi Cross-Dock (Bãi Nhận → Bãi Xuất SHIPPING-STAGE)
          </button>
+         <button
+           type="button"
+           data-testid="btn-evaluate-abc-interleaving"
+           disabled={!!busy||slottingBusy}
+           onClick={()=>void evaluateAbcSlottingInterleaving()}
+         >
+           Phân tích Vị trí Động ABC (Dynamic Slotting) &amp; Ghép cặp Chuyến kép (Task Interleaving)
+         </button>
         <button
           type="button"
           className="ui-btn-secondary"
@@ -255,25 +291,19 @@ export default function PutawayTasks(){
        </div>
        <div data-testid="putaway-ledger-pair-panel" style={{ marginTop: 6, padding: '8px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: 13 }}>
          <strong>Bút toán Sổ cái Đối ứng 2 Dòng:</strong> Chân nguồn <code>-Q (Bãi tiếp nhận)</code> • Chân đích <code>+Q (Kệ lưu trữ BIN-A01-01)</code> (hoặc <code>SHIPPING-STAGE</code> khi Cross-Dock) — Bảo toàn tổng tồn kho toàn kho (<code>Δ = 0</code>).
-         {crossDockNotice&&(
-           <div
-             role="status"
-             data-testid="cross-dock-status-banner"
-             style={{
-               marginTop: 8,
-               padding: '8px 12px',
-               borderRadius: 8,
-               background: '#eff6ff',
-               color: '#1e3a8a',
-               border: '1px solid #93c5fd',
-               fontSize: 13,
-               lineHeight: 1.5,
-               fontWeight: 600,
-             }}
-           >
-             {crossDockNotice}
+         {abcInterleavingData&&(
+           <div role="region" aria-label="Kết quả Tối ưu vị trí ABC và Ghép cặp Chuyến kép" data-testid="epic90-1-abc-slotting-interleaving-panel" style={{ marginTop: 8, padding: '10px 14px', borderRadius: 8, background: '#f0fdf4', color: '#065f46', border: '1px solid #86efac', fontSize: 13, lineHeight: 1.5 }}>
+             <div style={{ fontWeight: 700, marginBottom: 4 }}>Tối ưu Vị trí Động ABC (Dynamic ABC Slotting) &amp; Ghép cặp Chuyến kép (Task Interleaving): {abcInterleavingData.evaluationId}</div>
+             <div style={{ marginBottom: 4 }}>{abcInterleavingData.statusLabel}</div>
+             {abcInterleavingData.reslottingRecommendations&&abcInterleavingData.reslottingRecommendations.length>0&&(
+               <div style={{ marginBottom: 4 }}><strong>Đề xuất Đảo kệ Động (ABC Velocity):</strong>{' '}{abcInterleavingData.reslottingRecommendations.slice(0,2).map((rec,idx)=><span key={idx} style={{ display: 'inline-block', marginRight: 10 }}>[{rec.abcClass}] <code>{rec.productCode}</code> ({rec.fromBinCode} → <strong>{rec.recommendedBinCode}</strong> • Tiết kiệm {rec.estimatedTravelSavingMeters}m)</span>)}</div>
+             )}
+             {abcInterleavingData.interleavedTaskPairs&&abcInterleavingData.interleavedTaskPairs.length>0&&(
+               <div><strong>Chu trình Chuyến kép (Dual-Command Cycle):</strong>{' '}{abcInterleavingData.interleavedTaskPairs.slice(0,1).map((pair)=><span key={pair.cycleCode}><code>{pair.cycleCode}</code>: {pair.interleavedRouteVi} • Giảm di chuyển rỗng: <strong>{pair.estimatedDeadheadSavedPercent}%</strong></span>)}</div>
+             )}
            </div>
          )}
+         {crossDockNotice&&<div role="status" data-testid="cross-dock-status-banner" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#eff6ff', color: '#1e3a8a', border: '1px solid #93c5fd', fontSize: 13, lineHeight: 1.5, fontWeight: 600 }}>{crossDockNotice}</div>}
        </div>
        {slottingEvaluationResult&&(
          <div

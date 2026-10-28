@@ -232,6 +232,107 @@ public sealed class InventoryControlController : ControllerBase
         return this.ToActionResult(outcome);
     }
 
+    [HttpGet("slotting-interleaving/evaluate")]
+    [HttpGet("/api/inventory-control/slotting-interleaving/evaluate")]
+    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    public async Task<IActionResult> PreviewAbcSlottingAndTaskInterleaving(
+        [FromQuery] int? warehouseId = null,
+        [FromQuery] int lookbackDays = 90,
+        [FromServices] IInventoryControlOperationsService? opsSvc = null,
+        [FromServices] IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        var effectiveOps = opsSvc ?? _controlOps;
+        var effectiveAuth = warehouseAuth ?? _warehouseAccess;
+        var outcome = await effectiveOps.EvaluateAbcSlottingAndTaskInterleavingAsync(
+            new EvaluateAbcSlottingInput(warehouseId, lookbackDays, null, PersistAuditAndOutbox: false),
+            GetActorUserId(),
+            effectiveAuth,
+            cancellationToken);
+        return this.ToActionResult(outcome);
+    }
+
+    [HttpPost("slotting-interleaving/evaluate")]
+    [HttpPost("/api/inventory-control/slotting-interleaving/evaluate")]
+    [HttpPost("/api/v1/putaway-tasks/abc-slotting-interleaving")]
+    [HttpPost("/api/putaway-tasks/abc-slotting-interleaving")]
+    [IdempotentCommand("Inventory.AbcSlottingInterleaving")]
+    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    public async Task<IActionResult> EvaluateAbcSlottingAndTaskInterleaving(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EvaluateAbcSlottingInput? request = null,
+        [FromServices] IInventoryControlOperationsService? opsSvc = null,
+        [FromServices] IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
+        var effectiveOps = opsSvc ?? _controlOps;
+        var effectiveAuth = warehouseAuth ?? _warehouseAccess;
+        var outcome = await effectiveOps.EvaluateAbcSlottingAndTaskInterleavingAsync(
+            request ?? new EvaluateAbcSlottingInput(),
+            GetActorUserId(),
+            effectiveAuth,
+            cancellationToken);
+        return this.ToActionResult(outcome);
+    }
+
+    [HttpGet("3pl-depositor-portal")]
+    [HttpGet("/api/inventory-control/3pl-depositor-portal")]
+    [HttpGet("/api/v1/business-partners/3pl-depositor-portal")]
+    [HttpGet("/api/business-partners/3pl-depositor-portal")]
+    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    public async Task<IActionResult> GetThreePlDepositorPortal(
+        [FromQuery] int? ownerId = null,
+        [FromQuery] int? requestedOwnerId = null,
+        [FromQuery] int? authenticatedOwnerId = null,
+        [FromQuery] int? warehouseId = null,
+        [FromQuery] string? billingPeriod = null,
+        [FromServices] IInventoryControlOperationsService? opsSvc = null,
+        [FromServices] IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        var effectiveOps = opsSvc ?? _controlOps;
+        var effectiveAuth = warehouseAuth ?? _warehouseAccess;
+        var outcome = await effectiveOps.GetThreePlDepositorPortalAsync(
+            new ThreePlDepositorPortalInput(
+                OwnerId: ownerId,
+                RequestedOwnerId: requestedOwnerId,
+                AuthenticatedOwnerId: authenticatedOwnerId,
+                WarehouseId: warehouseId,
+                BillingPeriod: billingPeriod,
+                PersistSnapshotAndStatement: false),
+            GetActorUserId(),
+            effectiveAuth,
+            cancellationToken);
+        return this.ToActionResult(outcome);
+    }
+
+    [HttpPost("3pl-depositor-portal")]
+    [HttpPost("/api/inventory-control/3pl-depositor-portal")]
+    [HttpPost("/api/v1/business-partners/3pl-depositor-portal")]
+    [HttpPost("/api/business-partners/3pl-depositor-portal")]
+    [IdempotentCommand("ThreePlDepositorPortal.IssueBillingStatement")]
+    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    public async Task<IActionResult> ExecuteThreePlDepositorPortal(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ThreePlDepositorPortalInput? request = null,
+        [FromServices] IInventoryControlOperationsService? opsSvc = null,
+        [FromServices] IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
+        var effectiveOps = opsSvc ?? _controlOps;
+        var effectiveAuth = warehouseAuth ?? _warehouseAccess;
+        var outcome = await effectiveOps.GetThreePlDepositorPortalAsync(
+            request ?? new ThreePlDepositorPortalInput(PersistSnapshotAndStatement: true),
+            GetActorUserId(),
+            effectiveAuth,
+            cancellationToken);
+        return this.ToActionResult(outcome);
+    }
+
     private int? GetActorUserId() =>
         int.TryParse(
             User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,

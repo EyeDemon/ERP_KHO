@@ -46,6 +46,28 @@ public record ExecuteBreakBulkReplenishmentInput(
     int? OriginalReferenceId = null,
     string? Note = null);
 
+public record EvaluateAbcSlottingInput(
+    int? WarehouseId = null,
+    int LookbackDays = 90,
+    int? ProductId = null,
+    bool PersistAuditAndOutbox = true,
+    bool Reverse = false,
+    string? OriginalEvaluationId = null);
+
+public record ThreePlDepositorPortalInput(
+    int? OwnerId = null,
+    int? RequestedOwnerId = null,
+    int? AuthenticatedOwnerId = null,
+    int? WarehouseId = null,
+    string? BillingPeriod = null,
+    decimal StorageRatePerPalletDay = 15000m,
+    decimal InboundHandlingRatePerUnit = 8000m,
+    decimal OutboundHandlingRatePerUnit = 9000m,
+    decimal VasKittingRatePerUnit = 12000m,
+    bool PersistSnapshotAndStatement = false,
+    bool Reverse = false,
+    int? OriginalStatementId = null);
+
 public interface IInventoryControlOperationsService
 {
     Task<WmsEndpointOutcome> ReplenishmentSuggestionsAsync(
@@ -61,6 +83,18 @@ public interface IInventoryControlOperationsService
 
     Task<WmsEndpointOutcome> ExecuteBreakBulkReplenishmentAsync(
         ExecuteBreakBulkReplenishmentInput? request = null,
+        int? actorUserId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> EvaluateAbcSlottingAndTaskInterleavingAsync(
+        EvaluateAbcSlottingInput? request = null,
+        int? actorUserId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> GetThreePlDepositorPortalAsync(
+        ThreePlDepositorPortalInput? request = null,
         int? actorUserId = null,
         IWarehouseAuthorizationService? warehouseAuth = null,
         CancellationToken cancellationToken = default);

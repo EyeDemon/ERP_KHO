@@ -477,8 +477,31 @@ public sealed class PutawayService(
 
             if (dto?.Reverse == true)
             {
+                var cdRefTypes = new[] { "PutawayOut", "PutawayIn" };
+                var allCdOrigTxs = await context.InventoryTransactions
+                    .AsNoTracking()
+                    .Where(t => t.ReferenceId == task.Id &&
+                                t.TransactionType != TransactionType.Reversal &&
+                                t.ReferenceType != null &&
+                                cdRefTypes.Contains(t.ReferenceType))
+                    .OrderBy(t => t.Id)
+                    .ToListAsync(token);
+
                 if (!task.IsCrossDock || task.CrossDockAllocatedQty <= 0m)
                 {
+                    if (allCdOrigTxs.Count > 0)
+                    {
+                        var origIds = allCdOrigTxs.Select(x => x.Id).ToList();
+                        var hasExistingReversal = await context.InventoryTransactions
+                            .AsNoTracking()
+                            .AnyAsync(t => t.ReversalOfTransactionId != null && origIds.Contains(t.ReversalOfTransactionId.Value), token);
+                        if (hasExistingReversal)
+                        {
+                            throw new ConflictException(
+                                "CROSS_DOCK_ALREADY_REVERSED",
+                                $"Giao dịch Cross-Dock của nhiệm vụ #{task.Id} đã được đảo ngược trước đó.");
+                        }
+                    }
                     throw new BusinessRuleException("Nhiệm vụ chưa phát sinh Cross-Dock để đảo ngược.");
                 }
 
@@ -491,19 +514,27 @@ public sealed class PutawayService(
                     .Select(t => t.ReversalOfTransactionId!.Value)
                     .ToListAsync(token);
 
-                var cdRefTypes = new[] { "PutawayOut", "PutawayIn" };
-                var cdTxs = await context.InventoryTransactions
-                    .AsNoTracking()
-                    .Where(t => t.ReferenceId == task.Id &&
-                                t.TransactionType != TransactionType.Reversal &&
-                                t.ReferenceType != null &&
-                                cdRefTypes.Contains(t.ReferenceType) &&
-                                !alreadyReversedIds.Contains(t.Id))
+                var cdTxs = allCdOrigTxs
+                    .Where(t => !alreadyReversedIds.Contains(t.Id))
                     .OrderBy(t => t.Id)
-                    .ToListAsync(token);
+                    .ToList();
+
+                if (cdTxs.Count == 0)
+                {
+                    throw new ConflictException(
+                        "CROSS_DOCK_ALREADY_REVERSED",
+                        $"Toàn bộ bút toán Cross-Dock của nhiệm vụ #{task.Id} đã được đảo ngược trước đó.");
+                }
 
                 foreach (var orig in cdTxs)
                 {
+                    if (await context.InventoryTransactions.AsNoTracking().AnyAsync(t => t.ReversalOfTransactionId == orig.Id, token))
+                    {
+                        throw new ConflictException(
+                            "CROSS_DOCK_ALREADY_REVERSED",
+                            $"Bút toán Cross-Dock gốc #{orig.Id} của nhiệm vụ #{task.Id} đã tồn tại bút toán đảo trong sổ cái.");
+                    }
+
                     var revDelta = -orig.Quantity;
                     var bucket = await context.InventoryStocks
                         .FirstOrDefaultAsync(s =>
@@ -517,18 +548,37 @@ public sealed class PutawayService(
                             s.Status == orig.InventoryStatus,
                             token);
 
-                    if (bucket != null)
+                    var locCode = orig.LocationId.HasValue
+                        ? (await context.WarehouseLocations.AsNoTracking()
+                            .Where(l => l.Id == orig.LocationId.Value)
+                            .Select(l => l.Code)
+                            .FirstOrDefaultAsync(token) ?? $"LOC-{orig.LocationId.Value}")
+                        : "UNKNOWN";
+
+                    if (revDelta < 0m)
                     {
-                        if (revDelta < 0m)
+                        if (bucket == null || bucket.Quantity + revDelta < 0m)
                         {
-                            var releaseAmt = Math.Min(-revDelta, bucket.ReservedQuantity);
-                            bucket.ReservedQuantity = Math.Max(0m, bucket.ReservedQuantity - releaseAmt);
-                            bucket.AllocatedQuantity = Math.Max(0m, bucket.AllocatedQuantity - Math.Min(-revDelta, bucket.AllocatedQuantity));
+                            throw new ConflictException(
+                                "CROSS_DOCK_REVERSAL_INSUFFICIENT_STOCK",
+                                $"Không đủ tồn kho khả dụng tại vị trí '{locCode}' để đảo ngược Cross-Dock (Cần trừ: {Math.Abs(revDelta):0.0000}, Hiện có: {(bucket?.Quantity ?? 0m):0.0000}).");
                         }
-                        bucket.Quantity = Math.Max(0m, bucket.Quantity + revDelta);
-                        bucket.LastUpdated = nowUtc;
-                        bucket.RefreshGrainHash();
+
+                        var releaseAmt = Math.Min(-revDelta, bucket.ReservedQuantity);
+                        bucket.ReservedQuantity = bucket.ReservedQuantity - releaseAmt;
+                        var releaseAlloc = Math.Min(-revDelta, bucket.AllocatedQuantity);
+                        bucket.AllocatedQuantity = bucket.AllocatedQuantity - releaseAlloc;
                     }
+                    else if (bucket == null)
+                    {
+                        throw new ConflictException(
+                            "CROSS_DOCK_REVERSAL_INSUFFICIENT_STOCK",
+                            $"Không tìm thấy bucket tồn kho tại vị trí '{locCode}' để hoàn trả Cross-Dock.");
+                    }
+
+                    bucket.Quantity = bucket.Quantity + revDelta;
+                    bucket.LastUpdated = nowUtc;
+                    bucket.RefreshGrainHash();
 
                     context.InventoryTransactions.Add(new InventoryTransaction
                     {
@@ -637,11 +687,24 @@ public sealed class PutawayService(
 
             if (task.IsCrossDock && task.Status == PutawayTaskStatus.Completed)
             {
-                throw ConflictWithCode("CROSS_DOCK_ALREADY_COMPLETED", "Nhiệm vụ Cross-Dock đã được thực thi hoàn tất.");
+                throw new ConflictException("CROSS_DOCK_ALREADY_COMPLETED", "Nhiệm vụ Cross-Dock đã được thực thi hoàn tất.");
             }
-            if (task.Status is PutawayTaskStatus.Cancelled or PutawayTaskStatus.Completed)
+            if (task.Status == PutawayTaskStatus.Completed)
+            {
+                throw new ConflictException("CROSS_DOCK_ALREADY_COMPLETED", "Nhiệm vụ Cross-Dock đã được thực thi hoàn tất.");
+            }
+            if (task.Status == PutawayTaskStatus.Cancelled)
             {
                 throw Conflict("Nhiệm vụ không ở trạng thái có thể thực thi Cross-Dock.");
+            }
+            if (task.IsCrossDock && dto?.TargetBackorderId is > 0 && task.CrossDockTargetBackorderId == dto.TargetBackorderId.Value)
+            {
+                var existingBo = await context.Backorders.AsNoTracking()
+                    .FirstOrDefaultAsync(b => b.Id == dto.TargetBackorderId.Value, token);
+                if (existingBo != null && existingBo.Status == BackorderStatus.Fulfilled)
+                {
+                    throw new ConflictException("CROSS_DOCK_ALREADY_COMPLETED", $"Nhiệm vụ Cross-Dock cho Backorder #{dto.TargetBackorderId.Value} đã được thực thi hoàn tất.");
+                }
             }
 
             var item = (dto?.ItemId is > 0
