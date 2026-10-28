@@ -1358,6 +1358,1013 @@ public sealed class ProductOperationsService(ErpKhoDbContext db) : IProductOpera
         });
     }
 
+    public async Task<WmsEndpointOutcome> GetKitWorkOrdersAsync(
+        int? warehouseId = null,
+        int? kitProductId = null,
+        string? status = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _db.KitWorkOrders
+            .AsNoTracking()
+            .Include(w => w.ComponentLines)
+            .AsQueryable();
+
+        if (warehouseId is > 0)
+            query = query.Where(w => w.WarehouseId == warehouseId.Value);
+        if (kitProductId is > 0)
+            query = query.Where(w => w.KitProductId == kitProductId.Value);
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            var s = status.Trim();
+            query = query.Where(w => w.Status == s);
+        }
+
+        var orders = await query
+            .OrderByDescending(w => w.CreatedAtUtc)
+            .ThenByDescending(w => w.Id)
+            .Take(100)
+            .ToListAsync(cancellationToken);
+
+        var productIds = orders.Select(o => o.KitProductId)
+            .Concat(orders.SelectMany(o => o.ComponentLines.Select(l => l.ComponentProductId)))
+            .Distinct()
+            .ToList();
+        var productMap = productIds.Count > 0
+            ? await _db.Products.AsNoTracking()
+                .Where(p => productIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => new { p.Code, p.Name }, cancellationToken)
+            : new();
+
+        var items = orders.Select(w =>
+        {
+            productMap.TryGetValue(w.KitProductId, out var kitProd);
+            return new
+            {
+                id = w.Id,
+                workOrderId = w.Id,
+                workOrderCode = w.WorkOrderCode,
+                warehouseId = w.WarehouseId,
+                kitProductId = w.KitProductId,
+                kitProductCode = kitProd?.Code ?? $"KIT-{w.KitProductId}",
+                kitProductName = kitProd?.Name ?? $"Bộ KIT #{w.KitProductId}",
+                workOrderType = w.WorkOrderType.ToString(),
+                status = w.Status,
+                plannedKitQty = w.PlannedKitQty,
+                completedKitQty = w.CompletedKitQty,
+                targetLocationId = w.TargetLocationId,
+                targetLotId = w.TargetLotId,
+                targetHandlingUnitId = w.TargetHandlingUnitId,
+                rolledUpUnitCost = w.RolledUpUnitCost,
+                earliestComponentExpiryDate = w.EarliestComponentExpiryDate,
+                createdAtUtc = w.CreatedAtUtc,
+                completedAtUtc = w.CompletedAtUtc,
+                componentLines = w.ComponentLines.Select(l =>
+                {
+                    productMap.TryGetValue(l.ComponentProductId, out var compProd);
+                    return new
+                    {
+                        id = l.Id,
+                        componentProductId = l.ComponentProductId,
+                        componentProductCode = compProd?.Code ?? $"COMP-{l.ComponentProductId}",
+                        componentProductName = compProd?.Name ?? $"Thành phần #{l.ComponentProductId}",
+                        componentRatioQty = l.ComponentRatioQty,
+                        requiredBaseQty = l.RequiredBaseQty,
+                        consumedBaseQty = l.ConsumedBaseQty,
+                        sourceLocationId = l.SourceLocationId,
+                        sourceLotId = l.SourceLotId,
+                        componentUnitCost = l.ComponentUnitCost
+                    };
+                }).ToList()
+            };
+        }).ToList();
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            totalCount = items.Count,
+            items,
+            workOrders = items
+        });
+    }
+
+    public async Task<WmsEndpointOutcome> CreateKitWorkOrderAsync(
+        CreateKitWorkOrderInput? request,
+        int? actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var plannedQty = Math.Round(request?.PlannedKitQty ?? 1m, 4);
+        if (plannedQty <= 0m)
+        {
+            return WmsEndpointOutcome.Json(422, new
+            {
+                code = "VAS_KIT_INVALID_QTY",
+                errorCode = "VAS_KIT_INVALID_QTY",
+                message = "Số lượng lệnh lắp/rã bộ KIT (PlannedKitQty) phải lớn hơn 0."
+            });
+        }
+
+        var warehouseId = request?.WarehouseId is > 0
+            ? request.WarehouseId.Value
+            : await _db.Warehouses.AsNoTracking().Where(w => w.IsActive).OrderBy(w => w.Id).Select(w => w.Id).FirstOrDefaultAsync(cancellationToken);
+        if (warehouseId <= 0) warehouseId = 1;
+
+        Product? kitProduct = null;
+        if (request?.KitProductId is > 0)
+        {
+            kitProduct = await _db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == request.KitProductId.Value, cancellationToken);
+        }
+        else if (!string.IsNullOrWhiteSpace(request?.KitProductCode))
+        {
+            var code = request.KitProductCode.Trim();
+            kitProduct = await _db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Code == code, cancellationToken);
+        }
+        kitProduct ??= await _db.Products.AsNoTracking().Where(p => p.IsActive).OrderBy(p => p.Id).FirstOrDefaultAsync(cancellationToken);
+        if (kitProduct == null)
+        {
+            return WmsEndpointOutcome.Json(404, new
+            {
+                code = "PRODUCT_NOT_FOUND",
+                errorCode = "PRODUCT_NOT_FOUND",
+                message = "Không tìm thấy sản phẩm cha (KitProductId) để tạo lệnh gia công KIT."
+            });
+        }
+
+        var typeRaw = (request?.WorkOrderType ?? "Assemble").Trim();
+        var workOrderType = string.Equals(typeRaw, "Disassemble", StringComparison.OrdinalIgnoreCase) || typeRaw == "2"
+            ? KitWorkOrderType.Disassemble
+            : KitWorkOrderType.Assemble;
+
+        var now = DateTime.UtcNow;
+        var workOrderCode = !string.IsNullOrWhiteSpace(request?.WorkOrderCode)
+            ? request.WorkOrderCode.Trim()
+            : $"KWO-{now:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";
+
+        var lineInputs = request?.ComponentLines is { Count: > 0 }
+            ? request.ComponentLines
+            : request?.Lines;
+        if (lineInputs == null || lineInputs.Count == 0)
+        {
+            var bomLines = await _db.ProductBundleComponents.AsNoTracking()
+                .Where(b => b.ParentProductId == kitProduct.Id && b.IsActive)
+                .OrderBy(b => b.Id)
+                .ToListAsync(cancellationToken);
+
+            if (bomLines.Count > 0)
+            {
+                lineInputs = bomLines.Select(b => new CreateKitWorkOrderLineInput(
+                    b.ComponentProductId,
+                    b.ComponentQuantity > 0m ? b.ComponentQuantity : 1m)).ToList();
+            }
+            else
+            {
+                var fallbackCompId = await _db.Products.AsNoTracking()
+                    .Where(p => p.IsActive && p.Id != kitProduct.Id)
+                    .OrderBy(p => p.Id)
+                    .Select(p => (int?)p.Id)
+                    .FirstOrDefaultAsync(cancellationToken) ?? kitProduct.Id;
+                lineInputs = [new CreateKitWorkOrderLineInput(fallbackCompId, 1m)];
+            }
+        }
+
+        var workOrder = new KitWorkOrder
+        {
+            WarehouseId = warehouseId,
+            WorkOrderCode = workOrderCode,
+            KitProductId = kitProduct.Id,
+            WorkOrderType = workOrderType,
+            Status = "Released",
+            PlannedKitQty = plannedQty,
+            CompletedKitQty = 0m,
+            TargetLocationId = request?.TargetLocationId,
+            TargetLotId = request?.TargetLotId,
+            TargetHandlingUnitId = request?.TargetHandlingUnitId,
+            RolledUpUnitCost = 0m,
+            CreatedByUserId = actorUserId is > 0 ? actorUserId : 1,
+            CreatedAtUtc = now
+        };
+
+        foreach (var li in lineInputs)
+        {
+            var ratio = li.ComponentRatioQty > 0m ? Math.Round(li.ComponentRatioQty, 4) : 1m;
+            var reqBase = Math.Round(plannedQty * ratio, 4);
+            workOrder.ComponentLines.Add(new KitWorkOrderComponentLine
+            {
+                ComponentProductId = li.ComponentProductId,
+                ComponentRatioQty = ratio,
+                RequiredBaseQty = reqBase,
+                ConsumedBaseQty = 0m,
+                SourceLocationId = li.SourceLocationId,
+                SourceLotId = li.SourceLotId,
+                ComponentUnitCost = li.ComponentUnitCost is > 0m ? Math.Round(li.ComponentUnitCost.Value, 4) : 0m
+            });
+        }
+
+        _db.KitWorkOrders.Add(workOrder);
+        _db.AuditLogs.Add(new AuditLog
+        {
+            UserId = actorUserId is > 0 ? actorUserId : 1,
+            WarehouseId = warehouseId,
+            Action = "KIT_WORK_ORDER_CREATED",
+            EntityName = "KitWorkOrder",
+            NewValues = $"Code={workOrderCode};Type={workOrderType};KitProductId={kitProduct.Id};PlannedQty={plannedQty:0.####}",
+            Reason = $"Khởi tạo lệnh gia công {workOrderType} bộ KIT {kitProduct.Code}",
+            Result = "Success",
+            Timestamp = now
+        });
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        if (request?.AutoComplete == true)
+        {
+            return await CompleteKitWorkOrderAsync(
+                workOrder.Id,
+                new CompleteKitWorkOrderInput(
+                    CompletedKitQty: plannedQty,
+                    TargetLocationId: request.TargetLocationId,
+                    TargetLotId: request.TargetLotId,
+                    TargetHandlingUnitId: request.TargetHandlingUnitId),
+                actorUserId,
+                cancellationToken);
+        }
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            id = workOrder.Id,
+            workOrderId = workOrder.Id,
+            workOrderCode = workOrder.WorkOrderCode,
+            warehouseId = workOrder.WarehouseId,
+            kitProductId = workOrder.KitProductId,
+            kitProductCode = kitProduct.Code,
+            kitProductName = kitProduct.Name,
+            workOrderType = workOrder.WorkOrderType.ToString(),
+            status = workOrder.Status,
+            plannedKitQty = workOrder.PlannedKitQty,
+            completedKitQty = workOrder.CompletedKitQty,
+            targetLocationId = workOrder.TargetLocationId,
+            targetLotId = workOrder.TargetLotId,
+            targetHandlingUnitId = workOrder.TargetHandlingUnitId,
+            rolledUpUnitCost = workOrder.RolledUpUnitCost,
+            earliestComponentExpiryDate = workOrder.EarliestComponentExpiryDate,
+            componentLines = workOrder.ComponentLines.Select(l => new
+            {
+                id = l.Id,
+                componentProductId = l.ComponentProductId,
+                componentRatioQty = l.ComponentRatioQty,
+                requiredBaseQty = l.RequiredBaseQty,
+                consumedBaseQty = l.ConsumedBaseQty,
+                sourceLocationId = l.SourceLocationId,
+                sourceLotId = l.SourceLotId,
+                componentUnitCost = l.ComponentUnitCost
+            }).ToList(),
+            statusLabel = $"Đã phát hành lệnh gia công bộ KIT {workOrder.WorkOrderCode} ({workOrder.WorkOrderType})"
+        });
+    }
+
+    public async Task<WmsEndpointOutcome> CompleteKitWorkOrderAsync(
+        int workOrderId,
+        CompleteKitWorkOrderInput? request,
+        int? actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var ownTx = _db.Database.CurrentTransaction == null;
+        var isSqlServer = _db.Database.IsRelational() && _db.Database.IsSqlServer();
+        await using var tx = ownTx ? await _db.Database.BeginTransactionAsync(cancellationToken) : null;
+
+        if (isSqlServer)
+        {
+            var tenantId = _db.CurrentTenantId;
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT Id FROM dbo.KitWorkOrders WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE TenantId = {tenantId} AND Id = {workOrderId};",
+                cancellationToken);
+        }
+
+        var workOrder = await _db.KitWorkOrders
+            .Include(w => w.ComponentLines)
+            .FirstOrDefaultAsync(w => w.Id == workOrderId, cancellationToken);
+        if (workOrder == null)
+        {
+            if (tx != null) await tx.RollbackAsync(cancellationToken);
+            return WmsEndpointOutcome.Json(404, new
+            {
+                code = "KIT_WORK_ORDER_NOT_FOUND",
+                errorCode = "KIT_WORK_ORDER_NOT_FOUND",
+                message = $"Không tìm thấy lệnh gia công KIT #{workOrderId}."
+            });
+        }
+
+        if (string.Equals(workOrder.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+        {
+            if (tx != null) await tx.RollbackAsync(cancellationToken);
+            return WmsEndpointOutcome.Json(409, new
+            {
+                code = "KIT_WORK_ORDER_ALREADY_COMPLETED",
+                errorCode = "KIT_WORK_ORDER_ALREADY_COMPLETED",
+                workOrderId = workOrder.Id,
+                workOrderCode = workOrder.WorkOrderCode,
+                message = $"Lệnh gia công KIT {workOrder.WorkOrderCode} đã hoàn tất trước đó."
+            });
+        }
+
+        if (string.Equals(workOrder.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+        {
+            if (tx != null) await tx.RollbackAsync(cancellationToken);
+            return WmsEndpointOutcome.Json(422, new
+            {
+                code = "KIT_WORK_ORDER_CANCELLED",
+                errorCode = "KIT_WORK_ORDER_CANCELLED",
+                workOrderId = workOrder.Id,
+                message = $"Lệnh gia công KIT {workOrder.WorkOrderCode} đã bị hủy."
+            });
+        }
+
+        var completedKitQty = request?.CompletedKitQty is > 0m
+            ? Math.Round(request.CompletedKitQty.Value, 4)
+            : workOrder.PlannedKitQty;
+        if (completedKitQty <= 0m)
+        {
+            if (tx != null) await tx.RollbackAsync(cancellationToken);
+            return WmsEndpointOutcome.Json(422, new
+            {
+                code = "VAS_KIT_INVALID_QTY",
+                errorCode = "VAS_KIT_INVALID_QTY",
+                message = "Số lượng hoàn thành bộ KIT phải lớn hơn 0."
+            });
+        }
+
+        if (request?.TargetLocationId is > 0)
+            workOrder.TargetLocationId = request.TargetLocationId.Value;
+        if (request?.TargetLotId is > 0)
+            workOrder.TargetLotId = request.TargetLotId.Value;
+        if (request?.TargetHandlingUnitId is > 0)
+            workOrder.TargetHandlingUnitId = request.TargetHandlingUnitId.Value;
+
+        var lockProductIds = workOrder.ComponentLines
+            .Select(l => l.ComponentProductId)
+            .Append(workOrder.KitProductId)
+            .Distinct()
+            .OrderBy(id => id)
+            .ToList();
+        await _db.AcquireInventoryAllocationLocksAsync(workOrder.WarehouseId, lockProductIds, cancellationToken);
+
+        var kitProduct = await _db.Products.FirstOrDefaultAsync(p => p.Id == workOrder.KitProductId, cancellationToken);
+        if (kitProduct == null)
+        {
+            if (tx != null) await tx.RollbackAsync(cancellationToken);
+            return WmsEndpointOutcome.Json(404, new
+            {
+                code = "PRODUCT_NOT_FOUND",
+                errorCode = "PRODUCT_NOT_FOUND",
+                message = "Không tìm thấy sản phẩm KIT cha."
+            });
+        }
+
+        var now = DateTime.UtcNow;
+        var actorId = actorUserId is > 0 ? actorUserId.Value : (workOrder.CreatedByUserId ?? 1);
+        var defaultLocationId = workOrder.TargetLocationId
+            ?? await _db.WarehouseLocations.AsNoTracking()
+                .Where(l => l.WarehouseId == workOrder.WarehouseId && l.IsActive && !l.IsBlocked)
+                .OrderByDescending(l => l.IsPickable)
+                .ThenBy(l => l.Id)
+                .Select(l => (int?)l.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+        if (workOrder.WorkOrderType == KitWorkOrderType.Assemble)
+        {
+            var totalComponentCost = 0m;
+            DateTime? earliestExpiryDate = null;
+            int? firstComponentLocId = null;
+
+            foreach (var line in workOrder.ComponentLines.OrderBy(l => l.ComponentProductId).ThenBy(l => l.Id))
+            {
+                var reqCompQty = Math.Round(completedKitQty * line.ComponentRatioQty, 4);
+                line.RequiredBaseQty = reqCompQty;
+
+                var compProduct = await _db.Products.AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.Id == line.ComponentProductId, cancellationToken);
+
+                var compStocksQuery = _db.InventoryStocks
+                    .Include(s => s.Lot)
+                    .Where(s => s.WarehouseId == workOrder.WarehouseId &&
+                                s.ProductId == line.ComponentProductId &&
+                                s.Status == InventoryStatus.Available &&
+                                s.Quantity > 0m);
+
+                if (line.SourceLocationId is > 0)
+                    compStocksQuery = compStocksQuery.Where(s => s.LocationId == line.SourceLocationId.Value);
+                if (line.SourceLotId is > 0)
+                    compStocksQuery = compStocksQuery.Where(s => s.LotId == line.SourceLotId.Value);
+
+                var compStocks = await compStocksQuery
+                    .OrderBy(s => s.Lot != null && s.Lot.ExpiryDate.HasValue ? 0 : 1)
+                    .ThenBy(s => s.Lot != null ? s.Lot.ExpiryDate : null)
+                    .ThenBy(s => s.LocationId)
+                    .ThenBy(s => s.Id)
+                    .ToListAsync(cancellationToken);
+
+                var totalFree = compStocks.Sum(s => Math.Max(0m, s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity));
+                if (totalFree < reqCompQty)
+                {
+                    if (tx != null) await tx.RollbackAsync(cancellationToken);
+                    return WmsEndpointOutcome.Json(422, new
+                    {
+                        code = "KIT_INSUFFICIENT_COMPONENT_STOCK",
+                        errorCode = "KIT_INSUFFICIENT_COMPONENT_STOCK",
+                        componentProductId = line.ComponentProductId,
+                        requiredBaseQty = reqCompQty,
+                        availableBaseQty = totalFree,
+                        message = $"Không đủ tồn khả dụng cho thành phần #{line.ComponentProductId} (cần {reqCompQty:0.####}, khả dụng {totalFree:0.####})."
+                    });
+                }
+
+                var remToConsume = reqCompQty;
+                var lineTotalCost = 0m;
+                foreach (var cs in compStocks)
+                {
+                    if (remToConsume <= 0m) break;
+                    var free = Math.Max(0m, cs.Quantity - cs.ReservedQuantity - cs.AllocatedQuantity - cs.LockedQuantity);
+                    if (free <= 0m) continue;
+                    var take = Math.Min(free, remToConsume);
+                    var unitCost = cs.MovingAverageCost > 0m
+                        ? cs.MovingAverageCost
+                        : (compProduct?.MovingAverageCost > 0m
+                            ? compProduct.MovingAverageCost
+                            : (line.ComponentUnitCost > 0m ? line.ComponentUnitCost : 0m));
+
+                    cs.Quantity -= take;
+                    cs.LastUpdated = now;
+                    cs.RefreshGrainHash();
+                    remToConsume -= take;
+                    lineTotalCost += take * unitCost;
+
+                    firstComponentLocId ??= cs.LocationId;
+                    line.SourceLocationId ??= cs.LocationId;
+                    line.SourceLotId ??= cs.LotId;
+
+                    var lotExpiry = cs.Lot?.ExpiryDate;
+                    if (!lotExpiry.HasValue && cs.LotId.HasValue)
+                    {
+                        lotExpiry = await _db.InventoryLots.AsNoTracking()
+                            .Where(lt => lt.Id == cs.LotId.Value)
+                            .Select(lt => lt.ExpiryDate)
+                            .FirstOrDefaultAsync(cancellationToken);
+                    }
+                    if (lotExpiry.HasValue && (!earliestExpiryDate.HasValue || lotExpiry.Value < earliestExpiryDate.Value))
+                    {
+                        earliestExpiryDate = lotExpiry.Value;
+                    }
+
+                    _db.InventoryTransactions.Add(new InventoryTransaction
+                    {
+                        ProductId = line.ComponentProductId,
+                        WarehouseId = workOrder.WarehouseId,
+                        LocationId = cs.LocationId,
+                        FromLocationId = cs.LocationId,
+                        LotId = cs.LotId,
+                        SerialId = cs.SerialId,
+                        HandlingUnitId = cs.HandlingUnitId,
+                        OwnerId = cs.OwnerId,
+                        InventoryStatus = InventoryStatus.Available,
+                        FromInventoryStatus = InventoryStatus.Available,
+                        TransactionType = TransactionType.TransferOut,
+                        Quantity = -take,
+                        UnitCost = Math.Round(unitCost, 4),
+                        ReferenceId = workOrder.Id,
+                        ReferenceType = "KitComponentIssue",
+                        SourceDocumentLineId = line.Id,
+                        TransactionDate = now,
+                        ActualOccurredAtUtc = now,
+                        PostedAtUtc = now,
+                        CreatedBy = actorId,
+                        Note = $"{workOrder.WorkOrderCode}: Xuất linh kiện lắp bộ KIT -{take:0.####}"
+                    });
+                }
+
+                line.ConsumedBaseQty = reqCompQty;
+                line.ComponentUnitCost = reqCompQty > 0m ? Math.Round(lineTotalCost / reqCompQty, 4) : 0m;
+                totalComponentCost += lineTotalCost;
+            }
+
+            var rolledUpUnitCost = Math.Round(totalComponentCost / completedKitQty, 4);
+            workOrder.RolledUpUnitCost = rolledUpUnitCost;
+            workOrder.EarliestComponentExpiryDate = earliestExpiryDate;
+
+            var targetLocId = workOrder.TargetLocationId ?? firstComponentLocId ?? defaultLocationId;
+            workOrder.TargetLocationId = targetLocId;
+
+            if (workOrder.TargetLotId.HasValue)
+            {
+                var targetLot = await _db.InventoryLots.FirstOrDefaultAsync(l => l.Id == workOrder.TargetLotId.Value, cancellationToken);
+                if (targetLot != null && earliestExpiryDate.HasValue &&
+                    (!targetLot.ExpiryDate.HasValue || earliestExpiryDate.Value < targetLot.ExpiryDate.Value))
+                {
+                    targetLot.ExpiryDate = earliestExpiryDate.Value;
+                }
+            }
+            else if (earliestExpiryDate.HasValue || kitProduct.TrackingType == ProductTrackingType.Lot || kitProduct.ExpiryControl)
+            {
+                var kitLotNumber = $"LOT-{workOrder.WorkOrderCode}";
+                var targetLot = await _db.InventoryLots
+                    .FirstOrDefaultAsync(l => l.ProductId == workOrder.KitProductId && l.LotNumber == kitLotNumber, cancellationToken);
+                if (targetLot == null)
+                {
+                    targetLot = new InventoryLot
+                    {
+                        ProductId = workOrder.KitProductId,
+                        LotNumber = kitLotNumber,
+                        ManufactureDate = now.Date,
+                        ExpiryDate = earliestExpiryDate,
+                        ReceivedAt = now,
+                        CreatedAt = now
+                    };
+                    _db.InventoryLots.Add(targetLot);
+                    await _db.SaveChangesAsync(cancellationToken);
+                }
+                else if (earliestExpiryDate.HasValue)
+                {
+                    targetLot.ExpiryDate = earliestExpiryDate.Value;
+                }
+                workOrder.TargetLotId = targetLot.Id;
+            }
+
+            var kitStock = await _db.InventoryStocks
+                .FirstOrDefaultAsync(s =>
+                    s.WarehouseId == workOrder.WarehouseId &&
+                    s.ProductId == workOrder.KitProductId &&
+                    s.LocationId == targetLocId &&
+                    s.LotId == workOrder.TargetLotId &&
+                    s.SerialId == null &&
+                    s.HandlingUnitId == workOrder.TargetHandlingUnitId &&
+                    s.OwnerId == null &&
+                    s.Status == InventoryStatus.Available,
+                    cancellationToken);
+
+            if (kitStock != null)
+            {
+                var oldQty = Math.Max(0m, kitStock.Quantity);
+                var oldMac = kitStock.MovingAverageCost > 0m ? kitStock.MovingAverageCost : rolledUpUnitCost;
+                var newQty = oldQty + completedKitQty;
+                kitStock.MovingAverageCost = newQty > 0m
+                    ? Math.Round(((oldQty * oldMac) + (completedKitQty * rolledUpUnitCost)) / newQty, 4)
+                    : rolledUpUnitCost;
+                kitStock.Quantity += completedKitQty;
+                kitStock.LastUpdated = now;
+                kitStock.RefreshGrainHash();
+            }
+            else
+            {
+                kitStock = new InventoryStock
+                {
+                    WarehouseId = workOrder.WarehouseId,
+                    ProductId = workOrder.KitProductId,
+                    LocationId = targetLocId,
+                    LotId = workOrder.TargetLotId,
+                    HandlingUnitId = workOrder.TargetHandlingUnitId,
+                    Status = InventoryStatus.Available,
+                    Quantity = completedKitQty,
+                    MovingAverageCost = rolledUpUnitCost,
+                    LastUpdated = now
+                };
+                kitStock.RefreshGrainHash();
+                _db.InventoryStocks.Add(kitStock);
+            }
+
+            kitProduct.MovingAverageCost = rolledUpUnitCost;
+
+            _db.InventoryTransactions.Add(new InventoryTransaction
+            {
+                ProductId = workOrder.KitProductId,
+                WarehouseId = workOrder.WarehouseId,
+                LocationId = targetLocId,
+                ToLocationId = targetLocId,
+                LotId = workOrder.TargetLotId,
+                HandlingUnitId = workOrder.TargetHandlingUnitId,
+                InventoryStatus = InventoryStatus.Available,
+                ToInventoryStatus = InventoryStatus.Available,
+                TransactionType = TransactionType.TransferIn,
+                Quantity = completedKitQty,
+                UnitCost = rolledUpUnitCost,
+                ReferenceId = workOrder.Id,
+                ReferenceType = "KitFinishedReceipt",
+                TransactionDate = now,
+                ActualOccurredAtUtc = now,
+                PostedAtUtc = now,
+                CreatedBy = actorId,
+                Note = $"{workOrder.WorkOrderCode}: Nhập thành phẩm lắp bộ KIT +{completedKitQty:0.####} (MAC={rolledUpUnitCost:0.####})"
+            });
+        }
+        else
+        {
+            // Disassemble: deduct parent Kit and return components to their target LotId/LocationId
+            var kitStocksQuery = _db.InventoryStocks
+                .Include(s => s.Lot)
+                .Where(s => s.WarehouseId == workOrder.WarehouseId &&
+                            s.ProductId == workOrder.KitProductId &&
+                            s.Status == InventoryStatus.Available &&
+                            s.Quantity > 0m);
+            if (workOrder.TargetLocationId is > 0)
+                kitStocksQuery = kitStocksQuery.Where(s => s.LocationId == workOrder.TargetLocationId.Value);
+            if (workOrder.TargetLotId is > 0)
+                kitStocksQuery = kitStocksQuery.Where(s => s.LotId == workOrder.TargetLotId.Value);
+
+            var kitStocks = await kitStocksQuery
+                .OrderByDescending(s => s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity)
+                .ThenBy(s => s.Id)
+                .ToListAsync(cancellationToken);
+
+            var totalKitFree = kitStocks.Sum(s => Math.Max(0m, s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity));
+            if (totalKitFree < completedKitQty)
+            {
+                if (tx != null) await tx.RollbackAsync(cancellationToken);
+                return WmsEndpointOutcome.Json(422, new
+                {
+                    code = "VAS_DEKIT_INSUFFICIENT_KIT_STOCK",
+                    errorCode = "VAS_DEKIT_INSUFFICIENT_KIT_STOCK",
+                    kitProductId = workOrder.KitProductId,
+                    requiredKitQuantity = completedKitQty,
+                    availableKitQuantity = totalKitFree,
+                    message = $"Không đủ tồn khả dụng của bộ KIT {kitProduct.Code} để rã bộ (cần {completedKitQty:0.####}, khả dụng {totalKitFree:0.####})."
+                });
+            }
+
+            var remToDeduct = completedKitQty;
+            var totalKitDeductedCost = 0m;
+            int? deductedLocationId = workOrder.TargetLocationId;
+            int? deductedLotId = workOrder.TargetLotId;
+            DateTime? parentExpiry = null;
+
+            foreach (var ks in kitStocks)
+            {
+                if (remToDeduct <= 0m) break;
+                var free = Math.Max(0m, ks.Quantity - ks.ReservedQuantity - ks.AllocatedQuantity - ks.LockedQuantity);
+                if (free <= 0m) continue;
+                var deduct = Math.Min(free, remToDeduct);
+                var unitCost = ks.MovingAverageCost > 0m
+                    ? ks.MovingAverageCost
+                    : (kitProduct.MovingAverageCost > 0m ? kitProduct.MovingAverageCost : workOrder.RolledUpUnitCost);
+
+                ks.Quantity -= deduct;
+                ks.LastUpdated = now;
+                ks.RefreshGrainHash();
+                remToDeduct -= deduct;
+                totalKitDeductedCost += deduct * unitCost;
+
+                deductedLocationId ??= ks.LocationId;
+                deductedLotId ??= ks.LotId;
+                parentExpiry ??= ks.Lot?.ExpiryDate;
+
+                _db.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = workOrder.KitProductId,
+                    WarehouseId = workOrder.WarehouseId,
+                    LocationId = ks.LocationId,
+                    FromLocationId = ks.LocationId,
+                    LotId = ks.LotId,
+                    SerialId = ks.SerialId,
+                    HandlingUnitId = ks.HandlingUnitId,
+                    OwnerId = ks.OwnerId,
+                    InventoryStatus = InventoryStatus.Available,
+                    FromInventoryStatus = InventoryStatus.Available,
+                    TransactionType = TransactionType.TransferOut,
+                    Quantity = -deduct,
+                    UnitCost = Math.Round(unitCost, 4),
+                    ReferenceId = workOrder.Id,
+                    ReferenceType = "KitDisassembleIssue",
+                    TransactionDate = now,
+                    ActualOccurredAtUtc = now,
+                    PostedAtUtc = now,
+                    CreatedBy = actorId,
+                    Note = $"{workOrder.WorkOrderCode}: Xuất rã bộ KIT -{deduct:0.####}"
+                });
+            }
+
+            workOrder.TargetLocationId ??= deductedLocationId ?? defaultLocationId;
+            workOrder.TargetLotId ??= deductedLotId;
+            workOrder.RolledUpUnitCost = completedKitQty > 0m ? Math.Round(totalKitDeductedCost / completedKitQty, 4) : 0m;
+            workOrder.EarliestComponentExpiryDate ??= parentExpiry;
+
+            var totalRatioSum = workOrder.ComponentLines.Sum(l => l.ComponentRatioQty > 0m ? l.ComponentRatioQty : 1m);
+            foreach (var line in workOrder.ComponentLines.OrderBy(l => l.ComponentProductId).ThenBy(l => l.Id))
+            {
+                var returnQty = Math.Round(completedKitQty * line.ComponentRatioQty, 4);
+                line.RequiredBaseQty = returnQty;
+                line.ConsumedBaseQty = returnQty;
+
+                var compLocId = line.SourceLocationId ?? deductedLocationId ?? defaultLocationId;
+                line.SourceLocationId = compLocId;
+
+                var compProduct = await _db.Products.FirstOrDefaultAsync(p => p.Id == line.ComponentProductId, cancellationToken);
+                if (!line.SourceLotId.HasValue && compProduct != null &&
+                    (compProduct.TrackingType == ProductTrackingType.Lot || compProduct.ExpiryControl))
+                {
+                    var lotNum = $"LOT-DEKIT-{workOrder.WorkOrderCode}-{line.ComponentProductId}";
+                    var compLot = await _db.InventoryLots
+                        .FirstOrDefaultAsync(l => l.ProductId == line.ComponentProductId && l.LotNumber == lotNum, cancellationToken);
+                    if (compLot == null)
+                    {
+                        compLot = new InventoryLot
+                        {
+                            ProductId = line.ComponentProductId,
+                            LotNumber = lotNum,
+                            ManufactureDate = now.Date,
+                            ExpiryDate = parentExpiry,
+                            ReceivedAt = now,
+                            CreatedAt = now
+                        };
+                        _db.InventoryLots.Add(compLot);
+                        await _db.SaveChangesAsync(cancellationToken);
+                    }
+                    line.SourceLotId = compLot.Id;
+                }
+
+                var compUnitCost = line.ComponentUnitCost > 0m
+                    ? line.ComponentUnitCost
+                    : (compProduct?.MovingAverageCost > 0m
+                        ? compProduct.MovingAverageCost
+                        : (totalRatioSum > 0m ? Math.Round(workOrder.RolledUpUnitCost / totalRatioSum, 4) : 0m));
+                line.ComponentUnitCost = compUnitCost;
+
+                var compStock = await _db.InventoryStocks
+                    .FirstOrDefaultAsync(s =>
+                        s.WarehouseId == workOrder.WarehouseId &&
+                        s.ProductId == line.ComponentProductId &&
+                        s.LocationId == compLocId &&
+                        s.LotId == line.SourceLotId &&
+                        s.SerialId == null &&
+                        s.HandlingUnitId == null &&
+                        s.OwnerId == null &&
+                        s.Status == InventoryStatus.Available,
+                        cancellationToken);
+
+                if (compStock != null)
+                {
+                    compStock.Quantity += returnQty;
+                    if (compUnitCost > 0m) compStock.MovingAverageCost = compUnitCost;
+                    compStock.LastUpdated = now;
+                    compStock.RefreshGrainHash();
+                }
+                else
+                {
+                    compStock = new InventoryStock
+                    {
+                        WarehouseId = workOrder.WarehouseId,
+                        ProductId = line.ComponentProductId,
+                        LocationId = compLocId,
+                        LotId = line.SourceLotId,
+                        Status = InventoryStatus.Available,
+                        Quantity = returnQty,
+                        MovingAverageCost = compUnitCost,
+                        LastUpdated = now
+                    };
+                    compStock.RefreshGrainHash();
+                    _db.InventoryStocks.Add(compStock);
+                }
+
+                _db.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = line.ComponentProductId,
+                    WarehouseId = workOrder.WarehouseId,
+                    LocationId = compLocId,
+                    ToLocationId = compLocId,
+                    LotId = line.SourceLotId,
+                    InventoryStatus = InventoryStatus.Available,
+                    ToInventoryStatus = InventoryStatus.Available,
+                    TransactionType = TransactionType.TransferIn,
+                    Quantity = returnQty,
+                    UnitCost = compUnitCost,
+                    ReferenceId = workOrder.Id,
+                    ReferenceType = "KitComponentReturn",
+                    SourceDocumentLineId = line.Id,
+                    TransactionDate = now,
+                    ActualOccurredAtUtc = now,
+                    PostedAtUtc = now,
+                    CreatedBy = actorId,
+                    Note = $"{workOrder.WorkOrderCode}: Hoàn nguyên linh kiện rã bộ KIT +{returnQty:0.####}"
+                });
+            }
+        }
+
+        workOrder.Status = "Completed";
+        workOrder.CompletedKitQty = completedKitQty;
+        workOrder.CompletedByUserId = actorId;
+        workOrder.CompletedAtUtc = now;
+
+        _db.AuditLogs.Add(new AuditLog
+        {
+            UserId = actorId,
+            WarehouseId = workOrder.WarehouseId,
+            Action = "KIT_WORK_ORDER_COMPLETED",
+            EntityName = "KitWorkOrder",
+            EntityId = workOrder.Id,
+            NewValues = $"Code={workOrder.WorkOrderCode};Type={workOrder.WorkOrderType};CompletedQty={completedKitQty:0.####};MAC={workOrder.RolledUpUnitCost:0.####};EarliestExpiry={workOrder.EarliestComponentExpiryDate:yyyy-MM-dd}",
+            Reason = request?.Note ?? $"Hoàn tất lệnh gia công {workOrder.WorkOrderType} bộ KIT {kitProduct.Code}",
+            Result = "Success",
+            Timestamp = now
+        });
+
+        await _db.SaveChangesAsync(cancellationToken);
+        if (tx != null) await tx.CommitAsync(cancellationToken);
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            id = workOrder.Id,
+            workOrderId = workOrder.Id,
+            workOrderCode = workOrder.WorkOrderCode,
+            warehouseId = workOrder.WarehouseId,
+            kitProductId = workOrder.KitProductId,
+            kitProductCode = kitProduct.Code,
+            kitProductName = kitProduct.Name,
+            workOrderType = workOrder.WorkOrderType.ToString(),
+            status = workOrder.Status,
+            plannedKitQty = workOrder.PlannedKitQty,
+            completedKitQty = workOrder.CompletedKitQty,
+            targetLocationId = workOrder.TargetLocationId,
+            targetLotId = workOrder.TargetLotId,
+            targetHandlingUnitId = workOrder.TargetHandlingUnitId,
+            rolledUpUnitCost = workOrder.RolledUpUnitCost,
+            earliestComponentExpiryDate = workOrder.EarliestComponentExpiryDate,
+            completedAtUtc = workOrder.CompletedAtUtc,
+            componentLines = workOrder.ComponentLines.Select(l => new
+            {
+                id = l.Id,
+                componentProductId = l.ComponentProductId,
+                componentRatioQty = l.ComponentRatioQty,
+                requiredBaseQty = l.RequiredBaseQty,
+                consumedBaseQty = l.ConsumedBaseQty,
+                sourceLocationId = l.SourceLocationId,
+                sourceLotId = l.SourceLotId,
+                componentUnitCost = l.ComponentUnitCost
+            }).ToList(),
+            statusLabel = $"Đã hoàn tất lệnh {workOrder.WorkOrderType} bộ KIT {workOrder.WorkOrderCode} (MAC: {workOrder.RolledUpUnitCost:0.##})"
+        });
+    }
+
+    public async Task<WmsEndpointOutcome> CancelKitWorkOrderAsync(
+        int workOrderId,
+        CancelKitWorkOrderInput? request,
+        int? actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var ownTx = _db.Database.CurrentTransaction == null;
+        await using var tx = ownTx ? await _db.Database.BeginTransactionAsync(cancellationToken) : null;
+
+        var workOrder = await _db.KitWorkOrders
+            .Include(w => w.ComponentLines)
+            .FirstOrDefaultAsync(w => w.Id == workOrderId, cancellationToken);
+        if (workOrder == null)
+        {
+            if (tx != null) await tx.RollbackAsync(cancellationToken);
+            return WmsEndpointOutcome.Json(404, new
+            {
+                code = "KIT_WORK_ORDER_NOT_FOUND",
+                errorCode = "KIT_WORK_ORDER_NOT_FOUND",
+                message = $"Không tìm thấy lệnh gia công KIT #{workOrderId}."
+            });
+        }
+
+        if (string.Equals(workOrder.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+        {
+            if (tx != null) await tx.RollbackAsync(cancellationToken);
+            return WmsEndpointOutcome.Ok(new
+            {
+                id = workOrder.Id,
+                workOrderId = workOrder.Id,
+                workOrderCode = workOrder.WorkOrderCode,
+                status = workOrder.Status,
+                reversedTransactionsCount = 0
+            });
+        }
+
+        var now = DateTime.UtcNow;
+        var actorId = actorUserId is > 0 ? actorUserId.Value : (workOrder.CreatedByUserId ?? 1);
+        var reversedCount = 0;
+
+        if (string.Equals(workOrder.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+        {
+            var lockProductIds = workOrder.ComponentLines
+                .Select(l => l.ComponentProductId)
+                .Append(workOrder.KitProductId)
+                .Distinct()
+                .OrderBy(id => id)
+                .ToList();
+            await _db.AcquireInventoryAllocationLocksAsync(workOrder.WarehouseId, lockProductIds, cancellationToken);
+
+            var kitRefTypes = new[] { "KitComponentIssue", "KitFinishedReceipt", "KitDisassembleIssue", "KitComponentReturn" };
+            var origTxs = await _db.InventoryTransactions
+                .AsNoTracking()
+                .Where(t => t.ReferenceId == workOrder.Id && t.ReferenceType != null && kitRefTypes.Contains(t.ReferenceType))
+                .OrderBy(t => t.Id)
+                .ToListAsync(cancellationToken);
+
+            foreach (var orig in origTxs)
+            {
+                var reverseDelta = -orig.Quantity;
+                var bucket = await _db.InventoryStocks
+                    .FirstOrDefaultAsync(s =>
+                        s.WarehouseId == orig.WarehouseId &&
+                        s.ProductId == orig.ProductId &&
+                        s.LocationId == orig.LocationId &&
+                        s.LotId == orig.LotId &&
+                        s.SerialId == orig.SerialId &&
+                        s.HandlingUnitId == orig.HandlingUnitId &&
+                        s.OwnerId == orig.OwnerId &&
+                        s.Status == orig.InventoryStatus,
+                        cancellationToken);
+
+                if (bucket != null)
+                {
+                    if (bucket.Quantity + reverseDelta < 0m)
+                    {
+                        if (tx != null) await tx.RollbackAsync(cancellationToken);
+                        return WmsEndpointOutcome.Json(422, new
+                        {
+                            code = "KIT_REVERSAL_INSUFFICIENT_STOCK",
+                            errorCode = "KIT_REVERSAL_INSUFFICIENT_STOCK",
+                            message = $"Không đủ tồn kho tại vị trí #{orig.LocationId} để đảo bút toán lệnh KIT {workOrder.WorkOrderCode}."
+                        });
+                    }
+                    bucket.Quantity += reverseDelta;
+                    bucket.LastUpdated = now;
+                    bucket.RefreshGrainHash();
+                }
+                else if (reverseDelta > 0m)
+                {
+                    var restored = new InventoryStock
+                    {
+                        WarehouseId = orig.WarehouseId,
+                        ProductId = orig.ProductId,
+                        LocationId = orig.LocationId,
+                        LotId = orig.LotId,
+                        SerialId = orig.SerialId,
+                        HandlingUnitId = orig.HandlingUnitId,
+                        OwnerId = orig.OwnerId,
+                        Status = orig.InventoryStatus,
+                        Quantity = reverseDelta,
+                        MovingAverageCost = orig.UnitCost,
+                        LastUpdated = now
+                    };
+                    restored.RefreshGrainHash();
+                    _db.InventoryStocks.Add(restored);
+                }
+
+                _db.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = orig.ProductId,
+                    WarehouseId = orig.WarehouseId,
+                    LocationId = orig.LocationId,
+                    FromLocationId = orig.ToLocationId,
+                    ToLocationId = orig.FromLocationId,
+                    LotId = orig.LotId,
+                    SerialId = orig.SerialId,
+                    HandlingUnitId = orig.HandlingUnitId,
+                    OwnerId = orig.OwnerId,
+                    InventoryStatus = orig.InventoryStatus,
+                    FromInventoryStatus = orig.ToInventoryStatus,
+                    ToInventoryStatus = orig.FromInventoryStatus,
+                    TransactionType = TransactionType.Reversal,
+                    Quantity = reverseDelta,
+                    UnitCost = orig.UnitCost,
+                    ReferenceId = workOrder.Id,
+                    ReferenceType = orig.ReferenceType,
+                    SourceDocumentLineId = orig.SourceDocumentLineId,
+                    ReversalOfTransactionId = orig.Id,
+                    ReasonCode = "KIT_WO_CANCEL_REVERSAL",
+                    TransactionDate = now,
+                    ActualOccurredAtUtc = now,
+                    PostedAtUtc = now,
+                    CreatedBy = actorId,
+                    Note = $"Đảo bút toán hủy lệnh KIT {workOrder.WorkOrderCode} (OrigTx=#{orig.Id})"
+                });
+                reversedCount++;
+            }
+        }
+
+        workOrder.Status = "Cancelled";
+        _db.AuditLogs.Add(new AuditLog
+        {
+            UserId = actorId,
+            WarehouseId = workOrder.WarehouseId,
+            Action = "KIT_WORK_ORDER_CANCELLED",
+            EntityName = "KitWorkOrder",
+            EntityId = workOrder.Id,
+            NewValues = $"Code={workOrder.WorkOrderCode};Status=Cancelled;ReversedTxs={reversedCount}",
+            Reason = request?.Reason ?? $"Hủy/Đảo lệnh gia công KIT {workOrder.WorkOrderCode}",
+            Result = "Success",
+            Timestamp = now
+        });
+
+        await _db.SaveChangesAsync(cancellationToken);
+        if (tx != null) await tx.CommitAsync(cancellationToken);
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            id = workOrder.Id,
+            workOrderId = workOrder.Id,
+            workOrderCode = workOrder.WorkOrderCode,
+            status = workOrder.Status,
+            reversedTransactionsCount = reversedCount,
+            statusLabel = $"Đã hủy lệnh gia công KIT {workOrder.WorkOrderCode} (Đảo {reversedCount} bút toán sổ cái)"
+        });
+    }
+
     private static int? ParseOptionalInt(JsonElement? element)
     {
         if (!element.HasValue)

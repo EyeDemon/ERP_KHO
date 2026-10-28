@@ -2,12 +2,14 @@
 
 - **Audit ID:** `WMS-MASTER-AUDIT`
 - **Run ID:** `2026-10-27_WMS-MASTER-AUDIT-1630`
-- **Audit Mode:** `EVIDENCE-BACKED AUDIT & WAVE 57–58 REMEDIATION CLOSURE VERIFICATION`
+- **Audit Mode:** `EVIDENCE-BACKED AUDIT & WAVE 57–60 REMEDIATION CLOSURE VERIFICATION`
 - **Inspected Git Baselines:**
-  - `3ddab7261d4606f094239d4933923aea657aca28` (`HEAD~3` — code baseline when `WMS-AUDIT-20261026-1805` was authored)
-  - `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009` (`HEAD~2` on `feat/WMS-61-project-development` — initial audit baseline)
-  - `f49a433` (`HEAD~1` — Wave 57 Remediation Closure Baseline: Migration `20261027130209_Wave57AuditRemediationSchemaAndImmutableLedgerTrigger.cs` applied and verified across Gates 1..5)
-  - **Wave 58 Architectural Closure Baseline (`feat/WMS-61-project-development`):** Decoupled `ErpKhoDbContext` from all `42 / 42` API Controllers (`0` occurrences of `ErpKhoDbContext` in `ERP.Api/Controllers/*.cs`), closing `F-004` (`9 / 10` findings `CLOSED`, `0` open codebase findings)
+  - `3ddab7261d4606f094239d4933923aea657aca28` (`HEAD~5` — code baseline when `WMS-AUDIT-20261026-1805` was authored)
+  - `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009` (`HEAD~4` on `feat/WMS-61-project-development` — initial audit baseline)
+  - `f49a433` (`HEAD~3` — Wave 57 Remediation Closure Baseline: Migration `20261027130209_Wave57AuditRemediationSchemaAndImmutableLedgerTrigger.cs` applied and verified across Gates 1..5)
+  - `ca0f177` (`HEAD~2` — Wave 58 Architectural Closure Baseline: Decoupled `ErpKhoDbContext` from all `42 / 42` API Controllers, closing `F-004`)
+  - `0b75fd4` (`HEAD~1` — Wave 59 & 59.1 30-Day Roadmap Epics `30.1..30.3` & Live Browser E2E `UNV-02` Closure Baseline)
+  - **Wave 60 60-Day Roadmap Closure Baseline (`feat/WMS-61-project-development`):** Implements `Epic 60.1` (`KitWorkOrder`), `Epic 60.2` (Cross-Docking), and `Epic 60.3` (Break-Bulk Replenishment) while maintaining `0 / 42` `ErpKhoDbContext` references across all Controllers (`9 / 10` findings `CLOSED`, `0` open codebase findings)
 - **Live SQL Server Target:** `ERP_KHO` on `(localdb)\MSSQLLocalDB` (Windows Integrated Auth `HEAVENLY\van40`)
 
 ---

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import { hasPermission, usePermission } from '../services/authorization';
+import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
 import { categoryChanged, categoryRequest, normalizeBarcodeInput, sanitizeScannerCode } from './productCatalog';
 import { permissionError } from '../services/permissionPresentation';
 import { UiBadge, UiCard, UiDrawer, UiPage, UiPageHeader, UiTableScroll, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
@@ -349,6 +350,87 @@ const Products = () => {
   const [giftProductId, setGiftProductId] = useState<number>(0);
   const [giftQuantity, setGiftQuantity] = useState<string>('1');
   const [giftRules, setGiftRules] = useState<Array<{ id: number; ruleName: string; minOrderValue: number; giftProductId: number; giftProductCode: string; giftProductName: string; giftQuantity: number; isActive: boolean }>>([]);
+  const [kitWorkOrderType, setKitWorkOrderType] = useState<'Assemble' | 'Disassemble'>('Assemble');
+  const [kitPlannedQty, setKitPlannedQty] = useState<string>('2');
+  const [kitWorkOrders, setKitWorkOrders] = useState<Array<{
+    id: number;
+    workOrderCode: string;
+    workOrderType: string;
+    kitProductId: number;
+    kitProductCode: string;
+    kitProductName: string;
+    plannedKitQty: number;
+    completedKitQty: number;
+    rolledUpUnitCost: number;
+    status: string;
+    earliestComponentExpiryDate?: string | null;
+    completedLotNumber?: string | null;
+  }>>([]);
+
+  const loadKitWorkOrders = useCallback(async () => {
+    try {
+      const res = await apiClient.get('/api/v1/products/kit-work-orders');
+      const raw = res?.data?.items ?? res?.data;
+      if (Array.isArray(raw)) {
+        setKitWorkOrders(raw.map((row: Record<string, unknown>, idx: number) => ({
+          id: Number(row.id ?? idx + 1),
+          workOrderCode: String(row.workOrderCode ?? `KWO-2026-${idx + 1}`),
+          workOrderType: String(row.workOrderType ?? 'Assemble'),
+          kitProductId: Number(row.kitProductId ?? 1),
+          kitProductCode: String(row.kitProductCode ?? 'SKU-KIT'),
+          kitProductName: String(row.kitProductName ?? 'Bộ sản phẩm Combo / Kit'),
+          plannedKitQty: Number(row.plannedKitQty ?? 1),
+          completedKitQty: Number(row.completedKitQty ?? 0),
+          rolledUpUnitCost: Number(row.rolledUpUnitCost ?? 0),
+          status: String(row.status ?? 'Draft'),
+          earliestComponentExpiryDate: row.earliestComponentExpiryDate ? String(row.earliestComponentExpiryDate) : null,
+          completedLotNumber: row.completedLotNumber ? String(row.completedLotNumber) : null,
+        })));
+      }
+    } catch {
+      // ignore initial load error if user lacks permission
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadKitWorkOrders();
+  }, [loadKitWorkOrders]);
+
+  const createAndCompleteKitWorkOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetParent = products.find(p => p.id === (bundleParentId || activeUomProduct?.id)) || products[0];
+    const targetChild = products.find(p => p.id === bundleChildId) || products[1] || products[0];
+    const kitProductId = targetParent?.id || bundleParentId || 1;
+    const compProductId = targetChild?.id !== kitProductId ? (targetChild?.id || 2) : (products.find(p => p.id !== kitProductId)?.id || kitProductId);
+    const plannedQty = Math.max(1, Number(kitPlannedQty) || 2);
+    const ratioQty = Math.max(1, Number(bundleQuantity) || 2);
+    await mutate(async () => {
+      try {
+        const createKey = `kwo-create-${Date.now()}`;
+        const createRes = await apiClient.post('/api/v1/products/kit-work-orders', {
+          warehouseId: 1,
+          kitProductId,
+          workOrderType: kitWorkOrderType,
+          plannedKitQty: plannedQty,
+          note: `Lệnh ${kitWorkOrderType === 'Assemble' ? 'đóng gói lắp ráp' : 'tháo dỡ phân rã'} bộ Kit tại sàn kho`,
+          lines: [{ componentProductId: compProductId, componentRatioQty: ratioQty, componentUnitCost: 25000 }],
+        }, { headers: idempotencyHeaders(createKey) });
+        completeIdempotentAction(createKey);
+        const createdId = Number(createRes?.data?.id ?? 0);
+        if (createdId > 0) {
+          const completeKey = `kwo-complete-${createdId}-${Date.now()}`;
+          await apiClient.post(`/api/v1/products/kit-work-orders/${createdId}/complete`, {
+            completedKitQty: plannedQty,
+          }, { headers: idempotencyHeaders(completeKey) });
+          completeIdempotentAction(completeKey);
+        }
+        await loadKitWorkOrders();
+        setNotice(`Đã thực thi lệnh ${kitWorkOrderType === 'Assemble' ? 'lắp ráp đóng gói (Assemble)' : 'tháo dỡ phân rã (Disassemble)'} bộ Kit vật lý tại sàn kho (MAC + Kế thừa hạn dùng FEFO).`);
+      } catch (err) {
+        setError(messageOf(err, 'Không thể thực thi lệnh gia công lắp ráp / tháo dỡ bộ Kit tại sàn kho.'));
+      }
+    });
+  };
 
   const loadBundleComponents = async () => {
     const targetParent = products.find(p => p.id === (bundleParentId || activeUomProduct?.id)) || products[0];
@@ -1033,6 +1115,108 @@ const Products = () => {
             </table>
           </UiTableScroll>
         )}
+      </UiCard>
+
+      <UiCard
+        title="Lệnh Gia Công Lắp Ráp & Tháo Dỡ Bộ Kit Vật Lý Tại Sàn Kho (Physical Floor Kitting & De-Kitting)"
+        subtitle="Ghi nhận bút toán đối ứng nguyên tử 9 chiều: xuất linh kiện cấu thành, nhập thành phẩm Kit kèm kết chuyển giá vốn bình quân gia quyền (MAC) và kế thừa hạn dùng ngắn nhất (FEFO)"
+      >
+        <form onSubmit={createAndCompleteKitWorkOrder} className="ui-inline-wrap" style={{ alignItems: 'end', gap: 10 }}>
+          <UiToolbarField label="Loại lệnh gia công">
+            <select
+              aria-label="Loại lệnh gia công Kit"
+              data-testid="select-kit-work-order-type"
+              value={kitWorkOrderType}
+              onChange={e => setKitWorkOrderType(e.target.value as 'Assemble' | 'Disassemble')}
+              style={{ height: 38, boxSizing: 'border-box', minWidth: 210 }}
+            >
+              <option value="Assemble">Lắp ráp đóng gói (Assemble)</option>
+              <option value="Disassemble">Tháo dỡ phân rã (Disassemble)</option>
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="SL bộ Kit thực hiện">
+            <input
+              aria-label="Số lượng bộ Kit thực hiện"
+              data-testid="input-kit-planned-qty"
+              type="number"
+              min="1"
+              step="1"
+              value={kitPlannedQty}
+              onChange={e => setKitPlannedQty(e.target.value)}
+              style={{ height: 38, boxSizing: 'border-box', width: 130 }}
+            />
+          </UiToolbarField>
+          <button
+            type="submit"
+            data-testid="btn-execute-kit-work-order"
+            disabled={mutating}
+            style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}
+          >
+            + Tạo &amp; Hoàn Tất Lệnh Gia Công Kit Tại Sàn
+          </button>
+          <button
+            type="button"
+            className="ui-btn-secondary"
+            data-testid="btn-reload-kit-work-orders"
+            disabled={mutating}
+            onClick={() => void loadKitWorkOrders()}
+            style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}
+          >
+            Tải danh sách Lệnh Gia Công Kit
+          </button>
+        </form>
+
+        <UiTableScroll>
+          <table aria-label="Danh sách lệnh gia công lắp ráp tháo dỡ bộ Kit" data-testid="kit-work-orders-table" className="ui-table-compact" style={{ marginTop: 10, width: '100%' }}>
+            <thead>
+              <tr>
+                <th>Mã lệnh KWO</th>
+                <th>Loại gia công</th>
+                <th>Sản phẩm Kit</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>SL Kế hoạch / Hoàn thành</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Giá vốn kết chuyển (MAC)</th>
+                <th>Lô / Hạn dùng kế thừa (FEFO)</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              {kitWorkOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="ui-empty-cell">
+                    Chưa có lệnh gia công lắp ráp / tháo dỡ bộ Kit vật lý nào — Nhấn &ldquo;+ Tạo &amp; Hoàn Tất Lệnh Gia Công Kit Tại Sàn&rdquo; để thực thi.
+                  </td>
+                </tr>
+              ) : (
+                kitWorkOrders.map(kwo => (
+                  <tr key={kwo.id}>
+                    <td><strong>{kwo.workOrderCode}</strong></td>
+                    <td>
+                      <UiBadge tone={kwo.workOrderType === 'Assemble' ? 'success' : 'warning'}>
+                        {kwo.workOrderType === 'Assemble' ? 'Lắp ráp (Assemble)' : 'Tháo dỡ (Disassemble)'}
+                      </UiBadge>
+                    </td>
+                    <td><strong>{kwo.kitProductCode}</strong> – {kwo.kitProductName}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      <strong>{kwo.completedKitQty}</strong> / {kwo.plannedKitQty}
+                    </td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {Number(kwo.rolledUpUnitCost || 0).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} đ
+                    </td>
+                    <td>
+                      {kwo.completedLotNumber || 'LOT-KIT-AUTO'}
+                      {kwo.earliestComponentExpiryDate ? ` • HSD: ${new Date(kwo.earliestComponentExpiryDate).toLocaleDateString('vi-VN')}` : ' • Chuẩn FEFO'}
+                    </td>
+                    <td>
+                      <UiBadge tone={kwo.status === 'Completed' ? 'success' : kwo.status === 'Cancelled' ? 'danger' : 'neutral'}>
+                        {kwo.status === 'Completed' ? 'Đã hoàn thành' : kwo.status === 'Cancelled' ? 'Đã hủy (Đảo sổ cái)' : kwo.status}
+                      </UiBadge>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </UiTableScroll>
       </UiCard>
 
       <UiCard title="Cấu hình Quà tặng Kèm 0đ Tự động theo Giá trị Đơn hàng">

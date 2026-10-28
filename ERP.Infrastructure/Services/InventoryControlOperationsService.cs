@@ -794,4 +794,592 @@ public sealed class InventoryControlOperationsService(
             evaluatedAtUtc = now
         });
     }
+
+    public async Task<WmsEndpointOutcome> ExecuteBreakBulkReplenishmentAsync(
+        ExecuteBreakBulkReplenishmentInput? request = null,
+        int? actorUserId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        var effectiveAuth = warehouseAuth ?? warehouseAccess;
+        var warehouseId = request?.WarehouseId;
+        var targetWarehouseId = warehouseId ?? 1;
+        if (effectiveAuth != null)
+        {
+            if (warehouseId.HasValue)
+            {
+                await effectiveAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            }
+            else
+            {
+                var accessibleIds = await effectiveAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+                if (accessibleIds.Count == 0)
+                    return WmsEndpointOutcome.Forbid();
+                targetWarehouseId = accessibleIds.First();
+            }
+        }
+
+        var sourcePackQty = request?.SourcePackQty ?? 1m;
+        if (sourcePackQty <= 0m)
+        {
+            return WmsEndpointOutcome.BadRequest("Số lượng thùng/kiện xả lẻ (SourcePackQty) phải lớn hơn 0.");
+        }
+
+        if (db == null)
+        {
+            return WmsEndpointOutcome.BadRequest("Database context is required.");
+        }
+
+        var now = DateTime.UtcNow;
+        var effectiveActorId = actorUserId ?? (currentUser is { UserId: > 0 } ? currentUser.UserId : 1);
+
+        int? resolvedProductId = request?.ProductId;
+        var resolvedProductCode = request?.ProductCode?.Trim() ?? string.Empty;
+        var resolvedProductName = string.Empty;
+        var baseUomCode = "EA";
+
+        if (!resolvedProductId.HasValue && !string.IsNullOrWhiteSpace(resolvedProductCode))
+        {
+            var prod = await db.Products.AsNoTracking()
+                .Include(p => p.Unit)
+                .FirstOrDefaultAsync(p => p.Code == resolvedProductCode, cancellationToken);
+            if (prod != null)
+            {
+                resolvedProductId = prod.Id;
+                resolvedProductCode = prod.Code.Trim();
+                resolvedProductName = prod.Name.Trim();
+                baseUomCode = prod.Unit?.Code?.Trim() ?? "EA";
+            }
+        }
+        else if (resolvedProductId.HasValue)
+        {
+            var prod = await db.Products.AsNoTracking()
+                .Include(p => p.Unit)
+                .FirstOrDefaultAsync(p => p.Id == resolvedProductId.Value, cancellationToken);
+            if (prod != null)
+            {
+                resolvedProductCode = prod.Code.Trim();
+                resolvedProductName = prod.Name.Trim();
+                baseUomCode = prod.Unit?.Code?.Trim() ?? "EA";
+            }
+        }
+
+        if (!resolvedProductId.HasValue)
+        {
+            var candidateStock = await db.InventoryStocks.AsNoTracking()
+                .Include(s => s.Product)
+                .ThenInclude(p => p.Unit)
+                .Where(s => s.WarehouseId == targetWarehouseId &&
+                            s.Status == InventoryStatus.Available &&
+                            s.LocationId.HasValue &&
+                            (s.Quantity - s.ReservedQuantity) >= 12m)
+                .OrderByDescending(s => s.HandlingUnitId.HasValue ? 1 : 0)
+                .ThenByDescending(s => s.Quantity - s.ReservedQuantity)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (candidateStock == null)
+            {
+                return WmsEndpointOutcome.UnprocessableEntity(new { message = "INV_INSUFFICIENT_AVAILABLE_STOCK: Không tìm thấy tồn kho khả dụng tại vị trí lưu trữ để xả thùng bổ sung kệ nhặt.", code = "INV_INSUFFICIENT_AVAILABLE_STOCK" });
+            }
+
+            resolvedProductId = candidateStock.ProductId;
+            resolvedProductCode = candidateStock.Product?.Code?.Trim() ?? $"SKU-{candidateStock.ProductId}";
+            resolvedProductName = candidateStock.Product?.Name?.Trim() ?? "Sản phẩm xả thùng";
+            baseUomCode = candidateStock.Product?.Unit?.Code?.Trim() ?? "EA";
+        }
+
+        // Resolve UOM conversion factor
+        decimal conversionFactor = request?.ConversionFactor ?? 0m;
+        int? resolvedUomId = request?.SourceUomId;
+        var resolvedSourceUomCode = !string.IsNullOrWhiteSpace(request?.SourceUomCode)
+            ? request!.SourceUomCode!.Trim().ToUpperInvariant()
+            : "CASE";
+
+        var productUomQuery = db.ProductUoms.AsNoTracking()
+            .Include(u => u.Unit)
+            .Where(u => u.ProductId == resolvedProductId.Value && u.IsActive);
+
+        if (resolvedUomId.HasValue)
+        {
+            var matchedUom = await productUomQuery
+                .FirstOrDefaultAsync(u => u.UnitId == resolvedUomId.Value || u.Id == resolvedUomId.Value, cancellationToken);
+            if (matchedUom != null)
+            {
+                if (conversionFactor <= 0m)
+                    conversionFactor = matchedUom.ConversionFactor;
+                resolvedUomId = matchedUom.UnitId;
+                resolvedSourceUomCode = matchedUom.Unit?.Code?.Trim() ?? resolvedSourceUomCode;
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(request?.SourceUomCode))
+        {
+            var code = request!.SourceUomCode!.Trim();
+            var matchedUom = await productUomQuery
+                .FirstOrDefaultAsync(u => u.Unit.Code == code, cancellationToken);
+            if (matchedUom != null)
+            {
+                if (conversionFactor <= 0m)
+                    conversionFactor = matchedUom.ConversionFactor;
+                resolvedUomId = matchedUom.UnitId;
+                resolvedSourceUomCode = matchedUom.Unit?.Code?.Trim() ?? code;
+            }
+        }
+
+        if (conversionFactor <= 0m)
+        {
+            var packUom = await productUomQuery
+                .Where(u => u.ConversionFactor > 1m)
+                .OrderByDescending(u => u.ConversionFactor)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (packUom != null)
+            {
+                conversionFactor = packUom.ConversionFactor;
+                resolvedUomId = packUom.UnitId;
+                resolvedSourceUomCode = packUom.Unit?.Code?.Trim() ?? "CASE";
+            }
+            else
+            {
+                conversionFactor = 12m;
+            }
+        }
+
+        conversionFactor = Math.Round(conversionFactor, 4, MidpointRounding.AwayFromZero);
+        if (conversionFactor <= 1m)
+        {
+            return WmsEndpointOutcome.UnprocessableEntity(new { message = "INV_BREAK_BULK_INVALID_UOM: Hệ số quy đổi UOM xả thùng (ConversionFactor) phải lớn hơn 1.", code = "INV_BREAK_BULK_INVALID_UOM" });
+        }
+
+        var movedBaseQty = Math.Round(sourcePackQty * conversionFactor, 4, MidpointRounding.AwayFromZero);
+
+        var isRelational = db.Database.IsRelational();
+        await using var tx = isRelational && db.Database.CurrentTransaction == null
+            ? await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, cancellationToken)
+            : null;
+
+        await db.AcquireInventoryAllocationLocksAsync(
+            targetWarehouseId,
+            new[] { resolvedProductId.Value },
+            cancellationToken);
+
+        int? resolvedSourceLocationId = request?.SourceLocationId;
+        var resolvedSourceLocationCode = request?.SourceLocationCode?.Trim() ?? string.Empty;
+        int? resolvedTargetLocationId = request?.TargetLocationId;
+        var resolvedTargetLocationCode = request?.TargetLocationCode?.Trim() ?? string.Empty;
+
+        if (!resolvedSourceLocationId.HasValue && !string.IsNullOrWhiteSpace(resolvedSourceLocationCode))
+        {
+            var loc = await db.WarehouseLocations.AsNoTracking()
+                .FirstOrDefaultAsync(l => l.WarehouseId == targetWarehouseId && l.Code == resolvedSourceLocationCode, cancellationToken);
+            if (loc != null)
+            {
+                resolvedSourceLocationId = loc.Id;
+                resolvedSourceLocationCode = loc.Code.Trim();
+            }
+        }
+
+        if (!resolvedTargetLocationId.HasValue && !string.IsNullOrWhiteSpace(resolvedTargetLocationCode))
+        {
+            var loc = await db.WarehouseLocations.AsNoTracking()
+                .FirstOrDefaultAsync(l => l.WarehouseId == targetWarehouseId && l.Code == resolvedTargetLocationCode, cancellationToken);
+            if (loc != null)
+            {
+                resolvedTargetLocationId = loc.Id;
+                resolvedTargetLocationCode = loc.Code.Trim();
+            }
+        }
+
+        if (request?.Reverse == true)
+        {
+            if (!resolvedSourceLocationId.HasValue || !resolvedTargetLocationId.HasValue)
+            {
+                return WmsEndpointOutcome.BadRequest(new { message = "Cần chỉ định vị trí nguồn (Reserve) và vị trí đích (Forward-Pick) để hoàn tác xả thùng." });
+            }
+
+            var pickStock = await db.InventoryStocks
+                .Include(s => s.Location)
+                .Where(s => s.WarehouseId == targetWarehouseId &&
+                            s.ProductId == resolvedProductId.Value &&
+                            s.LocationId == resolvedTargetLocationId.Value &&
+                            s.HandlingUnitId == null &&
+                            s.Status == InventoryStatus.Available &&
+                            (request.SourceLotId == null || s.LotId == request.SourceLotId))
+                .OrderByDescending(s => s.Quantity - s.ReservedQuantity)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            var pickAvailable = pickStock != null ? pickStock.Quantity - pickStock.ReservedQuantity : 0m;
+            if (pickStock == null || pickAvailable < movedBaseQty)
+            {
+                return WmsEndpointOutcome.UnprocessableEntity(new { message = $"INV_INSUFFICIENT_AVAILABLE_STOCK: Tồn khả dụng tại kệ nhặt lẻ ({pickAvailable:0.####}) không đủ để đảo bút toán xả thùng ({movedBaseQty:0.####} {baseUomCode}).", code = "INV_INSUFFICIENT_AVAILABLE_STOCK" });
+            }
+
+            pickStock.Quantity = Math.Round(pickStock.Quantity - movedBaseQty, 4, MidpointRounding.AwayFromZero);
+            pickStock.LastUpdated = now;
+
+            var reserveStock = await db.InventoryStocks
+                .FirstOrDefaultAsync(s =>
+                    s.WarehouseId == targetWarehouseId &&
+                    s.ProductId == resolvedProductId.Value &&
+                    s.LocationId == resolvedSourceLocationId.Value &&
+                    s.LotId == pickStock.LotId &&
+                    s.SerialId == pickStock.SerialId &&
+                    s.HandlingUnitId == request.SourceHandlingUnitId &&
+                    s.OwnerId == pickStock.OwnerId &&
+                    s.Status == InventoryStatus.Available,
+                    cancellationToken);
+
+            if (reserveStock == null)
+            {
+                reserveStock = new ERP.Domain.Entities.InventoryStock
+                {
+                    WarehouseId = targetWarehouseId,
+                    ProductId = resolvedProductId.Value,
+                    LocationId = resolvedSourceLocationId.Value,
+                    LotId = pickStock.LotId,
+                    SerialId = pickStock.SerialId,
+                    HandlingUnitId = request.SourceHandlingUnitId,
+                    OwnerId = pickStock.OwnerId,
+                    Status = InventoryStatus.Available,
+                    Quantity = movedBaseQty,
+                    ReservedQuantity = 0m,
+                    LastUpdated = now
+                };
+                db.InventoryStocks.Add(reserveStock);
+            }
+            else
+            {
+                reserveStock.Quantity = Math.Round(reserveStock.Quantity + movedBaseQty, 4, MidpointRounding.AwayFromZero);
+                reserveStock.LastUpdated = now;
+            }
+
+            var revId = $"BB-REV-{now:yyyyMMdd-HHmmss}";
+            var revNote = $"{revId}: Đảo bút toán xả thùng {sourcePackQty:0.####} {resolvedSourceUomCode} (x{conversionFactor:0.####} = {movedBaseQty:0.####} {baseUomCode})";
+
+            int? origOutTxId = null;
+            int? origInTxId = null;
+            if (request.OriginalReferenceId.HasValue)
+            {
+                var origTxs = await db.InventoryTransactions
+                    .AsNoTracking()
+                    .Where(t => t.WarehouseId == targetWarehouseId &&
+                                t.ProductId == resolvedProductId.Value &&
+                                t.ReferenceType == "BreakBulkReplenishment" &&
+                                t.ReferenceId == request.OriginalReferenceId.Value)
+                    .OrderBy(t => t.Id)
+                    .ToListAsync(cancellationToken);
+
+                origOutTxId = origTxs.FirstOrDefault(t => t.Quantity < 0)?.Id;
+                origInTxId = origTxs.FirstOrDefault(t => t.Quantity > 0)?.Id;
+            }
+
+            var revOutTx = new ERP.Domain.Entities.InventoryTransaction
+            {
+                ProductId = resolvedProductId.Value,
+                WarehouseId = targetWarehouseId,
+                LocationId = resolvedTargetLocationId.Value,
+                FromLocationId = resolvedTargetLocationId.Value,
+                ToLocationId = resolvedSourceLocationId.Value,
+                LotId = pickStock.LotId,
+                SerialId = pickStock.SerialId,
+                HandlingUnitId = null,
+                OwnerId = pickStock.OwnerId,
+                InventoryStatus = InventoryStatus.Available,
+                FromInventoryStatus = InventoryStatus.Available,
+                ToInventoryStatus = InventoryStatus.Available,
+                TransactionType = TransactionType.Reversal,
+                Quantity = -movedBaseQty,
+                ReferenceId = request.OriginalReferenceId ?? pickStock.Id,
+                ReferenceType = "BreakBulkReplenishmentReversal",
+                ReversalOfTransactionId = origInTxId,
+                ReasonCode = "BREAK_BULK_REVERSAL",
+                TransactionDate = now,
+                ActualOccurredAtUtc = now,
+                PostedAtUtc = now,
+                CreatedBy = effectiveActorId,
+                Note = revNote
+            };
+            var revInTx = new ERP.Domain.Entities.InventoryTransaction
+            {
+                ProductId = resolvedProductId.Value,
+                WarehouseId = targetWarehouseId,
+                LocationId = resolvedSourceLocationId.Value,
+                FromLocationId = resolvedTargetLocationId.Value,
+                ToLocationId = resolvedSourceLocationId.Value,
+                LotId = pickStock.LotId,
+                SerialId = pickStock.SerialId,
+                HandlingUnitId = request.SourceHandlingUnitId,
+                OwnerId = pickStock.OwnerId,
+                InventoryStatus = InventoryStatus.Available,
+                FromInventoryStatus = InventoryStatus.Available,
+                ToInventoryStatus = InventoryStatus.Available,
+                TransactionType = TransactionType.Reversal,
+                Quantity = movedBaseQty,
+                ReferenceId = request.OriginalReferenceId ?? reserveStock.Id,
+                ReferenceType = "BreakBulkReplenishmentReversal",
+                ReversalOfTransactionId = origOutTxId,
+                ReasonCode = "BREAK_BULK_REVERSAL",
+                TransactionDate = now,
+                ActualOccurredAtUtc = now,
+                PostedAtUtc = now,
+                CreatedBy = effectiveActorId,
+                Note = revNote
+            };
+
+            db.InventoryTransactions.Add(revOutTx);
+            db.InventoryTransactions.Add(revInTx);
+            await db.SaveChangesAsync(cancellationToken);
+
+            if (tx != null)
+            {
+                await tx.CommitAsync(cancellationToken);
+            }
+
+            return WmsEndpointOutcome.Ok(new
+            {
+                replenishmentId = revId,
+                warehouseId = targetWarehouseId,
+                productId = resolvedProductId.Value,
+                productCode = resolvedProductCode,
+                productName = resolvedProductName,
+                sourceLocationId = resolvedSourceLocationId.Value,
+                targetLocationId = resolvedTargetLocationId.Value,
+                sourceUomCode = resolvedSourceUomCode,
+                baseUomCode,
+                sourcePackQty,
+                conversionFactor,
+                movedBaseQty,
+                baseUomDelta = 0.0000m,
+                sourceRemainingQuantity = reserveStock.Quantity,
+                targetResultingQuantity = pickStock.Quantity,
+                reversed = true,
+                status = "REVERSED",
+                statusLabel = "Đã hoàn tác xả thùng bổ sung kệ nhặt lẻ",
+                executedAtUtc = now
+            });
+        }
+
+        // Forward Break-Bulk Replenishment
+        var sourceQuery = db.InventoryStocks
+            .Include(s => s.Location)
+            .Where(s => s.WarehouseId == targetWarehouseId &&
+                        s.ProductId == resolvedProductId.Value &&
+                        s.Status == InventoryStatus.Available &&
+                        s.LocationId.HasValue);
+
+        if (resolvedSourceLocationId.HasValue)
+            sourceQuery = sourceQuery.Where(s => s.LocationId == resolvedSourceLocationId.Value);
+        if (request?.SourceHandlingUnitId.HasValue == true)
+            sourceQuery = sourceQuery.Where(s => s.HandlingUnitId == request.SourceHandlingUnitId.Value);
+        if (request?.SourceLotId.HasValue == true)
+            sourceQuery = sourceQuery.Where(s => s.LotId == request.SourceLotId.Value);
+
+        var sourceStockBucket = await sourceQuery
+            .OrderByDescending(s => s.HandlingUnitId.HasValue ? 1 : 0)
+            .ThenByDescending(s => s.Quantity - s.ReservedQuantity)
+            .ThenBy(s => s.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var sourceAvail = sourceStockBucket != null ? sourceStockBucket.Quantity - sourceStockBucket.ReservedQuantity : 0m;
+        if (sourceStockBucket == null || sourceAvail < movedBaseQty)
+        {
+            return WmsEndpointOutcome.UnprocessableEntity(
+                new { message = $"INV_INSUFFICIENT_AVAILABLE_STOCK: Tồn khả dụng tại vị trí lưu trữ ({sourceAvail:0.####} {baseUomCode}) không đủ để xả {sourcePackQty:0.####} {resolvedSourceUomCode} ({movedBaseQty:0.####} {baseUomCode}).", code = "INV_INSUFFICIENT_AVAILABLE_STOCK" });
+        }
+
+        resolvedSourceLocationId = sourceStockBucket.LocationId!.Value;
+        resolvedSourceLocationCode = sourceStockBucket.Location?.Code?.Trim() ?? $"LOC-{resolvedSourceLocationId}";
+
+        if (!resolvedTargetLocationId.HasValue || resolvedTargetLocationId.Value == resolvedSourceLocationId.Value)
+        {
+            var pickLoc = await db.WarehouseLocations.AsNoTracking()
+                .Where(l => l.WarehouseId == targetWarehouseId &&
+                            l.IsActive &&
+                            !l.IsBlocked &&
+                            !l.IsSystemManaged &&
+                            l.IsPickable &&
+                            l.Id != resolvedSourceLocationId.Value)
+                .OrderBy(l => l.Code)
+                .FirstOrDefaultAsync(cancellationToken)
+                ?? await db.WarehouseLocations.AsNoTracking()
+                    .Where(l => l.WarehouseId == targetWarehouseId &&
+                                l.IsActive &&
+                                l.Id != resolvedSourceLocationId.Value)
+                    .OrderBy(l => l.Code)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+            if (pickLoc == null)
+            {
+                return WmsEndpointOutcome.UnprocessableEntity(new { message = "INV_TARGET_LOCATION_NOT_FOUND: Không tìm thấy vị trí kệ nhặt lẻ đích (Forward-Pick Bin) hợp lệ.", code = "INV_TARGET_LOCATION_NOT_FOUND" });
+            }
+
+            resolvedTargetLocationId = pickLoc.Id;
+            resolvedTargetLocationCode = pickLoc.Code.Trim();
+        }
+        else if (string.IsNullOrWhiteSpace(resolvedTargetLocationCode))
+        {
+            var pickLoc = await db.WarehouseLocations.AsNoTracking()
+                .FirstOrDefaultAsync(l => l.Id == resolvedTargetLocationId.Value, cancellationToken);
+            resolvedTargetLocationCode = pickLoc?.Code?.Trim() ?? $"LOC-{resolvedTargetLocationId.Value}";
+        }
+
+        var detachedHandlingUnitId = sourceStockBucket.HandlingUnitId;
+
+        sourceStockBucket.Quantity = Math.Round(sourceStockBucket.Quantity - movedBaseQty, 4, MidpointRounding.AwayFromZero);
+        sourceStockBucket.LastUpdated = now;
+
+        if (detachedHandlingUnitId.HasValue)
+        {
+            var huContent = await db.HandlingUnitContents
+                .FirstOrDefaultAsync(c => c.HandlingUnitId == detachedHandlingUnitId.Value &&
+                                          c.ProductId == resolvedProductId.Value, cancellationToken);
+            if (huContent != null && huContent.Quantity >= movedBaseQty)
+            {
+                huContent.Quantity = Math.Round(huContent.Quantity - movedBaseQty, 4, MidpointRounding.AwayFromZero);
+            }
+        }
+
+        // Deposit into Forward-Pick Bin in BaseUom (detached from source HandlingUnit: HandlingUnitId = null)
+        var targetStockBucket = await db.InventoryStocks
+            .FirstOrDefaultAsync(s =>
+                s.WarehouseId == targetWarehouseId &&
+                s.ProductId == resolvedProductId.Value &&
+                s.LocationId == resolvedTargetLocationId.Value &&
+                s.LotId == sourceStockBucket.LotId &&
+                s.SerialId == sourceStockBucket.SerialId &&
+                s.HandlingUnitId == null &&
+                s.OwnerId == sourceStockBucket.OwnerId &&
+                s.Status == InventoryStatus.Available,
+                cancellationToken);
+
+        if (targetStockBucket == null)
+        {
+            targetStockBucket = new ERP.Domain.Entities.InventoryStock
+            {
+                WarehouseId = targetWarehouseId,
+                ProductId = resolvedProductId.Value,
+                LocationId = resolvedTargetLocationId.Value,
+                LotId = sourceStockBucket.LotId,
+                SerialId = sourceStockBucket.SerialId,
+                HandlingUnitId = null,
+                OwnerId = sourceStockBucket.OwnerId,
+                Status = InventoryStatus.Available,
+                Quantity = movedBaseQty,
+                ReservedQuantity = 0m,
+                LastUpdated = now
+            };
+            db.InventoryStocks.Add(targetStockBucket);
+        }
+        else
+        {
+            targetStockBucket.Quantity = Math.Round(targetStockBucket.Quantity + movedBaseQty, 4, MidpointRounding.AwayFromZero);
+            targetStockBucket.LastUpdated = now;
+        }
+
+        var breakBulkId = $"BB-REPL-{now:yyyyMMdd-HHmmss}";
+        var txNote = string.IsNullOrWhiteSpace(request?.Note)
+            ? $"{breakBulkId}: Xả thùng bổ sung kệ nhặt lẻ {sourcePackQty:0.####} {resolvedSourceUomCode} x {conversionFactor:0.####} = {movedBaseQty:0.####} {baseUomCode} ({resolvedSourceLocationCode} -> {resolvedTargetLocationCode})"
+            : $"{breakBulkId}: {request!.Note!.Trim()} [{sourcePackQty:0.####} {resolvedSourceUomCode} x {conversionFactor:0.####} = {movedBaseQty:0.####} {baseUomCode}]";
+
+        var outTx = new ERP.Domain.Entities.InventoryTransaction
+        {
+            ProductId = resolvedProductId.Value,
+            WarehouseId = targetWarehouseId,
+            LocationId = resolvedSourceLocationId.Value,
+            FromLocationId = resolvedSourceLocationId.Value,
+            ToLocationId = resolvedTargetLocationId.Value,
+            LotId = sourceStockBucket.LotId,
+            SerialId = sourceStockBucket.SerialId,
+            HandlingUnitId = detachedHandlingUnitId,
+            OwnerId = sourceStockBucket.OwnerId,
+            InventoryStatus = InventoryStatus.Available,
+            FromInventoryStatus = InventoryStatus.Available,
+            ToInventoryStatus = InventoryStatus.Available,
+            TransactionType = TransactionType.Move,
+            Quantity = -movedBaseQty,
+            ReferenceId = sourceStockBucket.Id,
+            ReferenceType = "BreakBulkReplenishment",
+            TransactionDate = now,
+            CreatedBy = effectiveActorId,
+            Note = txNote
+        };
+
+        var inTx = new ERP.Domain.Entities.InventoryTransaction
+        {
+            ProductId = resolvedProductId.Value,
+            WarehouseId = targetWarehouseId,
+            LocationId = resolvedTargetLocationId.Value,
+            FromLocationId = resolvedSourceLocationId.Value,
+            ToLocationId = resolvedTargetLocationId.Value,
+            LotId = sourceStockBucket.LotId,
+            SerialId = sourceStockBucket.SerialId,
+            HandlingUnitId = null,
+            OwnerId = sourceStockBucket.OwnerId,
+            InventoryStatus = InventoryStatus.Available,
+            FromInventoryStatus = InventoryStatus.Available,
+            ToInventoryStatus = InventoryStatus.Available,
+            TransactionType = TransactionType.Move,
+            Quantity = movedBaseQty,
+            ReferenceId = sourceStockBucket.Id,
+            ReferenceType = "BreakBulkReplenishment",
+            TransactionDate = now,
+            CreatedBy = effectiveActorId,
+            Note = txNote
+        };
+
+        db.InventoryTransactions.Add(outTx);
+        db.InventoryTransactions.Add(inTx);
+
+        db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+        {
+            UserId = effectiveActorId,
+            WarehouseId = targetWarehouseId,
+            EntityName = "InventoryStock",
+            EntityId = sourceStockBucket.Id,
+            Action = "ExecuteBreakBulkReplenishment",
+            NewValues = $"{breakBulkId}:{resolvedProductCode}:{sourcePackQty:0.####} {resolvedSourceUomCode}->{movedBaseQty:0.####} {baseUomCode}",
+            Reason = txNote,
+            Result = "Success",
+            Timestamp = now
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+        if (tx != null)
+        {
+            await tx.CommitAsync(cancellationToken);
+        }
+
+        var baseUomDelta = Math.Round(outTx.Quantity + inTx.Quantity, 4, MidpointRounding.AwayFromZero);
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            replenishmentId = breakBulkId,
+            referenceId = sourceStockBucket.Id,
+            warehouseId = targetWarehouseId,
+            productId = resolvedProductId.Value,
+            productCode = resolvedProductCode,
+            productName = resolvedProductName,
+            sourceLocationId = resolvedSourceLocationId.Value,
+            sourceLocationCode = resolvedSourceLocationCode,
+            targetLocationId = resolvedTargetLocationId.Value,
+            targetLocationCode = resolvedTargetLocationCode,
+            sourceHandlingUnitId = detachedHandlingUnitId,
+            targetHandlingUnitId = (int?)null,
+            detachedFromHandlingUnit = detachedHandlingUnitId.HasValue,
+            sourceUomId = resolvedUomId,
+            sourceUomCode = resolvedSourceUomCode,
+            baseUomCode,
+            sourcePackQty,
+            conversionFactor,
+            movedBaseQty,
+            movedQuantity = movedBaseQty,
+            baseUomDelta,
+            sourceRemainingQuantity = sourceStockBucket.Quantity,
+            targetResultingQuantity = targetStockBucket.Quantity,
+            outTransactionId = outTx.Id,
+            inTransactionId = inTx.Id,
+            stockMutated = true,
+            status = "COMPLETED",
+            statusLabel = $"Đã xả {sourcePackQty:0.####} {resolvedSourceUomCode} (x{conversionFactor:0.####}) = {movedBaseQty:0.####} {baseUomCode} từ {resolvedSourceLocationCode} sang {resolvedTargetLocationCode}",
+            executedAtUtc = now
+        });
+    }
 }

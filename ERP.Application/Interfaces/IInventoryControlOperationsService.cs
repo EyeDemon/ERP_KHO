@@ -28,6 +28,24 @@ public record WhatIfSimulationInput(
 
 public record EvaluateDecisionPolicyInput(int? WarehouseId = null);
 
+public record ExecuteBreakBulkReplenishmentInput(
+    int? WarehouseId = null,
+    int? ProductId = null,
+    string? ProductCode = null,
+    int? SourceLocationId = null,
+    string? SourceLocationCode = null,
+    int? TargetLocationId = null,
+    string? TargetLocationCode = null,
+    int? SourceUomId = null,
+    string? SourceUomCode = null,
+    decimal SourcePackQty = 1m,
+    decimal? ConversionFactor = null,
+    int? SourceHandlingUnitId = null,
+    int? SourceLotId = null,
+    bool Reverse = false,
+    int? OriginalReferenceId = null,
+    string? Note = null);
+
 public interface IInventoryControlOperationsService
 {
     Task<WmsEndpointOutcome> ReplenishmentSuggestionsAsync(
@@ -37,6 +55,12 @@ public interface IInventoryControlOperationsService
 
     Task<WmsEndpointOutcome> ExecuteReplenishmentAsync(
         ExecuteReplenishmentInput? request = null,
+        int? actorUserId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> ExecuteBreakBulkReplenishmentAsync(
+        ExecuteBreakBulkReplenishmentInput? request = null,
         int? actorUserId = null,
         IWarehouseAuthorizationService? warehouseAuth = null,
         CancellationToken cancellationToken = default);

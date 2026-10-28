@@ -147,6 +147,26 @@ public sealed class InventoryControlController : ControllerBase
         return this.ToActionResult(outcome);
     }
 
+    [HttpPost("replenishment/break-bulk")]
+    [HttpPost("/api/inventory-control/replenishment/break-bulk")]
+    [IdempotentCommand("Inventory.BreakBulkReplenishment")]
+    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    public async Task<IActionResult> ExecuteBreakBulkReplenishment(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExecuteBreakBulkReplenishmentInput? request = null,
+        [FromServices] IInventoryControlOperationsService? opsSvc = null,
+        [FromServices] IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (User?.IsInRole(AppRoles.Viewer) == true)
+            return Forbid();
+
+        var effectiveOps = opsSvc ?? _controlOps;
+        var effectiveAuth = warehouseAuth ?? _warehouseAccess;
+        var actorUserId = GetActorUserId();
+        var outcome = await effectiveOps.ExecuteBreakBulkReplenishmentAsync(request, actorUserId, effectiveAuth, cancellationToken);
+        return this.ToActionResult(outcome);
+    }
+
     [HttpGet("advanced-planning-suite")]
     [HttpGet("/api/inventory-control/advanced-planning-suite")]
     [PermissionAuthorize(AppPermissions.InventoryRead)]

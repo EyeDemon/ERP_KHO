@@ -18,6 +18,11 @@ public class PutawayTask : ITenantEntity
     public string? ExceptionReason { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public int CreatedBy { get; set; }
+    public bool IsCrossDock { get; set; }
+    public int? CrossDockTargetSalesOrderId { get; set; }
+    public int? CrossDockTargetExportReceiptId { get; set; }
+    public int? CrossDockTargetBackorderId { get; set; }
+    public decimal CrossDockAllocatedQty { get; set; }
     public byte[] RowVersion { get; set; } = [];
     public ImportReceipt Receipt { get; set; } = null!;
     public Warehouse Warehouse { get; set; } = null!;

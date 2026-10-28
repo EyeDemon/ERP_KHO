@@ -68,7 +68,7 @@ Note: Projects reside directly under the repository root `d:\ERP_KHO\` (and `d:\
 
 ## 3. Domain Entities & Canonical Alias Map (`OD-03`)
 
-All **94** Domain entity classes (`94` business tables in `ErpKhoDbContext`) defined across **59** `.cs` files in `ERP.Domain/Entities/*.cs` map to **94** `DbSet<T>` properties in [ErpKhoDbContext.cs](file:///d:/ERP_KHO/ERP.Infrastructure/Persistence/ErpKhoDbContext.cs#L141-L234) and **94** physical user tables in SQL Server database `ERP_KHO` (plus `1` `__EFMigrationsHistory` = **95** physical tables total across **60** applied EF Core migrations). In Wave 57 (`20261027130209_Wave57AuditRemediationSchemaAndImmutableLedgerTrigger.cs`), `PickingWaves`, `PutToWallSlots`, `ThreePlStorageSnapshots`, and `ThreePlBillingStatements` were promoted to first-class relational tables (`decimal(19,4)`), and in Wave 59 (`20261028052814_Wave59RoadmapEpics301To303.cs`), `PickingWaveTemplates` and `CarrierIntegrationConfigs` (plus Wave 59 columns on `PickingWaves`, `PickingTasks`, `PutToWallSlots`, and `MarketplaceShops`) were added.
+All **96** Domain entity classes (`96` business tables in `ErpKhoDbContext`) defined across **60** `.cs` files in `ERP.Domain/Entities/*.cs` map to **96** `DbSet<T>` properties in [ErpKhoDbContext.cs](file:///d:/ERP_KHO/ERP.Infrastructure/Persistence/ErpKhoDbContext.cs#L141-L236) and **96** physical user tables in SQL Server database `ERP_KHO` (plus `1` `__EFMigrationsHistory` = **97** physical tables total across **61** applied EF Core migrations). In Wave 57 (`20261027130209_Wave57AuditRemediationSchemaAndImmutableLedgerTrigger.cs`), `PickingWaves`, `PutToWallSlots`, `ThreePlStorageSnapshots`, and `ThreePlBillingStatements` were promoted to first-class relational tables (`decimal(19,4)`), in Wave 59 (`20261028052814_Wave59RoadmapEpics301To303.cs`), `PickingWaveTemplates` and `CarrierIntegrationConfigs` were added, and in Wave 60 (`20261028100852_Wave60RoadmapEpics601To603.cs`), `KitWorkOrders` and `KitWorkOrderComponentLines` (plus cross-docking columns on `PutawayTasks`) were added.
 
 | # | `ErpKhoDbContext` `DbSet<T>` (`Line`) | Domain Entity Class | Source File (`ERP.Domain/Entities/`) | Canonical Notion Spec Alias (`OD-03`) |
 |---:|---|---|---|---|
@@ -166,6 +166,8 @@ All **94** Domain entity classes (`94` business tables in `ErpKhoDbContext`) def
 | 92 | `ThreePlBillingStatements` (`L232`) | `ThreePlBillingStatement` | [ThreePlBillingStatement.cs](file:///d:/ERP_KHO/ERP.Domain/Entities/ThreePlBillingStatement.cs) | `three_pl_billing_statements` |
 | 93 | `PickingWaveTemplates` (`L233`) | `PickingWaveTemplate` | [PickingWaveTemplate.cs](file:///d:/ERP_KHO/ERP.Domain/Entities/PickingWaveTemplate.cs) | `picking_wave_templates` (`Wave 59 Epic 30.1`) |
 | 94 | `CarrierIntegrationConfigs` (`L234`) | `CarrierIntegrationConfig` | [CarrierIntegrationConfig.cs](file:///d:/ERP_KHO/ERP.Domain/Entities/CarrierIntegrationConfig.cs) | `carrier_integration_configs` (`Wave 59 Epic 30.2`) |
+| 95 | `KitWorkOrders` (`L235`) | `KitWorkOrder` | [KitWorkOrder.cs](file:///d:/ERP_KHO/ERP.Domain/Entities/KitWorkOrder.cs) | `kit_work_orders` (`Wave 60 Epic 60.1`) |
+| 96 | `KitWorkOrderComponentLines` (`L236`) | `KitWorkOrderComponentLine` | [KitWorkOrder.cs](file:///d:/ERP_KHO/ERP.Domain/Entities/KitWorkOrder.cs) | `kit_work_order_component_lines` (`Wave 60 Epic 60.1`) |
 
 ---
 
@@ -277,10 +279,10 @@ All **42** controller `.cs` files in `ERP.Api/Controllers/` are mapped below (`F
 
 ### 6.1 Database Schema & Constraints Summary (`FACT`)
 Queried live from `ERP_KHO` on `(localdb)\MSSQLLocalDB` (`C:\Users\van40\ERP_KHO.mdf`, `72 MB`):
-- **Physical Tables (`sys.tables`):** **`95`** (`94` EF Core business tables + `1` `__EFMigrationsHistory`).
-- **Applied EF Core Migrations (`dbo.__EFMigrationsHistory`):** **`60`** migrations applied (all under ProductVersion `10.0.9`), from `20260405082652_InitialCreate` through `20261028052814_Wave59RoadmapEpics301To303`.
-- **Foreign Keys (`sys.foreign_keys`):** `226+` foreign keys (`DeleteBehavior.Restrict` / `NoAction` on domain relationships).
-- **Unique Indexes (`sys.indexes WHERE is_unique = 1`):** `101` unique indexes (including `IX_PickingWaves_TenantId_WaveCode`, `IX_PickingWaveTemplates_TenantId_WarehouseId_TemplateCode`, `IX_CarrierIntegrationConfigs_TenantId_WarehouseId_CarrierCode`, `IX_PutToWallSlots_TenantId_WarehouseId_WaveCode_SlotCode`, `IX_ThreePlStorageSnapshots_TenantId_WarehouseId_OwnerId_SnapshotDate`, `IX_ThreePlBillingStatements_TenantId_StatementCode`), plus:
+- **Physical Tables (`sys.tables`):** **`97`** (`96` EF Core business tables + `1` `__EFMigrationsHistory`).
+- **Applied EF Core Migrations (`dbo.__EFMigrationsHistory`):** **`61`** migrations applied (all under ProductVersion `10.0.9`), from `20260405082652_InitialCreate` through `20261028100852_Wave60RoadmapEpics601To603`.
+- **Foreign Keys (`sys.foreign_keys`):** `232+` foreign keys (`DeleteBehavior.Restrict` / `NoAction` on domain relationships).
+- **Unique Indexes (`sys.indexes WHERE is_unique = 1`):** `102` unique indexes (including `IX_KitWorkOrders_TenantId_WorkOrderCode`, `IX_PickingWaves_TenantId_WaveCode`, `IX_PickingWaveTemplates_TenantId_WarehouseId_TemplateCode`, `IX_CarrierIntegrationConfigs_TenantId_WarehouseId_CarrierCode`, `IX_PutToWallSlots_TenantId_WarehouseId_WaveCode_SlotCode`, `IX_ThreePlStorageSnapshots_TenantId_WarehouseId_OwnerId_SnapshotDate`, `IX_ThreePlBillingStatements_TenantId_StatementCode`), plus:
   - `IX_InventoryStocks_CanonicalBucket` on `(TenantId, WarehouseId, ProductId, Status, LocationId, LotId, SerialId, HandlingUnitId, OwnerId)`
   - `IX_InventoryStocks_Tenant_GrainHash` on `(TenantId, GrainHash)`
   - `UX_InventoryTransactions_ReversalOfTransaction` (filtered unique index preventing double reversal of a ledger entry)

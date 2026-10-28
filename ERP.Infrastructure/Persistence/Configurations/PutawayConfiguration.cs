@@ -22,6 +22,7 @@ public sealed class PutawayTaskConfiguration : IEntityTypeConfiguration<PutawayT
     public void Configure(EntityTypeBuilder<PutawayTask> b)
     {
         b.ToTable("PutawayTasks"); b.HasKey(x => x.Id); b.Property(x => x.RowVersion).IsRowVersion(); b.Property(x => x.ExceptionReason).HasMaxLength(500);
+        b.Property(x => x.CrossDockAllocatedQty).HasPrecision(19, 4);
         b.HasIndex(x => x.ReceiptId).IsUnique();
         b.HasOne(x => x.Receipt).WithMany().HasForeignKey(x => x.ReceiptId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);

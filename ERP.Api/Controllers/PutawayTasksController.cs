@@ -170,6 +170,9 @@ public sealed class PutawayTasksController(
     [HttpPost("{id:int}/exception"), IdempotentCommand("Putaway.Exception"), PermissionAuthorize(AppPermissions.PutawayExecute)] public async Task<IActionResult> Exception(int id, PutawayStateCommandDto dto, CancellationToken ct) => Ok(await service.OpenExceptionAsync(id, dto, ct));
     [HttpPost("{id:int}/resume"), IdempotentCommand("Putaway.Resume"), PermissionAuthorize(AppPermissions.PutawayExecute)] public async Task<IActionResult> Resume(int id, PutawayStateCommandDto dto, CancellationToken ct) => Ok(await service.ResumeAsync(id, dto, ct));
     [HttpPost("{id:int}/cancel"), IdempotentCommand("Putaway.Cancel"), PermissionAuthorize(AppPermissions.PutawayCancel)] public async Task<IActionResult> Cancel(int id, PutawayStateCommandDto dto, CancellationToken ct) => Ok(await service.CancelAsync(id, dto, ct));
+    [HttpPost("{id:int}/cross-dock"), IdempotentCommand("Putaway.CrossDock"), PermissionAuthorize(AppPermissions.PutawayExecute)]
+    public async Task<IActionResult> CrossDock(int id, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExecuteCrossDockDto? dto = null, CancellationToken ct = default)
+        => Ok(await service.EvaluateAndExecuteCrossDockAsync(id, dto, ct));
 
     public sealed record LocationBarcodeSheetRequest(
         int? WarehouseId = null,

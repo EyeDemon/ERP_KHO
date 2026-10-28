@@ -27,4 +27,5 @@ public interface IPutawayService
     Task<PutawayTaskDto> OpenExceptionAsync(int id, PutawayStateCommandDto dto, CancellationToken token = default);
     Task<PutawayTaskDto> ResumeAsync(int id, PutawayStateCommandDto dto, CancellationToken token = default);
     Task<PutawayTaskDto> CancelAsync(int id, PutawayStateCommandDto dto, CancellationToken token = default);
+    Task<PutawayTaskDto> EvaluateAndExecuteCrossDockAsync(int id, ExecuteCrossDockDto? dto = null, CancellationToken token = default);
 }

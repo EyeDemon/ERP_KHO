@@ -232,6 +232,8 @@ WHERE TenantId = {tenantId}
     public DbSet<CarrierIntegrationConfig> CarrierIntegrationConfigs => Set<CarrierIntegrationConfig>();
     public DbSet<ThreePlStorageSnapshot> ThreePlStorageSnapshots => Set<ThreePlStorageSnapshot>();
     public DbSet<ThreePlBillingStatement> ThreePlBillingStatements => Set<ThreePlBillingStatement>();
+    public DbSet<KitWorkOrder> KitWorkOrders => Set<KitWorkOrder>();
+    public DbSet<KitWorkOrderComponentLine> KitWorkOrderComponentLines => Set<KitWorkOrderComponentLine>();
 
     public override int SaveChanges() => SaveChanges(acceptAllChangesOnSuccess: true);
 

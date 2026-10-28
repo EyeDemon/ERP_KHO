@@ -2741,6 +2741,176 @@ namespace ERP.Infrastructure.Migrations
                     b.HasAnnotation("SqlServer:UseSqlOutputClause", false);
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.KitWorkOrder", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CompletedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("CompletedKitQty")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("EarliestComponentExpiryDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("KitProductId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("PlannedKitQty")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal>("RolledUpUnitCost")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<int?>("TargetHandlingUnitId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("TargetLocationId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("TargetLotId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("WorkOrderCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<int>("WorkOrderType")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KitProductId");
+
+                    b.HasIndex("TargetHandlingUnitId");
+
+                    b.HasIndex("TargetLocationId");
+
+                    b.HasIndex("TargetLotId");
+
+                    b.HasIndex("WarehouseId");
+
+                    b.HasIndex("TenantId", "WarehouseId", "WorkOrderCode")
+                        .IsUnique();
+
+                    b.ToTable("KitWorkOrders", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_KitWorkOrders_CompletedKitQty", "[CompletedKitQty] >= 0");
+
+                            t.HasCheckConstraint("CK_KitWorkOrders_PlannedKitQty", "[PlannedKitQty] > 0");
+
+                            t.HasCheckConstraint("CK_KitWorkOrders_RolledUpUnitCost", "[RolledUpUnitCost] >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.KitWorkOrderComponentLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ComponentProductId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("ComponentRatioQty")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal>("ComponentUnitCost")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<decimal>("ConsumedBaseQty")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<int>("KitWorkOrderId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("RequiredBaseQty")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<int?>("SourceLocationId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("SourceLotId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TenantId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ComponentProductId");
+
+                    b.HasIndex("KitWorkOrderId");
+
+                    b.HasIndex("SourceLocationId");
+
+                    b.HasIndex("SourceLotId");
+
+                    b.HasIndex("TenantId", "KitWorkOrderId", "ComponentProductId");
+
+                    b.ToTable("KitWorkOrderComponentLines", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_KitWorkOrderComponentLines_ComponentRatioQty", "[ComponentRatioQty] > 0");
+
+                            t.HasCheckConstraint("CK_KitWorkOrderComponentLines_ComponentUnitCost", "[ComponentUnitCost] >= 0");
+
+                            t.HasCheckConstraint("CK_KitWorkOrderComponentLines_ConsumedBaseQty", "[ConsumedBaseQty] >= 0");
+
+                            t.HasCheckConstraint("CK_KitWorkOrderComponentLines_RequiredBaseQty", "[RequiredBaseQty] > 0");
+                        });
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.MarketplaceShop", b =>
                 {
                     b.Property<int>("Id")
@@ -4113,9 +4283,25 @@ namespace ERP.Infrastructure.Migrations
                     b.Property<int>("CreatedBy")
                         .HasColumnType("int");
 
+                    b.Property<decimal>("CrossDockAllocatedQty")
+                        .HasPrecision(19, 4)
+                        .HasColumnType("decimal(19,4)");
+
+                    b.Property<int?>("CrossDockTargetBackorderId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("CrossDockTargetExportReceiptId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("CrossDockTargetSalesOrderId")
+                        .HasColumnType("int");
+
                     b.Property<string>("ExceptionReason")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsCrossDock")
+                        .HasColumnType("bit");
 
                     b.Property<int>("ReceiptId")
                         .HasColumnType("int");
@@ -8133,6 +8319,63 @@ namespace ERP.Infrastructure.Migrations
                     b.Navigation("Warehouse");
                 });
 
+            modelBuilder.Entity("ERP.Domain.Entities.KitWorkOrder", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Product", null)
+                        .WithMany()
+                        .HasForeignKey("KitProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.HandlingUnit", null)
+                        .WithMany()
+                        .HasForeignKey("TargetHandlingUnitId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", null)
+                        .WithMany()
+                        .HasForeignKey("TargetLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.InventoryLot", null)
+                        .WithMany()
+                        .HasForeignKey("TargetLotId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.Warehouse", null)
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.KitWorkOrderComponentLine", b =>
+                {
+                    b.HasOne("ERP.Domain.Entities.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ComponentProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.KitWorkOrder", "KitWorkOrder")
+                        .WithMany("ComponentLines")
+                        .HasForeignKey("KitWorkOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ERP.Domain.Entities.WarehouseLocation", null)
+                        .WithMany()
+                        .HasForeignKey("SourceLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("ERP.Domain.Entities.InventoryLot", null)
+                        .WithMany()
+                        .HasForeignKey("SourceLotId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("KitWorkOrder");
+                });
+
             modelBuilder.Entity("ERP.Domain.Entities.MarketplaceShop", b =>
                 {
                     b.HasOne("ERP.Domain.Entities.Warehouse", "DefaultWarehouse")
@@ -9251,6 +9494,11 @@ namespace ERP.Infrastructure.Migrations
             modelBuilder.Entity("ERP.Domain.Entities.InventoryLot", b =>
                 {
                     b.Navigation("Serials");
+                });
+
+            modelBuilder.Entity("ERP.Domain.Entities.KitWorkOrder", b =>
+                {
+                    b.Navigation("ComponentLines");
                 });
 
             modelBuilder.Entity("ERP.Domain.Entities.MarketplaceShop", b =>

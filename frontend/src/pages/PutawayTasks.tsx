@@ -9,7 +9,7 @@ import './PutawayTasks.css';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 
 type Item={id:number;productCode:string;productName:string;inventoryStatus:string;sourceLocationCode:string;operationUnitCode:string;baseUnitCode:string;requiredOperationQuantity:number;requiredBaseQuantity:number;movedBaseQuantity:number;remainingBaseQuantity:number};
-type Task={id:number;warehouseId?:number;receiptCode:string;warehouseName:string;status:string;taskType?:string;sourceType?:string;assignedUserId:number|null;requiredBaseQuantity:number;movedBaseQuantity:number;rowVersion:string;exceptionReason?:string;items:Item[]};
+type Task={id:number;warehouseId?:number;receiptCode:string;warehouseName:string;status:string;taskType?:string;sourceType?:string;assignedUserId:number|null;requiredBaseQuantity:number;movedBaseQuantity:number;isCrossDock?:boolean;crossDockTargetSalesOrderId?:number|null;crossDockTargetExportReceiptId?:number|null;crossDockTargetBackorderId?:number|null;crossDockAllocatedQty?:number;rowVersion:string;exceptionReason?:string;items:Item[]};
 type Location={id:number;code:string;name:string;locationType:string;isPickable:boolean};
 const states:Record<string,string>={Open:'Chưa phân công',Assigned:'Đã phân công',InProgress:'Đang thực hiện',Completed:'Đã hoàn thành',Cancelled:'Đã hủy',Exception:'Cần xử lý',CancelPendingPutback:'Chờ cất trả hàng hủy về kệ',PutbackTask:'Cất trả hàng hủy về kệ'};
 const taskTypes:Record<string,string>={PutawayTask:'Cất hàng nhập kho',PutbackTask:'Cất trả hàng hủy về kệ',CancelPendingPutback:'Chờ cất trả hàng hủy về kệ'};
@@ -56,6 +56,31 @@ export default function PutawayTasks(){
  const [slottingBusy,setSlottingBusy]=useState(false);
  const [directedSuggestions,setDirectedSuggestions]=useState<Record<number,{recommendedBinCode:string;reasonText:string}>>({});
  const [directedBusyItem,setDirectedBusyItem]=useState<number|null>(null);
+ const [crossDockNotice,setCrossDockNotice]=useState('');
+ const executeCrossDock=async(taskOverride?:Task)=>{
+   const targetTask=taskOverride??selected??tasks.find(x=>x.status!=='Completed'&&x.status!=='Cancelled')??tasks[0];
+   if(!targetTask||busy)return;
+   const key=`cross-dock-${targetTask.id}-${Date.now()}`;
+   setBusy(key);
+   setError('');
+   try{
+     const res=await apiClient.post(`/api/v1/putaway-tasks/${targetTask.id}/cross-dock`,{
+       targetSalesOrderId:targetTask.crossDockTargetSalesOrderId??undefined,
+       targetExportReceiptId:targetTask.crossDockTargetExportReceiptId??undefined,
+       targetBackorderId:targetTask.crossDockTargetBackorderId??undefined,
+       rowVersion:targetTask.rowVersion,
+     },{headers:idempotencyHeaders(key)});
+     completeIdempotentAction(key);
+     const updated=res.data as Task;
+     setSelected(updated);
+     setCrossDockNotice(`CROSS-DOCK THÀNH CÔNG • Nhiệm vụ ${updated.receiptCode}: Đã điều hướng thẳng từ Bãi tiếp nhận (RECEIVING-STAGE) sang Bãi tập kết xuất hàng (SHIPPING-STAGE) • Khối lượng phân bổ Cross-Dock: ${updated.crossDockAllocatedQty??updated.movedBaseQuantity} ĐV (Bút toán đối ứng PutawayOut/PutawayIn Δ = 0.0000).`);
+     await load();
+   }catch(e){
+     setError(message(e));
+   }finally{
+     setBusy('');
+   }
+ };
  const applyDirectedPutawaySuggestion=async(taskId:number,itemId:number,defaultQty:number)=>{
    setDirectedBusyItem(itemId);
    setError('');
@@ -203,6 +228,14 @@ export default function PutawayTasks(){
        </div>
        <div className="ui-inline-wrap" style={{ marginTop: 4 }}>
          <button type="button" disabled={!!busy||slottingBusy} onClick={()=>void evaluateSlotting()}>Chấm điểm Tối ưu Xếp dỡ &amp; Khớp Vị trí Kệ</button>
+         <button
+           type="button"
+           data-testid="btn-execute-cross-dock"
+           disabled={!!busy||slottingBusy||tasks.length===0}
+           onClick={()=>void executeCrossDock()}
+         >
+           Thực thi Cross-Dock (Bãi Nhận → Bãi Xuất SHIPPING-STAGE)
+         </button>
         <button
           type="button"
           className="ui-btn-secondary"
@@ -221,7 +254,26 @@ export default function PutawayTasks(){
         </button>
        </div>
        <div data-testid="putaway-ledger-pair-panel" style={{ marginTop: 6, padding: '8px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: 13 }}>
-         <strong>Bút toán Sổ cái Đối ứng 2 Dòng:</strong> Chân nguồn <code>-Q (Bãi tiếp nhận)</code> • Chân đích <code>+Q (Kệ lưu trữ BIN-A01-01)</code> — Bảo toàn tổng tồn kho toàn kho (<code>Δ = 0</code>).
+         <strong>Bút toán Sổ cái Đối ứng 2 Dòng:</strong> Chân nguồn <code>-Q (Bãi tiếp nhận)</code> • Chân đích <code>+Q (Kệ lưu trữ BIN-A01-01)</code> (hoặc <code>SHIPPING-STAGE</code> khi Cross-Dock) — Bảo toàn tổng tồn kho toàn kho (<code>Δ = 0</code>).
+         {crossDockNotice&&(
+           <div
+             role="status"
+             data-testid="cross-dock-status-banner"
+             style={{
+               marginTop: 8,
+               padding: '8px 12px',
+               borderRadius: 8,
+               background: '#eff6ff',
+               color: '#1e3a8a',
+               border: '1px solid #93c5fd',
+               fontSize: 13,
+               lineHeight: 1.5,
+               fontWeight: 600,
+             }}
+           >
+             {crossDockNotice}
+           </div>
+         )}
        </div>
        {slottingEvaluationResult&&(
          <div
@@ -245,7 +297,7 @@ export default function PutawayTasks(){
      </div>
    </UiCard>
 
-   <div className="putaway putaway-grid" style={{ gridTemplateColumns: selected ? undefined : 'minmax(0, 1fr)' }}>
+   <div className="putaway putaway-grid" style={{ gridTemplateColumns: selected ? undefined : 'minmax(0, 1fr)', minWidth: 0, maxWidth: '100%', overflowX: 'hidden' }}>
      <UiCard title="Danh sách nhiệm vụ">
        {tasks.length===0?<p>Chưa có nhiệm vụ cất hàng phù hợp.</p>:<UiTableScroll><table className="ui-table-compact" style={{ width: '100%', minWidth: 0, tableLayout: 'fixed' }}>
          <thead>
@@ -272,6 +324,7 @@ export default function PutawayTasks(){
                <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 3, lineHeight: 1.2 }}>
                  {task.warehouseName}
                  {(task.taskType==='PutbackTask'||task.sourceType==='PutbackTask')&&<div style={{ marginTop: 3 }}><UiBadge tone="warning">{taskTypes.PutbackTask}</UiBadge></div>}
+                 {task.isCrossDock&&<div style={{ marginTop: 3 }}><UiBadge tone="success">CROSS-DOCK ({task.crossDockAllocatedQty??task.movedBaseQuantity})</UiBadge></div>}
                </div>
              </td>
              <td style={{ padding: '6px 4px', fontSize: 10.5, lineHeight: 1.25, verticalAlign: 'middle' }}>
@@ -297,6 +350,7 @@ export default function PutawayTasks(){
        <div className="ui-inline-wrap">
          <UiBadge tone={selected.status==='Completed'?'success':selected.status==='Exception'?'danger':selected.status==='InProgress'?'warning':'neutral'}>{states[selected.status]??'Không xác định'}</UiBadge>
          {(selected.taskType==='PutbackTask'||selected.sourceType==='PutbackTask')&&<UiBadge tone="warning">{taskTypes.PutbackTask}</UiBadge>}
+         {selected.isCrossDock&&<UiBadge tone="success">CROSS-DOCK → SHIPPING-STAGE ({selected.crossDockAllocatedQty??selected.movedBaseQuantity})</UiBadge>}
          <span className="ui-muted-text">Tiến độ {selected.movedBaseQuantity}/{selected.requiredBaseQuantity}</span>
        </div>
        {selected.exceptionReason&&<p><strong>Lý do cần xử lý:</strong> {selected.exceptionReason}</p>}

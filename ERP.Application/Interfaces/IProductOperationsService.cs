@@ -68,6 +68,38 @@ public record ProductDekitInput(
     decimal? Quantity = null,
     string? Note = null);
 
+public record CreateKitWorkOrderLineInput(
+    int ComponentProductId,
+    decimal ComponentRatioQty = 1m,
+    int? SourceLocationId = null,
+    int? SourceLotId = null,
+    decimal? ComponentUnitCost = null);
+
+public record CreateKitWorkOrderInput(
+    int? WarehouseId = null,
+    int? KitProductId = null,
+    string? KitProductCode = null,
+    string? WorkOrderCode = null,
+    string? WorkOrderType = "Assemble",
+    decimal PlannedKitQty = 1m,
+    int? TargetLocationId = null,
+    int? TargetLotId = null,
+    int? TargetHandlingUnitId = null,
+    bool AutoComplete = false,
+    List<CreateKitWorkOrderLineInput>? ComponentLines = null,
+    List<CreateKitWorkOrderLineInput>? Lines = null,
+    string? Note = null);
+
+public record CompleteKitWorkOrderInput(
+    decimal? CompletedKitQty = null,
+    int? TargetLocationId = null,
+    int? TargetLotId = null,
+    int? TargetHandlingUnitId = null,
+    string? Note = null);
+
+public record CancelKitWorkOrderInput(
+    string? Reason = null);
+
 public interface IProductOperationsService
 {
     Task<WmsEndpointOutcome> AutoAuditGovernanceAsync(
@@ -134,6 +166,29 @@ public interface IProductOperationsService
     Task<WmsEndpointOutcome> DekitAsync(
         int? id,
         ProductDekitInput? request,
+        int? actorUserId,
+        CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> GetKitWorkOrdersAsync(
+        int? warehouseId = null,
+        int? kitProductId = null,
+        string? status = null,
+        CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> CreateKitWorkOrderAsync(
+        CreateKitWorkOrderInput? request,
+        int? actorUserId,
+        CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> CompleteKitWorkOrderAsync(
+        int workOrderId,
+        CompleteKitWorkOrderInput? request,
+        int? actorUserId,
+        CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> CancelKitWorkOrderAsync(
+        int workOrderId,
+        CancelKitWorkOrderInput? request,
         int? actorUserId,
         CancellationToken cancellationToken = default);
 }

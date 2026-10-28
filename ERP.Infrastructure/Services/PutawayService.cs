@@ -298,6 +298,25 @@ public sealed class PutawayService(
             Add(line, InventoryStatus.Rejected, line.RejectedQuantity, line.BaseRejectedQuantity);
         }
         if (task.Items.Count == 0) throw new BusinessRuleException("Phiếu nhập không có số lượng hợp lệ để tạo nhiệm vụ cất hàng.");
+        var availProductIds = task.Items.Where(i => i.InventoryStatus == InventoryStatus.Available && i.RequiredBaseQuantity > 0).Select(i => i.ProductId).Distinct().ToList();
+        if (availProductIds.Count > 0)
+        {
+            var matchedBo = await context.Backorders.AsNoTracking()
+                .Include(b => b.SalesOrderLine)
+                .Where(b => b.WarehouseId == receipt.WarehouseId &&
+                            b.Status == BackorderStatus.Open &&
+                            b.Quantity - b.RecoveredQuantity - b.CancelledQuantity > 0 &&
+                            availProductIds.Contains(b.SalesOrderLine.ProductId))
+                .OrderByDescending(b => b.SalesOrderLine.SalesOrder.Priority)
+                .ThenBy(b => b.CreatedAt)
+                .Select(b => new { b.Id, b.SalesOrderLine.SalesOrderId })
+                .FirstOrDefaultAsync(token);
+            if (matchedBo != null)
+            {
+                task.CrossDockTargetBackorderId = matchedBo.Id;
+                task.CrossDockTargetSalesOrderId = matchedBo.SalesOrderId;
+            }
+        }
         context.PutawayTasks.Add(task);
         await context.SaveChangesAsync(token);
         context.AuditLogs.Add(Audit(actorId, "PutawayTask.Created", task.Id, receipt.WarehouseId, $"ReceiptId: {receipt.Id}; Items: {task.Items.Count}"));
@@ -316,7 +335,9 @@ public sealed class PutawayService(
         var ids = await warehouses.GetAccessibleWarehouseIdsAsync(token);
         return await context.PutawayTasks.AsNoTracking().Where(x => ids.Contains(x.WarehouseId)).OrderByDescending(x => x.CreatedAt)
             .Select(x => new PutawayTaskListDto { Id=x.Id, ReceiptId=x.ReceiptId, ReceiptCode=x.Receipt.Code.Trim(), WarehouseId=x.WarehouseId, WarehouseCode=x.Warehouse.Code.Trim(), WarehouseName=x.Warehouse.Name.Trim(),
-                Status=x.Status.ToString(), AssignedUserId=x.AssignedUserId, RequiredBaseQuantity=x.Items.Sum(i=>i.RequiredBaseQuantity), MovedBaseQuantity=x.Items.Sum(i=>i.MovedBaseQuantity), CreatedAt=x.CreatedAt }).ToListAsync(token);
+                Status=x.Status.ToString(), AssignedUserId=x.AssignedUserId, RequiredBaseQuantity=x.Items.Sum(i=>i.RequiredBaseQuantity), MovedBaseQuantity=x.Items.Sum(i=>i.MovedBaseQuantity),
+                IsCrossDock=x.IsCrossDock, CrossDockTargetSalesOrderId=x.CrossDockTargetSalesOrderId, CrossDockTargetExportReceiptId=x.CrossDockTargetExportReceiptId, CrossDockTargetBackorderId=x.CrossDockTargetBackorderId, CrossDockAllocatedQty=x.CrossDockAllocatedQty,
+                CreatedAt=x.CreatedAt }).ToListAsync(token);
     }
 
     public async Task<PutawayTaskDto> GetAsync(int id, CancellationToken token = default)
@@ -434,6 +455,609 @@ public sealed class PutawayService(
     public Task<PutawayTaskDto> OpenExceptionAsync(int id, PutawayStateCommandDto dto, CancellationToken token = default) => Mutate(id,dto,[PutawayTaskStatus.InProgress],task=>{ EnsureActor(task); task.ExceptionReason=string.IsNullOrWhiteSpace(dto.Reason)?throw new BusinessRuleException("Lý do cần xử lý là bắt buộc."):dto.Reason.Trim(); task.Status=PutawayTaskStatus.Exception; },"ExceptionOpened",token);
     public Task<PutawayTaskDto> ResumeAsync(int id, PutawayStateCommandDto dto, CancellationToken token = default) => Mutate(id,dto,[PutawayTaskStatus.Exception],task=>{ EnsureActor(task); task.Status=PutawayTaskStatus.InProgress; task.ExceptionReason=null; },"Resumed",token);
     public Task<PutawayTaskDto> CancelAsync(int id, PutawayStateCommandDto dto, CancellationToken token = default) => Mutate(id,dto,[PutawayTaskStatus.Open,PutawayTaskStatus.Assigned],task=>{ if(task.Items.Any(x=>x.MovedBaseQuantity>0)) throw Conflict("Không thể hủy nhiệm vụ đã phát sinh di chuyển."); task.Status=PutawayTaskStatus.Cancelled; task.CancelledAt=DateTime.UtcNow; },"Cancelled",token);
+
+    public async Task<PutawayTaskDto> EvaluateAndExecuteCrossDockAsync(int id, ExecuteCrossDockDto? dto = null, CancellationToken token = default)
+    {
+        var ownTransaction = context.Database.CurrentTransaction is null;
+        var isSqlServer = context.Database.IsRelational() && context.Database.IsSqlServer();
+        await using var tx = ownTransaction ? await context.Database.BeginTransactionAsync(token) : null;
+        try
+        {
+            if (isSqlServer)
+            {
+                var tenantId = context.CurrentTenantId;
+                await context.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT 1 FROM dbo.PutawayTasks WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE TenantId = {tenantId} AND Id = {id}; SELECT 1 FROM dbo.PutawayTaskItems WITH (UPDLOCK, ROWLOCK, HOLDLOCK) WHERE TenantId = {tenantId} AND PutawayTaskId = {id};",
+                    token);
+            }
+
+            var task = await Load(id, token);
+            var nowUtc = DateTime.UtcNow;
+            var actorId = currentUser.UserId > 0 ? currentUser.UserId : (task.CreatedBy > 0 ? task.CreatedBy : 1);
+
+            if (dto?.Reverse == true)
+            {
+                if (!task.IsCrossDock || task.CrossDockAllocatedQty <= 0m)
+                {
+                    throw new BusinessRuleException("Nhiệm vụ chưa phát sinh Cross-Dock để đảo ngược.");
+                }
+
+                var reverseProductIds = task.Items.Select(x => x.ProductId).Distinct().OrderBy(x => x).ToList();
+                await context.AcquireInventoryAllocationLocksAsync(task.WarehouseId, reverseProductIds, token);
+
+                var alreadyReversedIds = await context.InventoryTransactions
+                    .AsNoTracking()
+                    .Where(t => t.ReferenceId == task.Id && t.ReversalOfTransactionId != null)
+                    .Select(t => t.ReversalOfTransactionId!.Value)
+                    .ToListAsync(token);
+
+                var cdRefTypes = new[] { "PutawayOut", "PutawayIn" };
+                var cdTxs = await context.InventoryTransactions
+                    .AsNoTracking()
+                    .Where(t => t.ReferenceId == task.Id &&
+                                t.TransactionType != TransactionType.Reversal &&
+                                t.ReferenceType != null &&
+                                cdRefTypes.Contains(t.ReferenceType) &&
+                                !alreadyReversedIds.Contains(t.Id))
+                    .OrderBy(t => t.Id)
+                    .ToListAsync(token);
+
+                foreach (var orig in cdTxs)
+                {
+                    var revDelta = -orig.Quantity;
+                    var bucket = await context.InventoryStocks
+                        .FirstOrDefaultAsync(s =>
+                            s.WarehouseId == orig.WarehouseId &&
+                            s.ProductId == orig.ProductId &&
+                            s.LocationId == orig.LocationId &&
+                            s.LotId == orig.LotId &&
+                            s.SerialId == orig.SerialId &&
+                            s.HandlingUnitId == orig.HandlingUnitId &&
+                            s.OwnerId == orig.OwnerId &&
+                            s.Status == orig.InventoryStatus,
+                            token);
+
+                    if (bucket != null)
+                    {
+                        if (revDelta < 0m)
+                        {
+                            var releaseAmt = Math.Min(-revDelta, bucket.ReservedQuantity);
+                            bucket.ReservedQuantity = Math.Max(0m, bucket.ReservedQuantity - releaseAmt);
+                            bucket.AllocatedQuantity = Math.Max(0m, bucket.AllocatedQuantity - Math.Min(-revDelta, bucket.AllocatedQuantity));
+                        }
+                        bucket.Quantity = Math.Max(0m, bucket.Quantity + revDelta);
+                        bucket.LastUpdated = nowUtc;
+                        bucket.RefreshGrainHash();
+                    }
+
+                    context.InventoryTransactions.Add(new InventoryTransaction
+                    {
+                        ProductId = orig.ProductId,
+                        WarehouseId = orig.WarehouseId,
+                        LocationId = orig.LocationId,
+                        FromLocationId = orig.ToLocationId,
+                        ToLocationId = orig.FromLocationId,
+                        LotId = orig.LotId,
+                        SerialId = orig.SerialId,
+                        HandlingUnitId = orig.HandlingUnitId,
+                        OwnerId = orig.OwnerId,
+                        InventoryStatus = orig.InventoryStatus,
+                        FromInventoryStatus = orig.ToInventoryStatus,
+                        ToInventoryStatus = orig.FromInventoryStatus,
+                        TransactionType = TransactionType.Reversal,
+                        Quantity = revDelta,
+                        UnitCost = orig.UnitCost,
+                        ReferenceId = task.Id,
+                        ReferenceType = orig.ReferenceType,
+                        SourceDocumentLineId = orig.SourceDocumentLineId,
+                        ReversalOfTransactionId = orig.Id,
+                        ReasonCode = "CROSS_DOCK_REVERSAL",
+                        TransactionDate = nowUtc,
+                        ActualOccurredAtUtc = nowUtc,
+                        PostedAtUtc = nowUtc,
+                        CreatedBy = actorId,
+                        Note = $"Đảo bút toán Cross-Dock PutawayTask #{task.Id} (OrigTx=#{orig.Id})"
+                    });
+                }
+
+                var cdAllocations = await context.StockAllocations
+                    .Include(a => a.Reservation)
+                    .Where(a => a.WarehouseId == task.WarehouseId &&
+                                a.SelectionReason == $"CROSS_DOCK_TASK_{task.Id}" &&
+                                a.Status == StockAllocationStatus.Active)
+                    .ToListAsync(token);
+
+                foreach (var alloc in cdAllocations)
+                {
+                    alloc.Status = StockAllocationStatus.Released;
+                    alloc.ReleasedAt = nowUtc;
+                    alloc.ReleasedBy = actorId;
+                    alloc.ReleaseReason = dto.Reason ?? "Cross-Dock Reversal";
+                    if (alloc.Reservation != null)
+                    {
+                        if (alloc.Reservation.SourceCode == $"CD-TASK-{task.Id}")
+                        {
+                            alloc.Reservation.ReleasedQuantity = alloc.Reservation.Quantity;
+                            alloc.Reservation.AllocatedQuantity = 0m;
+                            alloc.Reservation.Status = StockReservationStatus.Released;
+                            alloc.Reservation.ReleasedAt = nowUtc;
+                            alloc.Reservation.ReleasedBy = actorId;
+                            alloc.Reservation.ReleaseReason = dto.Reason ?? "Cross-Dock Reversal";
+                        }
+                        else
+                        {
+                            alloc.Reservation.Quantity = Math.Max(0m, alloc.Reservation.Quantity - alloc.Quantity);
+                            alloc.Reservation.AllocatedQuantity = Math.Max(0m, alloc.Reservation.AllocatedQuantity - alloc.Quantity);
+                            if (alloc.Reservation.AllocatedQuantity > 0m)
+                            {
+                                alloc.Reservation.Status = StockReservationStatus.Allocated;
+                                alloc.Reservation.ReleasedQuantity = 0m;
+                                alloc.Reservation.ReleasedAt = null;
+                                alloc.Reservation.ReleasedBy = null;
+                                alloc.Reservation.ReleaseReason = null;
+                            }
+                            else
+                            {
+                                alloc.Reservation.Status = StockReservationStatus.Released;
+                                alloc.Reservation.ReleasedQuantity = alloc.Reservation.Quantity;
+                                alloc.Reservation.ReleasedAt = nowUtc;
+                                alloc.Reservation.ReleasedBy = actorId;
+                                alloc.Reservation.ReleaseReason = dto.Reason ?? "Cross-Dock Reversal";
+                            }
+                        }
+                    }
+                }
+
+                if (task.CrossDockTargetBackorderId.HasValue)
+                {
+                    var bo = await context.Backorders.FirstOrDefaultAsync(b => b.Id == task.CrossDockTargetBackorderId.Value, token);
+                    if (bo != null)
+                    {
+                        bo.RecoveredQuantity = Math.Max(0m, bo.RecoveredQuantity - task.CrossDockAllocatedQty);
+                        bo.Status = BackorderStatus.Open;
+                        bo.ResolvedAt = null;
+                        bo.UpdatedAt = nowUtc;
+                    }
+                }
+
+                foreach (var it in task.Items)
+                {
+                    it.MovedBaseQuantity = Math.Max(0m, it.MovedBaseQuantity - task.CrossDockAllocatedQty);
+                }
+
+                task.IsCrossDock = false;
+                task.CrossDockAllocatedQty = 0m;
+                task.Status = PutawayTaskStatus.Open;
+                task.CompletedAt = null;
+                context.AuditLogs.Add(Audit(actorId, "PutawayTask.CrossDockReversed", task.Id, task.WarehouseId, $"Reason: {dto.Reason ?? "Cross-Dock Reversal"}"));
+                await context.SaveChangesAsync(token);
+                if (tx is not null) await tx.CommitAsync(token);
+                return await GetAsync(id, token);
+            }
+
+            if (task.IsCrossDock && task.Status == PutawayTaskStatus.Completed)
+            {
+                throw ConflictWithCode("CROSS_DOCK_ALREADY_COMPLETED", "Nhiệm vụ Cross-Dock đã được thực thi hoàn tất.");
+            }
+            if (task.Status is PutawayTaskStatus.Cancelled or PutawayTaskStatus.Completed)
+            {
+                throw Conflict("Nhiệm vụ không ở trạng thái có thể thực thi Cross-Dock.");
+            }
+
+            var item = (dto?.ItemId is > 0
+                ? task.Items.FirstOrDefault(x => x.Id == dto.ItemId.Value)
+                : task.Items.FirstOrDefault(x => x.InventoryStatus == InventoryStatus.Available && x.RemainingBaseQuantity > 0))
+                ?? task.Items.FirstOrDefault();
+
+            if (item is null)
+                throw new NotFoundException("Không tìm thấy dòng hàng cất kho.");
+            if (item.InventoryStatus != InventoryStatus.Available)
+                throw new BusinessRuleException("Chỉ hàng hóa ở trạng thái Khả dụng (Available) mới được phép Cross-Dock trực tiếp sang khu vực xuất hàng.");
+            if (item.RemainingBaseQuantity <= 0m)
+                throw Conflict("Dòng hàng đã được cất hết số lượng yêu cầu.");
+
+            await context.AcquireInventoryAllocationLocksAsync([(task.WarehouseId, item.ProductId)], token);
+
+            // Match open Backorder or high-priority outbound SalesOrder / ExportReceipt
+            var targetBoId = dto?.TargetBackorderId ?? task.CrossDockTargetBackorderId;
+            Backorder? matchedBackorder = null;
+            if (targetBoId is > 0)
+            {
+                matchedBackorder = await context.Backorders
+                    .Include(b => b.SalesOrderLine)
+                    .FirstOrDefaultAsync(b =>
+                        b.Id == targetBoId.Value &&
+                        b.WarehouseId == task.WarehouseId &&
+                        b.Status == BackorderStatus.Open &&
+                        b.Quantity - b.RecoveredQuantity - b.CancelledQuantity > 0,
+                        token);
+            }
+            matchedBackorder ??= await context.Backorders
+                .Include(b => b.SalesOrderLine)
+                    .ThenInclude(l => l.SalesOrder)
+                .Where(b => b.WarehouseId == task.WarehouseId &&
+                            b.Status == BackorderStatus.Open &&
+                            b.Quantity - b.RecoveredQuantity - b.CancelledQuantity > 0 &&
+                            b.SalesOrderLine.ProductId == item.ProductId)
+                .OrderByDescending(b => b.SalesOrderLine.SalesOrder.Priority)
+                .ThenBy(b => b.CreatedAt)
+                .FirstOrDefaultAsync(token);
+
+            int? matchedSalesOrderId = dto?.TargetSalesOrderId ?? matchedBackorder?.SalesOrderLine?.SalesOrderId ?? task.CrossDockTargetSalesOrderId;
+            decimal? outboundDemandQty = matchedBackorder != null
+                ? Math.Max(0m, matchedBackorder.Quantity - matchedBackorder.RecoveredQuantity - matchedBackorder.CancelledQuantity)
+                : null;
+
+            if (!matchedSalesOrderId.HasValue)
+            {
+                var waitingSoLine = await context.SalesOrderLines
+                    .Include(l => l.SalesOrder)
+                    .Where(l => l.SalesOrder.WarehouseId == task.WarehouseId &&
+                                l.ProductId == item.ProductId &&
+                                l.OrderedQuantity - l.CancelledQuantity > 0 &&
+                                (l.SalesOrder.Status == SalesOrderStatus.Released ||
+                                 l.SalesOrder.Status == SalesOrderStatus.PartiallyFulfilled ||
+                                 l.SalesOrder.Status == SalesOrderStatus.Draft))
+                    .OrderByDescending(l => l.SalesOrder.Priority)
+                    .ThenBy(l => l.SalesOrder.CreatedAt)
+                    .FirstOrDefaultAsync(token);
+                if (waitingSoLine != null)
+                {
+                    matchedSalesOrderId = waitingSoLine.SalesOrderId;
+                    outboundDemandQty ??= Math.Max(0m, waitingSoLine.OrderedQuantity - waitingSoLine.CancelledQuantity);
+                }
+            }
+
+            int? matchedExportReceiptId = dto?.TargetExportReceiptId ?? task.CrossDockTargetExportReceiptId;
+            if (!matchedExportReceiptId.HasValue)
+            {
+                var waitingExportLine = await context.ExportReceiptDetails
+                    .Include(d => d.ExportReceipt)
+                    .Where(d => d.ExportReceipt.WarehouseId == task.WarehouseId &&
+                                d.ProductId == item.ProductId &&
+                                d.Quantity > 0 &&
+                                (d.ExportReceipt.Status == ReceiptStatus.Draft || d.ExportReceipt.Status == ReceiptStatus.Approved))
+                    .OrderByDescending(d => d.ExportReceipt.Id)
+                    .FirstOrDefaultAsync(token);
+                if (waitingExportLine != null)
+                {
+                    matchedExportReceiptId = waitingExportLine.ExportReceiptId;
+                    outboundDemandQty ??= waitingExportLine.Quantity;
+                }
+            }
+
+            // Resolve Outbound Staging location (SHIPPING-STAGE / STAGE-OUT-01 / STAGE-01)
+            WarehouseLocation? stagingLoc = null;
+            if (dto?.OutboundStagingLocationId is > 0)
+            {
+                stagingLoc = await LocationForMutation(dto.OutboundStagingLocationId.Value, token);
+            }
+            if (stagingLoc is null && !string.IsNullOrWhiteSpace(dto?.OutboundStagingLocationCode))
+            {
+                var code = dto.OutboundStagingLocationCode.Trim().ToUpperInvariant();
+                stagingLoc = await LocationByCodeForMutation(task.WarehouseId, code, token);
+            }
+            if (stagingLoc is null)
+            {
+                var stagingCodes = new[] { "SHIPPING-STAGE", "STAGE-OUT-01", "STAGE-01" };
+                stagingLoc = await context.WarehouseLocations
+                    .Where(l => l.WarehouseId == task.WarehouseId && l.IsActive && !l.IsBlocked && stagingCodes.Contains(l.Code))
+                    .OrderBy(l => l.Id)
+                    .FirstOrDefaultAsync(token);
+            }
+            if (stagingLoc is null)
+            {
+                stagingLoc = await context.WarehouseLocations
+                    .Where(l => l.WarehouseId == task.WarehouseId &&
+                                l.IsActive &&
+                                !l.IsBlocked &&
+                                l.Id != item.SourceLocationId &&
+                                l.LocationType == WarehouseLocationType.Storage &&
+                                l.IsPickable)
+                    .OrderBy(l => l.Code)
+                    .FirstOrDefaultAsync(token);
+            }
+            if (stagingLoc is null)
+            {
+                stagingLoc = new WarehouseLocation
+                {
+                    WarehouseId = task.WarehouseId,
+                    Code = "SHIPPING-STAGE",
+                    Name = "Bãi tập kết xuất hàng Cross-Dock",
+                    LocationType = WarehouseLocationType.Storage,
+                    IsPickable = true,
+                    IsReceivable = false,
+                    IsActive = true,
+                    IsBlocked = false,
+                    CreatedBy = actorId
+                };
+                context.WarehouseLocations.Add(stagingLoc);
+                await context.SaveChangesAsync(token);
+            }
+
+            var sourceBuckets = await context.InventoryStocks
+                .Include(x => x.Lot)
+                .Include(x => x.Serial)
+                .Where(x => x.ProductId == item.ProductId &&
+                            x.WarehouseId == task.WarehouseId &&
+                            x.Status == InventoryStatus.Available &&
+                            x.LocationId == item.SourceLocationId &&
+                            x.Quantity > x.ReservedQuantity)
+                .OrderBy(x => x.LotId)
+                .ThenBy(x => x.SerialId)
+                .ThenBy(x => x.Id)
+                .ToListAsync(token);
+
+            var totalAvailAtReceiving = sourceBuckets.Sum(x => Math.Max(0m, x.Quantity - x.ReservedQuantity));
+            if (totalAvailAtReceiving <= 0m)
+            {
+                throw Conflict("Không còn tồn khả dụng tại bãi tiếp nhận để thực thi Cross-Dock.");
+            }
+
+            var targetQty = dto?.Quantity is > 0m
+                ? Math.Min(dto.Quantity.Value, item.RemainingBaseQuantity)
+                : Math.Min(outboundDemandQty ?? item.RemainingBaseQuantity, item.RemainingBaseQuantity);
+            var crossDockQty = Math.Round(Math.Min(targetQty, totalAvailAtReceiving), 4);
+            if (crossDockQty <= 0m)
+            {
+                throw new BusinessRuleException("Số lượng Cross-Dock phải lớn hơn 0.");
+            }
+
+            var rsvSourceType = matchedExportReceiptId.HasValue
+                ? "ExportReceipt"
+                : (matchedSalesOrderId.HasValue ? "SalesOrder" : "CrossDock");
+            var rsvSourceId = matchedExportReceiptId ?? matchedSalesOrderId ?? task.Id;
+            var reservation = await context.StockReservations
+                .FirstOrDefaultAsync(r =>
+                    r.ProductId == item.ProductId &&
+                    r.SourceCode == $"CD-TASK-{task.Id}" &&
+                    r.Status != StockReservationStatus.Released &&
+                    r.Status != StockReservationStatus.Cancelled,
+                    token);
+            if (reservation is null)
+            {
+                reservation = new StockReservation
+                {
+                    ReservationCode = $"RSV-CD-{task.Id}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}",
+                    ProductId = item.ProductId,
+                    WarehouseId = task.WarehouseId,
+                    Quantity = crossDockQty,
+                    AllocatedQuantity = crossDockQty,
+                    ConsumedQuantity = 0m,
+                    ReleasedQuantity = 0m,
+                    BaseUomIdSnapshot = item.BaseUnitId > 0 ? item.BaseUnitId : 1,
+                    BaseUomCodeSnapshot = !string.IsNullOrWhiteSpace(item.BaseUnitCodeSnapshot) ? item.BaseUnitCodeSnapshot : "THÙNG",
+                    BaseUomDecimalPlacesSnapshot = item.BaseUnitDecimalPlaces,
+                    AllocationVersion = 1,
+                    Status = StockReservationStatus.Allocated,
+                    SourceType = rsvSourceType,
+                    SourceId = rsvSourceId,
+                    SourceCode = $"CD-TASK-{task.Id}",
+                    CreatedAt = nowUtc,
+                    CreatedBy = actorId,
+                    ExpiresAt = nowUtc.AddDays(7)
+                };
+                context.StockReservations.Add(reservation);
+            }
+            else
+            {
+                reservation.Quantity = Math.Round(reservation.Quantity + crossDockQty, 4);
+                reservation.AllocatedQuantity = Math.Round(reservation.AllocatedQuantity + crossDockQty, 4);
+                reservation.Status = StockReservationStatus.Allocated;
+                reservation.AllocationVersion += 1;
+            }
+            await context.SaveChangesAsync(token);
+
+            var remToMove = crossDockQty;
+            var sourceCode = item.SourceLocation?.Code?.Trim() ?? "RECEIVING";
+            foreach (var srcBucket in sourceBuckets)
+            {
+                if (remToMove <= 0m) break;
+                var avail = Math.Max(0m, srcBucket.Quantity - srcBucket.ReservedQuantity);
+                if (avail <= 0m) continue;
+                var chunk = Math.Min(remToMove, avail);
+
+                srcBucket.Quantity -= chunk;
+                srcBucket.LastUpdated = nowUtc;
+                srcBucket.RefreshGrainHash();
+
+                var destBucket = context.InventoryStocks.Local.FirstOrDefault(x =>
+                                     x.ProductId == item.ProductId &&
+                                     x.WarehouseId == task.WarehouseId &&
+                                     x.Status == InventoryStatus.Available &&
+                                     x.LocationId == stagingLoc.Id &&
+                                     x.LotId == srcBucket.LotId &&
+                                     x.SerialId == srcBucket.SerialId &&
+                                     x.HandlingUnitId == srcBucket.HandlingUnitId &&
+                                     x.OwnerId == srcBucket.OwnerId)
+                                 ?? await context.InventoryStocks.FirstOrDefaultAsync(x =>
+                                     x.ProductId == item.ProductId &&
+                                     x.WarehouseId == task.WarehouseId &&
+                                     x.Status == InventoryStatus.Available &&
+                                     x.LocationId == stagingLoc.Id &&
+                                     x.LotId == srcBucket.LotId &&
+                                     x.SerialId == srcBucket.SerialId &&
+                                     x.HandlingUnitId == srcBucket.HandlingUnitId &&
+                                     x.OwnerId == srcBucket.OwnerId, token);
+
+                if (destBucket is null)
+                {
+                    destBucket = new InventoryStock
+                    {
+                        ProductId = item.ProductId,
+                        WarehouseId = task.WarehouseId,
+                        Status = InventoryStatus.Available,
+                        LocationId = stagingLoc.Id,
+                        LotId = srcBucket.LotId,
+                        SerialId = srcBucket.SerialId,
+                        HandlingUnitId = srcBucket.HandlingUnitId,
+                        OwnerId = srcBucket.OwnerId,
+                        Quantity = chunk,
+                        ReservedQuantity = chunk,
+                        AllocatedQuantity = chunk,
+                        MovingAverageCost = srcBucket.MovingAverageCost,
+                        LastUpdated = nowUtc
+                    };
+                    destBucket.RefreshGrainHash();
+                    context.InventoryStocks.Add(destBucket);
+                }
+                else
+                {
+                    destBucket.Quantity += chunk;
+                    destBucket.ReservedQuantity += chunk;
+                    destBucket.AllocatedQuantity += chunk;
+                    destBucket.LastUpdated = nowUtc;
+                    destBucket.RefreshGrainHash();
+                }
+
+                context.StockAllocations.Add(new StockAllocation
+                {
+                    AllocationCode = $"ALC-CD-{task.Id}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}",
+                    ReservationId = reservation.Id,
+                    WarehouseId = task.WarehouseId,
+                    ProductId = item.ProductId,
+                    LocationId = stagingLoc.Id,
+                    LotId = srcBucket.LotId,
+                    SerialId = srcBucket.SerialId,
+                    HandlingUnitId = srcBucket.HandlingUnitId,
+                    OwnerId = srcBucket.OwnerId,
+                    InventoryStatus = InventoryStatus.Available,
+                    Quantity = chunk,
+                    Status = StockAllocationStatus.Active,
+                    Strategy = AllocationStrategy.LocationOrder,
+                    SelectionReason = $"CROSS_DOCK_TASK_{task.Id}",
+                    AllocatedAt = nowUtc,
+                    AllocatedBy = actorId,
+                    Version = 1
+                });
+
+                context.InventoryLocationMovements.Add(new InventoryLocationMovement
+                {
+                    WarehouseId = task.WarehouseId,
+                    ProductId = item.ProductId,
+                    InventoryStatus = InventoryStatus.Available,
+                    LotId = srcBucket.LotId,
+                    SerialId = srcBucket.SerialId,
+                    FromLocationId = item.SourceLocationId,
+                    ToLocationId = stagingLoc.Id,
+                    BaseQuantity = chunk,
+                    EnteredQuantity = chunk,
+                    EnteredUnitCode = !string.IsNullOrWhiteSpace(item.BaseUnitCodeSnapshot) ? item.BaseUnitCodeSnapshot : "THÙNG",
+                    ReferenceType = "CrossDock",
+                    ReferenceId = task.Id,
+                    PutawayTaskId = task.Id,
+                    PutawayTaskItemId = item.Id,
+                    ReceiptId = task.ReceiptId,
+                    ReceiptLineId = item.ReceiptLineId,
+                    CreatedBy = actorId
+                });
+
+                var noteText = $"CROSS-DOCK từ {sourceCode} thẳng sang bãi xuất {stagingLoc.Code}";
+                context.InventoryTransactions.AddRange(
+                    new InventoryTransaction
+                    {
+                        ProductId = item.ProductId,
+                        WarehouseId = task.WarehouseId,
+                        LocationId = item.SourceLocationId,
+                        FromLocationId = item.SourceLocationId,
+                        ToLocationId = stagingLoc.Id,
+                        InventoryStatus = InventoryStatus.Available,
+                        FromInventoryStatus = InventoryStatus.Available,
+                        ToInventoryStatus = InventoryStatus.Available,
+                        LotId = srcBucket.LotId,
+                        SerialId = srcBucket.SerialId,
+                        HandlingUnitId = srcBucket.HandlingUnitId,
+                        OwnerId = srcBucket.OwnerId,
+                        TransactionType = TransactionType.Move,
+                        Quantity = -chunk,
+                        UnitCost = srcBucket.MovingAverageCost,
+                        ReferenceId = task.Id,
+                        ReferenceType = "PutawayOut",
+                        SourceDocumentLineId = item.ReceiptLineId,
+                        TransactionDate = nowUtc,
+                        ActualOccurredAtUtc = nowUtc,
+                        PostedAtUtc = nowUtc,
+                        CreatedBy = actorId,
+                        Note = noteText
+                    },
+                    new InventoryTransaction
+                    {
+                        ProductId = item.ProductId,
+                        WarehouseId = task.WarehouseId,
+                        LocationId = stagingLoc.Id,
+                        FromLocationId = item.SourceLocationId,
+                        ToLocationId = stagingLoc.Id,
+                        InventoryStatus = InventoryStatus.Available,
+                        FromInventoryStatus = InventoryStatus.Available,
+                        ToInventoryStatus = InventoryStatus.Available,
+                        LotId = srcBucket.LotId,
+                        SerialId = srcBucket.SerialId,
+                        HandlingUnitId = srcBucket.HandlingUnitId,
+                        OwnerId = srcBucket.OwnerId,
+                        TransactionType = TransactionType.Move,
+                        Quantity = chunk,
+                        UnitCost = srcBucket.MovingAverageCost,
+                        ReferenceId = task.Id,
+                        ReferenceType = "PutawayIn",
+                        SourceDocumentLineId = item.ReceiptLineId,
+                        TransactionDate = nowUtc,
+                        ActualOccurredAtUtc = nowUtc,
+                        PostedAtUtc = nowUtc,
+                        CreatedBy = actorId,
+                        Note = noteText
+                    });
+
+                remToMove -= chunk;
+            }
+
+            if (matchedBackorder != null)
+            {
+                var maxRecoverable = Math.Max(0m, matchedBackorder.Quantity - matchedBackorder.CancelledQuantity);
+                matchedBackorder.RecoveredQuantity = Math.Min(maxRecoverable, Math.Round(matchedBackorder.RecoveredQuantity + crossDockQty, 4));
+                matchedBackorder.UpdatedAt = nowUtc;
+                if (matchedBackorder.RecoveredQuantity + matchedBackorder.CancelledQuantity >= matchedBackorder.Quantity)
+                {
+                    matchedBackorder.Status = BackorderStatus.Fulfilled;
+                    matchedBackorder.ResolvedAt = nowUtc;
+                }
+            }
+
+            item.MovedBaseQuantity += crossDockQty;
+            task.IsCrossDock = true;
+            task.CrossDockAllocatedQty = Math.Round(task.CrossDockAllocatedQty + crossDockQty, 4);
+            task.CrossDockTargetBackorderId = matchedBackorder?.Id ?? task.CrossDockTargetBackorderId;
+            task.CrossDockTargetSalesOrderId = matchedSalesOrderId ?? task.CrossDockTargetSalesOrderId;
+            task.CrossDockTargetExportReceiptId = matchedExportReceiptId ?? task.CrossDockTargetExportReceiptId;
+            task.AssignedUserId ??= actorId;
+            task.StartedAt ??= nowUtc;
+            task.Status = task.Items.All(x => x.RemainingBaseQuantity == 0)
+                ? PutawayTaskStatus.Completed
+                : PutawayTaskStatus.InProgress;
+            if (task.Status == PutawayTaskStatus.Completed)
+                task.CompletedAt = nowUtc;
+
+            context.AuditLogs.Add(Audit(
+                actorId,
+                "PutawayTask.CrossDockExecuted",
+                task.Id,
+                task.WarehouseId,
+                $"CrossDockQty: {crossDockQty:0.####}; StagingBin: {stagingLoc.Code}; SalesOrderId: {task.CrossDockTargetSalesOrderId}; BackorderId: {task.CrossDockTargetBackorderId}"));
+
+            await context.SaveChangesAsync(token);
+            if (tx is not null) await tx.CommitAsync(token);
+            return await GetAsync(id, token);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            if (tx is not null) await tx.RollbackAsync(token);
+            throw new ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.", ex);
+        }
+        catch
+        {
+            if (tx is not null) await tx.RollbackAsync(token);
+            throw;
+        }
+    }
 
     public async Task<PutawayTaskDto> MoveAsync(int id, MovePutawayItemDto dto, CancellationToken token = default)
     {
@@ -1046,7 +1670,7 @@ public sealed class PutawayService(
         var canMutate=currentUser.Role is "Admin" or "Manager" or "WarehouseStaff";
         return new PutawayTaskDto
         {
-            Id=t.Id,ReceiptId=t.ReceiptId,ReceiptCode=(t.Receipt?.Code??string.Empty).Trim(),WarehouseId=t.WarehouseId,WarehouseCode=(t.Warehouse?.Code??string.Empty).Trim(),WarehouseName=(t.Warehouse?.Name??string.Empty).Trim(),Status=t.Status.ToString(),AssignedUserId=t.AssignedUserId,RequiredBaseQuantity=t.Items.Sum(x=>x.RequiredBaseQuantity),MovedBaseQuantity=t.Items.Sum(x=>x.MovedBaseQuantity),CreatedAt=t.CreatedAt,RowVersion=canMutate&&t.RowVersion is { Length: > 0 }?Convert.ToBase64String(t.RowVersion):null,ExceptionReason=canMutate?t.ExceptionReason:null,
+            Id=t.Id,ReceiptId=t.ReceiptId,ReceiptCode=(t.Receipt?.Code??string.Empty).Trim(),WarehouseId=t.WarehouseId,WarehouseCode=(t.Warehouse?.Code??string.Empty).Trim(),WarehouseName=(t.Warehouse?.Name??string.Empty).Trim(),Status=t.Status.ToString(),AssignedUserId=t.AssignedUserId,RequiredBaseQuantity=t.Items.Sum(x=>x.RequiredBaseQuantity),MovedBaseQuantity=t.Items.Sum(x=>x.MovedBaseQuantity),IsCrossDock=t.IsCrossDock,CrossDockTargetSalesOrderId=t.CrossDockTargetSalesOrderId,CrossDockTargetExportReceiptId=t.CrossDockTargetExportReceiptId,CrossDockTargetBackorderId=t.CrossDockTargetBackorderId,CrossDockAllocatedQty=t.CrossDockAllocatedQty,CreatedAt=t.CreatedAt,RowVersion=canMutate&&t.RowVersion is { Length: > 0 }?Convert.ToBase64String(t.RowVersion):null,ExceptionReason=canMutate?t.ExceptionReason:null,
             Items=t.Items.Select(x=>
             {
                 var reqType=RequiredType(x.InventoryStatus);

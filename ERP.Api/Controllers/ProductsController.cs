@@ -334,6 +334,43 @@ public class ProductsController : ControllerBase
         return (await _productOps.DekitAsync(id, request, ResolveActorUserId(), cancellationToken)).ToActionResult(this);
     }
 
+    [HttpGet("kit-work-orders")]
+    [PermissionAuthorize(AppPermissions.ProductRead)]
+    public async Task<IActionResult> GetKitWorkOrders(
+        [FromQuery] int? warehouseId = null, [FromQuery] int? kitProductId = null, [FromQuery] string? status = null,
+        CancellationToken cancellationToken = default)
+        => _productOps == null ? Ok(Array.Empty<object>()) : (await _productOps.GetKitWorkOrdersAsync(warehouseId, kitProductId, status, cancellationToken)).ToActionResult(this);
+
+    [HttpPost("kit-work-orders")]
+    [IdempotentCommand("Product.CreateKitWorkOrder")]
+    [PermissionAuthorize(AppPermissions.ProductUpdate)]
+    public async Task<IActionResult> CreateKitWorkOrder(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CreateKitWorkOrderInput? request = null,
+        CancellationToken cancellationToken = default)
+        => User?.IsInRole(AppRoles.Viewer) == true ? Forbid() : _productOps == null
+            ? StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." })
+            : (await _productOps.CreateKitWorkOrderAsync(request, ResolveActorUserId(), cancellationToken)).ToActionResult(this);
+
+    [HttpPost("kit-work-orders/{id:int}/complete")]
+    [IdempotentCommand("Product.CompleteKitWorkOrder")]
+    [PermissionAuthorize(AppPermissions.ProductUpdate)]
+    public async Task<IActionResult> CompleteKitWorkOrder(
+        int id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CompleteKitWorkOrderInput? request = null,
+        CancellationToken cancellationToken = default)
+        => User?.IsInRole(AppRoles.Viewer) == true ? Forbid() : _productOps == null
+            ? StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." })
+            : (await _productOps.CompleteKitWorkOrderAsync(id, request, ResolveActorUserId(), cancellationToken)).ToActionResult(this);
+
+    [HttpPost("kit-work-orders/{id:int}/cancel")]
+    [IdempotentCommand("Product.CancelKitWorkOrder")]
+    [PermissionAuthorize(AppPermissions.ProductUpdate)]
+    public async Task<IActionResult> CancelKitWorkOrder(
+        int id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CancelKitWorkOrderInput? request = null,
+        CancellationToken cancellationToken = default)
+        => User?.IsInRole(AppRoles.Viewer) == true ? Forbid() : _productOps == null
+            ? StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." })
+            : (await _productOps.CancelKitWorkOrderAsync(id, request, ResolveActorUserId(), cancellationToken)).ToActionResult(this);
+
     private int? ResolveActorUserId()
         => int.TryParse(
             User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
