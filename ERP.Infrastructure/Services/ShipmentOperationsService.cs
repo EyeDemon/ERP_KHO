@@ -946,19 +946,27 @@ public sealed class ShipmentOperationsService(
         if (shipment != null)
         {
             shipment.SourceCode ??= booking.AwbTrackingCode;
-            db.ShipmentTrackingEvents.Add(new ERP.Domain.Entities.ShipmentTrackingEvent
+            var eventExists = await db.ShipmentTrackingEvents.AnyAsync(
+                e => e.ShipmentId == shipment.Id
+                     && e.Source == booking.CarrierCode
+                     && e.SourceEventId == booking.AwbTrackingCode,
+                cancellationToken);
+            if (!eventExists)
             {
-                ShipmentId = shipment.Id,
-                EventType = "WaybillBooked",
-                FromStatus = shipment.Status,
-                ToStatus = shipment.Status,
-                OccurredAt = now,
-                RecordedAt = now,
-                Source = booking.CarrierCode,
-                SourceEventId = booking.AwbTrackingCode,
-                Note = $"Đã tạo vận đơn điện tử {booking.AwbTrackingCode} ({booking.SortingHubCode})",
-                RecordedBy = resolvedActorId
-            });
+                db.ShipmentTrackingEvents.Add(new ERP.Domain.Entities.ShipmentTrackingEvent
+                {
+                    ShipmentId = shipment.Id,
+                    EventType = "WaybillBooked",
+                    FromStatus = shipment.Status,
+                    ToStatus = shipment.Status,
+                    OccurredAt = now,
+                    RecordedAt = now,
+                    Source = booking.CarrierCode,
+                    SourceEventId = booking.AwbTrackingCode,
+                    Note = $"Đã tạo vận đơn điện tử {booking.AwbTrackingCode} ({booking.SortingHubCode})",
+                    RecordedBy = resolvedActorId
+                });
+            }
         }
 
         var outboxMsg = new ERP.Domain.Entities.IntegrationOutboxMessage
@@ -1107,9 +1115,12 @@ public sealed class ShipmentOperationsService(
             });
         }
 
-        var rawStatus = string.IsNullOrWhiteSpace(request.CarrierStatus)
+        var resolvedStatusInput = !string.IsNullOrWhiteSpace(request.CarrierStatus)
+            ? request.CarrierStatus
+            : (!string.IsNullOrWhiteSpace(request.Status) ? request.Status : request.EventType);
+        var rawStatus = string.IsNullOrWhiteSpace(resolvedStatusInput)
             ? "IN_TRANSIT"
-            : request.CarrierStatus.Trim().ToUpperInvariant();
+            : resolvedStatusInput.Trim().ToUpperInvariant();
         var eventId = !string.IsNullOrWhiteSpace(request.EventId)
             ? request.EventId.Trim()
             : $"{normCarrier}-{request.TrackingNumber ?? "NOAWB"}-{rawStatus}";

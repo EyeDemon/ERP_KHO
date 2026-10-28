@@ -83,6 +83,7 @@ const AppRoutes = () => {
         {/* Hệ thống vận hành thật (Production ERP WMS) */}
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Dashboard />} />
+          <Route path="dashboard" element={<Dashboard />} />
           <Route path="products" element={<PermissionRoute permission="product.read"><Products /></PermissionRoute>} />
           <Route path="categories" element={<PermissionRoute permission="product.read"><Categories /></PermissionRoute>} />
           <Route path="warehouses" element={<PermissionRoute permission="warehouse.read"><Warehouses /></PermissionRoute>} />

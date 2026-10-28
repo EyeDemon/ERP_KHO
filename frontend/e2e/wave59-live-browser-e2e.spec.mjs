@@ -24,6 +24,13 @@ test('Wave 59 Live Browser E2E (UNV-02 Closure): Login -> Dashboard -> Epic 30.1
     }
   });
 
+  const assertNo404Page = async (label) => {
+    await expect(
+      page.locator('text=404 - Không tìm thấy trang'),
+      `${label}: must not render 404 NotFound page`
+    ).toHaveCount(0);
+  };
+
   // =========================================================================
   // 1. DESKTOP VIEWPORT (1440x900) - LOGIN & DASHBOARD
   // =========================================================================
@@ -47,7 +54,8 @@ test('Wave 59 Live Browser E2E (UNV-02 Closure): Login -> Dashboard -> Epic 30.1
 
   await page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 30_000 });
   await page.goto(`${FRONTEND_BASE}/dashboard`, { waitUntil: 'networkidle' });
-  await expect(page.locator('h1, h2').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Tổng quan vận hành' })).toBeVisible({ timeout: 20_000 });
+  await assertNo404Page('Dashboard 1440x900');
 
   const authMeRes = await request.get(`${API_BASE}/api/v1/auth/me`, {
     headers: { Authorization: `Bearer ${accessToken}` }
@@ -61,9 +69,6 @@ test('Wave 59 Live Browser E2E (UNV-02 Closure): Login -> Dashboard -> Epic 30.1
   // =========================================================================
   // 2. EPIC 30.1: WAVE RELEASE TEMPLATE -> CLUSTER TOTE -> PUT-TO-WALL -> AUTO PACKINGSESSION
   // =========================================================================
-  await page.goto(`${FRONTEND_BASE}/picking-tasks`, { waitUntil: 'networkidle' });
-  await expect(page.getByTestId('wave-release-template-cluster-banner')).toBeVisible({ timeout: 20_000 });
-
   const waveReleaseRes = await request.post(`${API_BASE}/api/v1/picking-tasks/waves/release`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -83,6 +88,10 @@ test('Wave 59 Live Browser E2E (UNV-02 Closure): Login -> Dashboard -> Epic 30.1
   const waveReleaseBody = await waveReleaseRes.json();
   expect(waveReleaseBody.waveCode).toBeTruthy();
 
+  await page.goto(`${FRONTEND_BASE}/picking-tasks`, { waitUntil: 'networkidle' });
+  await expect(page.getByTestId('wave-release-template-cluster-banner')).toBeVisible({ timeout: 20_000 });
+  await assertNo404Page('PickingTasks 1440x900');
+
   await page.locator('input[aria-label="Số lượng chia vào ô Put-to-Wall"]').fill('4');
   const ptwSortResPromise = page.waitForResponse(
     res => res.url().includes('/put-to-wall-sort') && res.request().method() === 'POST',
@@ -96,7 +105,15 @@ test('Wave 59 Live Browser E2E (UNV-02 Closure): Login -> Dashboard -> Epic 30.1
   expect(ptwSortBody.autoCreatedPackingSession).toBe(true);
   expect(ptwSortBody.packingSessionCode).toContain('PACK-PTW-');
 
-  await expect(page.getByTestId('put-to-wall-sort-notice')).toBeVisible();
+  const ptwNotice = page.getByTestId('put-to-wall-sort-notice');
+  await expect(ptwNotice).toBeVisible();
+  await expect(ptwNotice).toContainText('PACK-PTW-');
+  await page.locator('text=Tường Chia Chọn Đa Đơn & Giỏ Nhặt Cụm').first().evaluate(el => {
+    const card = el.closest('section, .ui-card') ?? el;
+    card.scrollIntoView({ block: 'start' });
+  });
+  await page.waitForTimeout(200);
+
   const pickingOverflow1440 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(pickingOverflow1440, 'PickingTasks 1440x900 must have 0px horizontal overflow').toBeLessThanOrEqual(0);
   await page.screenshot({ path: path.join(ARTIFACT_DIR, 'wave59_e2e_2_epic30_1_picking_wave_ptw_1440x900.png'), fullPage: false });
@@ -104,8 +121,6 @@ test('Wave 59 Live Browser E2E (UNV-02 Closure): Login -> Dashboard -> Epic 30.1
   // =========================================================================
   // 3. EPIC 30.2: CARRIER WAYBILL BOOKING -> 100x150mm THERMAL PDF -> COD RECONCILIATION
   // =========================================================================
-  await page.goto(`${FRONTEND_BASE}/shipments`, { waitUntil: 'networkidle' });
-
   const bookShp2Res = await request.post(`${API_BASE}/api/v1/shipments/book-carrier-waybill`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -156,6 +171,7 @@ test('Wave 59 Live Browser E2E (UNV-02 Closure): Login -> Dashboard -> Epic 30.1
       trackingNumber: bookShp2Body.trackingNumber,
       shipmentId: 2,
       warehouseId: 1,
+      carrierStatus: 'DELIVERED',
       eventType: 'DELIVERED',
       status: 'DELIVERED',
       actualCodCollected: 450000,
@@ -166,11 +182,22 @@ test('Wave 59 Live Browser E2E (UNV-02 Closure): Login -> Dashboard -> Epic 30.1
   });
   expect(carrierWebhookRes.status()).toBe(200);
 
+  await page.goto(`${FRONTEND_BASE}/shipments`, { waitUntil: 'networkidle' });
+  await assertNo404Page('Shipments 1440x900');
+  const shipmentsTable = page.locator('table[aria-label="Danh sách Shipment"]');
+  await expect(shipmentsTable).toBeVisible({ timeout: 20_000 });
+  await expect(shipmentsTable.getByText('Đã giao').first()).toBeVisible({ timeout: 15_000 });
+  const shp2Button = shipmentsTable.getByRole('button', { name: 'SHP-QA-002' });
+  if (await shp2Button.count() > 0) {
+    await shp2Button.first().click();
+  }
+
   const shipmentsOverflow1440 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(shipmentsOverflow1440, 'Shipments 1440x900 must have 0px horizontal overflow').toBeLessThanOrEqual(0);
   await page.screenshot({ path: path.join(ARTIFACT_DIR, 'wave59_e2e_3_epic30_2_shipments_carrier_1440x900.png'), fullPage: false });
 
   await page.goto(`${FRONTEND_BASE}/cod-reconciliation`, { waitUntil: 'networkidle' });
+  await assertNo404Page('CodReconciliation 1440x900');
   const codOverflow1440 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(codOverflow1440, 'CodReconciliation 1440x900 must have 0px horizontal overflow').toBeLessThanOrEqual(0);
 
@@ -178,6 +205,9 @@ test('Wave 59 Live Browser E2E (UNV-02 Closure): Login -> Dashboard -> Epic 30.1
   // 4. EPIC 30.3: SHOPEE/TIKTOK OAUTH 2.0 -> BUFFERED STOCK PUSH -> BUYER CANCEL GATE (409)
   // =========================================================================
   await page.goto(`${FRONTEND_BASE}/outbound-demand`, { waitUntil: 'networkidle' });
+  await assertNo404Page('OutboundDemand 1440x900');
+  const outboundOverflow1440 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(outboundOverflow1440, 'OutboundDemand 1440x900 must have 0px horizontal overflow').toBeLessThanOrEqual(0);
 
   const oauthRes = await request.post(`${API_BASE}/api/v1/marketplace-shops/oauth/exchange`, {
     headers: {
@@ -223,25 +253,28 @@ test('Wave 59 Live Browser E2E (UNV-02 Closure): Login -> Dashboard -> Epic 30.1
   });
   expect(cancelWebhookRes.status()).toBe(200);
 
-  const handoverBlockRes = await request.post(`${API_BASE}/api/v1/handover-manifests/scan-awb`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Idempotency-Key': crypto.randomUUID()
-    },
-    data: {
-      manifestId: 6054,
-      warehouseId: 1,
-      carrierCode: 'GHN',
-      exportReceiptId: 179,
-      trackingNumber: 'ER-QA-003'
-    }
-  });
+  await page.goto(`${FRONTEND_BASE}/handover-manifests`, { waitUntil: 'networkidle' });
+  await assertNo404Page('HandoverManifests 1440x900');
+  const scanAwbInput = page.getByTestId('input-scan-awb');
+  await expect(scanAwbInput).toBeVisible({ timeout: 20_000 });
+  await scanAwbInput.fill('ER-QA-003');
+
+  const scanAwbResPromise = page.waitForResponse(
+    res => res.url().includes('/handover-manifests/scan-awb') && res.request().method() === 'POST',
+    { timeout: 30_000 }
+  );
+  await page.getByTestId('btn-scan-awb').click();
+  const handoverBlockRes = await scanAwbResPromise;
   expect(handoverBlockRes.status(), 'Scanning AWB of buyer-cancelled order at handover must return 409 Conflict').toBe(409);
   const handoverBlockBody = await handoverBlockRes.json();
   expect(handoverBlockBody.errorCode).toBe('ORDER_CANCELLED_PUTBACK_REQUIRED');
 
-  const outboundOverflow1440 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  expect(outboundOverflow1440, 'OutboundDemand 1440x900 must have 0px horizontal overflow').toBeLessThanOrEqual(0);
+  const criticalAlert = page.getByTestId('handover-critical-alert');
+  await expect(criticalAlert).toBeVisible({ timeout: 15_000 });
+  await expect(criticalAlert).toContainText('409 ORDER_CANCELLED_PUTBACK_REQUIRED');
+
+  const handoverOverflow1440 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(handoverOverflow1440, 'HandoverManifests 1440x900 must have 0px horizontal overflow').toBeLessThanOrEqual(0);
   await page.screenshot({ path: path.join(ARTIFACT_DIR, 'wave59_e2e_4_epic30_3_marketplace_cancel_1440x900.png'), fullPage: false });
 
   // =========================================================================
@@ -250,9 +283,13 @@ test('Wave 59 Live Browser E2E (UNV-02 Closure): Login -> Dashboard -> Epic 30.1
   await page.setViewportSize({ width: 390, height: 844 });
   for (const routePath of ['/dashboard', '/picking-tasks', '/shipments', '/outbound-demand', '/handover-manifests']) {
     await page.goto(`${FRONTEND_BASE}${routePath}`, { waitUntil: 'networkidle' });
+    await assertNo404Page(`Mobile PDA 390x844 on ${routePath}`);
     const overflow390 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow390, `Mobile PDA 390x844 on ${routePath} must have 0px horizontal overflow`).toBeLessThanOrEqual(0);
   }
+  await page.getByTestId('input-scan-awb').fill('ER-QA-003');
+  await page.getByTestId('btn-scan-awb').click();
+  await expect(page.getByTestId('handover-critical-alert')).toBeVisible({ timeout: 15_000 });
   await page.screenshot({ path: path.join(ARTIFACT_DIR, 'wave59_e2e_5_mobile_pda_390x844.png'), fullPage: false });
 
   expect(pageErrors, 'Zero unhandled page runtime errors across E2E journey').toEqual([]);

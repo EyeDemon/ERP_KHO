@@ -38,7 +38,9 @@ public record CarrierWebhookEventInput(
     string? PodRecipientName = null,
     string? PodNote = null,
     string? PodPhotoUrl = null,
-    string? FailureReason = null);
+    string? FailureReason = null,
+    string? Status = null,
+    string? EventType = null);
 
 public record UpsertCarrierConfigInput(
     int? WarehouseId = null,
