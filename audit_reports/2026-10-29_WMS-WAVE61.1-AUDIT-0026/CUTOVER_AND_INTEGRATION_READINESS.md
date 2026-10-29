@@ -1,8 +1,8 @@
-# PRODUCTION CUTOVER & PARTNER INTEGRATION READINESS PACK (`WAVE 61.2` / `WAVE 61.3`)
+# PRODUCTION CUTOVER & PARTNER INTEGRATION READINESS PACK (`WAVE 61.2` / `WAVE 61.3` / `WAVE 61.6`)
 
-- **Run ID:** `WMS-WAVE61.1-AUDIT-0026` (`Wave 61.2 / Wave 61.3 Post-Acceptance Packaging & Smoke Verification`)
+- **Run ID:** `WMS-WAVE61.1-AUDIT-0026` (`Wave 61.2 / Wave 61.3 / Wave 61.6 Post-Acceptance Packaging, Smoke Verification & CI Security Gate Closure`)
 - **Project:** `ERP_KHO` — Enterprise Multi-Tenant WMS SaaS (.NET 10 / ASP.NET Core / EF Core 10 / SQL Server / React 19 / TypeScript / Vite 8)
-- **Target Branch:** `feat/WMS-61-project-development` (Accepted Code Baseline: `645bd9d`, Current Audit Head: `84a1b99`)
+- **Target Branch:** `feat/WMS-61-project-development` (Accepted Backend C# Baseline: `645bd9d`, Prior Audit Head: `ad51bda`, Current Wave 61.6 Closure: `17/17` Findings `CLOSED`)
 - **Target Database:** `ERP_KHO` on `(localdb)\MSSQLLocalDB` (`97` physical tables = `96` business tables + `1` `__EFMigrationsHistory`, `61` migrations, `1` active trigger `TR_InventoryTransactions_Immutable_AppendOnly`)
 - **Verification Standard:** `REP-001 / REP-002` (`FACT`, `INFERENCE`, `NOT VERIFIED`), Zero-Workaround, Anti-Truncation
 
@@ -296,4 +296,65 @@ f49a433 feat(wave57): remediate audit findings F-001..F-009, enforce SQL ledger 
 | **7** | `2eafbed` | **Wave 61** | Khắc phục `F-013` & `F-014`, triển khai Lộ trình 90 ngày (`Epic 90.1` Dynamic ABC Slotting & Task Interleaving, `Epic 90.2` Cổng tự phục vụ chủ hàng 3PL & tính phí tự động, `Epic 90.3` Hạch toán Thông tư 200 & HĐĐT Nghị định `70/2025/NĐ-CP`). | `CLOSED / ACCEPTED` |
 | **8** | `645bd9d` | **Wave 61.1** | Khắc phục triệt để `F-015, F-016, F-017, F-018` (đóng `16/16` findings), xuất toàn văn bằng chứng mã nguồn & SQL `WMS-WAVE61.1-AUDIT-0026` (**Accepted Code Baseline**). | `CLOSED / ACCEPTED` |
 | **9** | `84a1b99` | **Wave 61.2** | Đồng bộ trích xuất nguyên văn `Epic60_3` đến dấu `}`, lập hồ sơ sẵn sàng Cutover Production & tích hợp đối tác (`CUTOVER_AND_INTEGRATION_READINESS.md`). | `CLOSED / ACCEPTED` |
-| **10** | *(Working Tree)* | **Wave 61.3** | Chuẩn hóa câu tóm tắt Mục 4 `WAVE61_1_CODE_AND_SQL_EVIDENCE.md`, bổ sung lưu ý SePay/PayOS Webhook Adapter tại Mục 2.4, thực thi thực tế 5 bước Smoke Test Runbook và đóng gói PR Pack. | `READY FOR COMMIT & PR` |
+| **10** | `ad51bda` | **Wave 61.3** | Chuẩn hóa câu tóm tắt Mục 4 `WAVE61_1_CODE_AND_SQL_EVIDENCE.md`, bổ sung lưu ý SePay/PayOS Webhook Adapter tại Mục 2.4, thực thi thực tế 5 bước Smoke Test Runbook và đóng gói PR Pack. | `CLOSED / ACCEPTED` |
+| **11** | *(Wave 61.6)* | **Wave 61.6** | Khắc phục phẫu thuật `F-019` (`S2 — CLOSED`): nâng cấp `axios@1.21.0`, `follow-redirects@1.16.2`, `undici@8.12.3`, `vite@8.3.5`, `vitest@5.0.5` (`npm audit --audit-level=high` & `npm audit` = `0 vulnerabilities`), đồng bộ nhánh mặc định `feat/WMS-61-project-development` trong `.github/workflows/ci.yml`, lưu script `scripts/Test-ErpWmsStagingPreFlight.ps1`, ghi nhận `BLK-04` (`SonarCloud` & `PR #36`), nâng tổng số Finding đã đóng lên **`17/17` (`F-001..F-009, F-011..F-019`)**. | `READY FOR COMMIT & PUSH` |
+
+---
+
+## 6. Automated Pre-Flight Script (`scripts/Test-ErpWmsStagingPreFlight.ps1`) & Wave 61.6 CI Security Gate Closure (`F-019`) (`FACT`)
+
+### 6.1 Automated Staging/Production Pre-Flight Validator (`scripts/Test-ErpWmsStagingPreFlight.ps1`)
+- Saved in repository at [Test-ErpWmsStagingPreFlight.ps1](file:///d:/ERP_KHO/scripts/Test-ErpWmsStagingPreFlight.ps1) (UTF-8 without BOM).
+- Validates:
+  1. `ASPNETCORE_ENVIRONMENT` is explicitly set (`Staging` or `Production`).
+  2. `ConnectionStrings__DefaultConnection` is present, does **not** point to `(localdb)` in Staging/Production, and does **not** use `User ID=sa` (`[SEC-003]`).
+  3. `Jwt__Key` (`>= 32` chars), `Jwt__Issuer`, and `Jwt__Audience` are present and do not contain default dev secrets.
+  4. Partner integration secrets (`SaasBilling__VietQrWebhookSecret`, `CarrierIntegration__DefaultWebhookSecret`, `MarketplaceIntegration__DefaultWebhookSecret`) do not use dev/sandbox fallback constants (`ERP-KHO-VIETQR-WEBHOOK-SECRET-2026`, `ERP_KHO_CARRIER_WEBHOOK_SECRET_2026`, `ERP_KHO_MARKETPLACE_WEBHOOK_SECRET_2026`, `SANDBOX_TOKEN_`).
+  5. Optional live HTTP health probes (`/health/live` and `/health/ready` returning `HTTP 200` + `X-Correlation-Id`).
+
+### 6.2 Wave 61.6 CI Steps `#14`..`#17` & Frontend Security Audit Verification (`F-019` `CLOSED`) (`FACT`)
+```text
+=== npm --prefix D:\ERP_KHO\frontend ls --depth=0 ===
+frontend@0.0.0 D:\ERP_KHO\frontend
+├── @playwright/test@1.58.2
+├── @testing-library/jest-dom@6.9.1
+├── @testing-library/react@16.3.2
+├── @testing-library/user-event@14.6.1
+├── @types/dompurify@3.0.5
+├── @types/node@24.12.0
+├── @types/react-dom@19.2.3
+├── @types/react@19.2.14
+├── @vitejs/plugin-react@6.0.1
+├── axios@1.21.0
+├── dompurify@3.3.3
+├── jsdom@29.0.2
+├── lucide-react@1.16.0
+├── oxlint@1.60.0
+├── react-dom@19.2.5
+├── react-router-dom@7.14.0
+├── react@19.2.5
+├── typescript@5.9.3
+├── vite@8.3.5
+└── vitest@5.0.5
+NPM_LS_EXIT=0
+
+=== CI STEP #14: npm --prefix D:\ERP_KHO\frontend audit --audit-level=high (& full npm audit) ===
+found 0 vulnerabilities
+STEP14_EXIT=0
+
+=== CI STEP #15: npm --prefix D:\ERP_KHO\frontend run lint ===
+Found 18 warnings and 0 errors.
+STEP15_EXIT=0
+
+=== CI STEP #16: npm --prefix D:\ERP_KHO\frontend test ===
+ Test Files  73 passed (73)
+      Tests  406 passed (406)
+STEP16_EXIT=0
+
+=== CI STEP #17: npm --prefix D:\ERP_KHO\frontend run build ===
+vite v8.3.5 building client environment for production...
+✓ 1717 modules transformed.
+✓ built in 955ms
+STEP17_EXIT=0
+```
+

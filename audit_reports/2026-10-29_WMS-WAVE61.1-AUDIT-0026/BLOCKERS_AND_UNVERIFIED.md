@@ -10,23 +10,24 @@
 
 ---
 
-## 1. Summary Rollup by Category (Post-Wave-61 Closure State)
+## 1. Summary Rollup by Category (Post-Wave-61.6 Closure State)
 
 | Category | Count | Item IDs | Impact on Audit Completeness |
 | --- | ---: | --- | --- |
-| **`BLOCKED`** | **3** | `BLK-01`, `BLK-02`, `BLK-03` | Zero impact on core codebase/DB verification; normative requirements for `BLK-01` were verified via redundant Notion specs (`01/29/30/36/38/88/100`). |
+| **`BLOCKED`** | **4** | `BLK-01`, `BLK-02`, `BLK-03`, `BLK-04` | Zero impact on core codebase/DB/CI verification; normative requirements for `BLK-01` were verified via redundant Notion specs (`01/29/30/36/38/88/100`), and `BLK-04` covers external GitHub Web UI / SonarCloud dashboard settings outside the git repository. |
 | **`UNVERIFIED`** | **1** (`UNV-01` **`RESOLVED_AND_VERIFIED_IN_WAVE_57`**, `UNV-02` **`RESOLVED_AND_VERIFIED_IN_WAVES_59_60_60_1_AND_61`**) | `UNV-03` (`UNV-01`, `UNV-02` resolved) | `UNV-01` (Live SQL Integration Harness — `53` SQL test class files / `237` runtime SQL test cases `PASS`) and `UNV-02` (Live Mutating Browser E2E Verification via Playwright connected to `http://localhost:5173`, `http://localhost:5260`, and `ERP_KHO` across Waves 59, 60, 60.1 & 61 with `wave61_e2e_1..8.png`) are both **100% RESOLVED AND VERIFIED**. Only external competitor proprietary code (`UNV-03`) remains external. |
 | **`NOT_FOUND` -> `RESOLVED_AND_VERIFIED_IN_WAVE_57`** | **0** (`5` resolved in Wave 57) | `NF-01`, `NF-02`, `NF-03`, `NF-04`, `NF-05` | All 5 previously missing database/worker artifacts (`F-002`, `F-003a`, `F-003b`, `F-003c`, `F-006`) were created, migrated, and verified in Wave 57 (`RESOLVED_AND_VERIFIED_IN_WAVE_57`). |
 
 ---
 
-## 2. `BLOCKED` Items (`BLK-01`..`BLK-03`)
+## 2. `BLOCKED` Items (`BLK-01`..`BLK-04`)
 
 | ID | Blocked Item | Exact Reason for Block | Evidence & Workaround Applied |
 | --- | --- | --- | --- |
 | **`BLK-01`** | **Notion Child Pages `Spec 28`, `Spec 37`, `Spec 39`** (`3de558fb61748173bc03ec1117760072`, `3de558fb6174819c87cfdc38ee6744ff`, `3de558fb61748155a9d0df30b7be6a73`) | Notion MCP tool `notion-fetch` returned `HTTP 404 object_not_found` (pages not shared with integration or moved). | Documented in `NOTION_SOURCE_INVENTORY.md §3.1` and `F-010`. Normative business rules for 9D Balance/Availability (`Spec 28`), Packing/HU (`Spec 37`), and Internal Movement/Status/Lock (`Spec 39`) were extracted from accessible pages (`Root Page`, `Spec 01`, `Spec 29`, `Spec 30`, `Spec 36`, `Spec 38`, `Spec 99`, `ARCH-P4-03`) and verified against `InventoryStock.cs`, `PackingService.cs`, `InventoryMovementService.cs`, `InventoryStatusService.cs`, `InventoryLockService.cs`, and `StockTransferService.cs`. |
 | **`BLK-02`** | **4 Blacklisted Pages (`OWN-OOAD-001`..`004`)** (`3f8558fb61748145989cf2e7963e4b3b`, `3f8558fb617481ed9c65f702abb64ca5`, `3f8558fb61748104a627c163b9118b55`, `3f8558fb61748125bb89efb1c21cb650`) | Strictly prohibited by `PROJECT_RULES.md §3` and Audit Charter Section `2.3` (*"Tuyệt đối không mở, không đọc, không tìm kiếm, không trích dẫn"*). | `0` fetches, `0` searches, `0` citations performed (`100%` guardrail compliance). |
 | **`BLK-03`** | **Live External Third-Party Production APIs** (Shopee Open Platform, TikTok Shop Partner, Lazada Open Platform, GHN, GHTK, ViettelPost, Napas247 VietQR production keys) | External production merchant credentials are not stored in the repository (in compliance with `[SEC-003]`). | Verified the internal webhook HMAC-SHA256 verification, Outbox/Inbox state tables (`IntegrationOutboxMessages`, `IntegrationInboxMessages`, `ProcessedWebhookEvents`), and PDF `100x150mm` thermal AWB generator (`ExportReceiptsController.cs:531-788`) directly in source code and `ERP_KHO`. |
+| **`BLK-04`** | **External GitHub App `SonarCloud Code Analysis` (`Automatic Analysis` Check Run `73192635675`) & Legacy Open `PR #36` (`feat/WMS-61-project-development -> handoff/approval-complete-20260906`)** | `SonarCloud Code Analysis` is an external GitHub App configured on `sonarcloud.io` (`Automatic Analysis` mode, not triggered by `.github/workflows/ci.yml`, and `.github/workflows/sonar-diagnostics.yml` is `workflow_dispatch` only); closing `PR #36` and changing SonarCloud's main branch / analysis mode require Project Owner privileges in the GitHub Web UI and SonarCloud dashboard. | **Actionable Owner Steps:** (1) On GitHub (`https://github.com/EyeDemon/ERP_KHO/pulls`), close legacy **`PR #36`** (`feat/WMS-61-project-development -> handoff/approval-complete-20260906`) now that `feat/WMS-61-project-development` is the repository `default` branch (`origin/HEAD`), preventing duplicate `pull_request` workflow runs; (2) On `sonarcloud.io` (`EyeDemon/ERP_KHO`), go to **Administration -> Branches** and set the Main Branch to `feat/WMS-61-project-development` (or disable **Automatic Analysis** / exclude `audit_reports/**` and `frontend/e2e/**` from New Code coverage gates). Meanwhile, `F-019` (GitHub Actions `ci.yml` Step #14 `npm audit` failure + `on.push.branches` trigger) has been 100% resolved in Wave 61.6. |
 
 ---
 

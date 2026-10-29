@@ -2,32 +2,34 @@
 
 - **Audit ID:** `WMS-WAVE61.1-AUDIT`
 - **Run ID:** `2026-10-29_WMS-WAVE61.1-AUDIT-0026`
-- **Audit Mode:** `EVIDENCE-BACKED AUDIT & WAVE 57–61.1 SURGICAL REMEDIATION + 90-DAY ROADMAP CLOSURE VERIFICATION`
+- **Audit Mode:** `EVIDENCE-BACKED AUDIT & WAVE 57–61.6 SURGICAL REMEDIATION + 90-DAY ROADMAP & CI SECURITY GATE CLOSURE VERIFICATION`
 - **Inspected Git Baselines:**
-  - `3ddab7261d4606f094239d4933923aea657aca28` (`HEAD~8` — code baseline when `WMS-AUDIT-20261026-1805` was authored)
-  - `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009` (`HEAD~7` on `feat/WMS-61-project-development` — initial audit baseline)
-  - `f49a433` (`HEAD~6` — Wave 57 Remediation Closure Baseline: Migration `20261027130209_Wave57AuditRemediationSchemaAndImmutableLedgerTrigger.cs` applied and verified across Gates 1..5)
-  - `ca0f177` (`HEAD~5` — Wave 58 Architectural Closure Baseline: Decoupled `ErpKhoDbContext` from all `42 / 42` API Controllers, closing `F-004`)
-  - `0b75fd4` (`HEAD~4` — Wave 59 & 59.1 30-Day Roadmap Epics `30.1..30.3` & Live Browser E2E `UNV-02` Closure Baseline)
-  - `37eb5fe` (`HEAD~3` — Wave 60 60-Day Roadmap Epics `60.1..60.3` Implementation Baseline: `KitWorkOrder`, Cross-Docking, and Break-Bulk Replenishment)
-  - `5ce6242` (`HEAD~2` — Wave 60.1 Remediation Closure Baseline: Resolved `F-011` and `F-012`)
-  - `2eafbed` (`HEAD~1` — Wave 61 Remediation [`F-013`, `F-014`] & 90-Day Roadmap [`Epic 90.1..90.3`] Baseline)
-  - **Wave 61.1 Surgical Remediation & Full Verbatim Evidence Closure Baseline (`feat/WMS-61-project-development`):** Resolves `F-015` (`S2 — MEDIUM`: restores 7th dimension `HandlingUnitId` & `HandlingUnitContents.Quantity` inside `foreach (var (origOut, origIn, legQty) in matchedOrigPairs)` in `ExecuteBreakBulkReplenishmentAsync`, acquires SQL transaction + `UPDLOCK, ROWLOCK, HOLDLOCK` on `dbo.Warehouses` + 9D `AcquireInventoryAllocationLocksAsync` before duplicate check in `EvaluateAbcSlottingAndTaskInterleavingAsync` with strict `1x200 + 1x409` concurrency assertions, and removes the fake `SKU-DEFAULT` fallback in `SyncAccountingAndEInvoiceOutboxAsync`), `F-016` (`S2 — MEDIUM`: implements real 9D bin-to-bin re-slotting mutation on `InventoryStocks` + `GrainHash` + paired `InventoryTransactions` `AbcSlottingReSlotting` + `InventoryLocationMovements` and full 9D reversal in `EvaluateAbcSlottingAndTaskInterleavingAsync`), `F-017` (`S3 — LOW`: publishes 100% untruncated `WAVE61_1_CODE_AND_SQL_EVIDENCE.md`), and `F-018` (`S3 — LOW`: synchronizes exact method/route names across all audit reports), achieving **`16 / 16` code/data/report findings `CLOSED` (`17 / 18` total findings `CLOSED` including `F-003a/b/c`, `0` `OPEN`, and `1` `BLOCKED` external Notion `404` `F-010`)**
+  - `3ddab7261d4606f094239d4933923aea657aca28` (`HEAD~9` — code baseline when `WMS-AUDIT-20261026-1805` was authored)
+  - `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009` (`HEAD~8` on `feat/WMS-61-project-development` — initial audit baseline)
+  - `f49a433` (`HEAD~7` — Wave 57 Remediation Closure Baseline: Migration `20261027130209_Wave57AuditRemediationSchemaAndImmutableLedgerTrigger.cs` applied and verified across Gates 1..5)
+  - `ca0f177` (`HEAD~6` — Wave 58 Architectural Closure Baseline: Decoupled `ErpKhoDbContext` from all `42 / 42` API Controllers, closing `F-004`)
+  - `0b75fd4` (`HEAD~5` — Wave 59 & 59.1 30-Day Roadmap Epics `30.1..30.3` & Live Browser E2E `UNV-02` Closure Baseline)
+  - `37eb5fe` (`HEAD~4` — Wave 60 60-Day Roadmap Epics `60.1..60.3` Implementation Baseline: `KitWorkOrder`, Cross-Docking, and Break-Bulk Replenishment)
+  - `5ce6242` (`HEAD~3` — Wave 60.1 Remediation Closure Baseline: Resolved `F-011` and `F-012`)
+  - `2eafbed` (`HEAD~2` — Wave 61 Remediation [`F-013`, `F-014`] & 90-Day Roadmap [`Epic 90.1..90.3`] Baseline)
+  - `645bd9d` (`HEAD~1` — Accepted Backend C# Code Baseline: Wave 61.1 Surgical Remediation [`F-015`, `F-016`, `F-017`, `F-018`] & Full Verbatim Evidence Closure)
+  - `ad51bda` (`HEAD` — Wave 61.2 / 61.3 Cutover Readiness & Smoke Test Packaging Baseline)
+  - **Wave 61.6 CI Security Gate (`Step #14`) & Workflow Trigger Remediation Closure Baseline (`feat/WMS-61-project-development`):** Resolves `F-019` (`S2 — MEDIUM`: upgrades `axios` `1.18.1 -> 1.21.0`, `follow-redirects` `1.16.0 -> 1.16.2`, `undici` `8.10.2 -> 8.12.3`, `vite` `8.1.4 -> 8.3.5`, and `vitest` / `@vitest/mocker` `4.1.11 -> 5.0.5` in `frontend/package.json` & `frontend/package-lock.json` so `npm audit --audit-level=high` and `npm audit` report `found 0 vulnerabilities` [`ExitCode = 0`], and adds `feat/WMS-61-project-development` and `main` to `on.push.branches` in `.github/workflows/ci.yml`), achieving **`17 / 17` code/data/CI/report findings `CLOSED` (`18 / 19` total findings `CLOSED` including `F-003a/b/c`, `0` `OPEN`, and `1` `BLOCKED` external Notion `404` `F-010`)**
 - **Live SQL Server Target:** `ERP_KHO` on `(localdb)\MSSQLLocalDB` (Windows Integrated Auth `HEAVENLY\van40`)
 
 ---
 
-## 1. Executive Rollup of Audit Findings (Post-Wave-61.1 Closure State)
+## 1. Executive Rollup of Audit Findings (Post-Wave-61.6 Closure State)
 
 ### 1.1 Rollup by Severity (`S0`–`S3`), Priority (`P0`–`P4`) & Open vs Closed Status
 
-| Severity | Definition | Total Logged | Closed in Waves 57–61.1 | Remaining Open / Blocked | Open / Blocked Finding IDs | Priority Distribution (Open/Blocked) |
+| Severity | Definition | Total Logged | Closed in Waves 57–61.6 | Remaining Open / Blocked | Open / Blocked Finding IDs | Priority Distribution (Open/Blocked) |
 | --- | --- | ---: | ---: | ---: | --- | --- |
 | **`S0 — Critical / Blocker`** | Active cross-tenant data leak, systemic negative stock across production SKUs, or non-compiling release build | **0** | **0** | **0** | None | `P0: 0` |
 | **`S1 — High`** | Data integrity variance on specific lot/location ledger rebuild path or missing database-level append-only trigger | **2** (`F-001`, `F-002`) | **2** (`F-001`, `F-002`) | **0** | None (`100% CLOSED`) | `P1: 0` |
-| **`S2 — Medium`** | Secondary workflows persisting state in `AuditLogs.NewValues` JSON, Fat Controllers injecting `DbContext`, optional idempotency scopes, manual HTTP trigger for scheduled jobs, Cross-Dock/Break-Bulk reversal stock clamping/lookup guard, Break-Bulk 7th-dimension `HandlingUnitId` reversal / Epic 90.1 lock / Epic 90.3 fallback guard, or Epic 90.1 9D bin-to-bin re-slotting mutation | **7** (`F-003`, `F-004`, `F-005`, `F-006`, `F-013`, `F-015`, `F-016`) | **7** (`F-003a/b/c`, `F-004`, `F-005`, `F-006`, `F-013`, `F-015`, `F-016`) | **0** | None (`100% CLOSED`) | `P1: 0`, `P2: 0` |
+| **`S2 — Medium`** | Secondary workflows persisting state in `AuditLogs.NewValues` JSON, Fat Controllers injecting `DbContext`, optional idempotency scopes, manual HTTP trigger for scheduled jobs, Cross-Dock/Break-Bulk reversal stock clamping/lookup guard, Break-Bulk 7th-dimension `HandlingUnitId` reversal / Epic 90.1 lock / Epic 90.3 fallback guard, Epic 90.1 9D bin-to-bin re-slotting mutation, or CI Step #14 `npm audit --audit-level=high` GHSA vulnerabilities & `ci.yml` default branch trigger | **8** (`F-003`, `F-004`, `F-005`, `F-006`, `F-013`, `F-015`, `F-016`, `F-019`) | **8** (`F-003a/b/c`, `F-004`, `F-005`, `F-006`, `F-013`, `F-015`, `F-016`, `F-019`) | **0** | None (`100% CLOSED`) | `P1: 0`, `P2: 0` |
 | **`S3 — Low / Hygiene`** | Single ledger timestamp vs dual `ActualOccurredAtUtc`/`PostedAtUtc`, unrouted legacy frontend component, SQL test harness class-name filter, Notion child page `404` sharing drift, UI Break-Bulk badge UOM label, audit report metadata drift, duplicate reversal test assertion / `§6.2` row prose, evidence line-count truncation, or conceptual vs actual method/route naming in prose | **9** (`F-007`, `F-008`, `F-009`, `F-010`, `F-011`, `F-012`, `F-014`, `F-017`, `F-018`) | **8** (`F-007`, `F-008`, `F-009`, `F-011`, `F-012`, `F-014`, `F-017`, `F-018`) | **1** (`BLOCKED`) | `F-010` (3 Notion child links `404`, `BLOCKED` on external Notion sharing) | `P2: 0`, `P3: 1` |
-| **TOTAL** | **All Consolidated Findings (`F-001`..`F-018`; `16/16` Code/Data/Report Findings `CLOSED`)** | **18** (`17` Code/Data/Report + `1` External Notion) | **17 (`CLOSED` — `100%` of actionable findings)** | **1 (`0 OPEN`, `1 BLOCKED S3`)** | Open: `0 S0`, `0 S1`, `0 S2`, `0 S3 OPEN`, `1 S3 BLOCKED` (`F-010`) | `P0: 0`, `P1: 0`, `P2: 0`, `P3: 1`, `P4: 0` |
+| **TOTAL** | **All Consolidated Findings (`F-001`..`F-019`; `17/17` Code/Data/CI/Report Findings `CLOSED`)** | **19** (`18` Code/Data/CI/Report + `1` External Notion) | **18 (`CLOSED` — `100%` of actionable findings)** | **1 (`0 OPEN`, `1 BLOCKED S3`)** | Open: `0 S0`, `0 S1`, `0 S2`, `0 S3 OPEN`, `1 S3 BLOCKED` (`F-010`) | `P0: 0`, `P1: 0`, `P2: 0`, `P3: 1`, `P4: 0` |
 
 ### 1.2 Rollup by Finding Type, Verification Status & Confidence
 
@@ -51,10 +53,11 @@
 | **`F-016`** | `EvaluateAbcSlottingAndTaskInterleavingAsync` (`Epic 90.1`) Only Staged Outbox/Audit Without Mutating 9D `InventoryStocks`, `InventoryTransactions` (`AbcSlottingReSlotting`), or `InventoryLocationMovements` | `S2` | `P1` | `SPEC_VS_CODE_MISMATCH` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 61.1)* |
 | **`F-017`** | Line-Count Cap (`+ 318/196/188 more lines`) Truncated Method Bodies in `WAVE61_1_CODE_AND_SQL_EVIDENCE.md` | `S3` | `P2` | `EVIDENCE_TRUNCATION` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 61.1)* |
 | **`F-018`** | Conceptual Method & Route Names Cited in `EXECUTIVE_SUMMARY.md`, `COMPETITIVE_GAP_AND_ROADMAP.md`, and `TEST_COVERAGE_GAPS.md` Differed from Actual Code Names | `S3` | `P3` | `REPORT_ACCURACY` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 61.1)* |
+| **`F-019`** | GitHub Actions CI Security Gate Step #14 (`npm audit --audit-level=high`) Failing (`ExitCode = 1`) Due to 5 Newly Published GHSA Advisories (`vite@8.1.4`, `undici@8.10.2`, `follow-redirects@1.16.0`, `@vitest/mocker@4.1.11`) + `axios@1.18.1 invalid: "^1.20.0"` Mismatch, and `.github/workflows/ci.yml` `on.push.branches` Missing Default Branch `feat/WMS-61-project-development` | `S2` | `P1` | `CI_SECURITY_AUDIT_AND_WORKFLOW_TRIGGER` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 61.6)* |
 
 ---
 
-## 2. Detailed Forensic Findings (`F-001` through `F-018`)
+## 2. Detailed Forensic Findings (`F-001` through `F-019`)
 
 ### `F-001` — `WH01 / QA-LOT-002` (`ProductId=517`) `-60.0000` Stock-vs-Ledger Variance Caused by `RebuildBalancesAsync` Iterating Only Existing `InventoryStocks` Rows & Clamping Negative Sums
 - **Severity / Priority:** `S1` / `P1`
@@ -440,4 +443,34 @@
     - **Epic 90.2:** `GetThreePlDepositorPortalAsync` (`GET/POST /api/v1/inventory-control/3pl-depositor-portal`, `GET/POST /api/v1/business-partners/3pl-depositor-portal`)
     - **Epic 90.3:** `SyncAccountingAndEInvoiceOutboxAsync` (`GET /api/v1/export-receipts/accounting-einvoice/preview`, `POST /api/v1/export-receipts/accounting-einvoice/sync`)
   - Verified via `Select-String` across `2026-10-29_WMS-WAVE61.1-AUDIT-0026\*.md` that `0` conceptual method/route mismatches remain outside the historical `F-018` finding description itself.
+
+---
+
+### `F-019` — GitHub Actions CI Security Gate Step #14 (`npm audit --audit-level=high`) Failing (`ExitCode = 1`) Due to 5 Newly Published GHSA Advisories (`vite@8.1.4`, `undici@8.10.2`, `follow-redirects@1.16.0`, `@vitest/mocker@4.1.11`) + `axios@1.18.1 invalid: "^1.20.0"` Mismatch, and `.github/workflows/ci.yml` `on.push.branches` Missing Default Branch `feat/WMS-61-project-development`
+- **Severity / Priority:** `S2` / `P1`
+- **Finding Type:** `CI_SECURITY_AUDIT_AND_WORKFLOW_TRIGGER`
+- **Related Requirement & Workflow IDs:** `SEC-004`, `GIT-001`, `OPS-001`, `REP-001`, `REP-002`
+- **Related Subagent Cross-References:** `CUTOVER_AND_INTEGRATION_READINESS.md §6`, `BLOCKERS_AND_UNVERIFIED.md §2 (BLK-04)`
+- **Verification Label & Confidence:** `FACT` | `HIGH`
+- **Source & CI Evidence Prior to Wave 61.6 (`File:Line` & GitHub Actions Run `#24972546464` on `ad51bda`):**
+  1. **GitHub Actions `ci.yml` Step #14 Failure (`ExitCode = 1`):**
+     - On commit `ad51bda`, GitHub Actions workflow `.github/workflows/ci.yml` (`build-and-test`, job ID `73192634866`, runner `windows-2025`) passed Steps `#1` through `#13` (`UTF-8 Encoding Check`, `Setup .NET 10.0.x`, `Restore`, `Build`, `Audit NuGet Vulnerability Gate`, `Start SQL Server LocalDB`, `Application Tests`, `API Tests`, `Install Frontend Dependencies`), but failed at **Step #14 (`Audit Frontend Dependencies`: `npm --prefix frontend audit --audit-level=high`)** with `Process completed with exit code 1` ( causing Steps `#15 Lint Frontend`, `#16 Test Frontend`, and `#17 Build Frontend` to be `skipped`).
+     - Reproducing `npm --prefix D:\ERP_KHO\frontend audit --audit-level=high` and `npm --prefix D:\ERP_KHO\frontend ls --depth=0` locally confirmed:
+       - `npm error invalid: axios@1.18.1` (`frontend/package.json` declared `"axios": "^1.20.0"` while `frontend/package-lock.json` still pinned `axios@1.18.1` and `follow-redirects@1.16.0`).
+       - `3 high` severity GHSA advisories: `follow-redirects <= 1.16.0` (`GHSA-r4q5-vmmm-2653`), `undici 8.0.0 - 8.10.2` (`GHSA-f972-7638-2465`), and `vite 8.0.0 - 8.1.4` (`GHSA-4w7w-66w2-5vf9`, `GHSA-v2wj-q39q-566r`, `GHSA-p9ff-h696-f583`).
+       - `2 moderate` severity GHSA advisories: `@vitest/mocker <= 4.1.11` (`GHSA-qxg6-89mg-rqv8`, `GHSA-xp26-3454-mjgp`).
+  2. **`.github/workflows/ci.yml` `on.push.branches` Trigger Drift:**
+     - `D:\ERP_KHO\.github\workflows\ci.yml` (`L3–L8`) only listed `handoff/approval-complete-20260906` and `fix/audit-p0-remediation` under `on.push.branches`, omitting the repository's new default branch `feat/WMS-61-project-development` and `main` (so `ci.yml` only triggered on `ad51bda` via the open legacy `PR #36` `pull_request` event rather than direct `push` events on `feat/WMS-61-project-development`).
+- **Wave 61.6 Closure Evidence (`FACT` — Status: `CLOSED`):**
+  - **Surgical Frontend Dependency & Lockfile Remediation (`TASK-W61.6-FRONTEND-AUDIT-FIX`):**
+    1. Updated [package.json](file:///d:/ERP_KHO/frontend/package.json) and [package-lock.json](file:///d:/ERP_KHO/frontend/package-lock.json) in `D:\ERP_KHO\frontend` without adding any new packages or weakening CI gates:
+       - `axios`: `1.18.1 -> 1.21.0` (satisfying `"^1.20.0"` and upgrading transitive `follow-redirects` `1.16.0 -> 1.16.2`)
+       - `undici`: `8.10.2 -> 8.12.3`
+       - `vite`: `8.1.4 -> 8.3.5`
+       - `vitest` & `@vitest/mocker`: `4.1.11 -> 5.0.5` (`devDependencies: "vitest": "^5.0.5"`)
+    2. Verified `npm --prefix D:\ERP_KHO\frontend ls --depth=0` (`ExitCode = 0`, `0` `invalid` or `ERR!` lines), `npm --prefix D:\ERP_KHO\frontend audit --audit-level=high` (**`found 0 vulnerabilities`**, `ExitCode = 0`), and `npm --prefix D:\ERP_KHO\frontend audit` across all severity levels (**`found 0 vulnerabilities`**, `ExitCode = 0`).
+    3. Executed CI Steps `#14` through `#17` sequentially (`Step #14: npm audit --audit-level=high` `ExitCode = 0`; `Step #15: npm run lint` `0 errors, 18 warnings, ExitCode = 0`; `Step #16: npm test` `73/73` test files, `406/406` tests `PASS`, `ExitCode = 0`; `Step #17: npm run build` `tsc -b && vite v8.3.5 build` `1,711` modules transformed, `ExitCode = 0`).
+  - **CI Workflow Branch Synchronization (`TASK-W61.6-CI-WORKFLOW-SYNC`):**
+    1. Updated [ci.yml](file:///d:/ERP_KHO/.github/workflows/ci.yml#L3-L10) (`on.push.branches`) to prepend `feat/WMS-61-project-development` and `main` ahead of `handoff/approval-complete-20260906` and `fix/audit-p0-remediation` while keeping all security and test gates in `ci.yml` 100% intact.
+
 

@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches:
+      - feat/WMS-61-project-development
+      - main
       - handoff/approval-complete-20260906
       - feature/inbound-permission-code-authorization
   pull_request:
