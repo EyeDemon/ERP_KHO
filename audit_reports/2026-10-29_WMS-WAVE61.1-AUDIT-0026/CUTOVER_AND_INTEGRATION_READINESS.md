@@ -1,8 +1,8 @@
-# PRODUCTION CUTOVER & PARTNER INTEGRATION READINESS PACK (`WAVE 61.2`)
+# PRODUCTION CUTOVER & PARTNER INTEGRATION READINESS PACK (`WAVE 61.2` / `WAVE 61.3`)
 
-- **Run ID:** `WMS-WAVE61.1-AUDIT-0026` (`Wave 61.2 Post-Acceptance Packaging`)
+- **Run ID:** `WMS-WAVE61.1-AUDIT-0026` (`Wave 61.2 / Wave 61.3 Post-Acceptance Packaging & Smoke Verification`)
 - **Project:** `ERP_KHO` — Enterprise Multi-Tenant WMS SaaS (.NET 10 / ASP.NET Core / EF Core 10 / SQL Server / React 19 / TypeScript / Vite 8)
-- **Target Branch:** `feat/WMS-61-project-development` (Accepted Code Baseline: `645bd9d`)
+- **Target Branch:** `feat/WMS-61-project-development` (Accepted Code Baseline: `645bd9d`, Current Audit Head: `84a1b99`)
 - **Target Database:** `ERP_KHO` on `(localdb)\MSSQLLocalDB` (`97` physical tables = `96` business tables + `1` `__EFMigrationsHistory`, `61` migrations, `1` active trigger `TR_InventoryTransactions_Immutable_AppendOnly`)
 - **Verification Standard:** `REP-001 / REP-002` (`FACT`, `INFERENCE`, `NOT VERIFIED`), Zero-Workaround, Anti-Truncation
 
@@ -16,38 +16,40 @@
   - **Mandatory Cutover Rule:** Always normalize the working directory to uppercase drive letter `D:\ERP_KHO` (`Set-Location 'D:\ERP_KHO'`) and pass explicit uppercase paths (`D:\ERP_KHO\...`) in CI/CD and production cutover scripts.
 - **`RSK-OPS-002` (Background `ERP.Api.exe` File Lock Prevention During Build/Publish):**
   - **Root Cause:** A running `ERP.Api.exe` host process locks `ERP.Api\bin\Release\net10.0\ERP.Api.exe` and `ERP.Infrastructure.dll` on Windows (`MSB3027 / MSB3021`).
-  - **Mandatory Cutover Rule:** Before running `dotnet build` or `dotnet publish`, ensure no stale `ERP.Api` process is holding locks (`Stop-Process -Name "ERP.Api" -Force -ErrorAction SilentlyContinue`), or publish to an isolated output directory (`-o D:\ERP_KHO\artifacts\publish_verify`).
+  - **Mandatory Cutover Rule:** Before running `dotnet build` or `dotnet publish`, ensure no stale `ERP.Api` process is holding locks (`Stop-Process -Name "ERP.Api" -Force -ErrorAction SilentlyContinue`), or publish to an isolated output directory (`-o D:\ERP_KHO\artifacts\publish_smoke`).
 
 ### 1.2 Verbatim Standalone Release Publish & Encoding Verification Output (`FACT`)
-Executed on `D:\ERP_KHO` at commit `645bd9d`, followed by immediate cleanup of the temporary `D:\ERP_KHO\artifacts\publish_verify` directory so the repository working tree remains clean:
+Executed on `D:\ERP_KHO` at accepted code baseline `645bd9d`, followed by immediate cleanup of the temporary `D:\ERP_KHO\artifacts\publish_smoke` directory so the repository working tree remains clean:
 
 ```text
 PS D:\ERP_KHO> Set-Location 'D:\ERP_KHO'
-PS D:\ERP_KHO> powershell -ExecutionPolicy Bypass -File 'D:\ERP_KHO\scripts\check-encoding.ps1'
+PS D:\ERP_KHO> powershell -NoProfile -ExecutionPolicy Bypass -File 'D:\ERP_KHO\scripts\check-encoding.ps1'
 Encoding check passed: all scanned files are valid UTF-8 and no mojibake markers were found.
+STEP1_EXIT=0
 
-PS D:\ERP_KHO> dotnet publish 'D:\ERP_KHO\ERP.Api\ERP.Api.csproj' -c Release -o 'D:\ERP_KHO\artifacts\publish_verify' --no-restore
+PS D:\ERP_KHO> dotnet publish 'D:\ERP_KHO\ERP.Api\ERP.Api.csproj' -c Release -o 'D:\ERP_KHO\artifacts\publish_smoke' --no-restore
   ERP.Domain -> D:\ERP_KHO\ERP.Domain\bin\Release\net10.0\ERP.Domain.dll
   ERP.Application -> D:\ERP_KHO\ERP.Application\bin\Release\net10.0\ERP.Application.dll
   ERP.Infrastructure -> D:\ERP_KHO\ERP.Infrastructure\bin\Release\net10.0\ERP.Infrastructure.dll
   ERP.Api -> D:\ERP_KHO\ERP.Api\bin\Release\net10.0\ERP.Api.dll
-  ERP.Api -> D:\ERP_KHO\artifacts\publish_verify\
+  ERP.Api -> D:\ERP_KHO\artifacts\publish_smoke\
+STEP2A_EXIT=0
 
 Name         Length LastWriteTime
 ----         ------ -------------
-ERP.Api.dll 1376768 10/29/2026 3:39:39 PM
-ERP.Api.exe  162304 10/29/2026 3:39:39 PM
+ERP.Api.dll 1376768 10/29/2026 4:00:06 PM
+ERP.Api.exe  162304 10/29/2026 4:00:06 PM
 
-Exit Code: 0 (0 Warning(s), 0 Error(s); artifacts/publish_verify cleaned up after verification)
+Exit Code: 0 (0 Warning(s), 0 Error(s); artifacts/publish_smoke cleaned up after verification)
 ```
 
 ---
 
 ## 2. Partner Integration Configuration & Environment Variable Inventory (`BLK-03`) (`FACT`)
 
-All 4 external partner integration domains are fully implemented in `ERP.Api` and `ERP.Infrastructure` using the transactional Inbox/Outbox pattern (`dbo.IntegrationOutboxMessages` and `dbo.IntegrationInboxMessages`), HMAC-SHA256 webhook signature verification, and idempotent replay protection. While live external partner production credentials remain classified as `BLK-03` (`NOT VERIFIED` against external third-party production servers until credentials are provisioned), the table and sections below provide the complete configuration inventory required at cutover.
+All 4 external partner integration domains are fully implemented in `ERP.Api` and `ERP.Infrastructure` using the transactional Inbox/Outbox pattern (`dbo.IntegrationOutboxMessages` and `dbo.IntegrationInboxMessages`), HMAC-SHA256 webhook signature verification, and idempotent replay protection. While live external partner production credentials remain classified as `BLK-03` (`NOT VERIFIED` against external third-party production servers until credentials are provisioned), the master table and sections `2.1–2.4` below provide the complete configuration inventory required at cutover.
 
-### 2.1 Master Environment Variable & Secret Inventory
+### Master Environment Variable & Secret Inventory
 
 | Integration Domain | Config / Secret Key / Column | Default Dev/Sandbox Fallback in Code | Production Cutover Requirement | Consuming C# Service & `File:Line` |
 | --- | --- | --- | --- | --- |
@@ -58,11 +60,11 @@ All 4 external partner integration domains are fully implemented in `ERP.Api` an
 | **Group B — E-Commerce Marketplaces** | `dbo.MarketplaceShops.EncryptedAccessToken` & `EncryptedRefreshToken` (`SHOPEE`, `TIKTOK`, `LAZADA`) | Sandbox OAuth token exchange via `ExchangeMarketplaceOAuthAsync` | Complete live OAuth 2.0 authorization code exchange via `POST /api/v1/marketplace-shops/oauth/exchange` and automated rotation via `POST /api/v1/marketplace-shops/{shopId}/oauth/refresh` | `ERP.Infrastructure/Services/SalesOrderOperationsService.cs:916-1121` |
 | **Group B — E-Commerce Marketplaces** | `dbo.MarketplaceShops.WebhookSecret` | `DefaultWebhookSecret = "ERP_KHO_MARKETPLACE_WEBHOOK_SECRET_2026"` | Partner Push/Webhook HMAC-SHA256 secret per connected shop | `ERP.Infrastructure/Services/SalesOrderOperationsService.cs:19, 1306-1333` |
 | **Group C — Accounting & E-Invoice (NĐ 70/2025)** | `AccountingProvider` (`MISA_AMIS`, `FAST_ACCOUNTING`, `BRAVO_ERP`) & `EInvoiceProvider` (`VIETTEL_SINVOICE`, `MISA_MEINVOICE`, `VNPT_INVOICE`) | Outbox staging in `dbo.IntegrationOutboxMessages` (`Status = "Pending"`) | Configure worker dispatcher endpoint credentials for MISA AMIS & Viettel S-Invoice / Tax Authority TVAN | `ERP.Infrastructure/Services/ExportReceiptOperationsService.cs:1090-1465` |
-| **Group D — VietQR Payment Gateways** | `X-VietQR-Signature` HMAC Secret (`PayOS`, `SePay`, `Casso`) | `"ERP-KHO-VIETQR-WEBHOOK-SECRET-2026"` | Replace with live VietQR gateway webhook HMAC-SHA256 secret before enabling public webhook ingress | `ERP.Api/Controllers/SaasBillingController.cs:80-102`, `ERP.Infrastructure/Services/SaasBillingService.cs:260-384` |
+| **Group D — VietQR Payment Gateways** | `X-VietQR-Signature` / `SaasBilling:VietQrWebhookSecret` (`PayOS`, `SePay`, `Casso`) | `"ERP-KHO-VIETQR-WEBHOOK-SECRET-2026"` | Replace with live VietQR gateway webhook HMAC-SHA256 secret before enabling public webhook ingress | `ERP.Api/Controllers/SaasBillingController.cs:80-102`, `ERP.Infrastructure/Services/SaasBillingService.cs:197-310, 260-384` |
 
 ---
 
-### 2.2 Group A — TMS / Domestic Couriers (`GHN`, `GHTK`, `ViettelPost`, `J&T Express`) (`Epic 30.2`)
+### 2.1 Group A — TMS / Domestic Couriers (`GHN`, `GHTK`, `ViettelPost`, `J&T Express`) (`Epic 30.2`)
 
 1. **Adapters, Services & Thin Controller Endpoints (`FACT`):**
    - **Service Implementation:** [ShipmentOperationsService.cs](file:///d:/ERP_KHO/ERP.Infrastructure/Services/ShipmentOperationsService.cs#L625-L1335) and [HandoverManifestService.cs](file:///d:/ERP_KHO/ERP.Infrastructure/Services/HandoverManifestService.cs#L139-L300).
@@ -82,7 +84,7 @@ All 4 external partner integration domains are fully implemented in `ERP.Api` an
 
 ---
 
-### 2.3 Group B — E-Commerce Marketplaces (`Shopee`, `TikTok Shop`, `Lazada`) (`Epic 30.3`)
+### 2.2 Group B — E-Commerce Marketplaces (`Shopee`, `TikTok Shop`, `Lazada`) (`Epic 30.3`)
 
 1. **Adapters, Services & Thin Controller Endpoints (`FACT`):**
    - **Service Implementation:** [SalesOrderOperationsService.cs](file:///d:/ERP_KHO/ERP.Infrastructure/Services/SalesOrderOperationsService.cs#L754-L1650).
@@ -102,7 +104,7 @@ All 4 external partner integration domains are fully implemented in `ERP.Api` an
 
 ---
 
-### 2.4 Group C — Accounting (`Circular 200/2014/TT-BTC`) & E-Invoice (`Decree 70/2025/NĐ-CP`) (`Epic 90.3`)
+### 2.3 Group C — Accounting (`Circular 200/2014/TT-BTC`) & E-Invoice (`Decree 70/2025/NĐ-CP`) (`Epic 90.3`)
 
 1. **Services & Thin Controller Endpoints (`FACT`):**
    - **Service Implementation:** [ExportReceiptOperationsService.cs](file:///d:/ERP_KHO/ERP.Infrastructure/Services/ExportReceiptOperationsService.cs#L1090-L1465) (`SyncAccountingAndEInvoiceOutboxAsync`).
@@ -120,7 +122,7 @@ All 4 external partner integration domains are fully implemented in `ERP.Api` an
 
 ---
 
-### 2.5 Group D — VietQR Napas247 Payment Gateways (`PayOS`, `SePay`, `Casso`)
+### 2.4 Cổng thanh toán VietQR Napas247 (`PayOS`, `SePay`, `Casso`) (`Group D`)
 
 1. **Services & Thin Controller Endpoints (`FACT`):**
    - **Service Implementation:** [SaasBillingService.cs](file:///d:/ERP_KHO/ERP.Infrastructure/Services/SaasBillingService.cs#L18-L384).
@@ -136,6 +138,8 @@ All 4 external partner integration domains are fully implemented in `ERP.Api` an
      - `<= 100%` quota: `NORMAL`
      - `100% < usagePct <= 115%`: `SOFT_WARNING_GRACE_15PCT` (`SOFT_BURST_100_115`, `writeBlocked = false`, `72h` grace period so Flash Sale outbound fulfillment is never interrupted)
      - `> 115%` quota: `HARD_CAP_BLOCKED` (`READ_ONLY_OVER_115`, throws `403 SUBSCRIPTION_QUOTA_EXCEEDED` on new order creation while keeping read/outbound completion operational)
+
+> **Lưu ý tích hợp Webhook thực tế trên Staging/Production (SePay / PayOS Adapter)**: Endpoint `POST /api/v1/saas-billing/webhooks/vietqr` / `POST /api/v1/saas-billing/vietqr-webhook` (`SaasBillingController.cs:80-102` & `SaasBillingService.cs:197-310` / `260-384`) xác thực chữ ký `HMAC-SHA256` qua header `X-VietQR-Signature` trên chuỗi gốc định dạng chuẩn `"{InvoiceCode}|{PlanCode}|{PaidAmountVnd}"`. Khi đấu nối với cổng trung gian thanh toán VietQR thực tế (như PayOS hoặc SePay vốn có cấu trúc JSON payload và header chữ ký riêng), tầng API Gateway / Cloudflare Worker hoặc Webhook Adapter phía trước cần ánh xạ (map) payload về DTO chuẩn của ERP và ký lại bằng `SaasBilling:VietQrWebhookSecret` trước khi chuyển tiếp vào `SaasBillingController`.
 
 ---
 
@@ -166,22 +170,130 @@ Execute the following 5-step smoke test sequence in order during the production 
 ```powershell
 # Step 1: Set canonical uppercase working directory & verify UTF-8 encoding gate
 Set-Location 'D:\ERP_KHO'
-powershell -ExecutionPolicy Bypass -File 'D:\ERP_KHO\scripts\check-encoding.ps1'
+powershell -NoProfile -ExecutionPolicy Bypass -File 'D:\ERP_KHO\scripts\check-encoding.ps1'
 
 # Step 2: Publish standalone Release binary & build Frontend production bundle
-dotnet publish 'D:\ERP_KHO\ERP.Api\ERP.Api.csproj' -c Release -o 'D:\ERP_KHO\artifacts\publish_release' --no-restore
+dotnet publish 'D:\ERP_KHO\ERP.Api\ERP.Api.csproj' -c Release -o 'D:\ERP_KHO\artifacts\publish_smoke' --no-restore
 npm --prefix 'D:\ERP_KHO\frontend' run build
 
 # Step 3: Verify Wave 60 & Wave 61 SQL Server Integration Suites (7/7 PASS)
 dotnet test 'D:\ERP_KHO\ERP.Application.Tests\ERP.Application.Tests.csproj' -c Release --no-build --filter "FullyQualifiedName~SqlServerWave60RoadmapEpicsTests|FullyQualifiedName~SqlServerWave61RoadmapEpicsTests"
 
-# Step 4: Verify Liveness & Readiness Health Probes (Requires running ERP.Api host)
-Invoke-RestMethod -Uri "http://localhost:5142/health/live" -Method GET
-Invoke-RestMethod -Uri "http://localhost:5142/health/ready" -Method GET
+# Step 4: Verify Liveness & Readiness Health Probes against published Release binary
+Invoke-WebRequest -Uri "http://127.0.0.1:5142/health/live" -Method GET -UseBasicParsing
+Invoke-WebRequest -Uri "http://127.0.0.1:5142/health/ready" -Method GET -UseBasicParsing
 
 # Step 5: Run Read-Only 3-Way SQL Integrity Checks (Check A, Check B, Check C) on ERP_KHO
-# Expected: Check A = 0 rows with Variance <> 0; Check B = 0 orphan reservations;
-# Check C = 20 rows, TotalOnHand = 232.0000, TotalReserved = 9.0000, TotalAvailable = 223.0000,
-# NegativeQtyCount = 0, InvalidGrainHashCount = 0.
 powershell -NoProfile -ExecutionPolicy Bypass -File 'C:\Users\van40\.gemini\antigravity\brain\16f9bcc3-2924-4af8-9fa0-4b8b8bfc08bb\scratch\run-sql-checks.ps1'
 ```
+
+---
+
+## 5. Biên Bản Thực Thi Cutover Smoke Test Thực Tế & Danh Sách Commits Đóng Gói PR — Wave 61.3 (`FACT`)
+
+### 5.1 Biên Bản Thực Thi Thực Tế 5 Bước Cutover Smoke Test (`TASK-W61.3-SMOKE-EXEC`) (`FACT`)
+
+Toàn bộ 5 bước trong Runbook Mục 4 đã được thực thi tuần tự trên `D:\ERP_KHO` (tại commit mã nguồn `645bd9d` / commit nhánh `84a1b99`) vào ngày `2026-10-29T16:00:00+07:00`:
+
+#### Smoke Step 1 & Step 2 — Kiểm tra Encoding, Đóng gói Binary `ERP.Api` (`Release`) & Build Frontend Production (`Vite 8.1.4`)
+```text
+=== SMOKE STEP 1: check-encoding.ps1 ===
+Encoding check passed: all scanned files are valid UTF-8 and no mojibake markers were found.
+STEP1_EXIT=0
+
+=== SMOKE STEP 2A: dotnet publish -c Release -o D:\ERP_KHO\artifacts\publish_smoke ===
+  ERP.Domain -> D:\ERP_KHO\ERP.Domain\bin\Release\net10.0\ERP.Domain.dll
+  ERP.Application -> D:\ERP_KHO\ERP.Application\bin\Release\net10.0\ERP.Application.dll
+  ERP.Infrastructure -> D:\ERP_KHO\ERP.Infrastructure\bin\Release\net10.0\ERP.Infrastructure.dll
+  ERP.Api -> D:\ERP_KHO\ERP.Api\bin\Release\net10.0\ERP.Api.dll
+  ERP.Api -> D:\ERP_KHO\artifacts\publish_smoke\
+STEP2A_EXIT=0
+
+Name         Length LastWriteTime
+----         ------ -------------
+ERP.Api.dll 1376768 10/29/2026 4:00:06 PM
+ERP.Api.exe  162304 10/29/2026 4:00:06 PM
+
+=== SMOKE STEP 2B: npm --prefix D:\ERP_KHO\frontend run build ===
+> frontend@0.0.0 build
+> tsc -b && vite build
+vite v8.1.4 building client environment for production...
+transforming...✓ 1711 modules transformed.
+✓ built in 1.36s
+STEP2B_EXIT=0
+```
+
+#### Smoke Step 3 — Kiểm thử Tích hợp SQL Server Wave 60 & Wave 61 (`7/7 PASS`)
+```text
+=== SMOKE STEP 3: SqlServerWave60RoadmapEpicsTests & SqlServerWave61RoadmapEpicsTests ===
+Test run for D:\ERP_KHO\ERP.Application.Tests\bin\Release\net10.0\ERP.Application.Tests.dll (.NETCoreApp,Version=v10.0)
+Owned migration target: ERP_KHO_Integration_20261029_090103_23c01103; RunId=23c01103ea3044c2a003d1ab37e9beeb.
+  Passed ERP.Application.Tests.SqlServerWave61RoadmapEpicsTests.Epic90_3_VietnamAccountingCircular200AndEinvoiceNd70Outbox_HappyPath_CustomsGuard_Form04SS_Concurrency_And_Reversal [2 s]
+  Passed ERP.Application.Tests.SqlServerWave61RoadmapEpicsTests.Wave61_F013_CrossDockAndBreakBulkReversal_InsufficientStock_DuplicateReversal_And_LedgerRule_Guards [4 s]
+  Passed ERP.Application.Tests.SqlServerWave61RoadmapEpicsTests.Epic90_2_SelfService3PlDepositorPortal_OwnerIsolation_BillingPreview_Concurrency_And_Reversal [895 ms]
+  Passed ERP.Application.Tests.SqlServerWave61RoadmapEpicsTests.Epic90_1_DynamicAbcVelocitySlottingAndTaskInterleaving_HappyPath_Idempotency_Concurrency_And_Reversal [1 s]
+  Passed ERP.Application.Tests.SqlServerWave60RoadmapEpicsTests.Epic60_3_AutomatedBreakBulkReplenishment_HappyPath_Idempotency_Concurrency_And_Reversal [1 s]
+  Passed ERP.Application.Tests.SqlServerWave60RoadmapEpicsTests.Epic60_2_InboundToOutboundCrossDocking_HappyPath_Idempotency_Concurrency_And_Reversal [1 s]
+  Passed ERP.Application.Tests.SqlServerWave60RoadmapEpicsTests.Epic60_1_PhysicalFloorKittingAndDeKitting_HappyPath_Idempotency_Concurrency_And_Reversal [1 s]
+Owned migration target cleaned: ERP_KHO_Integration_20261029_090103_23c01103; RunId=23c01103ea3044c2a003d1ab37e9beeb.
+Test Run Successful. Total tests: 7 | Passed: 7 | Failed: 0 | Total time: 30,0138 Seconds
+STEP3_EXIT=0
+```
+
+#### Smoke Step 4 — Khởi chạy thực tế `ERP.Api.exe` từ `D:\ERP_KHO\artifacts\publish_smoke`, đo `/health/live` & `/health/ready`, và Dọn dẹp (`Stop-Process` + `Remove-Item`)
+```text
+=== SMOKE STEP 4: Live HTTP Health Probes (/health/live & /health/ready) on Published Release Binary ===
+GET http://127.0.0.1:5142/health/live -> HTTP 200 | X-Correlation-Id=6a4ca58fd85d4e7780beba7a9224f95b | Body={"status":"healthy"}
+GET http://127.0.0.1:5142/health/ready -> HTTP 200 | X-Correlation-Id=dda1b41f98374d02b1ac7e5dfe97e09f | Body={"status":"healthy"}
+SMOKE_PROCESS_STOPPED=True | PUBLISH_SMOKE_CLEANED=True
+```
+
+#### Smoke Step 5 — Đối soát Read-Only 3-Way SQL Integrity Checks trên `ERP_KHO` (`0.0000` Variance)
+```text
+=== 1. SQL 3-Way Check A: InventoryStocks vs InventoryTransactions (with InventoryLedgerCalculationRules) ===
+WarehouseId ProductId StockAllStatusOnHand LedgerExpectedAllStatusNet AllStatusVariance StockAvailableOnHand LedgerExpectedAvailableNet AvailableVariance
+----------- --------- -------------------- -------------------------- ----------------- -------------------- -------------------------- -----------------
+          1       317             145.0000                   145.0000            0.0000             108.0000                   108.0000            0.0000
+          1       517              66.0000                    66.0000            0.0000              66.0000                    66.0000            0.0000
+       1403       317              21.0000                    21.0000            0.0000              21.0000                    21.0000            0.0000
+
+=== 2. SQL 3-Way Check B: ReservedQuantity vs Active StockReservations & StockAllocations ===
+ActiveReservationNetQty ActiveAllocationQty TotalStockReservedQty TotalStockAllocatedQty
+----------------------- ------------------- --------------------- ----------------------
+                 9.0000              9.0000                9.0000                 9.0000
+
+=== 3. SQL 3-Way Check C: Physical Stock & 32-Byte SHA2_256 GrainHash Invariants ===
+TotalGrainRows PositiveStockRows TotalOnHand TotalReserved TotalAvailable NegativeOnHandCount NegativeReservedCount OverReservedCount NullOrInvalidGrainHashCount
+-------------- ----------------- ----------- ------------- -------------- ------------------- --------------------- ----------------- ---------------------------
+            20                 9    232.0000        9.0000       223.0000                   0                     0                 0                           0
+```
+
+---
+
+### 5.2 Danh Sách Commits `origin/feat/WMS-61-project-development..HEAD` & Tổng Hợp Phạm Vi PR (`TASK-W61.3-PR-PACK`) (`FACT`)
+
+```text
+PS D:\ERP_KHO> git log origin/feat/WMS-61-project-development..HEAD --oneline
+84a1b99 docs(audit): sync wave 61.2 verbatim evidence and production cutover readiness pack
+645bd9d fix(wave61.1): remediate F-015 to F-018 and publish full verbatim audit evidence 0026
+2eafbed feat(wave61): remediate F-013/F-014 and implement 90-day roadmap epics 90.1-90.3
+5ce6242 fix(wave60.1): resolve S3 findings F-011/F-012, add code/SQL/mobile E2E evidence and close Wave 60 gate
+37eb5fe feat(wave60): implement 60-day roadmap Epics 60.1-60.3 (physical kitting, cross-docking, break-bulk replenishment)
+0b75fd4 fix(wave59.1): fix /dashboard route, interactive E2E visual evidence, and 94/95 table count sync
+d669beb feat(wave59): implement Epic 30.1-30.3 (wave templates, VN carrier & marketplace adapters) and close UNV-02 live browser E2E
+ca0f177 refactor(wave58): decouple ErpKhoDbContext from all 42 controllers (close F-004) and synchronize audit package
+f49a433 feat(wave57): remediate audit findings F-001..F-009, enforce SQL ledger trigger, and finalize WMS-MASTER-AUDIT
+```
+
+| Thứ tự | Commit SHA | Wave | Nội dung thay đổi cốt lõi | Trạng thái Nghiệm thu |
+| :---: | :---: | :---: | --- | :---: |
+| **1** | `f49a433` | **Wave 57** | Khắc phục `F-001..F-003, F-005..F-009`, chuẩn hóa `decimal(19,4)`, khóa dòng 9D `AcquireInventoryAllocationLocksAsync`, thêm trigger SQL bất biến `TR_InventoryTransactions_Immutable_AppendOnly`, chốt `SD-01..SD-05` Option A. | `CLOSED / ACCEPTED` |
+| **2** | `ca0f177` | **Wave 58** | Tách `ErpKhoDbContext` khỏi toàn bộ `42/42` API Controllers (`0` tham chiếu trực tiếp), hoàn tất Thin Controllers và đóng `F-004`. | `CLOSED / ACCEPTED` |
+| **3** | `d669beb` | **Wave 59** | Triển khai Lộ trình 30 ngày (`Epic 30.1` Wave Templates & Put-to-Wall, `Epic 30.2` Hãng vận chuyển VN & Chuẩn hóa địa giới 2/3 cấp, `Epic 30.3` Shopee/TikTok OAuth & Hủy đơn khách mua) và đóng `UNV-02`. | `CLOSED / ACCEPTED` |
+| **4** | `0b75fd4` | **Wave 59.1** | Khắc phục route `/dashboard`, bổ sung bằng chứng hình ảnh Live Browser E2E tương tác thực và đồng bộ số lượng bảng `94/95`. | `CLOSED / ACCEPTED` |
+| **5** | `37eb5fe` | **Wave 60** | Triển khai Lộ trình 60 ngày (`Epic 60.1` Kitting/De-kitting vật lý, `Epic 60.2` Cross-Docking Inbound-to-Outbound, `Epic 60.3` Tự động xả thùng lẻ Break-Bulk Replenishment) nâng schema lên `97` bảng (`61` migrations). | `CLOSED / ACCEPTED` |
+| **6** | `5ce6242` | **Wave 60.1** | Khắc phục `F-011` & `F-012`, bổ sung bằng chứng mã nguồn C#, đối soát SQL 3 chiều và ảnh E2E Mobile PDA `390x844`, đóng cổng Wave 60. | `CLOSED / ACCEPTED` |
+| **7** | `2eafbed` | **Wave 61** | Khắc phục `F-013` & `F-014`, triển khai Lộ trình 90 ngày (`Epic 90.1` Dynamic ABC Slotting & Task Interleaving, `Epic 90.2` Cổng tự phục vụ chủ hàng 3PL & tính phí tự động, `Epic 90.3` Hạch toán Thông tư 200 & HĐĐT Nghị định `70/2025/NĐ-CP`). | `CLOSED / ACCEPTED` |
+| **8** | `645bd9d` | **Wave 61.1** | Khắc phục triệt để `F-015, F-016, F-017, F-018` (đóng `16/16` findings), xuất toàn văn bằng chứng mã nguồn & SQL `WMS-WAVE61.1-AUDIT-0026` (**Accepted Code Baseline**). | `CLOSED / ACCEPTED` |
+| **9** | `84a1b99` | **Wave 61.2** | Đồng bộ trích xuất nguyên văn `Epic60_3` đến dấu `}`, lập hồ sơ sẵn sàng Cutover Production & tích hợp đối tác (`CUTOVER_AND_INTEGRATION_READINESS.md`). | `CLOSED / ACCEPTED` |
+| **10** | *(Working Tree)* | **Wave 61.3** | Chuẩn hóa câu tóm tắt Mục 4 `WAVE61_1_CODE_AND_SQL_EVIDENCE.md`, bổ sung lưu ý SePay/PayOS Webhook Adapter tại Mục 2.4, thực thi thực tế 5 bước Smoke Test Runbook và đóng gói PR Pack. | `READY FOR COMMIT & PR` |

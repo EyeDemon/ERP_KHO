@@ -13,30 +13,17 @@
 
 ```text
 === git status -sb ===
-## feat/WMS-61-project-development...origin/feat/WMS-61-project-development [ahead 8]
- D audit_reports/2026-10-27_WMS-MASTER-AUDIT-1630.tar
- D audit_reports/2026-10-29_WMS-WAVE61-AUDIT-0025.tar
- M audit_reports/2026-10-29_WMS-WAVE61.1-AUDIT-0026/AUDIT_STATE.md
- M audit_reports/2026-10-29_WMS-WAVE61.1-AUDIT-0026/EXECUTIVE_SUMMARY.md
- M audit_reports/2026-10-29_WMS-WAVE61.1-AUDIT-0026/FINDINGS_REGISTER.md
- M audit_reports/2026-10-29_WMS-WAVE61.1-AUDIT-0026/WAVE61_1_CODE_AND_SQL_EVIDENCE.md
-?? audit_reports/2026-10-29_WMS-WAVE61.1-AUDIT-0026/CUTOVER_AND_INTEGRATION_READINESS.md
+## feat/WMS-61-project-development...origin/feat/WMS-61-project-development [ahead 9]
 
 === git log -n 5 --oneline ===
+84a1b99 docs(audit): sync wave 61.2 verbatim evidence and production cutover readiness pack
 645bd9d fix(wave61.1): remediate F-015 to F-018 and publish full verbatim audit evidence 0026
 2eafbed feat(wave61): remediate F-013/F-014 and implement 90-day roadmap epics 90.1-90.3
 5ce6242 fix(wave60.1): resolve S3 findings F-011/F-012, add code/SQL/mobile E2E evidence and close Wave 60 gate
 37eb5fe feat(wave60): implement 60-day roadmap Epics 60.1-60.3 (physical kitting, cross-docking, break-bulk replenishment)
-0b75fd4 fix(wave59.1): fix /dashboard route, interactive E2E visual evidence, and 94/95 table count sync
 
 === git diff --stat ===
- audit_reports/2026-10-27_WMS-MASTER-AUDIT-1630.tar | Bin 1857024 -> 0 bytes
- audit_reports/2026-10-29_WMS-WAVE61-AUDIT-0025.tar | Bin 1994752 -> 0 bytes
- .../AUDIT_STATE.md                                 |   3 +-
- .../EXECUTIVE_SUMMARY.md                           |   1 +
- .../FINDINGS_REGISTER.md                           |   2 +-
- .../WAVE61_1_CODE_AND_SQL_EVIDENCE.md              |  67 ++++++++++++++-------
- 6 files changed, 48 insertions(+), 25 deletions(-)
+
 ```
 
 ---
@@ -1534,8 +1521,8 @@ public static class InventoryLedgerCalculationRules
 
 - **Exact Forward (`ExecuteReSlotting == true && !Reverse`) & Reversal (`Reverse == true`) Implementation Summary (`FACT`):**
   - **Concurrency & Lock Ordering (`F-015` Part 2):** Opens an explicit `IsolationLevel.ReadCommitted` SQL transaction (`L1486–L1488`), acquires `UPDLOCK, ROWLOCK, HOLDLOCK` on `dbo.Warehouses` (`L1492–L1499`), and acquires deterministic 9-dimension row locks via `InventoryStockLockHelper.AcquireInventoryAllocationLocksAsync` (`L1501–L1515`) **before** checking `dbo.IntegrationOutboxMessages` for duplicate/active plans or unreversed transactions.
-  - **Forward 9D Bin-to-Bin Re-Slotting (`ExecuteReSlotting == true && !Reverse`, `L1838–L2067`):** Selects `Class A` velocity stock residing in non-pickable/non-golden reserve bins (`sourceStock.LocationId != goldenPickBin.Id && (sourceStock.Quantity - sourceStock.ReservedQuantity) > 0m`), enforces `goldenPickBin.MaxWeightKg` and `goldenPickBin.MaxVolumeM3` capacity guards, deducts `reSlotMoveQty` from `sourceStock` and calls `sourceStock.RefreshGrainHash()`, upserts/increments `destStock` at `goldenPickBin.Id` preserving all other 8 dimensions (`TenantId`, `WarehouseId`, `ProductId`, `Status`, `LotId`, `SerialId`, `HandlingUnitId`, `OwnerId`) and calls `destStock.RefreshGrainHash()`, inserts paired `TransactionType.Move` ledger entries (`ReferenceType = "AbcSlottingReSlotting"`, `-reSlotMoveQty` with `Notes = "SLOTTING_MOVE_OUT..."` and `+reSlotMoveQty` with `Notes = "SLOTTING_MOVE_IN..."`) in `dbo.InventoryTransactions`, and inserts 1 `InventoryLocationMovement` row (`Reason = "ABC_SLOTTING_RESLOT"`).
-  - **Reversal 9D Restoration (`Reverse == true`, `L1553–L1774`):** Queries unreversed `AbcSlottingReSlotting` transaction pairs (`SLOTTING_MOVE_OUT` / `SLOTTING_MOVE_IN`), checks destination available stock `destStock.Quantity - destStock.ReservedQuantity < legQty` (throwing `ConflictException("SLOTTING_REVERSAL_INSUFFICIENT_DEST_AVAILABLE_STOCK")` on shortage, never clamping with `Math.Max(0m, ...)`), restores `sourceStock.Quantity += legQty` (`sourceStock.RefreshGrainHash()`) and deducts `destStock.Quantity -= legQty` (`destStock.RefreshGrainHash()`), inserts paired `TransactionType.Reversal` ledger entries (`ReferenceType = "AbcSlottingReSlottingReversal"`, `ReversalOfTransactionId = origOut.Id` and `ReversalOfTransactionId = origIn.Id`) in `dbo.InventoryTransactions`, and inserts 1 `InventoryLocationMovement` row (`Reason = "ABC_SLOTTING_REVERSAL"`).
+  - **Forward 9D Bin-to-Bin Re-Slotting (`ExecuteReSlotting == true && !Reverse`, `L1838–L2067`):** Selects `Class A` velocity stock residing in non-pickable/non-golden reserve bins (`sourceStock.LocationId != goldenPickBin.Id && (sourceStock.Quantity - sourceStock.ReservedQuantity) > 0m`), enforces `goldenPickBin.MaxWeightKg` and `goldenPickBin.MaxVolumeM3` capacity guards, deducts `moveQty` from `sourceStock` and calls `sourceStock.RefreshGrainHash()`, upserts/increments `destStock` at `goldenPickBin.Id` preserving all other 8 dimensions (`TenantId`, `WarehouseId`, `ProductId`, `Status`, `LotId`, `SerialId`, `HandlingUnitId`, `OwnerId`) and calls `destStock.RefreshGrainHash()`, inserts paired `TransactionType.Move` ledger entries (`ReferenceType = "AbcSlottingReSlotting"`, `ReasonCode = "ABC_DYNAMIC_RESLOTTING"`, `-moveQty` and `+moveQty`) in `dbo.InventoryTransactions`, and inserts 1 `InventoryLocationMovement` row (`ReferenceType = "AbcSlottingReSlotting"`).
+  - **Reversal 9D Restoration (`Reverse == true`, `L1553–L1774`):** Queries unreversed `AbcSlottingReSlotting` transaction pairs, checks destination available stock `destStock.Quantity - destStock.ReservedQuantity < revQty` (throwing `ConflictException("SLOTTING_REVERSAL_INSUFFICIENT_DEST_AVAILABLE_STOCK")` on shortage, never clamping with `Math.Max(0m, ...)`), deducts `destStock.Quantity -= revQty` (`destStock.RefreshGrainHash()`) and restores `srcStock.Quantity += revQty` (`srcStock.RefreshGrainHash()`), inserts paired `TransactionType.Reversal` ledger entries (`ReferenceType = "AbcSlottingReSlottingReversal"`, `ReasonCode = "ABC_SLOTTING_REVERSAL"`, `ReversalOfTransactionId = origIn.Id` and `ReversalOfTransactionId = origOut.Id`) in `dbo.InventoryTransactions`, marks `origOutbox.Status = "REVERSED"`, and writes `AuditLogs` (`Action = "InventoryControl.AbcSlottingAndTaskInterleavingReversed"`).
 
 ```csharp
     public async Task<WmsEndpointOutcome> EvaluateAbcSlottingAndTaskInterleavingAsync(
