@@ -422,7 +422,7 @@
 - **Source Evidence Prior to Wave 61.1:**
   - The evidence generator used in Wave 61 capped code blocks at `220` lines, emitting `... (+ 318 more lines in ERP.Infrastructure/Services/InventoryControlOperationsService.cs)` in `WAVE61_1_CODE_AND_SQL_EVIDENCE.md`.
 - **Wave 61.1 Closure Evidence (`FACT` — Status: `CLOSED`):**
-  - Generated [WAVE61_1_CODE_AND_SQL_EVIDENCE.md](file:///d:/ERP_KHO/audit_reports/2026-10-29_WMS-WAVE61.1-AUDIT-0026/WAVE61_1_CODE_AND_SQL_EVIDENCE.md) (`5,197` lines) containing 100% untruncated, verbatim C# source code from method signature to closing `}` across all 8 required sections (`0` occurrences of `more lines in` or `truncated`).
+  - Generated [WAVE61_1_CODE_AND_SQL_EVIDENCE.md](file:///d:/ERP_KHO/audit_reports/2026-10-29_WMS-WAVE61.1-AUDIT-0026/WAVE61_1_CODE_AND_SQL_EVIDENCE.md) (`5,222` lines) containing 100% untruncated, verbatim C# source code from method signature to closing `}` across all 8 required sections (`0` occurrences of `more lines in` or `truncated`).
 
 ---
 

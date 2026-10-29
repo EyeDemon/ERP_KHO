@@ -84,4 +84,5 @@
 11. `COMPETITIVE_WMS_BENCHMARK.md`
 12. `COMPETITIVE_GAP_AND_ROADMAP.md`
 13. `WAVE61_1_CODE_AND_SQL_EVIDENCE.md` *(Wave 61.1 Full Untruncated Verbatim C# & SQL Evidence Package)*
-14. `wave61_e2e_1_dashboard_1440x900.png` .. `wave61_e2e_8_mobile_exports_einvoice_390x844.png` *(8 Desktop `1440x900` & Mobile PDA `390x844` Live Browser E2E Screenshots)*
+14. `CUTOVER_AND_INTEGRATION_READINESS.md` *(Wave 61.2 Standalone Publish Verification, Partner Integration Config Inventory, Hardware Acceptance Checklist & Cutover Runbook)*
+15. `wave61_e2e_1_dashboard_1440x900.png` .. `wave61_e2e_8_mobile_exports_einvoice_390x844.png` *(8 Desktop `1440x900` & Mobile PDA `390x844` Live Browser E2E Screenshots)*
