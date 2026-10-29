@@ -22,6 +22,10 @@ public class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.Property(x => x.RequestFingerprint).HasMaxLength(64).IsFixedLength();
         builder.Property(x => x.Severity).HasMaxLength(32).IsRequired().HasDefaultValue("Information");
         builder.HasIndex(x => x.Timestamp);
+        builder.HasIndex(x => new { x.EntityName, x.Action, x.EntityId, x.Timestamp })
+               .HasDatabaseName("IX_AuditLogs_EntityName_Action_EntityId_Timestamp");
+        builder.HasIndex(x => new { x.EntityName, x.WarehouseId, x.Timestamp })
+               .HasDatabaseName("IX_AuditLogs_EntityName_WarehouseId_Timestamp");
 
         builder.HasOne(x => x.User)
                .WithMany()

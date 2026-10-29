@@ -1,8 +1,11 @@
+using ERP.Domain.Common;
+
 namespace ERP.Domain.Entities;
 
-public class AuditLog
+public class AuditLog : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int? UserId { get; set; }
     public string Action { get; set; } = string.Empty;
     public string EntityName { get; set; } = string.Empty;
@@ -20,6 +23,7 @@ public class AuditLog
     public string? IdempotencyKeyHash { get; set; }
     public string? RequestFingerprint { get; set; }
     public string Severity { get; set; } = "Information";
+    public int? ImpersonatedBySupportUserId { get; set; }
 
     // Navigation
     public User? User { get; set; }

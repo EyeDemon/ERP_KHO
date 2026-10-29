@@ -18,34 +18,47 @@ public class CatalogModelMetadataTests
         using var context = new ErpKhoDbContext(options);
         var model = context.Model;
 
-        // Product.Code -> IX_ProductCode (Unique)
+        // Product (TenantId, Code) -> UX_Products_TenantId_Code (Unique)
         var productEntity = model.FindEntityType(typeof(Product));
         productEntity.Should().NotBeNull();
-        var productCodeProp = productEntity!.FindProperty(nameof(Product.Code));
-        productCodeProp.Should().NotBeNull();
-        var productIndex = productEntity.FindIndex(productCodeProp!);
+        var productTenantProp = productEntity!.FindProperty(nameof(Product.TenantId))!;
+        var productCodeProp = productEntity.FindProperty(nameof(Product.Code))!;
+        var productIndex = productEntity.FindIndex(new[] { productTenantProp, productCodeProp });
         productIndex.Should().NotBeNull();
         productIndex!.IsUnique.Should().BeTrue();
-        productIndex.GetDatabaseName().Should().Be("IX_ProductCode");
+        productIndex.GetDatabaseName().Should().Be("UX_Products_TenantId_Code");
 
-        // Warehouse.Code -> IX_WarehouseCode (Unique)
+        // Warehouse (TenantId, Code) -> UX_Warehouses_TenantId_Code (Unique)
         var warehouseEntity = model.FindEntityType(typeof(Warehouse));
         warehouseEntity.Should().NotBeNull();
-        var warehouseCodeProp = warehouseEntity!.FindProperty(nameof(Warehouse.Code));
-        warehouseCodeProp.Should().NotBeNull();
-        var warehouseIndex = warehouseEntity.FindIndex(warehouseCodeProp!);
+        var warehouseTenantProp = warehouseEntity!.FindProperty(nameof(Warehouse.TenantId))!;
+        var warehouseCodeProp = warehouseEntity.FindProperty(nameof(Warehouse.Code))!;
+        var warehouseIndex = warehouseEntity.FindIndex(new[] { warehouseTenantProp, warehouseCodeProp });
         warehouseIndex.Should().NotBeNull();
         warehouseIndex!.IsUnique.Should().BeTrue();
-        warehouseIndex.GetDatabaseName().Should().Be("IX_WarehouseCode");
+        warehouseIndex.GetDatabaseName().Should().Be("UX_Warehouses_TenantId_Code");
 
-        // Unit.Code -> IX_UnitCode (Unique)
+        // Unit (TenantId, Code) -> UX_Units_TenantId_Code (Unique)
         var unitEntity = model.FindEntityType(typeof(Unit));
         unitEntity.Should().NotBeNull();
-        var unitCodeProp = unitEntity!.FindProperty(nameof(Unit.Code));
-        unitCodeProp.Should().NotBeNull();
-        var unitIndex = unitEntity.FindIndex(unitCodeProp!);
+        var unitTenantProp = unitEntity!.FindProperty(nameof(Unit.TenantId))!;
+        var unitCodeProp = unitEntity.FindProperty(nameof(Unit.Code))!;
+        var unitIndex = unitEntity.FindIndex(new[] { unitTenantProp, unitCodeProp });
         unitIndex.Should().NotBeNull();
         unitIndex!.IsUnique.Should().BeTrue();
-        unitIndex.GetDatabaseName().Should().Be("IX_UnitCode");
+        unitIndex.GetDatabaseName().Should().Be("UX_Units_TenantId_Code");
+
+        var category = model.FindEntityType(typeof(ProductCategory))!;
+        category.FindIndex(new[]
+        {
+            category.FindProperty(nameof(ProductCategory.TenantId))!,
+            category.FindProperty(nameof(ProductCategory.Code))!
+        })!.IsUnique.Should().BeTrue();
+        var barcode = model.FindEntityType(typeof(ProductBarcode))!;
+        barcode.FindIndex(new[]
+        {
+            barcode.FindProperty(nameof(ProductBarcode.TenantId))!,
+            barcode.FindProperty(nameof(ProductBarcode.Value))!
+        })!.IsUnique.Should().BeTrue();
     }
 }

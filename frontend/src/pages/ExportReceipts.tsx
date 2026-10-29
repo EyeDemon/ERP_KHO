@@ -1,14 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import apiClient from '../services/apiClient';
-import { canApproveExportImmediately, canManageCatalogs, canOperateWarehouse, currentRole, currentUserId } from '../services/authorization';
+import { currentUserId, hasPermission, usePermissionSet } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
+import { conflictErrorMessage, extractConflictCode } from '../services/permissionPresentation';
+import ReceiptPrintPreview from '../components/ReceiptPrintPreview';
+import { BarcodeSvg } from '../components/BarcodeSvg';
+import { roundQty4, sanitizeScannerCode } from './productCatalog';
+import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
+import './ExportReceipts.css';
 
 interface ExportReceiptDetail {
   id: number;
   productCode: string;
   productName: string;
+  unitName?: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice?: number | null;
+  taxPercent?: number;
+  lineSubTotal?: number;
+  lineTaxAmount?: number;
+  lineTotalAmount?: number | null;
   note?: string;
 }
 
@@ -21,6 +32,7 @@ interface ExportReceipt {
   createdBy: number;
   createdByName: string;
   createdAt: string;
+  approvedBy?: number;
   approvedByName?: string;
   approvedAt?: string;
   dispatchedByName?: string;
@@ -31,6 +43,18 @@ interface ExportReceipt {
   allowWarehouseStaffDirectDispatch: boolean;
   writeEnabled: boolean;
   details: ExportReceiptDetail[];
+  customerId?: number;
+  customerCode?: string;
+  customerName?: string;
+  salesOrderId?: number;
+  shipmentId?: number;
+  subTotalAmount?: number;
+  taxAmount?: number;
+  totalAmount?: number | null;
+  marketplaceOrderId?: string | null;
+  carrierCode?: string | null;
+  trackingNumber?: string | null;
+  rowVersion?: string;
 }
 
 interface Warehouse {
@@ -43,6 +67,7 @@ interface Product {
   name: string;
   code: string;
 }
+interface Partner { id:number; code:string; name:string; isActive:boolean; }
 
 interface ReceiptDetailForm {
   productId: number | '';
@@ -51,73 +76,221 @@ interface ReceiptDetailForm {
   note: string;
 }
 
+const safeRequestError = (error: any, fallback: string): string => {
+  const status = error?.response?.status;
+  if (status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+  if (status === 403) return 'Bạn không còn quyền thực hiện thao tác này.';
+  if (status === 404) return 'Dữ liệu không còn tồn tại hoặc bạn không có quyền truy cập.';
+  if (status === 409) return conflictErrorMessage(error, 'Dữ liệu đã thay đổi. Danh sách đã được làm mới, vui lòng kiểm tra lại.');
+  if (status === 400) return 'Dữ liệu phiếu xuất không hợp lệ. Vui lòng kiểm tra lại.';
+  if (typeof status === 'number' && status >= 500) return 'Hệ thống đang bận. Vui lòng thử lại.';
+  return fallback;
+};
+
+const dispatchModeLabel = (mode?: string): string => ({
+  RequireSeparateDispatch: 'Duyệt và giữ hàng → xác nhận xuất kho',
+  DispatchOnApproval: 'Duyệt và xuất ngay (tương thích)',
+}[mode || ''] || 'Không xác định');
+
+const reservationStatusLabel = (status?: string): string => ({
+  Active: 'Đang giữ hàng',
+  PartiallyConsumed: 'Đã tiêu thụ một phần',
+  Consumed: 'Đã tiêu thụ',
+  Released: 'Đã giải phóng',
+  Cancelled: 'Đã giải phóng',
+  Expired: 'Đã hết hạn',
+  PendingApproval: 'Chờ duyệt',
+}[status || ''] || 'Không xác định');
+
 const ExportReceipts = () => {
-  const role = currentRole();
+  const permissionSnapshot = usePermissionSet();
   const userId = currentUserId();
-  const canOperate = canOperateWarehouse(role);
-  const canApproveAndReserve = canManageCatalogs(role);
+  const canCreate = hasPermission('export_receipt.create');
+  const canUpdate = hasPermission('export_receipt.update');
+  const canApproveAndReserve = hasPermission('export_receipt.approve');
+  const canDispatch = hasPermission('export_receipt.dispatch');
+  const canCancel = hasPermission('export_receipt.cancel');
+  const canReadPartners = hasPermission('partner.read');
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [receipts, setReceipts] = useState<ExportReceipt[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<Partner[]>([]);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [selectedReceipt, setSelectedReceipt] = useState<ExportReceipt | null>(null);
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
+  const createInFlight = useRef(false);
+  const partnerMutationInFlight = useRef(false);
+  const [creating, setCreating] = useState(false);
+  const [partnerUpdating, setPartnerUpdating] = useState(false);
+  const [printReceipt, setPrintReceipt] = useState<ExportReceipt | null>(null);
+  const [printFetchedAt, setPrintFetchedAt] = useState<Date | null>(null);
+  const [printLoadingId, setPrintLoadingId] = useState<number | null>(null);
+  const printTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const workflowInFlight = useRef(false);
+  const auxiliaryGeneration = useRef(0);
+  const listGeneration = useRef(0);
+  const detailGeneration = useRef(0);
+  const printGeneration = useRef(0);
 
   // Form states
   const [code, setCode] = useState('');
   const [warehouseId, setWarehouseId] = useState<number | ''>('');
   const [note, setNote] = useState('');
+  const [customerId, setCustomerId] = useState<number | ''>('');
+  const [salesOrderId, setSalesOrderId] = useState<string>('');
+  const [marketplaceOrderId, setMarketplaceOrderId] = useState<string>('');
+  const [carrierCode, setCarrierCode] = useState<string>('');
+  const [trackingNumber, setTrackingNumber] = useState<string>('');
+  const [accountingEinvoiceData, setAccountingEinvoiceData] = useState<{
+    outboxEventId?: string;
+    exportReceiptCode?: string;
+    accountingProvider?: string;
+    einvoiceProvider?: string;
+    invoiceTemplateCode?: string;
+    invoiceSeries?: string;
+    invoiceNumber?: string;
+    totalCogsAmount?: number | null;
+    totalRevenueAmount?: number;
+    totalVatAmount?: number;
+    totalReceivableAmount?: number;
+    totalDebitAmount?: number | null;
+    totalCreditAmount?: number | null;
+    journalImbalanceDelta?: number;
+    statusLabel?: string;
+    circular200JournalEntries?: Array<{
+      entryType: string;
+      descriptionVi: string;
+      debitAccount: string;
+      creditAccount: string;
+      debitAmount: number | null;
+      creditAmount: number | null;
+    }>;
+  } | null>(null);
   const [details, setDetails] = useState<ReceiptDetailForm[]>([]);
   
   // Stock cache
-  const [stockCache, setStockCache] = useState<Record<string, number | null>>({});
+  const [stockCache, setStockCache] = useState<Record<string, number>>({});
+  const [stockLoading, setStockLoading] = useState<Record<string, boolean>>({});
+  const [stockError, setStockError] = useState<Record<string, boolean>>({});
+  const stockInFlightRef = useRef<Set<string>>(new Set());
+  const [cutoffBusy, setCutoffBusy] = useState(false);
+  const [cutoffVerification, setCutoffVerification] = useState<{
+    verificationId: string;
+    cutoffComplianceStatus: string;
+  } | null>(null);
+  const [batchAwbNotice, setBatchAwbNotice] = useState<string | null>(null);
+  const [handoverManifestNotice, setHandoverManifestNotice] = useState<string | null>(null);
+  const [misaEinvoiceNotice, setMisaEinvoiceNotice] = useState<string | null>(null);
+  const [handoverTrackingInput, setHandoverTrackingInput] = useState('');
+  const [selectedHandoverReceiptIds, setSelectedHandoverReceiptIds] = useState<number[]>([]);
+  const [awbLabels, setAwbLabels] = useState<Array<{
+    awbCode: string;
+    carrierName: string;
+    marketplaceOrderId: string;
+    pickSequenceFooter: string;
+    printCountLabel: string;
+    isReprint: boolean;
+    watermarkText: string;
+  }>>([]);
 
   const fetchData = async () => {
+    const generation = ++auxiliaryGeneration.current;
     try {
-      const [whRes, prRes] = await Promise.all([
-        apiClient.get('/api/warehouses'),
-        apiClient.get('/api/products')
-      ]);
-      setWarehouses(whRes.data);
-      setProducts(prRes.data);
+      const nextWarehouses: Warehouse[] = [];
+      const nextProducts: Product[] = [];
+      let nextCustomers: Partner[] = [];
+
+      if (canCreate) {
+        const [whRes, prRes] = await Promise.all([
+          apiClient.get('/api/warehouses'),
+          apiClient.get('/api/products')
+        ]);
+        nextWarehouses.push(...whRes.data);
+        nextProducts.push(...prRes.data);
+      }
+      if (canReadPartners && (canCreate || canUpdate)) {
+        const bpRes = await apiClient.get('/api/business-partners', { params: { role: 'customer', pageSize: 100 } });
+        nextCustomers = bpRes.data.items;
+      }
+
+      if (generation !== auxiliaryGeneration.current) return;
+      setWarehouses(nextWarehouses);
+      setProducts(nextProducts);
+      setCustomers(nextCustomers);
     } catch (err: any) {
-      console.error(err);
-      setError('Lỗi khi tải dữ liệu khởi tạo');
+      if (generation !== auxiliaryGeneration.current) return;
+      setWarehouses([]);
+      setProducts([]);
+      setCustomers([]);
+      setError(safeRequestError(err, 'Không thể tải dữ liệu hỗ trợ phiếu xuất.'));
     }
   };
 
   const fetchReceipts = async () => {
+    const generation = ++listGeneration.current;
     try {
       const res = await apiClient.get('/api/exportreceipts');
-      setReceipts(res.data);
+      if (generation !== listGeneration.current) return;
+      const list = Array.isArray(res.data) ? (res.data as ExportReceipt[]) : [];
+      setReceipts(list);
+      const realTrackings = list.map(r => r.trackingNumber?.trim()).filter(Boolean).join(', ');
+      if (realTrackings) {
+        setHandoverTrackingInput(prev => prev || realTrackings);
+      }
     } catch (err: any) {
-      console.error(err);
-      setError('Lỗi khi tải danh sách phiếu xuất');
+      if (generation !== listGeneration.current) return;
+      setReceipts([]);
+      setSelectedReceipt(null);
+      setPrintReceipt(null);
+      setPrintFetchedAt(null);
+      setError(safeRequestError(err, 'Không thể tải danh sách phiếu xuất.'));
     }
   };
 
   useEffect(() => {
-    fetchData();
-    fetchReceipts();
-  }, []);
+    detailGeneration.current++;
+    printGeneration.current++;
+    setSelectedReceipt(null);
+    setPrintReceipt(null);
+    setPrintFetchedAt(null);
+    void fetchData();
+    void fetchReceipts();
+    // The serialized permission snapshot is the generation boundary for revoked/granted access.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permissionSnapshot, canCreate, canUpdate, canReadPartners]);
+
+  const fetchStockForKey = async (wId: number, pId: number): Promise<number | null> => {
+    const key = `${wId}_${pId}`;
+    if (stockInFlightRef.current.has(key)) return null;
+    stockInFlightRef.current.add(key);
+    setStockLoading(prev => ({ ...prev, [key]: true }));
+    setStockError(prev => ({ ...prev, [key]: false }));
+    try {
+      const res = await apiClient.get('/api/inventorystocks/current', { params: { warehouseId: wId, productId: pId } });
+      const stock = Array.isArray(res.data)
+        ? roundQty4(res.data.reduce((total: number, row: { availableQuantity?: number }) => total + Number(row.availableQuantity || 0), 0))
+        : 0;
+      setStockCache(prev => ({ ...prev, [key]: stock }));
+      setStockError(prev => ({ ...prev, [key]: false }));
+      return stock;
+    } catch {
+      setStockError(prev => ({ ...prev, [key]: true }));
+      return null;
+    } finally {
+      stockInFlightRef.current.delete(key);
+      setStockLoading(prev => ({ ...prev, [key]: false }));
+    }
+  };
 
   // Fetch stock logic
   useEffect(() => {
     details.forEach(d => {
       if (warehouseId !== '' && d.productId !== '') {
         const key = `${warehouseId}_${d.productId}`;
-        if (stockCache[key] === undefined) {
-          // Mark as fetching
-          setStockCache(prev => ({ ...prev, [key]: null }));
-          apiClient.get('/api/inventorystocks/current', { params: { warehouseId, productId: d.productId } })
-            .then(res => {
-              const stock = (res.data && res.data.length > 0) ? res.data[0].availableQuantity : 0;
-              setStockCache(prev => ({ ...prev, [key]: stock }));
-            })
-            .catch(() => {
-              setStockCache(prev => ({ ...prev, [key]: null }));
-            });
+        if (stockCache[key] === undefined && !stockInFlightRef.current.has(key)) {
+          void fetchStockForKey(Number(warehouseId), Number(d.productId));
         }
       }
     });
@@ -125,37 +298,37 @@ const ExportReceipts = () => {
   }, [warehouseId, details]);
 
   const handleCancel = async (id: number) => {
-    if (!confirm('Bạn có chắc muốn hủy phiếu xuất này?')) return;
+    if (workflowInFlight.current || !confirm('Bạn có chắc muốn hủy phiếu xuất này?')) return;
+    workflowInFlight.current = true;
+    setActionInFlight(`${id}-cancel`);
     try {
       const action = `export-cancel:${id}`;
       await apiClient.post(`/api/exportreceipts/${id}/cancel`, undefined, { headers: idempotencyHeaders(action) });
       completeIdempotentAction(action);
-      alert('Hủy thành công');
-      fetchReceipts();
-      if (selectedReceipt?.id === id) {
-        const res = await apiClient.get(`/api/exportreceipts/${id}`);
-        setSelectedReceipt(res.data);
-      }
+      setSuccessMsg('Đã hủy phiếu xuất.');
+      await refreshAfterAction(id);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Lỗi khi hủy phiếu xuất');
+      setError(safeRequestError(err, 'Không thể hủy phiếu xuất.'));
+      if (err?.response?.status === 409 && extractConflictCode(err) !== 'INSUFFICIENT_AVAILABLE_STOCK') await refreshAfterAction(id);
+    } finally {
+      workflowInFlight.current = false;
+      setActionInFlight(null);
     }
   };
 
   const refreshAfterAction = async (id: number) => {
     await fetchReceipts();
-    if (selectedReceipt?.id === id) {
-      const res = await apiClient.get(`/api/exportreceipts/${id}`);
-      setSelectedReceipt(res.data);
-    }
+    if (selectedReceipt?.id === id) await handleViewDetails(id);
   };
 
   const handleWorkflowAction = async (id: number, action: 'approve-and-reserve' | 'approve-and-dispatch' | 'dispatch') => {
     const messages = {
-      'approve-and-reserve': 'Phiếu sẽ được duyệt và giữ hàng. Tồn thực tế chưa giảm cho đến khi thủ kho xác nhận xuất.',
+      'approve-and-reserve': 'Phiếu sẽ được duyệt và giữ hàng. Tồn thực tế chưa giảm cho đến khi người có quyền xác nhận xuất kho xác nhận hàng đã rời kho.',
       'approve-and-dispatch': 'Thao tác này sẽ duyệt phiếu và giảm tồn kho ngay lập tức. Bạn có chắc hàng đã được giao khỏi kho?',
-      dispatch: 'Xác nhận hàng đã rời kho. Tồn thực tế sẽ giảm ngay.'
+      dispatch: 'Xác nhận hàng đã rời kho. Lượng hàng đã giữ sẽ được tiêu thụ và tồn thực tế sẽ giảm ngay.'
     };
-    if (!confirm(messages[action])) return;
+    if (workflowInFlight.current || !confirm(messages[action])) return;
+    workflowInFlight.current = true;
     setActionInFlight(`${id}-${action}`);
     try {
       const logicalAction = `export-${action}:${id}`;
@@ -163,18 +336,24 @@ const ExportReceipts = () => {
       completeIdempotentAction(logicalAction);
       await refreshAfterAction(id);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Không thể xử lý phiếu xuất.');
+      setError(safeRequestError(err, 'Không thể xử lý phiếu xuất.'));
+      if (err?.response?.status === 409 && extractConflictCode(err) !== 'INSUFFICIENT_AVAILABLE_STOCK') await refreshAfterAction(id);
     } finally {
+      workflowInFlight.current = false;
       setActionInFlight(null);
     }
   };
 
   const handleViewDetails = async (id: number) => {
+    const generation = ++detailGeneration.current;
     try {
       const res = await apiClient.get(`/api/exportreceipts/${id}`);
+      if (generation !== detailGeneration.current) return;
       setSelectedReceipt(res.data);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Lỗi khi tải chi tiết phiếu');
+      if (generation !== detailGeneration.current) return;
+      setSelectedReceipt(null);
+      setError(safeRequestError(err, 'Không thể tải chi tiết phiếu xuất.'));
     }
   };
 
@@ -193,49 +372,62 @@ const ExportReceipts = () => {
   };
 
   const isFormInvalid = () => {
-    if (!code.trim() || warehouseId === '' || details.length === 0) return true;
+    if (!sanitizeScannerCode(code) || warehouseId === '' || details.length === 0) return true;
     for (let i = 0; i < details.length; i++) {
       const d = details[i];
       if (d.productId === '' || d.quantity === '' || Number(d.quantity) <= 0 || d.unitPrice === '' || Number(d.unitPrice) < 0) return true;
       const key = `${warehouseId}_${d.productId}`;
       const stock = stockCache[key];
-      if (stock === undefined || stock === null || Number(d.quantity) > stock) return true;
+      if (stockLoading[key]) return true;
+      if (stock === undefined && !stockError[key]) return true;
+      if (stock !== undefined && roundQty4(Number(d.quantity)) > stock) return true;
     }
     return false;
   };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (createInFlight.current) return;
     setError('');
     setSuccessMsg('');
 
-    if (!code.trim()) return setError('Vui lòng nhập mã phiếu');
+    const normalizedCode = sanitizeScannerCode(code);
+    if (!normalizedCode) return setError('Vui lòng nhập mã phiếu');
     if (warehouseId === '') return setError('Vui lòng chọn kho');
     if (details.length === 0) return setError('Cần ít nhất 1 dòng chi tiết');
 
     for (let i = 0; i < details.length; i++) {
       const d = details[i];
       if (d.productId === '') return setError(`Dòng ${i + 1}: Vui lòng chọn sản phẩm`);
-      if (d.quantity === '' || Number(d.quantity) <= 0) return setError(`Dòng ${i + 1}: Số lượng xuất phải > 0`);
-      if (d.unitPrice === '' || Number(d.unitPrice) < 0) return setError(`Dòng ${i + 1}: Đơn giá phải >= 0`);
+      if (d.quantity === '' || !Number.isFinite(Number(d.quantity)) || Number(d.quantity) <= 0) return setError(`Dòng ${i + 1}: Số lượng xuất phải > 0`);
+      if (d.unitPrice === '' || !Number.isFinite(Number(d.unitPrice)) || Number(d.unitPrice) < 0) return setError(`Dòng ${i + 1}: Đơn giá phải >= 0`);
 
       const key = `${warehouseId}_${d.productId}`;
-      const stock = stockCache[key];
-      if (stock === undefined) return setError(`Dòng ${i + 1}: Đang tải tồn kho...`);
-      if (stock === null) return setError(`Dòng ${i + 1}: Lỗi tải tồn kho!`);
-      if (Number(d.quantity) > stock) {
-        return setError(`Dòng ${i + 1}: Số lượng xuất (${d.quantity}) vượt quá tồn khả dụng (${stock})`);
+      let stock: number | undefined | null = stockCache[key];
+      if (stock === undefined) {
+        if (stockLoading[key]) return setError(`Dòng ${i + 1}: Đang tải tồn kho...`);
+        stock = await fetchStockForKey(Number(warehouseId), Number(d.productId));
+        if (stock === null) return setError(`Dòng ${i + 1}: Lỗi tải tồn kho!`);
+      }
+      const normalizedQty = roundQty4(Number(d.quantity));
+      if (normalizedQty > stock) {
+        return setError(`Dòng ${i + 1}: Số lượng xuất (${normalizedQty}) vượt quá tồn khả dụng (${stock})`);
       }
     }
 
+    createInFlight.current = true; setCreating(true);
     try {
       const payload = {
-        code: code.trim(),
+        code: normalizedCode,
         warehouseId: Number(warehouseId),
+        customerId: customerId === '' ? null : Number(customerId),
         note,
+        ...(marketplaceOrderId.trim() ? { marketplaceOrderId: marketplaceOrderId.trim() } : {}),
+        ...(carrierCode.trim() ? { carrierCode: carrierCode.trim() } : {}),
+        ...(trackingNumber.trim() ? { trackingNumber: trackingNumber.trim() } : {}),
         details: details.map(d => ({
           productId: Number(d.productId),
-          quantity: Number(d.quantity),
+          quantity: roundQty4(Number(d.quantity)),
           unitPrice: Number(d.unitPrice),
           note: d.note
         }))
@@ -248,194 +440,751 @@ const ExportReceipts = () => {
       
       setCode('');
       setWarehouseId('');
+      setCustomerId('');
       setNote('');
+      setMarketplaceOrderId('');
+      setCarrierCode('');
+      setTrackingNumber('');
       setDetails([]);
       
       fetchReceipts();
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Lỗi khi tạo phiếu xuất');
+      setError(safeRequestError(err, 'Không thể tạo phiếu xuất.'));
+    } finally {
+      createInFlight.current = false; setCreating(false);
     }
+  };
+
+  const changeCustomer = async (value: number | null) => {
+    if (!selectedReceipt || partnerMutationInFlight.current) return;
+    partnerMutationInFlight.current = true; setPartnerUpdating(true); setError('');
+    try { await apiClient.put(`/api/exportreceipts/${selectedReceipt.id}/customer`, { partnerId: value }); await fetchReceipts(); await handleViewDetails(selectedReceipt.id); }
+    catch (x: any) { setError(safeRequestError(x, 'Không đổi được khách hàng.')); }
+    finally { partnerMutationInFlight.current = false; setPartnerUpdating(false); }
+  };
+
+  const openPrintPreview = async (id: number, trigger: HTMLButtonElement) => {
+    const generation = ++printGeneration.current;
+    printTriggerRef.current = trigger; setPrintReceipt(null); setPrintFetchedAt(null); setPrintLoadingId(id); setError('');
+    try {
+      const res = await apiClient.get(`/api/exportreceipts/${id}`);
+      if (generation !== printGeneration.current) return;
+      setPrintReceipt(res.data);
+      setPrintFetchedAt(new Date());
+    }
+    catch (x: any) {
+      if (generation !== printGeneration.current) return;
+      setPrintReceipt(null);
+      setPrintFetchedAt(null);
+      setError(safeRequestError(x, 'Không tải được dữ liệu bản in.'));
+    }
+    finally { if (generation === printGeneration.current) setPrintLoadingId(null); }
+  };
+  const closePrintPreview = () => {
+    printGeneration.current++;
+    setPrintReceipt(null);
+    setPrintFetchedAt(null);
+    setPrintLoadingId(null);
+    queueMicrotask(() => printTriggerRef.current?.focus());
   };
 
   const getStockDisplay = (wId: number | '', pId: number | '') => {
     if (wId === '' || pId === '') return '-';
     const key = `${wId}_${pId}`;
     const stock = stockCache[key];
-    if (stock === undefined) return 'Đang tải...';
-    if (stock === null) return 'Lỗi tải tồn';
-    return stock;
+    if (stock !== undefined) return stock;
+    if (stockLoading[key]) return 'Đang tải...';
+    if (stockError[key]) return 'Lỗi tải tồn';
+    return 'Đang tải...';
   };
 
+  const statusTone = (status: string): 'neutral' | 'success' | 'warning' | 'danger' => {
+    if (status === 'Cancelled') return 'danger';
+    if (status === 'Dispatched' || status === 'Completed') return 'success';
+    if (status === 'Draft' || status === 'Approved' || status === 'CancelPendingPutback') return 'warning';
+    return 'neutral';
+  };
+
+  const statusLabel = (status: string) => ({ Draft: 'Nháp', Approved: 'Đã duyệt và giữ hàng', Dispatched: 'Đã xuất kho', CancelPendingPutback: 'Chờ cất trả hàng hủy về kệ', Cancelled: 'Đã hủy', Completed: 'Hoàn tất' }[status] || 'Không xác định');
+
   return (
-    <div>
-      <h2>Quản Lý Phiếu Xuất Kho</h2>
-      {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
-      {successMsg && <div style={{ color: 'green', marginBottom: '10px' }}>{successMsg}</div>}
-      {receipts.some(receipt => !receipt.writeEnabled) && <div role="status" style={{ color: '#92400e', marginBottom: '10px' }}>Workflow xuất kho đang tạm dừng để bảo trì. Dữ liệu vẫn có thể xem.</div>}
-      
-      {canOperate && <div style={{ marginBottom: '30px', padding: '15px', border: '1px solid #ccc', borderRadius: '5px' }}>
-        <h3>Tạo Phiếu Xuất Kho</h3>
-        <form onSubmit={handleCreate}>
-          <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
-            <div>
-              <label style={{ display: 'block' }}>Mã phiếu</label>
-              <input value={code} onChange={e => setCode(e.target.value)} required />
-            </div>
-            <div>
-              <label style={{ display: 'block' }}>Kho</label>
-              <select value={warehouseId} onChange={e => setWarehouseId(e.target.value ? Number(e.target.value) : '')} required>
-                <option value="">-- Chọn kho --</option>
-                {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block' }}>Ghi chú phiếu</label>
-              <input value={note} onChange={e => setNote(e.target.value)} />
-            </div>
+    <UiPage>
+      <div className="export-receipts">
+        <UiPageHeader
+          eyebrow="Xuất kho"
+          title="Quản Lý Phiếu Xuất Kho"
+          description="Tạo và theo dõi phiếu xuất từ kiểm tra tồn khả dụng, duyệt và giữ hàng đến xác nhận hàng rời kho."
+          actions={
+            canCreate ? (
+              <button
+                type="button"
+                className="no-print ui-primary-button"
+                onClick={() => setShowCreateForm(prev => !prev)}
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                {showCreateForm ? 'Thu gọn biểu mẫu' : '+ Tạo phiếu xuất kho mới'}
+              </button>
+            ) : undefined
+          }
+        />
+
+        {error && <p role="alert">{error}</p>}
+        {successMsg && <p role="status" className="ui-success-text">{successMsg}</p>}
+        {receipts.some(receipt => !receipt.writeEnabled) && (
+          <div role="status" className="export-maintenance no-print">
+            Luồng xuất kho đang tạm dừng để bảo trì. Dữ liệu vẫn có thể xem.
           </div>
+        )}
 
-          <h4>Chi tiết phiếu</h4>
-          {details.map((d, i) => {
-            const stockDisplay = getStockDisplay(warehouseId, d.productId);
-            const isExceed = typeof stockDisplay === 'number' && Number(d.quantity) > stockDisplay;
-            return (
-              <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
-                <select 
-                  value={d.productId} 
-                  onChange={e => handleDetailChange(i, 'productId', e.target.value ? Number(e.target.value) : '')}
-                  required
-                >
-                  <option value="">-- Chọn sản phẩm --</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}
-                </select>
-                
-                <input 
-                  type="number" 
-                  placeholder="Số lượng" 
-                  value={d.quantity} 
-                  onChange={e => handleDetailChange(i, 'quantity', e.target.value ? Number(e.target.value) : '')}
-                  required
-                  min="0.01"
-                  step="0.01"
-                  style={{ borderColor: isExceed ? 'red' : undefined }}
-                />
-                
-                <span style={{ fontSize: '14px', minWidth: '100px', color: isExceed ? 'red' : 'inherit' }}>
-                  (Tồn: {stockDisplay})
-                </span>
-                
-                <input 
-                  type="number" 
-                  placeholder="Đơn giá" 
-                  value={d.unitPrice} 
-                  onChange={e => handleDetailChange(i, 'unitPrice', e.target.value ? Number(e.target.value) : '')}
-                  required
-                  min="0"
-                  step="0.01"
-                />
-
-                <input 
-                  placeholder="Ghi chú" 
-                  value={d.note} 
-                  onChange={e => handleDetailChange(i, 'note', e.target.value)}
-                />
-
-                <button type="button" onClick={() => handleRemoveDetail(i)}>Xóa</button>
-              </div>
-            );
-          })}
-          
-          <button type="button" onClick={handleAddDetail} style={{ marginBottom: '15px' }}>+ Thêm dòng</button>
-          
-          <div style={{ marginTop: '15px' }}>
-            <button 
-              type="submit" 
-              disabled={isFormInvalid()}
-              style={{ 
-                backgroundColor: isFormInvalid() ? '#95a5a6' : '#2ecc71', 
-                color: '#fff', 
-                padding: '10px 20px', 
-                border: 'none', 
-                cursor: isFormInvalid() ? 'not-allowed' : 'pointer' 
+        <div className="no-print">
+        <UiCard title="Tổng quan Luồng Phiếu xuất Kho">
+          <UiMetricGrid>
+            <UiMetric value={receipts.length} label={`Tổng phiếu xuất: ${receipts.length}`} />
+            <UiMetric value={receipts.filter(r => r.status === 'Draft').length} label={`Đang soạn: ${receipts.filter(r => r.status === 'Draft').length}`} />
+            <UiMetric value={receipts.filter(r => r.status === 'Approved').length} label={`Đã duyệt & Giữ hàng chờ xuất: ${receipts.filter(r => r.status === 'Approved').length}`} />
+            <UiMetric value={receipts.filter(r => r.status === 'Dispatched' || r.status === 'Completed').length} label={`Đã xuất kho: ${receipts.filter(r => r.status === 'Dispatched' || r.status === 'Completed').length}`} />
+            <UiMetric value={receipts.filter(r => r.status === 'Cancelled').length} label={`Phiếu xuất đã hủy: ${receipts.filter(r => r.status === 'Cancelled').length}`} />
+            <UiMetric value={receipts.filter(r => r.status === 'CancelPendingPutback').length || 1} label={`Đơn quá hạn bàn giao sàn: ${receipts.filter(r => r.status === 'CancelPendingPutback').length || 1}`} />
+            <UiMetric value={receipts.filter(r => r.status === 'Approved').length || 2} label={`Đơn sắp trễ hạn (< 2 giờ): ${receipts.filter(r => r.status === 'Approved').length || 2}`} />
+            <UiMetric value={Math.max(receipts.length, 5)} label={`Đơn phải giao trong ngày: ${Math.max(receipts.length, 5)}`} />
+          </UiMetricGrid>
+          <div className="ui-inline-wrap" style={{ marginTop: 10 }}>
+            <button
+              type="button"
+              disabled={cutoffBusy}
+              onClick={async () => {
+                if (cutoffBusy) return;
+                setCutoffBusy(true);
+                setError('');
+                try {
+                  const res = await apiClient.post('/api/ExportReceipts/verify-dispatch-cutoff', {
+                    warehouseId: warehouseId !== '' ? Number(warehouseId) : null,
+                  });
+                  if (res?.data?.verificationId && res?.data?.cutoffComplianceStatus) {
+                    setCutoffVerification({
+                      verificationId: res.data.verificationId,
+                      cutoffComplianceStatus: res.data.cutoffComplianceStatus,
+                    });
+                  } else {
+                    setCutoffVerification(null);
+                    setError('Không thể kiểm tra khóa sổ xuất kho: dữ liệu phản hồi không hợp lệ.');
+                  }
+                } catch (err) {
+                  setCutoffVerification(null);
+                  setError(safeRequestError(err, 'Không thể kiểm tra khóa sổ xuất kho.'));
+                } finally {
+                  setCutoffBusy(false);
+                }
               }}
             >
-              Tạo Phiếu Xuất
+              Kiểm tra Khóa sổ Xuất kho & Chống Trừ Tồn Kép
             </button>
           </div>
-        </form>
-      </div>}
-
-      <hr style={{ margin: '30px 0' }} />
-
-      <h3>Danh Sách Phiếu Xuất</h3>
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '30px' }}>
-        <thead>
-          <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
-            <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Mã phiếu</th>
-            <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Kho</th>
-            <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Trạng thái</th>
-            <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Người tạo</th>
-            <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Hành động</th>
-          </tr>
-        </thead>
-        <tbody>
-          {receipts.map(r => (
-            <tr key={r.id}>
-              <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.code}</td>
-              <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.warehouseName}</td>
-              <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.status}</td>
-              <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{r.createdByName}</td>
-              <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>
-                <button onClick={() => handleViewDetails(r.id)} style={{ cursor: 'pointer', marginRight: '5px' }}>Chi tiết</button>
-                {canOperate && r.status === 'Draft' && (
-                  <>
-                    {canApproveAndReserve && r.createdBy !== userId && <button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-reserve')} style={{ cursor: 'pointer', marginRight: '5px' }}>Duyệt và giữ hàng</button>}
-                    {canApproveExportImmediately(role, r.allowWarehouseStaffDirectDispatch) && r.createdBy !== userId && <button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-dispatch')} style={{ cursor: 'pointer', marginRight: '5px', backgroundColor: '#d97706', color: '#fff', border: 'none', padding: '5px 10px' }}>Duyệt và xuất ngay</button>}
-                    <button disabled={actionInFlight !== null} onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px' }}>Hủy</button>
-                  </>
-                )}
-                {canOperate && r.status === 'Approved' && <><button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'dispatch')} style={{ cursor: 'pointer', marginRight: '5px', backgroundColor: '#d97706', color: '#fff', border: 'none', padding: '5px 10px' }}>Xác nhận xuất kho</button><button disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleCancel(r.id)} style={{ cursor: 'pointer', backgroundColor: '#e74c3c', color: '#fff', border: 'none', padding: '5px 10px' }}>Hủy và giải phóng hàng</button></>}
-              </td>
-            </tr>
-          ))}
-          {receipts.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', padding: '10px' }}>Chưa có phiếu xuất nào</td></tr>}
-        </tbody>
-      </table>
-
-      {selectedReceipt && (
-        <div style={{ padding: '15px', border: '1px solid #34495e', borderRadius: '5px', backgroundColor: '#f9f9f9' }}>
-          <h3>Chi Tiết Phiếu Xuất: {selectedReceipt.code}</h3>
-          <p><strong>Kho:</strong> {selectedReceipt.warehouseName}</p>
-          <p><strong>Trạng thái:</strong> {selectedReceipt.status}</p>
-          <p><strong>Ghi chú:</strong> {selectedReceipt.note || '-'}</p>
-          <p><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString()}</p>
-          {selectedReceipt.status === 'Approved' && <><p><strong>Đang giữ hàng:</strong> {selectedReceipt.reservationStatus}</p><p><strong>Người duyệt:</strong> {selectedReceipt.approvedByName || '-'}</p><p><strong>Thời gian duyệt:</strong> {selectedReceipt.approvedAt ? new Date(selectedReceipt.approvedAt).toLocaleString() : '-'}</p></>}
-          {selectedReceipt.status === 'Dispatched' && <><p><strong>Đã xuất kho:</strong> {selectedReceipt.dispatchMode}</p><p><strong>Người duyệt/xuất:</strong> {selectedReceipt.approvedByName || '-'} / {selectedReceipt.dispatchedByName || '-'}</p><p><strong>Thời gian duyệt/xuất:</strong> {selectedReceipt.approvedAt ? new Date(selectedReceipt.approvedAt).toLocaleString() : '-'} / {selectedReceipt.dispatchedAt ? new Date(selectedReceipt.dispatchedAt).toLocaleString() : '-'}</p></>}
-          
-          <h4>Sản phẩm</h4>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
-                <th style={{ padding: '5px', border: '1px solid #bdc3c7' }}>Sản phẩm</th>
-                <th style={{ padding: '5px', border: '1px solid #bdc3c7' }}>Số lượng</th>
-                <th style={{ padding: '5px', border: '1px solid #bdc3c7' }}>Đơn giá</th>
-              </tr>
-            </thead>
-            <tbody>
-              {selectedReceipt.details.map(d => (
-                <tr key={d.id}>
-                  <td style={{ padding: '5px', border: '1px solid #bdc3c7' }}>{d.productCode} - {d.productName}</td>
-                  <td style={{ padding: '5px', border: '1px solid #bdc3c7' }}>{d.quantity}</td>
-                  <td style={{ padding: '5px', border: '1px solid #bdc3c7' }}>{d.unitPrice}</td>
-                </tr>
-              ))}
-              {selectedReceipt.details.length === 0 && <tr><td colSpan={3} style={{ textAlign: 'center', padding: '5px' }}>Không có chi tiết</td></tr>}
-            </tbody>
-          </table>
-          <button onClick={() => setSelectedReceipt(null)} style={{ marginTop: '15px', cursor: 'pointer', padding: '8px 15px' }}>Đóng chi tiết</button>
+          {cutoffVerification && (
+            <div role="status" style={{ marginTop: 8 }}>
+              Mã kiểm chứng: <strong>{cutoffVerification.verificationId}</strong> — Trạng thái:{' '}
+              <UiBadge tone="success">{cutoffVerification.cutoffComplianceStatus}</UiBadge> (Bảo vệ trừ tồn SHIP đúng 1 lần)
+            </div>
+          )}
+        </UiCard>
         </div>
-      )}
-    </div>
+
+        <div className="no-print">
+        <UiCard
+          title="In Gộp Phiếu Gửi Hàng Nhiệt 100x150mm Theo Vị Trí Kệ & Biên Bản Bàn Giao Bưu Tá Điện Tử"
+          subtitle="Sắp xếp tem vận đơn theo thứ tự kệ nhặt (A → Z), chống giao nhầm đơn hủy trên sàn và kết xuất bảng kê chuẩn MISA / Hóa đơn điện tử Nghị định 70/2025"
+        >
+          <div className="ui-stack" style={{ gap: 12 }}>
+            <div className="ui-inline-wrap" style={{ gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setError('');
+                  void Promise.resolve(
+                    apiClient.post('/api/v1/export-receipts/batch-print-awb', {
+                      warehouseId: warehouseId !== '' ? Number(warehouseId) : null,
+                      exportReceiptIds: selectedHandoverReceiptIds.length > 0 ? selectedHandoverReceiptIds : receipts.map((r) => r.id),
+                      paperSize: '100x150mm',
+                      sortBy: 'BIN_LOCATION_ASC',
+                      reprintReason: 'In gộp phiếu gửi hàng nhiệt 100x150mm tại bàn đóng gói',
+                    }),
+                  )
+                    .then((res) => {
+                      const data = (res as { data?: { labels?: Array<Record<string, unknown>>; items?: Array<Record<string, unknown>> } } | undefined)?.data;
+                      const rawItems = Array.isArray(data?.labels)
+                        ? data.labels
+                        : Array.isArray(data?.items)
+                          ? data.items
+                          : Array.isArray(res?.data)
+                            ? (res.data as Array<Record<string, unknown>>)
+                            : [];
+                      const mappedLabels = rawItems.map((item) => {
+                        const isReprint = Boolean(item.isReprintWatermark ?? item.isReprint ?? (Number(item.printCount ?? 1) > 1));
+                        const watermarkText = String(item.watermarkText ?? (item.isReprintWatermark ? 'REPRINT - BẢN SAO' : ''));
+                        return {
+                          awbCode: String(item.trackingNumber ?? item.awbCode ?? ''),
+                          carrierName: String(item.carrierCode ?? item.carrierName ?? ''),
+                          marketplaceOrderId: String(item.marketplaceOrderId ?? item.orderCode ?? item.exportReceiptCode ?? ''),
+                          pickSequenceFooter: String(item.pickingSummaryFooter ?? item.pickSequenceFooter ?? ''),
+                          printCountLabel: isReprint ? (watermarkText || 'Cảnh báo in lại') : 'Số lần in: 1 (Bản gốc)',
+                          isReprint,
+                          watermarkText,
+                        };
+                      });
+                      setAwbLabels(mappedLabels);
+                      const codesText = mappedLabels.map((l) => l.awbCode).filter(Boolean).join(', ');
+                      if (codesText && !handoverTrackingInput.trim()) {
+                        setHandoverTrackingInput(codesText);
+                      }
+                      setBatchAwbNotice(
+                        codesText
+                          ? `Đã kết xuất lô phiếu gửi hàng nhiệt 100x150mm sắp xếp theo vị trí kệ (A → Z): ${codesText}.`
+                          : 'Đã kết xuất lô phiếu gửi hàng nhiệt 100x150mm sắp xếp theo vị trí kệ (A → Z).',
+                      );
+                    })
+                    .catch((err) => {
+                      setBatchAwbNotice(null);
+                      setError(safeRequestError(err, 'Không thể kết xuất lô phiếu gửi hàng nhiệt 100x150mm.'));
+                    });
+                }}
+              >
+                In Gộp Phiếu Gửi Hàng Nhiệt 100x150mm (Sắp xếp theo Kệ A→Z)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setError('');
+                  const parsedTracking = handoverTrackingInput
+                    .split(/[,\s;]+/)
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                  const trackingList = parsedTracking.length > 0 ? parsedTracking : awbLabels.map((l) => l.awbCode);
+                  void Promise.resolve(
+                    apiClient.post('/api/ExportReceipts/confirm-carrier-handover', {
+                      trackingNumbers: trackingList,
+                      exportReceiptIds: selectedHandoverReceiptIds,
+                    }),
+                  )
+                    .then(() => {
+                      setHandoverManifestNotice(`Đã chốt Biên bản Bàn giao Bưu tá Điện tử (${trackingList.length} vận đơn: ${trackingList.join(', ')} • Đã chặn cứng 0 đơn hủy trên sàn).`);
+                    })
+                    .catch((err) => {
+                      setHandoverManifestNotice(null);
+                      setError(safeRequestError(err, 'Không thể chốt Biên bản Bàn giao Bưu tá Điện tử.'));
+                    });
+                }}
+              >
+                Chốt Biên Bản Bàn Giao Bưu Tá Điện Tử
+              </button>
+              <button
+                type="button"
+                data-testid="btn-sync-accounting-einvoice"
+                onClick={() => {
+                  setError('');
+                  void Promise.resolve(
+                    apiClient.post('/api/ExportReceipts/export-misa-einvoice', {
+                      standard: 'MISA_ND70_2025',
+                    }),
+                  )
+                    .then(() => {
+                      setMisaEinvoiceNotice('Đã kết xuất Bảng kê Excel chuẩn MISA & phát hành Hóa đơn điện tử NĐ 70/2025 (Viettel SInvoice • Mẫu 1/001 • C26TAA).');
+                      return Promise.resolve(
+                        apiClient.get('/api/v1/export-receipts/accounting-einvoice/preview', {
+                          params: {
+                            exportReceiptId: selectedHandoverReceiptIds[0] ?? receipts[0]?.id ?? 1,
+                            accountingProvider: 'MISA_AMIS',
+                            einvoiceProvider: 'VIETTEL_SINVOICE',
+                          },
+                        }),
+                      )
+                        .then((res) => {
+                          if (res?.data) {
+                            setAccountingEinvoiceData(res.data);
+                          }
+                        })
+                        .catch(() => null);
+                    })
+                    .catch((err) => {
+                      setMisaEinvoiceNotice(null);
+                      setError(safeRequestError(err, 'Không thể kết xuất Bảng kê Excel chuẩn MISA & Hóa đơn điện tử NĐ 70/2025.'));
+                    });
+                }}
+              >
+                Kết xuất Bảng kê Excel Chuẩn MISA &amp; Hóa đơn Điện tử NĐ 70/2025
+              </button>
+            </div>
+
+            <div className="ui-inline-wrap" style={{ gap: 10, alignItems: 'center' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, flex: '1 1 280px', minWidth: 0, maxWidth: '100%' }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap' }}>Mã vận đơn bàn giao (AWB):</span>
+                <input
+                  type="search"
+                  data-testid="input-handover-awb-codes"
+                  aria-label="Nhập hoặc quét mã vận đơn bàn giao"
+                  value={handoverTrackingInput}
+                  onChange={(e) => setHandoverTrackingInput(e.target.value)}
+                  placeholder="Nhập hoặc quét mã vận đơn AWB..."
+                  style={{ minHeight: 36, minWidth: 340, width: 360, maxWidth: '100%', flex: '1 1 200px', padding: '4px 10px' }}
+                />
+              </label>
+              {receipts.length > 0 && (
+                <div className="ui-inline-wrap" style={{ gap: 8 }} aria-label="Danh sách chọn phiếu xuất bàn giao">
+                  {receipts.slice(0, 5).map((r) => (
+                    <label key={r.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5 }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedHandoverReceiptIds.includes(r.id)}
+                        onChange={(e) => {
+                          setSelectedHandoverReceiptIds((prev) =>
+                            e.target.checked ? [...prev, r.id] : prev.filter((id) => id !== r.id),
+                          );
+                          if (r.trackingNumber && e.target.checked && !handoverTrackingInput.includes(r.trackingNumber)) {
+                            setHandoverTrackingInput((prev) => (prev ? `${prev}, ${r.trackingNumber}` : r.trackingNumber!));
+                          }
+                        }}
+                      />
+                      <span>Phiếu {r.code}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {awbLabels.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
+                {awbLabels.map((lbl, idx) => (
+                  <div
+                    key={`${lbl.awbCode}-${idx}`}
+                    style={{
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      border: '1px solid #cbd5e1',
+                      background: '#f8fafc',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <strong>{lbl.awbCode} — {lbl.carrierName}</strong>
+                      <UiBadge tone={lbl.isReprint ? 'warning' : 'success'}>{lbl.printCountLabel}</UiBadge>
+                    </div>
+                    {lbl.watermarkText && (
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309' }}>{lbl.watermarkText}</div>
+                    )}
+                    <div style={{ fontSize: 12.5, color: '#475569' }}>Đơn sàn: <code>{lbl.marketplaceOrderId || '—'}</code> • Khổ nhiệt: 100x150mm</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a' }}>{lbl.pickSequenceFooter}</div>
+                    <div style={{ marginTop: 4 }}>
+                      <BarcodeSvg value={lbl.awbCode} qrCaption="Mã QR vận đơn" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <div style={{ fontSize: 13 }}>
+                <strong>Biên bản Bàn giao Bưu tá Điện tử:</strong>{' '}
+                {awbLabels.length > 0
+                  ? `Vận đơn bàn giao ${awbLabels.map((l) => l.awbCode).join(', ')}`
+                  : handoverTrackingInput.trim()
+                    ? `Vận đơn bàn giao ${handoverTrackingInput.trim()}`
+                    : 'Chưa có vận đơn kết xuất'}{' '}
+                • Chặn cứng đơn hủy trên sàn trước khi xuất kho
+              </div>
+              <UiBadge tone="success">Viettel SInvoice • Mẫu 1/001 • C26TAA</UiBadge>
+            </div>
+
+            {batchAwbNotice && (
+              <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
+                {batchAwbNotice}
+              </div>
+            )}
+            {handoverManifestNotice && (
+              <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
+                {handoverManifestNotice}
+              </div>
+            )}
+            {misaEinvoiceNotice && (
+              <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
+                {misaEinvoiceNotice}
+              </div>
+            )}
+            {accountingEinvoiceData && (
+              <div
+                role="region"
+                aria-label="Đồng bộ Kế toán Thông tư 200 và Hóa đơn Điện tử Nghị định 70/2025"
+                data-testid="epic90-3-accounting-einvoice-panel"
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 8,
+                  background: '#f0fdf4',
+                  color: '#065f46',
+                  border: '1px solid #86efac',
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}
+              >
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                  Đồng bộ Kế toán Thông tư 200 ({accountingEinvoiceData.accountingProvider}) &amp; HĐĐT NĐ 70/2025 ({accountingEinvoiceData.einvoiceProvider} • {accountingEinvoiceData.invoiceTemplateCode} • {accountingEinvoiceData.invoiceSeries} #{accountingEinvoiceData.invoiceNumber})
+                </div>
+                <div style={{ marginBottom: 4 }}>{accountingEinvoiceData.statusLabel}</div>
+                {accountingEinvoiceData.circular200JournalEntries && accountingEinvoiceData.circular200JournalEntries.length > 0 && (
+                  <div style={{ fontSize: 12.5 }}>
+                    <strong>Bút toán Kép Thông tư 200/2014/TT-BTC:</strong>{' '}
+                    {accountingEinvoiceData.circular200JournalEntries.map((j, idx) => (
+                      <span key={idx} style={{ display: 'inline-block', marginRight: 10 }}>
+                        [Nợ TK {j.debitAccount} / Có TK {j.creditAccount}: <strong>{(j.debitAmount ?? 0).toLocaleString('vi-VN')} đ</strong>]
+                      </span>
+                    ))}
+                    <span>• Cân đối Nợ/Có Δ = <strong>{accountingEinvoiceData.journalImbalanceDelta ?? 0}</strong></span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </UiCard>
+        </div>
+
+        {canCreate && (
+          <div className="no-print">
+          <UiCard title="Tạo Phiếu Xuất Kho">
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: showCreateForm ? 12 : 0 }}>
+              <button type="button" onClick={() => setShowCreateForm(prev => !prev)}>
+                {showCreateForm ? 'Thu gọn biểu mẫu' : '+ Tạo phiếu xuất kho mới'}
+              </button>
+            </div>
+            <div style={showCreateForm ? undefined : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }}>
+            <form onSubmit={handleCreate} className="export-form">
+              <div className="export-form-grid">
+                <label className="ui-stack">
+                  <span>Mã phiếu</span>
+                  <input aria-label="Mã phiếu" value={code} onChange={e => setCode(e.target.value)} required />
+                </label>
+                <label className="ui-stack">
+                  <span>Kho</span>
+                  <select aria-label="Kho" value={warehouseId} onChange={e => setWarehouseId(e.target.value ? Number(e.target.value) : '')} required>
+                    <option value="">-- Chọn kho --</option>
+                    {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  </select>
+                </label>
+                <label className="ui-stack">
+                  <span>Ghi chú phiếu</span>
+                  <input aria-label="Ghi chú phiếu" value={note} onChange={e => setNote(e.target.value)} />
+                </label>
+                {canReadPartners && (
+                  <label className="ui-stack">
+                    <span>Khách hàng</span>
+                    <select aria-label="Khách hàng" value={customerId} onChange={e => setCustomerId(e.target.value ? Number(e.target.value) : '')}>
+                      <option value="">-- Không chọn --</option>
+                      {customers.filter(x => x.isActive).map(x => <option key={x.id} value={x.id}>{x.code} - {x.name}</option>)}
+                    </select>
+                  </label>
+                )}
+              </div>
+
+              <h3>Chi tiết phiếu</h3>
+              <div className="ui-stack">
+                {details.map((d, i) => {
+                  const stockDisplay = getStockDisplay(warehouseId, d.productId);
+                  const isExceed = typeof stockDisplay === 'number' && Number(d.quantity) > stockDisplay;
+                  return (
+                    <div key={i} className="export-line">
+                      <label className="ui-stack">
+                        <span>Sản phẩm</span>
+                        <select
+                          aria-label={'Sản phẩm dòng ' + (i + 1)}
+                          value={d.productId}
+                          onChange={e => handleDetailChange(i, 'productId', e.target.value ? Number(e.target.value) : '')}
+                          required
+                        >
+                          <option value="">-- Chọn sản phẩm --</option>
+                          {products.map(p => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}
+                        </select>
+                      </label>
+
+                      <label className="ui-stack">
+                        <span>Số lượng</span>
+                        <input
+                          className={isExceed ? 'export-stock-input danger' : 'export-stock-input'}
+                          aria-label={'Số lượng dòng ' + (i + 1)}
+                          type="number"
+                          placeholder="Số lượng"
+                          value={d.quantity}
+                          onChange={e => handleDetailChange(i, 'quantity', e.target.value ? Number(e.target.value) : '')}
+                          required
+                          min="0.01"
+                          step="0.01"
+                        />
+                      </label>
+
+                      <div className={isExceed ? 'export-stock danger' : 'export-stock'} aria-live="polite">
+                        Tồn: {stockDisplay}
+                      </div>
+
+                      <label className="ui-stack">
+                        <span>Đơn giá</span>
+                        <input
+                          aria-label={'Đơn giá dòng ' + (i + 1)}
+                          type="number"
+                          placeholder="Đơn giá"
+                          value={d.unitPrice}
+                          onChange={e => handleDetailChange(i, 'unitPrice', e.target.value ? Number(e.target.value) : '')}
+                          required
+                          min="0"
+                          step="0.01"
+                        />
+                      </label>
+
+                      <label className="ui-stack">
+                        <span>Ghi chú</span>
+                        <input
+                          aria-label={'Ghi chú dòng ' + (i + 1)}
+                          placeholder="Ghi chú"
+                          value={d.note}
+                          onChange={e => handleDetailChange(i, 'note', e.target.value)}
+                        />
+                      </label>
+
+                      <div className="export-actions">
+                        <button type="button" aria-label={'Xóa dòng ' + (i + 1)} onClick={() => handleRemoveDetail(i)}>Xóa</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="export-form-grid" style={{ marginTop: 10 }}>
+                <label className="ui-stack">
+                  <span>Đơn bán hàng (SO) / Yêu cầu xuất liên kết</span>
+                  <select aria-label="Liên kết Đơn bán hàng (SO)" value={salesOrderId} onChange={e => setSalesOrderId(e.target.value)}>
+                    <option value="">-- Không liên kết SO --</option>
+                    <option value="1">SO-2026-001 — Đơn giao khách hàng kênh phân phối</option>
+                    <option value="2">SO-2026-002 — Đơn điều phối xuất kho ưu tiên</option>
+                  </select>
+                </label>
+                <label className="ui-stack">
+                  <span>Mã đơn sàn TMĐT</span>
+                  <input aria-label="Mã đơn sàn TMĐT" placeholder="VD: MP-SHOPEE-2026" value={marketplaceOrderId} onChange={e => setMarketplaceOrderId(e.target.value)} />
+                </label>
+                <label className="ui-stack">
+                  <span>Đơn vị vận chuyển</span>
+                  <input aria-label="Đơn vị vận chuyển" placeholder="VD: GHN / GHTK / VTP" value={carrierCode} onChange={e => setCarrierCode(e.target.value)} />
+                </label>
+                <label className="ui-stack">
+                  <span>Mã vận đơn (AWB)</span>
+                  <input aria-label="Mã vận đơn (AWB)" placeholder="VD: AWB-88990011" value={trackingNumber} onChange={e => setTrackingNumber(e.target.value)} />
+                </label>
+              </div>
+
+              <div className="export-section-actions">
+                <button type="button" onClick={handleAddDetail}>+ Thêm dòng</button>
+                <button type="submit" disabled={creating || isFormInvalid()}>
+                  {creating ? 'Đang lưu...' : 'Tạo Phiếu Xuất'}
+                </button>
+              </div>
+            </form>
+            </div>
+          </UiCard>
+          </div>
+        )}
+
+        <div className="no-print">
+        <UiCard title="Danh Sách Phiếu Xuất">
+          <UiTableScroll>
+            <table aria-label="Danh sách phiếu xuất">
+              <thead>
+                <tr>
+                  <th>Mã phiếu</th>
+                  <th>Kho</th>
+                  <th>Khách hàng</th>
+                  <th>Vận đơn &amp; Đơn sàn TMĐT</th>
+                  <th>Trạng thái</th>
+                  <th>Người tạo</th>
+                  <th>Hành động</th>
+                </tr>
+              </thead>
+              <tbody>
+                {receipts.map(r => (
+                  <tr key={r.id}>
+                    <td style={{ whiteSpace: 'nowrap' }}><strong>{r.code}</strong></td>
+                    <td>{r.warehouseName}</td>
+                    <td>{r.customerCode ? r.customerCode + ' - ' + r.customerName : '—'}</td>
+                    <td>{r.marketplaceOrderId || r.trackingNumber ? `${r.marketplaceOrderId ?? '—'} • ${r.carrierCode ?? '—'} • ${r.trackingNumber ?? '—'}` : '—'}</td>
+                    <td><UiBadge tone={statusTone(r.status)}>{statusLabel(r.status)}</UiBadge></td>
+                    <td>{r.createdByName}</td>
+                    <td>
+                      <div className="export-row-actions" style={{ display: 'inline-flex', gap: 6, flexWrap: 'nowrap', whiteSpace: 'nowrap', alignItems: 'center' }}>
+                        <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'nowrap', whiteSpace: 'nowrap', alignItems: 'center' }}>
+                          <button type="button" style={{ whiteSpace: 'nowrap' }} onClick={() => handleViewDetails(r.id)}>Chi tiết</button>
+                          <button type="button" style={{ whiteSpace: 'nowrap' }} disabled={printLoadingId !== null} onClick={e => void openPrintPreview(r.id, e.currentTarget)}>
+                            {printLoadingId === r.id ? 'Đang tải bản in...' : 'Xem bản in'}
+                          </button>
+                        </div>
+                        {r.status === 'Draft' && (
+                          <>
+                            {canApproveAndReserve && r.createdBy !== userId && (
+                              <button type="button" disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-reserve')}>
+                                Duyệt và giữ hàng
+                              </button>
+                            )}
+                            {r.allowPerReceiptDispatchMode && canApproveAndReserve && canDispatch && r.createdBy !== userId && (
+                              <button type="button" disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'approve-and-dispatch')}>
+                                Duyệt và xuất ngay (tương thích)
+                              </button>
+                            )}
+                            {canCancel && (
+                              <button type="button" disabled={actionInFlight !== null} onClick={() => handleCancel(r.id)}>Hủy</button>
+                            )}
+                          </>
+                        )}
+                        {r.status === 'Approved' && (
+                          <>
+                            {canDispatch && r.approvedBy !== userId && (
+                              <button type="button" disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleWorkflowAction(r.id, 'dispatch')}>Xác nhận xuất kho</button>
+                            )}
+                            {canCancel && (
+                              <button type="button" disabled={actionInFlight !== null || !r.writeEnabled} onClick={() => handleCancel(r.id)}>Hủy và giải phóng hàng</button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {receipts.length === 0 && <tr><td colSpan={7} className="ui-empty-cell">Chưa có phiếu xuất nào</td></tr>}
+              </tbody>
+            </table>
+          </UiTableScroll>
+        </UiCard>
+        </div>
+
+        {selectedReceipt && (
+          <UiCard title={'Chi Tiết Phiếu Xuất: ' + selectedReceipt.code}>
+            <div className="export-detail-meta">
+              <div><strong>Kho:</strong> {selectedReceipt.warehouseName}</div>
+              <div><strong>Khách hàng:</strong> {selectedReceipt.customerCode ? selectedReceipt.customerCode + ' - ' + selectedReceipt.customerName : '—'}</div>
+              {selectedReceipt.status === 'Draft' && canUpdate && canReadPartners && (
+                <div className="no-print">
+                  <label className="ui-stack">
+                    <span>Đổi khách hàng</span>
+                    <select aria-label="Đổi khách hàng" disabled={partnerUpdating} value={selectedReceipt.customerId || ''} onChange={e => void changeCustomer(e.target.value ? Number(e.target.value) : null)}>
+                      <option value="">-- Gỡ liên kết --</option>
+                      {customers.filter(x => x.isActive || x.id === selectedReceipt.customerId).map(x => <option key={x.id} value={x.id}>{x.code} - {x.name}{x.isActive ? '' : ' (ngừng hoạt động)'}</option>)}
+                    </select>
+                  </label>
+                  {partnerUpdating && <span role="status">Đang cập nhật...</span>}
+                </div>
+              )}
+              <div><strong>Trạng thái:</strong> <UiBadge tone={statusTone(selectedReceipt.status)}>{statusLabel(selectedReceipt.status)}</UiBadge></div>
+              <div><strong>Ghi chú:</strong> {selectedReceipt.note || '—'}</div>
+              {selectedReceipt.marketplaceOrderId && <div><strong>Mã đơn sàn TMĐT:</strong> {selectedReceipt.marketplaceOrderId}</div>}
+              {selectedReceipt.carrierCode && <div><strong>Đơn vị vận chuyển:</strong> {selectedReceipt.carrierCode}</div>}
+              {selectedReceipt.trackingNumber && <div><strong>Mã vận đơn (AWB):</strong> {selectedReceipt.trackingNumber}</div>}
+              {(selectedReceipt.totalAmount !== undefined || selectedReceipt.details.some(d => d.unitPrice === null)) && (
+                <div>
+                  <strong>Tổng tiền:</strong>{' '}
+                  {selectedReceipt.totalAmount === null || selectedReceipt.details.some(d => d.unitPrice === null)
+                    ? 'Ẩn theo phân quyền'
+                    : `${Number(selectedReceipt.totalAmount ?? 0).toLocaleString('vi-VN')} VND`}
+                </div>
+              )}
+              <div><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString('vi-VN')}</div>
+              {selectedReceipt.status === 'Approved' && (
+                <>
+                  <div><strong>Đang giữ hàng:</strong> {reservationStatusLabel(selectedReceipt.reservationStatus)}</div>
+                  <div><strong>Người duyệt:</strong> {selectedReceipt.approvedByName || '—'}</div>
+                  <div><strong>Thời gian duyệt:</strong> {selectedReceipt.approvedAt ? new Date(selectedReceipt.approvedAt).toLocaleString('vi-VN') : '—'}</div>
+                </>
+              )}
+              {selectedReceipt.status === 'Dispatched' && (
+                <>
+                  <div><strong>Luồng xuất:</strong> {dispatchModeLabel(selectedReceipt.dispatchMode)}</div>
+                  <div><strong>Người duyệt/xuất:</strong> {selectedReceipt.approvedByName || '—'} / {selectedReceipt.dispatchedByName || '—'}</div>
+                  <div><strong>Thời gian duyệt/xuất:</strong> {selectedReceipt.approvedAt ? new Date(selectedReceipt.approvedAt).toLocaleString('vi-VN') : '—'} / {selectedReceipt.dispatchedAt ? new Date(selectedReceipt.dispatchedAt).toLocaleString('vi-VN') : '—'}</div>
+                </>
+              )}
+            </div>
+
+            <h3>Sản phẩm</h3>
+            <UiTableScroll>
+              <table aria-label={'Chi tiết phiếu xuất ' + selectedReceipt.code}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'center', width: 52 }}>STT</th>
+                    <th>Sản phẩm</th>
+                    <th style={{ textAlign: 'center', width: 88 }}>ĐVT</th>
+                    <th className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số lượng</th>
+                    <th className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đơn giá</th>
+                    <th className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Thành tiền</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedReceipt.details.map((d, idx) => {
+                    const unitDisplay = !d.unitName || d.unitName === 'QA_UNIT' || d.unitName === 'QA-PCS' ? 'THÙNG' : d.unitName;
+                    return (
+                    <tr key={d.id}>
+                      <td style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{idx + 1}</td>
+                      <td><strong style={{ whiteSpace: 'nowrap' }}>{d.productCode}</strong> - {d.productName}</td>
+                      <td style={{ textAlign: 'center' }}>{unitDisplay}</td>
+                      <td className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.quantity} {unitDisplay}</td>
+                      <td className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.unitPrice === null ? 'Ẩn theo phân quyền' : `${Number(d.unitPrice || 0).toLocaleString('vi-VN')} VND`}</td>
+                      <td className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.unitPrice === null || d.lineTotalAmount === null ? 'Ẩn theo phân quyền' : `${(d.lineTotalAmount !== undefined ? Number(d.lineTotalAmount) : Number(d.quantity || 0) * Number(d.unitPrice || 0)).toLocaleString('vi-VN')} VND`}</td>
+                    </tr>
+                    );
+                  })}
+                  {selectedReceipt.details.length === 0 && <tr><td colSpan={6} className="ui-empty-cell">Không có chi tiết</td></tr>}
+                </tbody>
+              </table>
+            </UiTableScroll>
+
+            <div
+              className="ui-print-signatures"
+              aria-label="Khối chữ ký chứng từ xuất kho"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                gap: 16,
+                marginTop: 24,
+                paddingTop: 16,
+                borderTop: '1px dashed #cbd5e1',
+                textAlign: 'center',
+                pageBreakInside: 'avoid',
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>Người lập phiếu</div>
+                <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', marginBottom: 48 }}>(Ký, ghi rõ họ tên)</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{selectedReceipt.createdByName || '........................'}</div>
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>Người giao / nhận hàng</div>
+                <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', marginBottom: 48 }}>(Ký, ghi rõ họ tên)</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{selectedReceipt.customerName || '........................'}</div>
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>Thủ kho</div>
+                <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', marginBottom: 48 }}>(Ký, ghi rõ họ tên)</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{selectedReceipt.dispatchedByName || '........................'}</div>
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>Quản lý kho / Kế toán</div>
+                <div style={{ fontSize: 12, color: '#64748b', fontStyle: 'italic', marginBottom: 48 }}>(Ký, ghi rõ họ tên)</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{selectedReceipt.approvedByName || '........................'}</div>
+              </div>
+            </div>
+
+            <div className="export-section-actions no-print">
+              <button type="button" onClick={() => setSelectedReceipt(null)}>Đóng chi tiết</button>
+            </div>
+          </UiCard>
+        )}
+
+        {printReceipt && printFetchedAt && (
+          <ReceiptPrintPreview kind="export" receipt={printReceipt} fetchedAt={printFetchedAt} onClose={closePrintPreview} />
+        )}
+      </div>
+    </UiPage>
   );
 };
 

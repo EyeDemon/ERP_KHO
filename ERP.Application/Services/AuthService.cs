@@ -46,11 +46,23 @@ namespace ERP.Application.Services
                 throw new UnauthorizedAccessException("Tên đăng nhập hoặc mật khẩu không đúng");
             }
 
-            var user = await _userRepository.GetByUsernameWithRoleAsync(request.Username.Trim(), cancellationToken);
+            var (normalizedUsername, resolvedTenantId, hasInvalidTenantSpecifier) =
+                TenantContext.ResolveLoginIdentifier(request.Username, request.TenantId, request.TenantCode);
+            if (hasInvalidTenantSpecifier || string.IsNullOrWhiteSpace(normalizedUsername))
+            {
+                throw new UnauthorizedAccessException("Tên đăng nhập hoặc mật khẩu không đúng");
+            }
+
+            var user = resolvedTenantId.HasValue
+                ? await _userRepository.GetByUsernameWithRoleAsync(normalizedUsername, resolvedTenantId.Value, cancellationToken)
+                : await _userRepository.GetByUsernameWithRoleAsync(normalizedUsername, cancellationToken);
             if (user == null || !user.IsActive)
             {
                 throw new UnauthorizedAccessException("Tên đăng nhập hoặc mật khẩu không đúng");
             }
+
+            var effectiveTenantId = user.TenantId > 0 ? user.TenantId : TenantContext.DefaultTenantId;
+            var effectiveTenantCode = TenantContext.FormatTenantCode(effectiveTenantId);
 
             var nowUtc = DateTime.UtcNow;
             if (user.LockoutEnd.HasValue && user.LockoutEnd.Value > nowUtc)
@@ -67,6 +79,7 @@ namespace ERP.Application.Services
                     await _auditLogRepository.AddAsync(new AuditLog
                     {
                         UserId = user.Id,
+                        TenantId = effectiveTenantId,
                         Action = "Authentication.AccountLocked",
                         EntityName = "User",
                         EntityId = user.Id,
@@ -82,14 +95,29 @@ namespace ERP.Application.Services
 
             if (_sessionService is null)
             {
-                return new LoginResponseDto { Token = _tokenService.GenerateToken(user), Username = user.Username, Role = user.Role?.RoleName ?? string.Empty, UserId = user.Id };
+                return new LoginResponseDto
+                {
+                    Token = _tokenService.GenerateToken(user),
+                    Username = user.Username,
+                    Role = user.Role?.RoleName ?? string.Empty,
+                    UserId = user.Id,
+                    TenantId = effectiveTenantId,
+                    TenantCode = effectiveTenantCode
+                };
             }
 
             var tokens = await _sessionService.CreateAsync(user, context, cancellationToken);
 
             if (_auditLogRepository is not null && _unitOfWork is not null)
             {
-                await _auditLogRepository.AddAsync(new AuditLog { UserId = user.Id, Action = "Authentication.LoginSucceeded", EntityName = "UserSession", Timestamp = nowUtc });
+                await _auditLogRepository.AddAsync(new AuditLog
+                {
+                    UserId = user.Id,
+                    TenantId = effectiveTenantId,
+                    Action = "Authentication.LoginSucceeded",
+                    EntityName = "UserSession",
+                    Timestamp = nowUtc
+                });
                 await _unitOfWork.SaveChangesAsync();
             }
 
@@ -101,7 +129,9 @@ namespace ERP.Application.Services
                 RefreshTokenExpiresAtUtc = tokens.RefreshTokenExpiresAtUtc,
                 Username = user.Username,
                 Role = user.Role?.RoleName ?? string.Empty,
-                UserId = user.Id
+                UserId = user.Id,
+                TenantId = effectiveTenantId,
+                TenantCode = effectiveTenantCode
             };
         }
 

@@ -19,6 +19,11 @@ namespace ERP.Application.Services
         private readonly IAuditLogRepository _auditLogRepository;
         private readonly IWarehouseAuthorizationService? _warehouseAuthorization;
         private readonly ICurrentUser? _currentUser;
+        private readonly IReceiptPutawayIntegration? _putaway;
+        private readonly IReceiptInboundPlanningIntegration? _inboundPlanning;
+        private readonly IReceiptInventoryIdentityService? _inventoryIdentity;
+        private readonly IUserRepository? _permissionUsers;
+        private readonly IPartnerDebtService? _partnerDebt;
 
         internal ImportReceiptService(IImportReceiptRepository importReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IWarehouseRepository warehouseRepository, IProductRepository productRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository)
         {
@@ -40,7 +45,8 @@ namespace ERP.Application.Services
             IUnitOfWork unitOfWork,
             IAuditLogRepository auditLogRepository,
             IWarehouseAuthorizationService warehouseAuthorization,
-            ICurrentUser currentUser)
+            ICurrentUser currentUser,
+            IUserRepository permissionUsers)
         {
             _importReceiptRepository = importReceiptRepository;
             _inventoryStockRepository = inventoryStockRepository;
@@ -51,7 +57,49 @@ namespace ERP.Application.Services
             _auditLogRepository = auditLogRepository;
             _warehouseAuthorization = warehouseAuthorization;
             _currentUser = currentUser;
+            _permissionUsers = permissionUsers;
         }
+
+        public ImportReceiptService(IImportReceiptRepository importReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IWarehouseRepository warehouseRepository, IProductRepository productRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository, IWarehouseAuthorizationService warehouseAuthorization, ICurrentUser currentUser, IUserRepository permissionUsers, IReceiptPutawayIntegration putaway)
+            : this(importReceiptRepository, inventoryStockRepository, inventoryTransactionRepository, warehouseRepository, productRepository, unitOfWork, auditLogRepository, warehouseAuthorization, currentUser, permissionUsers) => _putaway = putaway;
+
+        public ImportReceiptService(IImportReceiptRepository importReceiptRepository, IInventoryStockRepository inventoryStockRepository, IInventoryTransactionRepository inventoryTransactionRepository, IWarehouseRepository warehouseRepository, IProductRepository productRepository, IUnitOfWork unitOfWork, IAuditLogRepository auditLogRepository, IWarehouseAuthorizationService warehouseAuthorization, ICurrentUser currentUser, IUserRepository permissionUsers, IReceiptPutawayIntegration putaway, IReceiptInboundPlanningIntegration inboundPlanning)
+            : this(importReceiptRepository, inventoryStockRepository, inventoryTransactionRepository, warehouseRepository, productRepository, unitOfWork, auditLogRepository, warehouseAuthorization, currentUser, permissionUsers, putaway) => _inboundPlanning = inboundPlanning;
+
+        public ImportReceiptService(
+            IImportReceiptRepository importReceiptRepository,
+            IInventoryStockRepository inventoryStockRepository,
+            IInventoryTransactionRepository inventoryTransactionRepository,
+            IWarehouseRepository warehouseRepository,
+            IProductRepository productRepository,
+            IUnitOfWork unitOfWork,
+            IAuditLogRepository auditLogRepository,
+            IWarehouseAuthorizationService warehouseAuthorization,
+            ICurrentUser currentUser,
+            IUserRepository permissionUsers,
+            IReceiptPutawayIntegration putaway,
+            IReceiptInboundPlanningIntegration inboundPlanning,
+            IReceiptInventoryIdentityService inventoryIdentity)
+            : this(importReceiptRepository, inventoryStockRepository, inventoryTransactionRepository, warehouseRepository, productRepository, unitOfWork, auditLogRepository, warehouseAuthorization, currentUser, permissionUsers, putaway, inboundPlanning)
+            => _inventoryIdentity = inventoryIdentity;
+
+        public ImportReceiptService(
+            IImportReceiptRepository importReceiptRepository,
+            IInventoryStockRepository inventoryStockRepository,
+            IInventoryTransactionRepository inventoryTransactionRepository,
+            IWarehouseRepository warehouseRepository,
+            IProductRepository productRepository,
+            IUnitOfWork unitOfWork,
+            IAuditLogRepository auditLogRepository,
+            IWarehouseAuthorizationService warehouseAuthorization,
+            ICurrentUser currentUser,
+            IUserRepository permissionUsers,
+            IReceiptPutawayIntegration putaway,
+            IReceiptInboundPlanningIntegration inboundPlanning,
+            IReceiptInventoryIdentityService inventoryIdentity,
+            IPartnerDebtService partnerDebt)
+            : this(importReceiptRepository, inventoryStockRepository, inventoryTransactionRepository, warehouseRepository, productRepository, unitOfWork, auditLogRepository, warehouseAuthorization, currentUser, permissionUsers, putaway, inboundPlanning, inventoryIdentity)
+            => _partnerDebt = partnerDebt;
 
         public async Task<ImportReceiptDto> CreateAsync(CreateImportReceiptDto dto, int userId)
         {
@@ -62,7 +110,9 @@ namespace ERP.Application.Services
             if (dto.WarehouseId <= 0)
                 throw new BusinessRuleException("Kho nhập không hợp lệ");
 
-            if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(dto.WarehouseId);
+            if (_warehouseAuthorization is not null)
+                await (_warehouseAuthorization.EnsureWarehouseCommandAccessAsync(dto.WarehouseId)
+                    ?? _warehouseAuthorization.EnsureWarehouseAccessAsync(dto.WarehouseId));
 
             var warehouse = await _warehouseRepository.GetByIdAsync(dto.WarehouseId);
             if (warehouse == null)
@@ -70,6 +120,9 @@ namespace ERP.Application.Services
 
             if (dto.Details == null || !dto.Details.Any())
                 throw new BusinessRuleException("Phiếu nhập phải có ít nhất 1 sản phẩm");
+
+            if (dto.Details.GroupBy(x => x.ProductId).Any(x => x.Count() > 1))
+                throw new BusinessRuleException("Một sản phẩm không được lặp nhiều dòng.");
 
             if (await _importReceiptRepository.ExistsByCodeAsync(dto.Code))
                 throw new BusinessRuleException($"Mã phiếu nhập '{dto.Code}' đã tồn tại");
@@ -80,6 +133,7 @@ namespace ERP.Application.Services
                 WarehouseId = dto.WarehouseId,
                 Status = ReceiptStatus.Draft,
                 Note = dto.Note,
+                SupplierId = dto.SupplierId,
                 CreatedBy = userId,
                 CreatedAt = DateTime.UtcNow,
                 Details = new List<ImportReceiptDetail>()
@@ -94,24 +148,68 @@ namespace ERP.Application.Services
                 if (product == null)
                     throw new BusinessRuleException($"Không tìm thấy sản phẩm với ID {detailDto.ProductId}");
 
-                if (detailDto.Quantity <= 0)
-                    throw new BusinessRuleException($"Số lượng nhập của sản phẩm ID {detailDto.ProductId} phải lớn hơn 0");
+                if (!product.IsActive)
+                    throw new BusinessRuleException($"Sản phẩm ID {detailDto.ProductId} không hoạt động");
+                if (detailDto.ExpectedQuantity <= 0)
+                    throw new BusinessRuleException($"Số lượng dự kiến của sản phẩm ID {detailDto.ProductId} phải lớn hơn 0");
+                var sourceBacked = detailDto.AsnLineId.HasValue || detailDto.PurchaseOrderLineId.HasValue;
+                var operationUnitId = sourceBacked ? product.UnitId : detailDto.OperationUnitId > 0 ? detailDto.OperationUnitId : product.UnitId;
+
+                var conversion = operationUnitId == product.UnitId
+                    ? new { Unit = product.Unit, Factor = 1m, Version = 1 }
+                    : product.Uoms.Where(x => x.IsActive && x.EffectiveFromUtc <= DateTime.UtcNow && x.UnitId == operationUnitId)
+                        .OrderByDescending(x => x.Version)
+                        .Select(x => new { x.Unit, Factor = x.ConversionFactor, Version = x.Version })
+                        .FirstOrDefault();
+                if (conversion is null || conversion.Factor <= 0)
+                    throw new BusinessRuleException($"UOM thao tác không hợp lệ cho sản phẩm ID {detailDto.ProductId}");
+                if (!sourceBacked) EnsurePrecision(detailDto.ExpectedQuantity, conversion.Unit.DecimalPlaces, "Số lượng dự kiến");
+                var baseExpected = detailDto.ExpectedQuantity * conversion.Factor;
+                if (!sourceBacked) EnsurePrecision(baseExpected, product.Unit.DecimalPlaces, "Số lượng Base UOM");
 
                 if (detailDto.UnitPrice < 0)
                     throw new BusinessRuleException($"Đơn giá của sản phẩm ID {detailDto.ProductId} không được âm");
+                if (detailDto.TaxPercent is < 0 or > 100)
+                    throw new BusinessRuleException($"Thuế suất của sản phẩm ID {detailDto.ProductId} phải từ 0 đến 100%");
+
+                var now = DateTime.UtcNow;
+                var policy = product.QcPolicies
+                    .Where(x => x.IsActive && x.EffectiveFromUtc <= now && (x.SupplierId == dto.SupplierId || x.SupplierId == null))
+                    .OrderByDescending(x => x.SupplierId == dto.SupplierId && dto.SupplierId.HasValue)
+                    .ThenByDescending(x => x.Version)
+                    .FirstOrDefault();
 
                 receipt.Details.Add(new ImportReceiptDetail
                 {
                     ProductId = detailDto.ProductId,
-                    Quantity = detailDto.Quantity,
+                    Quantity = detailDto.ExpectedQuantity,
+                    ExpectedQuantity = detailDto.ExpectedQuantity,
+                    OperationUnitId = conversion.Unit.Id,
+                    OperationUnitCodeSnapshot = conversion.Unit.Code,
+                    OperationUnitDecimalPlaces = conversion.Unit.DecimalPlaces,
+                    BaseUnitId = product.UnitId,
+                    BaseUnitCodeSnapshot = product.Unit.Code,
+                    BaseUnitDecimalPlaces = product.Unit.DecimalPlaces,
+                    ConversionFactor = conversion.Factor,
+                    ConversionVersion = conversion.Version,
+                    BaseExpectedQuantity = baseExpected,
                     UnitPrice = detailDto.UnitPrice,
-                    Note = detailDto.Note
+                    TaxPercent = detailDto.TaxPercent,
+                    Note = detailDto.Note,
+                    RequiresQc = policy?.RequiresQc == true,
+                    QcPolicyId = policy?.Id,
+                    QcPolicyVersion = policy?.Version,
+                    QcPolicySourceSnapshot = policy is null ? "None" : policy.SupplierId.HasValue ? "ProductSupplier" : "Product",
+                    QcPolicyEffectiveAtUtc = policy?.EffectiveFromUtc,
+                    QcRuleSnapshot = policy?.Rule,
+                    QcState = policy?.RequiresQc == true ? ReceiptLineQcState.QcPending : ReceiptLineQcState.NoQcRequired
                 });
             }
 
             await _unitOfWork.BeginTransactionAsync();
             try
             {
+                if (_inboundPlanning is not null) await _inboundPlanning.AttachSourceAsync(receipt, dto);
                 await _importReceiptRepository.AddAsync(receipt);
                 
                 await _auditLogRepository.AddAsync(new AuditLog
@@ -140,38 +238,152 @@ namespace ERP.Application.Services
             }
         }
 
+        private static string? NormalizeActorDisplayName(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return value?.Trim();
+            var trimmed = value.Trim();
+            return trimmed.ToUpperInvariant() switch
+            {
+                "QA MANAGER WH01" or "QA_MANAGER_WH01" => "Quản lý Kho WH01",
+                "QA STAFF WH01" or "QA_STAFF_WH01" => "Nhân viên Kho WH01",
+                "QA SUPERVISOR WH01" or "QA_SUPERVISOR_WH01" or "QA VIEWER WH01" or "QA_VIEWER_WH01" => "Giám sát Kho WH01",
+                "QA SYSTEM ADMIN" or "QA ADMIN" or "QA_ADMIN" => "Quản trị viên Hệ thống",
+                "QA_ADMIN_LOCAL" or "QA ADMIN LOCAL" => "Quản trị viên Nội bộ",
+                _ => trimmed
+            };
+        }
+
+        private static string NormalizeUomCode(string? code, string? fallback)
+        {
+            var raw = !string.IsNullOrWhiteSpace(code) ? code.Trim() : (fallback?.Trim() ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(raw) ||
+                string.Equals(raw, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(raw, "QA-PCS", StringComparison.OrdinalIgnoreCase))
+                return "THÙNG";
+            return raw;
+        }
+
         private ImportReceiptDto MapToDto(ImportReceipt receipt)
         {
-            return new ImportReceiptDto
+            var canReadCost = _currentUser is null || _currentUser.IsGlobalAdmin || _currentUser.Role is "Admin" or "Manager" or "Accountant" || _currentUser.HasPermission("inventory.cost.read");
+            var details = receipt.Details.Select(d =>
             {
-                Id = receipt.Id,
-                Code = receipt.Code,
-                WarehouseId = receipt.WarehouseId,
-                WarehouseName = receipt.Warehouse?.Name,
-                Status = receipt.Status.ToString(),
-                Note = receipt.Note,
-                CreatedBy = receipt.CreatedBy,
-                CreatedByName = receipt.CreatedByUser?.FullName ?? receipt.CreatedByUser?.Username,
-                ApprovedBy = receipt.ApprovedBy,
-                ApprovedByName = receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username,
-                CreatedAt = receipt.CreatedAt,
-                ApprovedAt = receipt.ApprovedAt,
-                Details = receipt.Details.Select(d => new ImportReceiptDetailDto
+                var factor = d.ConversionFactor > 0 ? d.ConversionFactor : 1m;
+                var billableQty = d.AcceptedQuantity > 0
+                    ? d.AcceptedQuantity
+                    : (d.BaseAcceptedQuantity > 0
+                        ? d.BaseAcceptedQuantity / factor
+                        : (d.ReceivedQuantity > 0 ? d.ReceivedQuantity : (d.ExpectedQuantity > 0 ? d.ExpectedQuantity : d.Quantity)));
+                var lineSub = canReadCost ? decimal.Round(billableQty * d.UnitPrice, 2, MidpointRounding.AwayFromZero) : 0m;
+                var lineTax = canReadCost ? decimal.Round(lineSub * (d.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero) : 0m;
+                var fallbackUom = d.Product?.Unit?.Code;
+                var baseUom = NormalizeUomCode(d.BaseUnitCodeSnapshot, fallbackUom);
+                var opUom = NormalizeUomCode(d.OperationUnitCodeSnapshot, baseUom);
+                if (baseUom == "THÙNG" || opUom == "THÙNG" || ((d.OperationUnitId == d.BaseUnitId || d.OperationUnitId <= 0 || d.BaseUnitId <= 0) && factor <= 1m) || string.Equals(opUom, baseUom, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (baseUom == "THÙNG" || opUom == "THÙNG")
+                        baseUom = opUom = "THÙNG";
+                    else
+                        opUom = baseUom;
+                }
+                var rawUnitName = (!string.IsNullOrWhiteSpace(d.OperationUnitCodeSnapshot) ? d.OperationUnitCodeSnapshot : d.Product?.Unit?.Name)?.Trim();
+                var unitName = string.IsNullOrWhiteSpace(rawUnitName) ||
+                               opUom == "THÙNG" ||
+                               string.Equals(rawUnitName, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(rawUnitName, "QA-PCS", StringComparison.OrdinalIgnoreCase)
+                    ? "THÙNG"
+                    : rawUnitName;
+                return new ImportReceiptDetailDto
                 {
                     Id = d.Id,
                     ProductId = d.ProductId,
-                    ProductCode = d.Product?.Code,
-                    ProductName = d.Product?.Name,
-                    Quantity = d.Quantity,
-                    UnitPrice = d.UnitPrice,
-                    Note = d.Note
-                }).ToList()
+                    PurchaseOrderLineId = d.PurchaseOrderLineId,
+                    AsnLineId = d.AsnLineId,
+                    ProductCode = d.Product?.Code?.Trim(),
+                    ProductName = d.Product?.Name?.Trim(),
+                    UnitName = unitName,
+                    OperationUnitId = d.OperationUnitId > 0 ? d.OperationUnitId : d.Product?.UnitId ?? 0,
+                    OperationUnitCode = opUom,
+                    OperationUnitDecimalPlaces = d.OperationUnitDecimalPlaces,
+                    BaseUnitId = d.BaseUnitId > 0 ? d.BaseUnitId : d.Product?.UnitId ?? 0,
+                    BaseUnitCode = baseUom,
+                    BaseUnitDecimalPlaces = d.BaseUnitDecimalPlaces,
+                    ConversionFactor = d.ConversionFactor > 0 ? d.ConversionFactor : 1,
+                    ConversionVersion = d.ConversionVersion > 0 ? d.ConversionVersion : 1,
+                    ExpectedQuantity = d.ExpectedQuantity > 0 ? d.ExpectedQuantity : d.Quantity,
+                    ReceivedQuantity = d.ReceivedQuantity,
+                    AcceptedQuantity = d.AcceptedQuantity,
+                    DamagedQuantity = d.DamagedQuantity,
+                    RejectedQuantity = d.RejectedQuantity,
+                    PostedQuantity = d.PostedQuantity,
+                    BaseExpectedQuantity = d.BaseExpectedQuantity > 0 ? d.BaseExpectedQuantity : d.Quantity,
+                    BaseReceivedQuantity = d.BaseReceivedQuantity,
+                    BaseAcceptedQuantity = d.BaseAcceptedQuantity,
+                    BaseDamagedQuantity = d.BaseDamagedQuantity,
+                    BaseRejectedQuantity = d.BaseRejectedQuantity,
+                    BasePostedQuantity = d.BasePostedQuantity,
+                    TrackingType = d.Product?.TrackingType.ToString() ?? "None",
+                    ExpiryControl = d.Product?.ExpiryControl == true,
+                    ShelfLifeDays = d.Product?.ShelfLifeDays,
+                    ObservedQuantity = d.ObservedQuantity,
+                    DoorRejectedQuantity = d.DoorRejectedQuantity,
+                    FinalReceivedQuantity = d.FinalReceivedQuantity > 0 ? d.FinalReceivedQuantity : d.ReceivedQuantity,
+                    BaseFinalReceivedQuantity = d.BaseFinalReceivedQuantity > 0 ? d.BaseFinalReceivedQuantity : d.BaseReceivedQuantity,
+                    UnitPrice = canReadCost ? d.UnitPrice : null,
+                    TaxPercent = d.TaxPercent,
+                    LineSubTotal = canReadCost ? lineSub : null,
+                    LineTaxAmount = canReadCost ? lineTax : null,
+                    LineTotal = canReadCost ? lineSub + lineTax : null,
+                    Note = d.Note?.Trim(),
+                    RequiresQc = d.RequiresQc,
+                    QcState = d.QcState.ToString(),
+                    QcPolicyId = d.QcPolicyId,
+                    QcPolicyVersion = d.QcPolicyVersion,
+                    QcPolicySource = d.QcPolicySourceSnapshot?.Trim(),
+                    QcPolicyEffectiveAtUtc = d.QcPolicyEffectiveAtUtc,
+                    QcDispositionReasonCode = d.QcDispositionReasonCode?.Trim(),
+                    QcDispositionNote = d.QcDispositionNote?.Trim()
+                };
+            }).ToList();
+
+            var subTotal = details.Sum(x => x.LineSubTotal ?? 0m);
+            var taxAmount = details.Sum(x => x.LineTaxAmount ?? 0m);
+
+            return new ImportReceiptDto
+            {
+                Id = receipt.Id,
+                Code = receipt.Code.Trim(),
+                WarehouseId = receipt.WarehouseId,
+                WarehouseCode = receipt.Warehouse?.Code?.Trim(),
+                WarehouseName = receipt.Warehouse?.Name?.Trim(),
+                Status = receipt.Status.ToString(),
+                Note = receipt.Note?.Trim(),
+                CreatedBy = receipt.CreatedBy,
+                CreatedByName = NormalizeActorDisplayName(receipt.CreatedByUser?.FullName ?? receipt.CreatedByUser?.Username),
+                ApprovedBy = receipt.ApprovedBy,
+                ApprovedByName = NormalizeActorDisplayName(receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username),
+                CreatedAt = receipt.CreatedAt,
+                ApprovedAt = receipt.ApprovedAt,
+                SupplierId = receipt.SupplierId,
+                PurchaseOrderId = receipt.PurchaseOrderId,
+                PurchaseOrderCode = receipt.PurchaseOrder?.Code?.Trim(),
+                AsnId = receipt.AsnId,
+                AsnCode = receipt.Asn?.Code?.Trim(),
+                SupplierCode = (!string.IsNullOrWhiteSpace(receipt.SupplierCodeSnapshot) ? receipt.SupplierCodeSnapshot : receipt.Supplier?.Code)?.Trim(),
+                SupplierName = (!string.IsNullOrWhiteSpace(receipt.SupplierNameSnapshot) ? receipt.SupplierNameSnapshot : receipt.Supplier?.Name)?.Trim(),
+                RequiresQc = receipt.Details.Any(x => x.RequiresQc),
+                SubTotalAmount = canReadCost ? subTotal : null,
+                TaxAmount = canReadCost ? taxAmount : null,
+                TotalAmount = canReadCost ? subTotal + taxAmount : null,
+                RowVersion = receipt.RowVersion is { Length: > 0 } ? Convert.ToBase64String(receipt.RowVersion) : null,
+                Details = details
             };
         }
 
         public async Task ApproveImportReceiptAsync(int id, int approvedByUserId)
         {
             if (_currentUser is not null) approvedByUserId = _currentUser.UserId;
+            await EnsurePermissionAsync(approvedByUserId, "receipt.complete");
             try
             {
                 await _unitOfWork.BeginTransactionAsync();
@@ -181,50 +393,22 @@ namespace ERP.Application.Services
 
                 Security.ApprovalSafetyGuard.EnsureDifferentChecker(receipt.CreatedBy, approvedByUserId);
 
-                if (receipt.Status != ReceiptStatus.Draft)
-                    throw new BusinessRuleException("Chỉ có thể duyệt phiếu ở trạng thái nháp");
+                if (receipt.Status != ReceiptStatus.Received && receipt.Status != ReceiptStatus.QcCompleted)
+                    throw Conflict("Chỉ có thể duyệt phiếu đã hoàn tất nhận hàng");
 
-                receipt.Status = ReceiptStatus.Approved;
+                var previousStatus = receipt.Status;
+                if (previousStatus == ReceiptStatus.QcCompleted)
+                    await EnsurePermissionAsync(approvedByUserId, "quality_disposition.approve");
+                if (_inboundPlanning is not null)
+                    await _inboundPlanning.ValidatePostAsync(receipt);
+                if (_inventoryIdentity is not null)
+                    await _inventoryIdentity.ValidateReadyToPostAsync(receipt.Id);
+                receipt.SupplierCodeSnapshot = receipt.Supplier?.Code;
+                receipt.SupplierNameSnapshot = receipt.Supplier?.Name;
+
+                receipt.Status = ReceiptStatus.ReadyToPost;
                 receipt.ApprovedBy = approvedByUserId;
                 receipt.ApprovedAt = DateTime.UtcNow;
-
-                foreach (var detail in receipt.Details)
-                {
-                    // Update Stock
-                    var stock = await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, receipt.WarehouseId);
-                    if (stock == null)
-                    {
-                        stock = new InventoryStock
-                        {
-                            ProductId = detail.ProductId,
-                            WarehouseId = receipt.WarehouseId,
-                            Quantity = detail.Quantity,
-                            LastUpdated = DateTime.UtcNow
-                        };
-                        await _inventoryStockRepository.AddAsync(stock);
-                    }
-                    else
-                    {
-                        stock.Quantity += detail.Quantity;
-                        stock.LastUpdated = DateTime.UtcNow;
-                        await _inventoryStockRepository.UpdateAsync(stock);
-                    }
-
-                    // Create Transaction
-                    var tx = new InventoryTransaction
-                    {
-                        ProductId = detail.ProductId,
-                        WarehouseId = receipt.WarehouseId,
-                        TransactionType = TransactionType.Import,
-                        Quantity = detail.Quantity,
-                        ReferenceId = receipt.Id,
-                        ReferenceType = "ImportReceipt",
-                        TransactionDate = DateTime.UtcNow,
-                        CreatedBy = approvedByUserId,
-                        Note = detail.Note
-                    };
-                    await _inventoryTransactionRepository.AddAsync(tx);
-                }
 
                 await _importReceiptRepository.UpdateAsync(receipt);
                 
@@ -235,8 +419,8 @@ namespace ERP.Application.Services
                 EntityName = "ImportReceipt",
                 EntityId = receipt.Id,
                 WarehouseId = receipt.WarehouseId,
-                OldValues = $"Status: {ReceiptStatus.Draft}",
-                NewValues = $"Status: {ReceiptStatus.Approved}",
+                OldValues = $"Status: {previousStatus}",
+                NewValues = $"Status: {ReceiptStatus.ReadyToPost}",
                 Result = "Success",
                 Severity = "Information",
                 Timestamp = DateTime.UtcNow
@@ -244,10 +428,10 @@ namespace ERP.Application.Services
                 
                 await _unitOfWork.CommitTransactionAsync();
             }
-            catch (ConcurrencyException)
+            catch (ConcurrencyException ex)
             {
                 await _unitOfWork.RollbackTransactionAsync();
-                throw new BusinessRuleException("Phiếu nhập đang được duyệt bởi một người khác. Vui lòng thử lại.");
+                throw new ConcurrencyException("Phiếu nhập đang được duyệt bởi một người khác. Vui lòng thử lại.", ex);
             }
             catch
             {
@@ -255,34 +439,248 @@ namespace ERP.Application.Services
                 throw;
             }
         }
+
+        public async Task ReceiveAsync(int id, ReceiveImportReceiptDto dto, int receivedByUserId)
+        {
+            if (_currentUser is not null) receivedByUserId = _currentUser.UserId;
+            await _unitOfWork.BeginTransactionAsync();
+            try
+            {
+                var receipt = await _importReceiptRepository.GetByIdWithDetailsAsync(id)
+                    ?? throw new NotFoundException($"Không tìm thấy phiếu nhập id {id}");
+                if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
+                if (receipt.Status != ReceiptStatus.Draft)
+                    throw Conflict("Chỉ có thể hoàn tất nhận hàng cho phiếu nháp");
+                if (receipt.Details.Count == 0 || dto.Lines.Count != receipt.Details.Count || dto.Lines.Select(x => x.LineId).Distinct().Count() != receipt.Details.Count)
+                    throw new BusinessRuleException("Dữ liệu nhận hàng phải bao phủ chính xác tất cả dòng phiếu");
+                foreach (var detail in receipt.Details)
+                {
+                    var line = dto.Lines.SingleOrDefault(x => x.LineId == detail.Id)
+                        ?? throw new BusinessRuleException($"Thiếu dữ liệu nhận cho dòng {detail.Id}");
+                    if (line.ReceivedQuantity <= 0 || line.AcceptedQuantity < 0 || line.DamagedQuantity < 0 || line.RejectedQuantity < 0)
+                        throw new BusinessRuleException($"Số lượng dòng {detail.Id} không hợp lệ");
+                    var expected = detail.ExpectedQuantity > 0 ? detail.ExpectedQuantity : detail.Quantity;
+                    if (line.ReceivedQuantity != expected)
+                        throw Conflict("Số lượng quan sát khác số lượng dự kiến; hãy dùng workflow receiving discrepancy.");
+                    if (!detail.RequiresQc && line.AcceptedQuantity + line.DamagedQuantity + line.RejectedQuantity != line.ReceivedQuantity)
+                        throw new BusinessRuleException($"Tổng chấp nhận, hư hỏng và từ chối phải bằng số lượng nhận ở dòng {detail.Id}");
+                    if (!detail.RequiresQc && (line.DamagedQuantity != 0 || line.RejectedQuantity != 0))
+                        throw new BusinessRuleException("Nhánh no-QC chỉ chấp nhận toàn bộ số lượng nhận");
+                    if (detail.RequiresQc && (line.AcceptedQuantity != 0 || line.DamagedQuantity != 0 || line.RejectedQuantity != 0))
+                        throw new BusinessRuleException("Disposition của dòng yêu cầu QC phải được ghi bằng command QC riêng");
+                    EnsurePrecision(line.ReceivedQuantity, detail.OperationUnitDecimalPlaces, "Số lượng nhận");
+                    var factor = detail.ConversionFactor > 0 ? detail.ConversionFactor : 1;
+                    detail.ReceivedQuantity = line.ReceivedQuantity;
+                    detail.ObservedQuantity = line.ReceivedQuantity;
+                    detail.FinalReceivedQuantity = line.ReceivedQuantity;
+                    detail.AcceptedQuantity = detail.RequiresQc ? 0 : line.AcceptedQuantity;
+                    detail.DamagedQuantity = detail.RequiresQc ? 0 : line.DamagedQuantity;
+                    detail.RejectedQuantity = detail.RequiresQc ? 0 : line.RejectedQuantity;
+                    detail.BaseReceivedQuantity = ConvertToBase(line.ReceivedQuantity, factor, detail);
+                    detail.BaseObservedQuantity = detail.BaseReceivedQuantity;
+                    detail.BaseFinalReceivedQuantity = detail.BaseReceivedQuantity;
+                    detail.BaseAcceptedQuantity = detail.RequiresQc ? 0 : ConvertToBase(line.AcceptedQuantity, factor, detail);
+                    detail.BaseDamagedQuantity = 0;
+                    detail.BaseRejectedQuantity = 0;
+                }
+                receipt.SupplierCodeSnapshot ??= receipt.Supplier?.Code;
+                receipt.SupplierNameSnapshot ??= receipt.Supplier?.Name;
+                receipt.Status = receipt.Details.Any(x => x.RequiresQc) ? ReceiptStatus.QcPending : ReceiptStatus.Received;
+                if (_inboundPlanning is not null) await _inboundPlanning.MarkReceivingAsync(receipt);
+                await _importReceiptRepository.UpdateAsync(receipt);
+                await _auditLogRepository.AddAsync(new AuditLog { UserId = receivedByUserId, Action = "ImportReceipt.Received", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.Draft}", NewValues = $"Status: {receipt.Status}", Result = "Success", Severity = "Information", Timestamp = DateTime.UtcNow });
+                await _unitOfWork.CommitTransactionAsync();
+            }
+            catch { await _unitOfWork.RollbackTransactionAsync(); throw; }
+        }
+
+        public async Task RecordQcDispositionAsync(int id, RecordQcDispositionDto dto, int completedByUserId)
+        {
+            if (_currentUser is not null) completedByUserId = _currentUser.UserId;
+            await EnsurePermissionAsync(completedByUserId, "quality_inspection.execute");
+            await _unitOfWork.BeginTransactionAsync();
+            try
+            {
+                var receipt = await _importReceiptRepository.GetByIdWithDetailsForUpdateAsync(id)
+                    ?? throw new NotFoundException($"Không tìm thấy phiếu nhập id {id}");
+                if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
+                if (receipt.Status != ReceiptStatus.QcPending) throw Conflict("Chỉ có thể ghi disposition khi phiếu đang chờ QC");
+                if (dto.Lines.Count == 0 || dto.Lines.Select(x => x.LineId).Distinct().Count() != dto.Lines.Count)
+                    throw new BusinessRuleException("Danh sách disposition không hợp lệ");
+                foreach (var line in dto.Lines)
+                {
+                    var detail = receipt.Details.SingleOrDefault(x => x.Id == line.LineId && x.RequiresQc)
+                        ?? throw new BusinessRuleException($"Dòng {line.LineId} không thuộc QC của phiếu");
+                    if (detail.QcState != ReceiptLineQcState.QcPending) throw Conflict($"Dòng {line.LineId} đã được disposition");
+                    if (line.AcceptedQuantity < 0 || line.DamagedQuantity < 0 || line.RejectedQuantity < 0 ||
+                        line.AcceptedQuantity + line.DamagedQuantity + line.RejectedQuantity != detail.ReceivedQuantity)
+                        throw new BusinessRuleException($"Accepted + Damaged + Rejected phải bằng Received ở dòng {line.LineId}");
+                    if ((line.DamagedQuantity > 0 || line.RejectedQuantity > 0) && string.IsNullOrWhiteSpace(line.ReasonCode))
+                        throw new BusinessRuleException($"Dòng {line.LineId} cần reason code cho lượng hư hỏng hoặc từ chối");
+                    EnsurePrecision(line.AcceptedQuantity, detail.OperationUnitDecimalPlaces, "Số lượng chấp nhận");
+                    EnsurePrecision(line.DamagedQuantity, detail.OperationUnitDecimalPlaces, "Số lượng hư hỏng");
+                    EnsurePrecision(line.RejectedQuantity, detail.OperationUnitDecimalPlaces, "Số lượng từ chối");
+                    var factor = detail.ConversionFactor > 0 ? detail.ConversionFactor : 1;
+                    detail.AcceptedQuantity = line.AcceptedQuantity;
+                    detail.DamagedQuantity = line.DamagedQuantity;
+                    detail.RejectedQuantity = line.RejectedQuantity;
+                    detail.BaseAcceptedQuantity = ConvertToBase(line.AcceptedQuantity, factor, detail);
+                    detail.BaseDamagedQuantity = ConvertToBase(line.DamagedQuantity, factor, detail);
+                    detail.BaseRejectedQuantity = ConvertToBase(line.RejectedQuantity, factor, detail);
+                    detail.QcDispositionReasonCode = line.ReasonCode?.Trim();
+                    detail.QcDispositionNote = line.Note?.Trim();
+                    detail.QcCompletedBy = completedByUserId;
+                    detail.QcCompletedAt = DateTime.UtcNow;
+                    detail.QcState = ReceiptLineQcState.QcCompleted;
+                }
+                if (receipt.Details.Where(x => x.RequiresQc).All(x => x.QcState == ReceiptLineQcState.QcCompleted))
+                {
+                    await EnsurePermissionAsync(completedByUserId, "quality_inspection.complete");
+                    receipt.Status = ReceiptStatus.QcCompleted;
+                }
+                await _importReceiptRepository.UpdateAsync(receipt);
+                await _auditLogRepository.AddAsync(new AuditLog { UserId = completedByUserId, Action = "ImportReceipt.QcDispositionRecorded", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.QcPending}", NewValues = $"Status: {receipt.Status}", Result = "Success", Severity = "Information", Timestamp = DateTime.UtcNow });
+                await _unitOfWork.CommitTransactionAsync();
+            }
+            catch (ConcurrencyException ex) { try { await _unitOfWork.RollbackTransactionAsync(); } catch { } throw new ConcurrencyException("Disposition đã được cập nhật bởi yêu cầu khác. Vui lòng tải lại.", ex); }
+            catch { await _unitOfWork.RollbackTransactionAsync(); throw; }
+        }
+
+        public async Task<IReadOnlyList<ImportReceiptInventoryIdentityDto>> SetInventoryIdentitiesAsync(
+            int id,
+            SetImportReceiptInventoryIdentitiesDto dto,
+            int updatedByUserId,
+            CancellationToken cancellationToken = default)
+        {
+            if (_inventoryIdentity is null)
+                throw new InvalidOperationException("Receipt inventory identity service is not configured.");
+            if (_currentUser is not null) updatedByUserId = _currentUser.UserId;
+            return await _inventoryIdentity.SetAsync(id, dto, updatedByUserId, cancellationToken);
+        }
+
+        public async Task<IReadOnlyList<ImportReceiptInventoryIdentityDto>> GetInventoryIdentitiesAsync(
+            int id,
+            CancellationToken cancellationToken = default)
+        {
+            if (_inventoryIdentity is null)
+                return Array.Empty<ImportReceiptInventoryIdentityDto>();
+            return await _inventoryIdentity.GetAsync(id, cancellationToken);
+        }
+
+        public async Task PostAsync(int id, int postedByUserId)
+        {
+            if (_currentUser is not null) postedByUserId = _currentUser.UserId;
+            var maxAttempts = _unitOfWork.HasExternalTransaction ? 1 : 4;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                await _unitOfWork.BeginTransactionAsync();
+                try
+                {
+                    var receipt = await _importReceiptRepository.GetByIdWithDetailsAsync(id)
+                        ?? throw new NotFoundException($"Không tìm thấy phiếu nhập id {id}");
+                    if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
+                    Security.ApprovalSafetyGuard.EnsureDifferentChecker(receipt.CreatedBy, postedByUserId);
+                    if (receipt.Status != ReceiptStatus.ReadyToPost)
+                        throw Conflict("Chỉ có thể ghi tồn cho phiếu sẵn sàng post");
+                    if (_inboundPlanning is not null) await _inboundPlanning.ValidatePostAsync(receipt);
+                    if (_inventoryIdentity is not null) await _inventoryIdentity.ValidateReadyToPostAsync(receipt.Id);
+                    int? receivingLocationId = _putaway is null ? null : await _putaway.GetReceivingLocationIdAsync(receipt.WarehouseId);
+                    await _inventoryStockRepository.AcquireAllocationLocksAsync(
+                        receipt.WarehouseId,
+                        receipt.Details.Select(d => d.ProductId));
+                    foreach (var detail in receipt.Details.OrderBy(d => d.ProductId).ThenBy(d => d.Id))
+                    {
+                        var legacyNoQc = !detail.RequiresQc && detail.BaseReceivedQuantity == 0 && detail.BaseAcceptedQuantity > 0;
+                        if (!legacyNoQc && detail.BaseAcceptedQuantity + detail.BaseDamagedQuantity + detail.BaseRejectedQuantity != detail.BaseReceivedQuantity)
+                            throw new BusinessRuleException($"Dòng {detail.Id} chưa có disposition hợp lệ");
+                        await PostBucketAsync(receipt, detail, InventoryStatus.Available, detail.BaseAcceptedQuantity, postedByUserId, receivingLocationId);
+                        await PostBucketAsync(receipt, detail, InventoryStatus.Damaged, detail.BaseDamagedQuantity, postedByUserId, receivingLocationId);
+                        await PostBucketAsync(receipt, detail, InventoryStatus.Rejected, detail.BaseRejectedQuantity, postedByUserId, receivingLocationId);
+                        detail.PostedQuantity = detail.AcceptedQuantity + detail.DamagedQuantity + detail.RejectedQuantity;
+                        detail.BasePostedQuantity = detail.BaseAcceptedQuantity + detail.BaseDamagedQuantity + detail.BaseRejectedQuantity;
+                    }
+                    receipt.Status = ReceiptStatus.Posted;
+                    if (_inboundPlanning is not null) await _inboundPlanning.ApplyPostedStateAsync(receipt, postedByUserId);
+                    if (_putaway is not null) await _putaway.CreateForPostedReceiptAsync(receipt, receivingLocationId!.Value, postedByUserId);
+                    await _importReceiptRepository.UpdateAsync(receipt);
+                    if (_partnerDebt is not null) await _partnerDebt.RecordImportReceiptApDebtAsync(receipt, postedByUserId);
+                    await _auditLogRepository.AddAsync(new AuditLog { UserId = postedByUserId, Action = "ImportReceipt.Posted", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = receipt.WarehouseId, OldValues = $"Status: {ReceiptStatus.ReadyToPost}", NewValues = $"Status: {ReceiptStatus.Posted}", Result = "Success", Severity = "Warning", Timestamp = DateTime.UtcNow });
+                    await _unitOfWork.CommitTransactionAsync();
+                    return;
+                }
+                catch (DeadlockException) when (attempt < maxAttempts)
+                {
+                    try { await _unitOfWork.RollbackTransactionAsync(); } catch { }
+                    await Task.Delay(15 * attempt);
+                }
+                catch (ConcurrencyException ex) { try { await _unitOfWork.RollbackTransactionAsync(); } catch { } throw new ConcurrencyException("Phiếu nhập đã được xử lý bởi yêu cầu khác. Vui lòng tải lại.", ex); }
+                catch { await _unitOfWork.RollbackTransactionAsync(); throw; }
+            }
+        }
+
+        private async Task PostBucketAsync(ImportReceipt receipt, ImportReceiptDetail detail, InventoryStatus status, decimal quantity, int userId, int? locationId)
+        {
+            if (quantity <= 0) return;
+            if (_inventoryIdentity is not null &&
+                await _inventoryIdentity.TryPostTrackedBucketAsync(receipt, detail, status, quantity, userId, locationId))
+                return;
+            var factor = detail.ConversionFactor > 0 ? detail.ConversionFactor : 1m;
+            var baseUnitCost = factor > 0 ? decimal.Round(detail.UnitPrice / factor, 4, MidpointRounding.AwayFromZero) : detail.UnitPrice;
+            var stock = locationId.HasValue ? await _inventoryStockRepository.GetByProductWarehouseStatusAndLocationAsync(detail.ProductId, receipt.WarehouseId, status, locationId.Value) : status == InventoryStatus.Available
+                ? await _inventoryStockRepository.GetByProductAndWarehouseAsync(detail.ProductId, receipt.WarehouseId)
+                : await _inventoryStockRepository.GetByProductWarehouseAndStatusAsync(detail.ProductId, receipt.WarehouseId, status);
+            var effectiveLocationId = locationId ?? stock?.LocationId;
+            if (stock is null)
+            {
+                await _inventoryStockRepository.AddAsync(new InventoryStock { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, Status = status, LocationId = effectiveLocationId, Quantity = quantity, MovingAverageCost = baseUnitCost, LastUpdated = DateTime.UtcNow });
+                if (detail.Product is not null && baseUnitCost > 0m && detail.Product.MovingAverageCost <= 0m)
+                    detail.Product.MovingAverageCost = baseUnitCost;
+            }
+            else
+            {
+                var oldQty = Math.Max(0m, stock.Quantity);
+                var oldMac = stock.MovingAverageCost > 0m ? stock.MovingAverageCost : baseUnitCost;
+                stock.MovingAverageCost = oldQty + quantity > 0m
+                    ? decimal.Round(((oldQty * oldMac) + (quantity * baseUnitCost)) / (oldQty + quantity), 4, MidpointRounding.AwayFromZero)
+                    : baseUnitCost;
+                stock.Quantity += quantity;
+                stock.LastUpdated = DateTime.UtcNow;
+                await _inventoryStockRepository.UpdateAsync(stock);
+                if (detail.Product is not null && stock.MovingAverageCost > 0m)
+                    detail.Product.MovingAverageCost = stock.MovingAverageCost;
+            }
+            await _inventoryTransactionRepository.AddAsync(new InventoryTransaction { ProductId = detail.ProductId, WarehouseId = receipt.WarehouseId, LocationId = effectiveLocationId, InventoryStatus = status, TransactionType = TransactionType.Import, Quantity = quantity, UnitCost = baseUnitCost, SourceDocumentLineId = detail.Id, ReferenceId = receipt.Id, ReferenceType = "ImportReceipt", TransactionDate = DateTime.UtcNow, CreatedBy = userId, Note = detail.Note });
+        }
+
+        private static decimal ConvertToBase(decimal quantity, decimal factor, ImportReceiptDetail detail)
+        {
+            var result = quantity * factor;
+            EnsurePrecision(result, detail.BaseUnitDecimalPlaces, $"Số lượng Base UOM dòng {detail.Id}");
+            return result;
+        }
+
+        private static void EnsurePrecision(decimal value, int decimalPlaces, string field)
+        {
+            if (decimalPlaces is < 0 or > 4 || decimal.Round(value, decimalPlaces) != value)
+                throw new BusinessRuleException($"{field} vượt quá {decimalPlaces} chữ số thập phân; hệ thống không tự làm tròn");
+        }
+
+        private static BusinessRuleException Conflict(string message)
+        {
+            var exception = new BusinessRuleException(message);
+            exception.Data["HttpStatusCode"] = 409;
+            return exception;
+        }
+
+        private async Task EnsurePermissionAsync(int userId, string permission)
+        {
+            if (_permissionUsers is not null && !await _permissionUsers.HasPermissionAsync(userId, permission))
+                throw new ForbiddenException("Bạn không có quyền thực hiện thao tác này.");
+        }
         public async Task<IEnumerable<ImportReceiptDto>> GetAllAsync(Domain.Enums.ReceiptStatus? status = null)
         {
             var receipts = await _importReceiptRepository.GetAllWithDetailsAsync(status);
-            return receipts.Select(receipt => new ImportReceiptDto
-            {
-                Id = receipt.Id,
-                Code = receipt.Code,
-                WarehouseId = receipt.WarehouseId,
-                WarehouseName = receipt.Warehouse?.Name,
-                Status = receipt.Status.ToString(),
-                Note = receipt.Note,
-                CreatedBy = receipt.CreatedBy,
-                CreatedByName = receipt.CreatedByUser?.FullName ?? receipt.CreatedByUser?.Username,
-                ApprovedBy = receipt.ApprovedBy,
-                ApprovedByName = receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username,
-                CreatedAt = receipt.CreatedAt,
-                ApprovedAt = receipt.ApprovedAt,
-                Details = receipt.Details.Select(d => new ImportReceiptDetailDto
-                {
-                    Id = d.Id,
-                    ProductId = d.ProductId,
-                    ProductCode = d.Product?.Code,
-                    ProductName = d.Product?.Name,
-                    Quantity = d.Quantity,
-                    UnitPrice = d.UnitPrice,
-                    Note = d.Note
-                }).ToList()
-            });
+            return receipts.Select(MapToDto);
         }
 
         public async Task<ImportReceiptDto> GetByIdAsync(int id)
@@ -291,31 +689,7 @@ namespace ERP.Application.Services
             if (receipt == null)
                 throw new NotFoundException($"Không tìm thấy phiếu nhập id {id}");
 
-            return new ImportReceiptDto
-            {
-                Id = receipt.Id,
-                Code = receipt.Code,
-                WarehouseId = receipt.WarehouseId,
-                WarehouseName = receipt.Warehouse?.Name,
-                Status = receipt.Status.ToString(),
-                Note = receipt.Note,
-                CreatedBy = receipt.CreatedBy,
-                CreatedByName = receipt.CreatedByUser?.FullName ?? receipt.CreatedByUser?.Username,
-                ApprovedBy = receipt.ApprovedBy,
-                ApprovedByName = receipt.ApprovedByUser?.FullName ?? receipt.ApprovedByUser?.Username,
-                CreatedAt = receipt.CreatedAt,
-                ApprovedAt = receipt.ApprovedAt,
-                Details = receipt.Details.Select(d => new ImportReceiptDetailDto
-                {
-                    Id = d.Id,
-                    ProductId = d.ProductId,
-                    ProductCode = d.Product?.Code,
-                    ProductName = d.Product?.Name,
-                    Quantity = d.Quantity,
-                    UnitPrice = d.UnitPrice,
-                    Note = d.Note
-                }).ToList()
-            };
+            return MapToDto(receipt);
         }
 
         public async Task CancelAsync(int id, int cancelledByUserId)
@@ -329,9 +703,23 @@ namespace ERP.Application.Services
                     throw new NotFoundException($"Không tìm thấy phiếu nhập id {id}");
                 if (_warehouseAuthorization is not null) await _warehouseAuthorization.EnsureWarehouseAccessAsync(receipt.WarehouseId);
 
-                if (receipt.Status != Domain.Enums.ReceiptStatus.Draft)
+                if (receipt.Status is not (Domain.Enums.ReceiptStatus.Draft
+                    or Domain.Enums.ReceiptStatus.Received
+                    or Domain.Enums.ReceiptStatus.QcPending
+                    or Domain.Enums.ReceiptStatus.QcCompleted
+                    or Domain.Enums.ReceiptStatus.ReadyToPost))
                     throw new BusinessRuleException("Chỉ có thể hủy phiếu nhập ở trạng thái nháp");
 
+                var previousStatus = receipt.Status;
+                if (receipt.Supplier is not null)
+                {
+                    receipt.SupplierCodeSnapshot ??= receipt.Supplier.Code;
+                    receipt.SupplierNameSnapshot ??= receipt.Supplier.Name;
+                }
+                if (receipt.Asn is not null && receipt.Asn.Status == Domain.Enums.AsnStatus.Receiving)
+                {
+                    receipt.Asn.Status = Domain.Enums.AsnStatus.Arrived;
+                }
                 receipt.Status = Domain.Enums.ReceiptStatus.Cancelled;
                 await _importReceiptRepository.UpdateAsync(receipt);
 
@@ -342,7 +730,7 @@ namespace ERP.Application.Services
                     EntityName = "ImportReceipt",
                     EntityId = receipt.Id,
                     WarehouseId = receipt.WarehouseId,
-                    OldValues = $"Status: {Domain.Enums.ReceiptStatus.Draft}",
+                    OldValues = $"Status: {previousStatus}",
                     NewValues = $"Status: {Domain.Enums.ReceiptStatus.Cancelled}",
                     Result = "Success",
                     Reason = "Import receipt cancelled",
@@ -360,5 +748,3 @@ namespace ERP.Application.Services
         }
     }
 }
-
-

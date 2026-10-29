@@ -1,16 +1,23 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public class StockReservation
+public class StockReservation : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string ReservationCode { get; set; } = string.Empty;
     public int ProductId { get; set; }
     public int WarehouseId { get; set; }
     public decimal Quantity { get; set; }
     public decimal ConsumedQuantity { get; set; }
     public decimal ReleasedQuantity { get; set; }
+    public decimal AllocatedQuantity { get; set; }
+    public int BaseUomIdSnapshot { get; set; } = 1;
+    public string BaseUomCodeSnapshot { get; set; } = "THÙNG";
+    public int BaseUomDecimalPlacesSnapshot { get; set; }
+    public int AllocationVersion { get; set; }
     public StockReservationStatus Status { get; set; }
     public string SourceType { get; set; } = string.Empty;
     public int? SourceId { get; set; }
@@ -27,4 +34,5 @@ public class StockReservation
     public Warehouse Warehouse { get; set; } = null!;
     public User CreatedByUser { get; set; } = null!;
     public User? ReleasedByUser { get; set; }
+    public ICollection<StockAllocation> Allocations { get; set; } = new List<StockAllocation>();
 }

@@ -8,5 +8,9 @@ public enum TransactionType
     AdjustmentDecrease = 3,
     TransferOut = 4,
     TransferIn = 5,
-    TransferAdjustment = 6
+    TransferAdjustment = 6,
+    Ship = 7,
+    StatusChange = 8,
+    Move = 9,
+    Reversal = 10
 }

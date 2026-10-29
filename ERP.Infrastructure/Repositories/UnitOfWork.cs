@@ -87,6 +87,7 @@ namespace ERP.Infrastructure.Repositories
                 {
                     await _transaction.DisposeAsync();
                     _transaction = null;
+                    _context.ChangeTracker.Clear();
                 }
             }
         }

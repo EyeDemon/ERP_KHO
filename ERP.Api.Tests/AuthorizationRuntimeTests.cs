@@ -10,6 +10,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Configuration;
+using ERP.Api.Authorization;
+using ERP.Domain.Entities;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace ERP.Api.Tests
 {
@@ -36,6 +39,7 @@ namespace ERP.Api.Tests
                 {
                     // Remove real DbContext
                     services.RemoveAll(typeof(DbContextOptions<ErpKhoDbContext>));
+                    services.RemoveAll<IDbContextOptionsConfiguration<ErpKhoDbContext>>();
                     
                     // Add in-memory DbContext
                     services.AddDbContext<ErpKhoDbContext>(options => 
@@ -62,6 +66,55 @@ namespace ERP.Api.Tests
 
             if (role != null)
             {
+                using var scope = _factory.Services.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<ErpKhoDbContext>();
+                db.Database.EnsureDeleted();
+                db.Database.EnsureCreated();
+                var databaseRole = new Role { Id = 1, RoleName = role };
+                var user = new User { Id = 99, Username = "AuthorizationTest", RoleId = 1, Role = databaseRole };
+                var permissionCodes = new HashSet<string>(StringComparer.Ordinal);
+                if (role is AppRoles.Admin or AppRoles.Manager)
+                {
+                    permissionCodes.UnionWith(new[]
+                    {
+                        AppPermissions.ProductCreate,
+                        AppPermissions.ProductUpdate,
+                        AppPermissions.ProductDeactivate,
+                        AppPermissions.ReceiptCreate,
+                        AppPermissions.ReceiptComplete,
+                        AppPermissions.ExportReceiptRead,
+                        AppPermissions.ExportReceiptCreate,
+                        AppPermissions.ExportReceiptUpdate,
+                        AppPermissions.ExportReceiptApprove,
+                        AppPermissions.ExportReceiptDispatch,
+                        AppPermissions.ExportReceiptCancel,
+                        AppPermissions.InventoryRead,
+                        AppPermissions.InventoryLedgerRead
+                    });
+                }
+                else if (role == AppRoles.WarehouseStaff)
+                {
+                    permissionCodes.UnionWith(new[]
+                    {
+                        AppPermissions.ExportReceiptRead,
+                        AppPermissions.ExportReceiptCreate,
+                        AppPermissions.ExportReceiptUpdate,
+                        AppPermissions.ExportReceiptDispatch
+                    });
+                }
+                else if (role == AppRoles.Viewer)
+                {
+                    permissionCodes.Add(AppPermissions.ExportReceiptRead);
+                    permissionCodes.Add(AppPermissions.InventoryRead);
+                }
+
+                foreach (var code in permissionCodes)
+                {
+                    var permission = new Permission(code);
+                    databaseRole.Permissions.Add(new RolePermission { Role = databaseRole, Permission = permission });
+                }
+                db.Users.Add(user);
+                db.SaveChanges();
                 client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(MockAuthenticationHandler.DefaultScheme);
                 client.DefaultRequestHeaders.Add("X-Test-Role", role);
             }
@@ -76,6 +129,10 @@ namespace ERP.Api.Tests
         [InlineData("POST", "/api/ImportReceipts")]
         [InlineData("POST", "/api/ExportReceipts")]
         [InlineData("POST", "/api/Stocktakes/1/approve")]
+        [InlineData("GET", "/api/inventory/reversal-reasons")]
+        [InlineData("GET", "/api/inventory/reversal-warehouses")]
+        [InlineData("GET", "/api/inventory/reversal-candidates?transactionId=1")]
+        [InlineData("POST", "/api/inventory/reversals")]
         [InlineData("GET", "/api/Reports/inventory-in-out-stock")]
         public async Task NoAuth_Returns401(string method, string url)
         {
@@ -112,6 +169,10 @@ namespace ERP.Api.Tests
         [InlineData("POST", "/api/ExportReceipts/1/approve", "Viewer")]
         [InlineData("POST", "/api/ExportReceipts/1/cancel", "Viewer")]
         [InlineData("POST", "/api/Stocktakes/1/approve", "Viewer")]
+        [InlineData("GET", "/api/inventory/reversal-reasons", "Viewer")]
+        [InlineData("GET", "/api/inventory/reversal-warehouses", "Viewer")]
+        [InlineData("GET", "/api/inventory/reversal-candidates?transactionId=1", "Viewer")]
+        [InlineData("POST", "/api/inventory/reversals", "Viewer")]
         [InlineData("GET", "/api/Reports/inventory-in-out-stock?fromDate=2020-01-01", "WarehouseStaff")]
         public async Task ForbiddenRole_Returns403(string method, string url, string role)
         {
@@ -154,6 +215,7 @@ namespace ERP.Api.Tests
             // or even 200/201, but as long as it's NOT 401 or 403, authorization passed!
             Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
             Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.NotEqual(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         }
     }
 }

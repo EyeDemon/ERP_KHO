@@ -57,8 +57,23 @@ namespace ERP.Api.Tests
             SetUserClaims(new Claim("Id", "99"));
             var result = await _controller.Approve(1);
             var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-            okResult.Value.Should().BeEquivalentTo(new { message = "Duyệt phiếu nhập thành công" });
+            okResult.Value.Should().BeEquivalentTo(new { message = "Phiếu nhập đã sẵn sàng post" });
             _mockService.Verify(x => x.ApproveImportReceiptAsync(1, 99), Times.Once);
+        }
+
+        [Theory]
+        [InlineData("receive")]
+        [InlineData("post")]
+        public async Task WorkflowCommand_ValidUserIdClaim_ReturnsOkAndCallsService(string command)
+        {
+            SetUserClaims(new Claim("Id", "99"));
+
+            var receiveDto = new ERP.Application.DTOs.ReceiveImportReceiptDto();
+            var result = command == "receive" ? await _controller.Receive(1, receiveDto) : await _controller.Post(1);
+
+            result.Should().BeOfType<OkObjectResult>();
+            if (command == "receive") _mockService.Verify(x => x.ReceiveAsync(1, receiveDto, 99), Times.Once);
+            else _mockService.Verify(x => x.PostAsync(1, 99), Times.Once);
         }
 
         [Fact]
@@ -110,35 +125,52 @@ namespace ERP.Api.Tests
                 .FirstOrDefault();
 
             authorizeAttr.Should().NotBeNull();
-            authorizeAttr!.Roles.Should().Be(ERP.Api.Authorization.AppRoles.AdminManagerOrViewer);
+            authorizeAttr!.Roles.Should().BeNull();
         }
 
         [Theory]
         [InlineData(nameof(ImportReceiptsController.Create))]
         [InlineData(nameof(ImportReceiptsController.Cancel))]
+        [InlineData(nameof(ImportReceiptsController.Receive))]
         public void MutationEndpoints_HaveAdminOrManagerAuthorizeAttribute(string methodName)
         {
             var method = typeof(ImportReceiptsController).GetMethod(methodName);
             method.Should().NotBeNull();
 
             var authorizeAttr = method!
-                .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
-                .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
+                .GetCustomAttributes(typeof(ERP.Api.Authorization.PermissionAuthorizeAttribute), false)
+                .Cast<ERP.Api.Authorization.PermissionAuthorizeAttribute>()
                 .FirstOrDefault();
 
             authorizeAttr.Should().NotBeNull();
-            authorizeAttr!.Roles.Should().Be(ERP.Api.Authorization.AppRoles.AdminOrManager);
+            authorizeAttr!.Permission.Should().Be(methodName switch
+            {
+                nameof(ImportReceiptsController.Create) => ERP.Api.Authorization.AppPermissions.ReceiptCreate,
+                nameof(ImportReceiptsController.Cancel) => ERP.Api.Authorization.AppPermissions.ReceiptCancel,
+                _ => ERP.Api.Authorization.AppPermissions.ReceiptReceive
+            });
         }
 
         [Fact]
         public void ApproveEndpoint_UsesSharedCheckerPolicy()
         {
             var authorizeAttr = typeof(ImportReceiptsController).GetMethod(nameof(ImportReceiptsController.Approve))!
-                .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), false)
-                .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
+                .GetCustomAttributes(typeof(ERP.Api.Authorization.PermissionAuthorizeAttribute), false)
+                .Cast<ERP.Api.Authorization.PermissionAuthorizeAttribute>()
                 .Single();
 
-            authorizeAttr.Policy.Should().Be(ERP.Api.Authorization.ApprovalPolicies.Checker);
+            authorizeAttr.Permission.Should().Be(ERP.Api.Authorization.AppPermissions.ReceiptComplete);
+        }
+
+        [Fact]
+        public void PostEndpoint_UsesSharedCheckerPolicy()
+        {
+            var authorizeAttr = typeof(ImportReceiptsController).GetMethod(nameof(ImportReceiptsController.Post))!
+                .GetCustomAttributes(typeof(ERP.Api.Authorization.PermissionAuthorizeAttribute), false)
+                .Cast<ERP.Api.Authorization.PermissionAuthorizeAttribute>()
+                .Single();
+
+            authorizeAttr.Permission.Should().Be(ERP.Api.Authorization.AppPermissions.ReceiptPost);
         }
     }
 }

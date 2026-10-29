@@ -1,7 +1,10 @@
+using ERP.Domain.Common;
+
 namespace ERP.Domain.Entities;
 
-public class UserWarehouse
+public class UserWarehouse : ITenantEntity
 {
+    public int TenantId { get; set; } = 1;
     public int UserId { get; set; }
     public int WarehouseId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

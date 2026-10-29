@@ -5,6 +5,7 @@ using ERP.Domain.Enums;
 using ERP.Domain.Interfaces;
 using ERP.Domain.Models;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Moq;
 using Xunit;
 
@@ -167,7 +168,8 @@ namespace ERP.Application.Tests
                 // P1 / W1
                 new InventoryTransaction { ProductId = 1, Product = p1, WarehouseId = 101, Warehouse = w1, Quantity = 10m, TransactionType = TransactionType.Import, TransactionDate = new DateTime(2026, 7, 1) },
                 new InventoryTransaction { ProductId = 1, Product = p1, WarehouseId = 101, Warehouse = w1, Quantity = 5m, TransactionType = TransactionType.AdjustmentIncrease, TransactionDate = new DateTime(2026, 7, 5) },
-                new InventoryTransaction { ProductId = 1, Product = p1, WarehouseId = 101, Warehouse = w1, Quantity = 3m, TransactionType = TransactionType.Export, TransactionDate = new DateTime(2026, 7, 8) },
+                new InventoryTransaction { ProductId = 1, Product = p1, WarehouseId = 101, Warehouse = w1, Quantity = 2m, TransactionType = TransactionType.Export, TransactionDate = new DateTime(2026, 7, 8) },
+                new InventoryTransaction { ProductId = 1, Product = p1, WarehouseId = 101, Warehouse = w1, Quantity = 1m, TransactionType = TransactionType.Ship, TransactionDate = new DateTime(2026, 7, 9) },
                 new InventoryTransaction { ProductId = 1, Product = p1, WarehouseId = 101, Warehouse = w1, Quantity = 2m, TransactionType = TransactionType.AdjustmentDecrease, TransactionDate = new DateTime(2026, 7, 10) },
 
                 // P1 / W2 (Net 0 -> Excluded)
@@ -211,6 +213,7 @@ namespace ERP.Application.Tests
         [InlineData(TransactionType.AdjustmentIncrease, 1)]
         [InlineData(TransactionType.TransferIn, 1)]
         [InlineData(TransactionType.Export, -1)]
+        [InlineData(TransactionType.Ship, -1)]
         [InlineData(TransactionType.AdjustmentDecrease, -1)]
         [InlineData(TransactionType.TransferOut, -1)]
         public void InventoryTransactionTypeMapping_RecognizedType_ReturnsExpectedSign(TransactionType type, int sign)
@@ -247,6 +250,88 @@ namespace ERP.Application.Tests
             var result = (await _service.GetInventoryReportAsync(asOfDate, null, null)).Single();
 
             result.Quantity.Should().Be(110);
+        }
+
+        [Fact]
+        public async Task GetInventoryReportAsync_HistoricalMode_SkipsLegacyTransferAdjustmentWithoutCrashing()
+        {
+            var asOfDate = new DateTime(2026, 8, 25, 12, 0, 0, DateTimeKind.Utc);
+            var product = new Product { Id = 1, Code = "P1", Name = "Product" };
+            var warehouse = new Warehouse { Id = 1, Code = "W1", Name = "Warehouse" };
+            var transactions = new[]
+            {
+                new InventoryTransaction { ProductId = 1, Product = product, WarehouseId = 1, Warehouse = warehouse, Quantity = 40, TransactionType = TransactionType.Import, TransactionDate = asOfDate.AddHours(-2) },
+                new InventoryTransaction { ProductId = 1, Product = product, WarehouseId = 1, Warehouse = warehouse, Quantity = 999, TransactionType = TransactionType.TransferAdjustment, TransactionDate = asOfDate.AddHours(-1) },
+                new InventoryTransaction { ProductId = 1, Product = product, WarehouseId = 1, Warehouse = warehouse, Quantity = 15, TransactionType = TransactionType.Export, TransactionDate = asOfDate }
+            };
+            _mockRepo.Setup(x => x.GetTransactionsUpToDateAsync(asOfDate, null, null, default)).ReturnsAsync(transactions);
+
+            TransactionType.TransferAdjustment.HasCanonicalSign().Should().BeFalse();
+            TransactionType.Import.HasCanonicalSign().Should().BeTrue();
+
+            var result = (await _service.GetInventoryReportAsync(asOfDate, null, null)).Single();
+            result.Quantity.Should().Be(25m);
+        }
+
+        [Fact]
+        public async Task InventoryTransactionsLedger_EnforcesAppendOnlyRule2_AndAllowsOneTimeReversalCorrectiveLink()
+        {
+            var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+            var repo = new ERP.Infrastructure.Repositories.InventoryTransactionRepository(db);
+
+            var importTx = new InventoryTransaction
+            {
+                ProductId = 1,
+                WarehouseId = 1,
+                TransactionType = TransactionType.Import,
+                Quantity = 10m,
+                ReferenceId = 1,
+                ReferenceType = "ImportReceipt",
+                TransactionDate = DateTime.UtcNow
+            };
+            await repo.AddAsync(importTx);
+            await db.SaveChangesAsync();
+
+            var repoUpdateAct = async () => await repo.UpdateAsync(importTx);
+            await repoUpdateAct.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Rule 2*");
+
+            var repoDeleteAct = async () => await repo.DeleteAsync(importTx);
+            await repoDeleteAct.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Rule 2*");
+
+            importTx.Quantity = 99m;
+            var saveModifiedAct = async () => await db.SaveChangesAsync();
+            await saveModifiedAct.Should().ThrowAsync<InvalidOperationException>().WithMessage("*modifying existing ledger entries is forbidden (Rule 2)*");
+            db.Entry(importTx).State = Microsoft.EntityFrameworkCore.EntityState.Unchanged;
+
+            db.InventoryTransactions.Remove(importTx);
+            var saveDeletedAct = async () => await db.SaveChangesAsync();
+            await saveDeletedAct.Should().ThrowAsync<InvalidOperationException>().WithMessage("*deleting ledger entries is forbidden (Rule 2)*");
+            db.Entry(importTx).State = Microsoft.EntityFrameworkCore.EntityState.Unchanged;
+
+            var reversalMarker = new InventoryTransaction
+            {
+                ProductId = 1,
+                WarehouseId = 1,
+                TransactionType = TransactionType.Reversal,
+                Quantity = 10m,
+                ReferenceId = importTx.Id,
+                ReferenceType = "InventoryReversal",
+                ReversalOfTransactionId = importTx.Id,
+                TransactionDate = DateTime.UtcNow
+            };
+            db.InventoryTransactions.Add(reversalMarker);
+            await db.SaveChangesAsync();
+
+            reversalMarker.CorrectiveTransactionId = 42;
+            await db.SaveChangesAsync();
+            reversalMarker.CorrectiveTransactionId.Should().Be(42);
+
+            reversalMarker.CorrectiveTransactionId = 99;
+            var overwriteCorrectiveAct = async () => await db.SaveChangesAsync();
+            await overwriteCorrectiveAct.Should().ThrowAsync<InvalidOperationException>().WithMessage("*Rule 2*");
         }
     }
 }

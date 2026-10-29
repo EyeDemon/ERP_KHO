@@ -26,6 +26,7 @@ Git cannot identify a diff because the repository has no commit and no tracked f
 
 - `ERP.Infrastructure/Migrations/20260825104054_AddExportReceiptDispatchWorkflow.cs`
 - `docs/AddExportReceiptDispatchWorkflow.sql`
+- `ERP.Infrastructure/Migrations/20261005214500_AllowLocationSplitExportLedger.cs`
 - `ERP.Application/Services/ExportReceiptService.cs`
 - `ERP.Infrastructure/Repositories/UnitOfWork.cs`
 - `ERP.Application.Tests/ExportReceiptDispatchMigrationContractTests.cs`
@@ -88,24 +89,24 @@ Audit rows include receipt ID (`EntityId`), actor (`UserId`), timestamp, warehou
 ## Index and query review
 
 - Reservation source lookup: unique filtered index on `(SourceType, SourceId, ProductId)`.
-- Physical export idempotency/backfill: unique filtered index `IX_InventoryTransactions_ExportReceiptReference` on `(ReferenceType, ReferenceId, TransactionType, ProductId, WarehouseId)` for `ExportReceipt`.
-- Stock row: unique index on `(ProductId, WarehouseId)` plus reservation check constraint.
+- Physical export idempotency: unique filtered index `IX_InventoryTransactions_ExportReceiptReference` on `(ReferenceType, ReferenceId, TransactionType, ProductId, WarehouseId, LocationId)` for `ExportReceipt`. This permits one immutable ledger row per actually consumed Location while preventing duplicate physical effects for the same bucket.
+- Eligible outbound stock is evaluated across AVAILABLE rows at active, unblocked, pickable Locations. Reservation consumption returns the exact Location/quantity breakdown used by the export ledger.
 - Dispatch/cancel receipt lookup: primary key seek; details use the existing `ExportReceiptId` relationship index; reservation source index supports consume/release.
 - Remaining action: capture plans and timings on production-sized sanitized data. A local empty/small database plan is not release evidence.
 
 ## Quality gates
 
-- `dotnet restore ERP.slnx`: PASS.
-- Release build with warnings as errors: PASS, 0 warnings, 0 errors.
-- `dotnet test ERP.slnx --no-restore --configuration Release`: PASS, **342/342**, 0 skipped.
-- SQL integration: enabled against database `ERP_KHO`; 0 skipped.
-- `npm test`: PASS, 2/2.
-- `npm audit --audit-level=high`: PASS, 0 vulnerabilities.
-- `npm run lint`: PASS.
-- `npm run build`: PASS.
-- encoding gate: PASS.
-- `dotnet ef migrations has-pending-model-changes`: no pending model changes.
-- migration rollback/reapply on local `ERP_KHO`: PASS.
+The authoritative release evidence is the final PR/head commit, not historical counts embedded in this document. Before merge, require all of the following on the same commit:
+
+- Release backend build: PASS with no compile errors.
+- Application + SQL integration tests: PASS with zero failures/skips caused by missing SQL.
+- API tests: PASS.
+- Frontend dependency audit, lint, tests and production build: PASS.
+- Encoding and offline-capacity guards: PASS.
+- Vercel preview for the exact head SHA: READY.
+- SonarQube Cloud Quality Gate: PASS with zero Security Hotspots.
+- Branch comparison against the integration branch: behind by 0 and limited to the approved Outbound/authorization/Blueprint scope.
+- ExportReceipt contract evidence includes reserve-only approval, explicit compatibility dispatch, checker/dispatcher separation, warehouse isolation, Viewer redaction, Base-UOM snapshots, multi-Location availability, location-traceable ledger, idempotency and cancel/replay/concurrency regressions.
 
 ## Deployment runbook
 

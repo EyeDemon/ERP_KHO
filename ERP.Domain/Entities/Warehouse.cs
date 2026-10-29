@@ -1,14 +1,18 @@
+using ERP.Domain.Common;
+
 namespace ERP.Domain.Entities;
 
-public class Warehouse
+public class Warehouse : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Address { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
+    public byte[] RowVersion { get; set; } = [0, 0, 0, 0, 0, 0, 0, 1];
 
     // Navigation
     public ICollection<InventoryStock> InventoryStocks { get; set; } = new List<InventoryStock>();
@@ -16,4 +20,5 @@ public class Warehouse
     public ICollection<ExportReceipt> ExportReceipts { get; set; } = new List<ExportReceipt>();
     public ICollection<Stocktake> Stocktakes { get; set; } = new List<Stocktake>();
     public ICollection<UserWarehouse> UserAccesses { get; set; } = new List<UserWarehouse>();
+    public ICollection<WarehouseLocation> Locations { get; set; } = new List<WarehouseLocation>();
 }

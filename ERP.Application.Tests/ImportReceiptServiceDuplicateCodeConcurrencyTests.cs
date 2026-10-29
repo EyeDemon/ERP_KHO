@@ -37,7 +37,8 @@ namespace ERP.Application.Tests
                 if (sqliteEx.SqliteExtendedErrorCode == 2067 || sqliteEx.SqliteErrorCode == 19)
                 {
                     var msg = sqliteEx.Message ?? string.Empty;
-                    return msg.Contains("UNIQUE constraint failed: ImportReceipts.Code", StringComparison.OrdinalIgnoreCase);
+                    return msg.Contains("UNIQUE constraint failed: ImportReceipts.Code", StringComparison.OrdinalIgnoreCase)
+                        || msg.Contains("UNIQUE constraint failed: ImportReceipts.TenantId, ImportReceipts.Code", StringComparison.OrdinalIgnoreCase);
                 }
             }
 
@@ -320,6 +321,7 @@ namespace ERP.Application.Tests
             }
 
             public Task<ImportReceipt?> GetByIdWithDetailsAsync(int id) => _inner.GetByIdWithDetailsAsync(id);
+            public Task<ImportReceipt?> GetByIdWithDetailsForUpdateAsync(int id) => _inner.GetByIdWithDetailsForUpdateAsync(id);
             public Task<ImportReceipt?> GetByIdAsync(int id, CancellationToken cancellationToken = default) => _inner.GetByIdAsync(id, cancellationToken);
             public Task<IEnumerable<ImportReceipt>> GetAllAsync(CancellationToken cancellationToken = default) => _inner.GetAllAsync(cancellationToken);
             public Task<IEnumerable<ImportReceipt>> FindAsync(Expression<Func<ImportReceipt, bool>> predicate, CancellationToken cancellationToken = default) => _inner.FindAsync(predicate, cancellationToken);

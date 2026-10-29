@@ -26,7 +26,9 @@ public class StockReservationDto
     public decimal Quantity { get; set; }
     public decimal ConsumedQuantity { get; set; }
     public decimal ReleasedQuantity { get; set; }
+    public decimal AllocatedQuantity { get; set; }
     public decimal RemainingQuantity => Quantity - ConsumedQuantity - ReleasedQuantity;
+    public decimal AllocatableQuantity => RemainingQuantity - AllocatedQuantity;
     public string Status { get; set; } = string.Empty;
     public string SourceType { get; set; } = string.Empty;
     public int? SourceId { get; set; }

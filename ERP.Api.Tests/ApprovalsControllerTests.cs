@@ -24,10 +24,11 @@ public sealed class ApprovalsControllerTests
     }
 
     [Fact]
-    public void Controller_RequiresCheckerPolicy_AndRejectUsesPersistentIdempotency()
+    public void Controller_RequiresDocumentTypeAuthorization_AndRejectUsesPersistentIdempotency()
     {
         typeof(ApprovalsController).GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>()
-            .Should().Contain(x => x.Policy == ApprovalPolicies.Checker);
+            .Should().Contain(x => x.Policy == null && x.Roles == null);
+        typeof(ApprovalsController).GetCustomAttributes(typeof(ApprovalAuthorizeAttribute), true).Should().ContainSingle();
         typeof(ApprovalsController).GetMethod(nameof(ApprovalsController.Reject))!.GetCustomAttributes(typeof(IdempotentCommandAttribute), true)
             .Should().ContainSingle();
     }

@@ -10,6 +10,21 @@ namespace ERP.Api.Tests;
 
 public class GlobalExceptionHandlingMiddlewareTests
 {
+    [Theory]
+    [InlineData(1205, true)]
+    [InlineData(2627, false)]
+    public void Sql_server_deadlock_is_a_concurrency_conflict(int number, bool expected)
+        => typeof(GlobalExceptionHandlingMiddleware)
+            .GetMethod("IsSqlServerConcurrencyError", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, [number]).Should().Be(expected);
+
+    [Fact]
+    public void Sql_server_deadlock_message_does_not_expose_provider_details()
+        => typeof(GlobalExceptionHandlingMiddleware)
+            .GetMethod("PublicMessage", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+            .Invoke(null, ["SQL provider detail", true])
+            .Should().Be("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.");
+
     [Fact]
     public async Task InvokeAsync_ServiceUnavailableException_ReturnsMaintenanceResponse()
     {
@@ -46,5 +61,24 @@ public class GlobalExceptionHandlingMiddlewareTests
         using var document = JsonDocument.Parse(body);
         document.RootElement.GetProperty("message").GetString().Should().Be("Tồn kho vừa được thay đổi.");
         body.Should().NotContain("stackTrace");
+    }
+
+    [Fact]
+    public async Task InvokeAsync_UnhandledException_MasksInternalErrorMessage()
+    {
+        var middleware = new GlobalExceptionHandlingMiddleware(
+            _ => throw new InvalidOperationException("Sensitive SQL table dbo.SecretUsers constraint error"),
+            NullLogger<GlobalExceptionHandlingMiddleware>.Instance);
+        var context = new DefaultHttpContext();
+        context.Response.Body = new MemoryStream();
+
+        await middleware.InvokeAsync(context);
+
+        context.Response.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+        context.Response.Body.Position = 0;
+        var body = await new StreamReader(context.Response.Body).ReadToEndAsync();
+        using var document = JsonDocument.Parse(body);
+        document.RootElement.GetProperty("message").GetString().Should().Be("Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau.");
+        body.Should().NotContain("Sensitive SQL table");
     }
 }

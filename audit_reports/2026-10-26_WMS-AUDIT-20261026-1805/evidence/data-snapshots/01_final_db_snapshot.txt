@@ -1,0 +1,95 @@
+=== DB METADATA (FINAL SNAPSHOT: (localdb)\MSSQLLocalDB / ERP_KHO) ===
+
+ServerInstance            CurrentDb SnapshotUtc           
+--------------            --------- -----------           
+Heavenly\LOCALDB#7B6FFF75 ERP_KHO   10/26/2026 12:28:05 PM
+
+
+
+=== INVENTORY CONSERVATION & INVARIANT CHECKS ===
+
+TotalGrainRows TotalOnHand TotalReserved TotalAvailable NegativeOnHandRows NegativeReservedRows OverReservedAvailableRows
+-------------- ----------- ------------- -------------- ------------------ -------------------- -------------------------
+            12    172.0000        9.0000       163.0000                  0                    0                         0
+
+
+
+=== INVENTORY STOCKS (9-DIM BALANCES) ===
+
+   Id WarehouseId WarehouseCode LocationId LocationCode ProductId ProductCode Status OnHandQty ReservedQuantity
+   -- ----------- ------------- ---------- ------------ --------- ----------- ------ --------- ----------------
+ 3663           1 WH01                   1 RECEIVING          317 QA-E2E-001       0   30.0000           0.0000
+ 3664           1 WH01                   9 BIN-A01            317 QA-E2E-001       0   60.0000           0.0000
+ 3665           1 WH01                   9 BIN-A01            317 QA-E2E-001       2   25.0000           0.0000
+ 3667           1 WH01                  10 BIN-A02            517 QA-LOT-002       0    0.0000           0.0000
+ 3666           1 WH01                  11 BIN-DMG-01         317 QA-E2E-001       3   12.0000           0.0000
+ 4663           1 WH01                1009 BIN-A01-01         317 QA-E2E-001       0   10.0000           9.0000
+ 5663           1 WH01                1009 BIN-A01-01         517 QA-LOT-002       0    0.0000           0.0000
+11675           1 WH01                2013 BIN-A01-03         317 QA-E2E-001       0    8.0000           0.0000
+11676           1 WH01                2013 BIN-A01-03         517 QA-LOT-002       0    6.0000           0.0000
+11672           1 WH01                2014 RCV-01             317 QA-E2E-001       0    0.0000           0.0000
+11673           1 WH01                2014 RCV-01             517 QA-LOT-002       0    0.0000           0.0000
+11674        1403 WH02                2031 BIN-HN-01          317 QA-E2E-001       0   21.0000           0.0000
+
+
+
+=== INVENTORY TRANSACTIONS BY TYPE (APPEND-ONLY LEDGER) ===
+
+TransactionType TxCount TotalQty
+--------------- ------- --------
+              0      10 240.0000
+              3       3   3.0000
+              4       4   4.0000
+              5       4   4.0000
+              7       1   5.0000
+              9       6  15.0000
+
+
+
+=== REVERSAL LEDGER PAIRS ===
+
+=== RESERVATIONS, ALLOCATIONS & OUTBOX SUMMARY ===
+
+TotalReservations TotalAllocations TotalOutboxMessages
+----------------- ---------------- -------------------
+                6                3                  97
+
+
+
+=== RECENT AUDIT LOGS (TOP 30) ===
+
+   Id Action                                           EntityName                 EntityId UserId Timestamp             
+   -- ------                                           ----------                 -------- ------ ---------             
+97674 ExportReceipt.IssueEinvoiceNd70Draft             ExportReceipt                   179    712 10/26/2026 12:24:53 PM
+97673 Authentication.RefreshRotated                    UserSession                            712 10/26/2026 12:14:00 PM
+97672 Approval.EscalateOverdue                         ApprovalQueue                          712 10/26/2026 12:12:02 PM
+97671 Approval.SlaEscalated                            Stocktake                      2002    712 10/26/2026 12:12:02 PM
+97670 CAPTURE_3PL_DAILY_STORAGE_SNAPSHOT               ThreePlStorageSnapshot                 712 10/26/2026 12:08:48 PM
+97669 ExportReceipt.IssueEinvoiceNd70Draft             ExportReceipt                   179    712 10/26/2026 12:08:10 PM
+97668 Shipment.SyncTmsManifest                         TmsManifest                            712 10/26/2026 12:05:11 PM
+97667 Packing.ExecuteKittingVas                        KittingVas                             712 10/26/2026 12:03:57 PM
+97666 PUT_TO_WALL_SLOT_SORTED                          PutToWallSortation                1    712 10/26/2026 12:02:40 PM
+97665 Picking.SyncAutomationTelemetry                  AutomationTelemetry                    712 10/26/2026 12:02:30 PM
+97664 StockReservation.SweepExpiredPreview             StockReservationSweep                  712 10/26/2026 12:01:05 PM
+97663 ExportReceipt.BatchPrintAwb                      ExportReceipt                   178    712 10/26/2026 12:00:08 PM
+97662 ExportReceipt.ReprintAwb                         ExportReceipt                   177    712 10/26/2026 12:00:08 PM
+97661 ExportReceipt.VerifyDispatchCutoff               ExportReceipt                          712 10/26/2026 12:00:06 PM
+97660 SalesOrder.ExpediteBackorder                     SalesOrder                             712 10/26/2026 11:58:52 AM
+97659 STOCKTAKE_AUTO_APPROVAL_EVALUATED                Stocktake                      2002    712 10/26/2026 11:56:44 AM
+97658 InventoryReconciliation.DispatchOutbox           IntegrationOutboxBatch                 712 10/26/2026 11:55:43 AM
+97657 Reconciliation.VerifySiteReadiness               InventoryReconciliation                712 10/26/2026 11:55:34 AM
+97656 Authentication.RefreshRotated                    UserSession                            712 10/26/2026 11:53:25 AM
+97655 Inventory.VerifyLockPrecedence                   InventoryLock                          712 10/26/2026 11:50:18 AM
+97654 AuditDecisionPolicies                            InventoryControl                       712 10/26/2026 11:49:43 AM
+97653 WhatIfSimulation                                 InventoryControl                       712 10/26/2026 11:49:40 AM
+97652 ImportReceipt.ExecuteRtvRefurbish                RtvRefurbish                   5031    712 10/26/2026 11:47:10 AM
+97651 ImportReceipt.RmaIntakeCheck                     RmaInspection                  5031    712 10/26/2026 11:47:05 AM
+97650 Asn.PreAllocateStaging                           Asn                                    712 10/26/2026 11:45:41 AM
+97649 PurchaseOrder.GenerateProcurementRecommendations PurchaseOrder                          712 10/26/2026 11:45:05 AM
+97648 PurchaseOrder.ExpediteOverdue                    PurchaseOrder                          712 10/26/2026 11:45:03 AM
+97647 DockYard.DispatchCrossdock                       CrossdockDispatch                      712 10/26/2026 11:44:30 AM
+97646 BusinessPartner.Generate3PlStatement             ThreePlBillingStatement        1002    712 10/26/2026 11:43:44 AM
+97645 HOLIDAY_CLOSURE                                  WarehouseCalendarException        1    712 10/26/2026 11:43:03 AM
+
+
+

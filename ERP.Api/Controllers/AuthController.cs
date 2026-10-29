@@ -4,11 +4,15 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
 using ERP.Application.Common;
+using System.Security.Claims;
 
 namespace ERP.Api.Controllers
 {
+    public sealed record RefreshRequestDto(string? RefreshToken = null);
+
     [ApiController]
     [Route("api/[controller]")]
+    [Route("api/v1/auth")]
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
@@ -32,7 +36,11 @@ namespace ERP.Api.Controllers
             try
             {
                 var response = await _authService.LoginAsync(request, RequestContext(), cancellationToken);
-                if (!string.IsNullOrEmpty(response.RefreshToken)) SetRefreshCookie(response.RefreshToken, response.RefreshTokenExpiresAtUtc);
+                if (!string.IsNullOrEmpty(response.RefreshToken))
+                {
+                    SetRefreshCookie(response.RefreshToken, response.RefreshTokenExpiresAtUtc);
+                    response.RefreshToken = string.Empty;
+                }
                 return Ok(response);
             }
             catch (UnauthorizedAccessException ex)
@@ -44,14 +52,16 @@ namespace ERP.Api.Controllers
         [HttpPost("refresh")]
         [AllowAnonymous]
         [EnableRateLimiting("Refresh")]
-        public async Task<IActionResult> Refresh(CancellationToken cancellationToken)
+        public async Task<IActionResult> Refresh([FromBody] RefreshRequestDto? request = null, CancellationToken cancellationToken = default)
         {
             try
             {
-                var refreshToken = Request.Cookies[RefreshCookieName] ?? string.Empty;
-                var result = await _sessionService.RefreshAsync(refreshToken, RequestContext(), cancellationToken);
+                var refreshToken = Request.Cookies[RefreshCookieName];
+                if (string.IsNullOrWhiteSpace(refreshToken))
+                    refreshToken = request?.RefreshToken;
+                var result = await _sessionService.RefreshAsync(refreshToken ?? string.Empty, RequestContext(), cancellationToken);
                 SetRefreshCookie(result.RefreshToken, result.RefreshTokenExpiresAtUtc);
-                return Ok(new { token = result.AccessToken, accessTokenExpiresAtUtc = result.AccessTokenExpiresAtUtc });
+                return Ok(new { token = result.AccessToken, accessToken = result.AccessToken, accessTokenExpiresAtUtc = result.AccessTokenExpiresAtUtc });
             }
             catch (UnauthorizedAccessException)
             {
@@ -69,6 +79,16 @@ namespace ERP.Api.Controllers
             await _sessionService.LogoutAsync(Request.Cookies[RefreshCookieName] ?? string.Empty, actor, cancellationToken);
             DeleteRefreshCookie();
             return NoContent();
+        }
+
+        [HttpGet("me")]
+        [Authorize]
+        public async Task<IActionResult> Me(CancellationToken cancellationToken)
+        {
+            if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+                return Unauthorized(new { message = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." });
+            var user = await _sessionService.GetAuthenticatedUserProfileAsync(userId, cancellationToken);
+            return user is null ? Unauthorized(new { message = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." }) : Ok(user);
         }
 
         [HttpPost("logout-all")]

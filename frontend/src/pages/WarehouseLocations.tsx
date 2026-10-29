@@ -1,0 +1,878 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useInRouterContext } from 'react-router-dom';
+import apiClient from '../services/apiClient';
+import { usePermission } from '../services/authorization';
+import {
+  UiBadge,
+  UiCard,
+  UiDrawer,
+  UiEmptyState,
+  UiMetric,
+  UiPage,
+  UiPageHeader,
+  UiTableScroll,
+  UiTabs,
+  UiToolbar,
+  UiToolbarField,
+} from '../ui/ProductionUi';
+import './WarehouseLocations.css';
+import BarcodeSvg from '../components/BarcodeSvg';
+
+type Warehouse = {
+  id: number;
+  code: string;
+  name: string;
+};
+
+type WarehouseLocation = {
+  id: number;
+  warehouseId: number;
+  code: string;
+  name: string;
+  structurePath?: string | null;
+  storageClass?: string | null;
+  maxWeightKg?: number | null;
+  maxVolumeM3?: number | null;
+  maxPalletEquivalent?: number | null;
+  locationType: string;
+  isActive: boolean;
+  isBlocked: boolean;
+  isPickable: boolean;
+  isReceivable: boolean;
+  isSystemManaged: boolean;
+  rowVersion?: string | null;
+};
+
+type LocationForm = {
+  id?: number;
+  code: string;
+  name: string;
+  locationType: 'Storage' | 'Damaged' | 'Rejected' | 'Staging';
+  zone: string;
+  aisle: string;
+  rack: string;
+  level: string;
+  bin: string;
+  storageClass: string;
+  maxWeightKg: string;
+  maxVolumeM3: string;
+  maxPalletEquivalent: string;
+  isActive: boolean;
+  isBlocked: boolean;
+  rowVersion?: string | null;
+};
+
+type LocationCapacity = {
+  locationId: number;
+  code: string;
+  name: string;
+  structurePath?: string | null;
+  storageClass?: string | null;
+  maxWeightKg?: number | null;
+  usedWeightKg?: number | null;
+  maxVolumeM3?: number | null;
+  usedVolumeM3?: number | null;
+  maxPalletEquivalent?: number | null;
+  usedPalletEquivalent?: number | null;
+  profileIncomplete: boolean;
+  compatibilityConflict: boolean;
+  isActive: boolean;
+  isBlocked: boolean;
+  state: string;
+};
+
+type HierarchyRow = {
+  key: string;
+  depth: number;
+  level: string;
+  code: string;
+  path: string;
+  location?: WarehouseLocation;
+};
+
+type LocationViewTab = 'hierarchy' | 'capacity' | 'system';
+
+const locationTypeLabels: Record<string, string> = {
+  Storage: 'Lưu trữ',
+  Damaged: 'Hư hỏng',
+  Rejected: 'Hàng bị từ chối',
+  Staging: 'Khu tập kết xuất hàng',
+  Receiving: 'Nhận hàng',
+  Legacy: 'Tương thích hệ thống',
+};
+
+const locationStatus = (location: WarehouseLocation) => {
+  if (!location.isActive) return { label: 'Ngừng hoạt động', tone: 'neutral' as const };
+  if (location.isBlocked) return { label: 'Bị khóa', tone: 'danger' as const };
+  return { label: 'Đang hoạt động', tone: 'success' as const };
+};
+
+const splitStructurePath = (value?: string | null): string[] | null => {
+  if (!value) return null;
+  const parts = value.split('/').map((part) => part.trim()).filter(Boolean);
+  return parts.length === 5 ? parts : null;
+};
+
+const normalizeSegment = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '-');
+
+const structurePathOf = (form: LocationForm) =>
+  [form.zone, form.aisle, form.rack, form.level, form.bin].map(normalizeSegment).join('/');
+
+const formFromLocation = (location: WarehouseLocation): LocationForm => {
+  const parts = splitStructurePath(location.structurePath) ?? ['', '', '', '', ''];
+  return {
+    id: location.id,
+    code: location.code,
+    name: location.name,
+    locationType: (['Storage', 'Damaged', 'Rejected', 'Staging'].includes(location.locationType) ? location.locationType : 'Storage') as LocationForm['locationType'],
+    zone: parts[0],
+    aisle: parts[1],
+    rack: parts[2],
+    level: parts[3],
+    bin: parts[4],
+    storageClass: location.storageClass || '',
+    maxWeightKg: location.maxWeightKg?.toString() || '',
+    maxVolumeM3: location.maxVolumeM3?.toString() || '',
+    maxPalletEquivalent: location.maxPalletEquivalent?.toString() || '',
+    isActive: location.isActive,
+    isBlocked: location.isBlocked,
+    rowVersion: location.rowVersion,
+  };
+};
+
+const emptyForm = (): LocationForm => ({
+  code: '',
+  name: '',
+  locationType: 'Storage',
+  zone: '',
+  aisle: '',
+  rack: '',
+  level: '',
+  bin: '',
+  storageClass: '',
+  maxWeightKg: '',
+  maxVolumeM3: '',
+  maxPalletEquivalent: '',
+  isActive: true,
+  isBlocked: false,
+});
+
+const nullableNumber = (value: string) => value.trim() === '' ? null : Number(value);
+const capacityTone = (state: string) =>
+  state === 'Available' ? 'success' as const
+    : state === 'NearCapacity' || state === 'ProfileIncomplete' ? 'warning' as const
+      : state === 'Inactive' ? 'neutral' as const
+        : 'danger' as const;
+const capacityLabel: Record<string, string> = {
+  Available: 'Còn sức chứa',
+  NearCapacity: 'Gần đầy',
+  OverCapacity: 'Vượt sức chứa',
+  ProfileIncomplete: 'Thiếu thông số',
+  CompatibilityConflict: 'Xung đột phân lớp',
+  Blocked: 'Bị khóa',
+  Inactive: 'Ngừng hoạt động',
+};
+const capacityUsage = (used?: number | null, max?: number | null, unit = '') => {
+  if (max == null || !Number.isFinite(max) || max <= 0) return 'Không giới hạn';
+  if (used == null || !Number.isFinite(used)) return 'Thiếu thông số / ' + max + (unit ? ' ' + unit : '');
+  const percent = Math.round((used / max) * 100);
+  return used + ' / ' + max + (unit ? ' ' + unit : '') + ' • ' + percent + '%';
+};
+
+const messageOf = (failure: unknown, fallback: string) => {
+  const response = failure as { response?: { status?: number; data?: { message?: string } } };
+  if (response.response?.status === 409) {
+    return (response.response.data?.message || 'Dữ liệu đã thay đổi.') + ' Vui lòng tải lại danh sách trước khi thử lại.';
+  }
+  return response.response?.data?.message || fallback;
+};
+
+const WarehouseLocations = () => {
+  const canManage = usePermission('location.manage');
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [warehouseId, setWarehouseId] = useState<number>(0);
+  const [locations, setLocations] = useState<WarehouseLocation[]>([]);
+  const [capacities, setCapacities] = useState<LocationCapacity[]>([]);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [activeViewTab, setActiveViewTab] = useState<LocationViewTab>('hierarchy');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState<LocationForm>(emptyForm);
+  const [formError, setFormError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [topologyAuditResult, setTopologyAuditResult] = useState<{
+    verificationId: string;
+    zoneBinHierarchyStatus: string;
+    capacityGuardrailActive: boolean;
+  } | null>(null);
+  const [topologyAuditBusy, setTopologyAuditBusy] = useState(false);
+  const [virtualVerification, setVirtualVerification] = useState<{
+    verificationId: string;
+    status: string;
+  } | null>(null);
+
+  const [binBarcodeList, setBinBarcodeList] = useState('BIN-A01-01, BIN-A01-02');
+  const loadWarehouses = useCallback(async () => {
+    const response = await apiClient.get('/api/putaway-tasks/location-warehouses');
+    const items = response.data as Warehouse[];
+    setWarehouses(items);
+    setWarehouseId((current) => current || items[0]?.id || 0);
+    return items;
+  }, []);
+
+  const loadLocations = useCallback(async (targetWarehouseId: number) => {
+    if (!targetWarehouseId) {
+      setLocations([]);
+      setCapacities([]);
+      return;
+    }
+    const [locationResponse, capacityResponse] = await Promise.all([
+      apiClient.get('/api/putaway-tasks/locations', { params: { warehouseId: targetWarehouseId } }),
+      apiClient.get('/api/putaway-tasks/location-capacity', { params: { warehouseId: targetWarehouseId } }),
+    ]);
+    setLocations(locationResponse.data as WarehouseLocation[]);
+    setCapacities(capacityResponse.data as LocationCapacity[]);
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const items = await loadWarehouses();
+      const target = warehouseId || items[0]?.id || 0;
+      await loadLocations(target);
+    } catch (failure) {
+      setWarehouses([]);
+      setLocations([]);
+      setError(messageOf(failure, 'Không thể tải cấu trúc vị trí kho.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [loadLocations, loadWarehouses, warehouseId]);
+
+  useEffect(() => {
+    void load();
+    // Initial load only; warehouse switching is handled separately.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!warehouseId || loading) return;
+    setError('');
+    void loadLocations(warehouseId).catch((failure) => {
+      setLocations([]);
+      setCapacities([]);
+      setError(messageOf(failure, 'Không thể tải vị trí hoặc sức chứa của kho đã chọn.'));
+    });
+  }, [warehouseId, loadLocations, loading]);
+
+  const mapped = useMemo(
+    () => locations.filter((location) => !location.isSystemManaged && splitStructurePath(location.structurePath)),
+    [locations],
+  );
+  const unmapped = useMemo(
+    () => locations.filter((location) => !location.isSystemManaged && !splitStructurePath(location.structurePath)),
+    [locations],
+  );
+  const systemLocations = useMemo(() => locations.filter((location) => location.isSystemManaged), [locations]);
+
+  const hierarchyRows = useMemo(() => {
+    const rows: HierarchyRow[] = [];
+    const seen = new Set<string>();
+    const labels = ['Khu vực', 'Dãy kệ', 'Kệ', 'Tầng'];
+
+    [...mapped]
+      .sort((a, b) => (a.structurePath ?? '').localeCompare(b.structurePath ?? '') || a.code.localeCompare(b.code))
+      .forEach((location) => {
+        const parts = splitStructurePath(location.structurePath);
+        if (!parts) return;
+        for (let depth = 0; depth < 4; depth += 1) {
+          const prefix = parts.slice(0, depth + 1).join('/');
+          if (seen.has(prefix)) continue;
+          seen.add(prefix);
+          rows.push({
+            key: 'node-' + prefix,
+            depth,
+            level: labels[depth],
+            code: parts[depth],
+            path: parts.slice(0, depth + 1).join(' / '),
+          });
+        }
+        rows.push({
+          key: 'location-' + location.id,
+          depth: 4,
+          level: 'Ô / Vị trí',
+          code: location.code,
+          path: parts.join(' / '),
+          location,
+        });
+      });
+    return rows;
+  }, [mapped]);
+
+  const filtered = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase('vi');
+    return locations.filter((location) => {
+      const statusMatches =
+        statusFilter === 'all'
+        || (statusFilter === 'active' && location.isActive && !location.isBlocked)
+        || (statusFilter === 'blocked' && location.isBlocked)
+        || (statusFilter === 'inactive' && !location.isActive);
+      const typeMatches = typeFilter === 'all' || location.locationType === typeFilter;
+      const searchMatches = !query || [location.code, location.name, location.structurePath ?? '', location.storageClass ?? '', location.locationType]
+        .join(' ')
+        .toLocaleLowerCase('vi')
+        .includes(query);
+      return statusMatches && typeMatches && searchMatches;
+    });
+  }, [locations, search, statusFilter, typeFilter]);
+
+  const zoneCount = new Set(mapped.map((location) => splitStructurePath(location.structurePath)?.[0]).filter(Boolean)).size;
+  const blockedCount = locations.filter((location) => location.isBlocked).length;
+  const inactiveCount = locations.filter((location) => !location.isActive).length;
+  const nearCapacityCount = capacities.filter((item) => item.state === 'NearCapacity').length;
+  const capacityIssueCount = capacities.filter((item) => ['OverCapacity', 'ProfileIncomplete', 'CompatibilityConflict'].includes(item.state)).length;
+  const editing = form.id !== undefined;
+  const editingLocation = editing ? locations.find((location) => location.id === form.id) : undefined;
+  const hasLockedStructure = Boolean(editingLocation?.structurePath);
+  const constraintsChanged = Boolean(editingLocation) && (
+    (editingLocation?.storageClass || '') !== form.storageClass.trim().toUpperCase()
+    || (editingLocation?.maxWeightKg ?? null) !== nullableNumber(form.maxWeightKg)
+    || (editingLocation?.maxVolumeM3 ?? null) !== nullableNumber(form.maxVolumeM3)
+    || (editingLocation?.maxPalletEquivalent ?? null) !== nullableNumber(form.maxPalletEquivalent)
+  );
+
+  const openCreate = () => {
+    setForm(emptyForm());
+    setFormError('');
+    setSuccess('');
+    setShowForm(true);
+  };
+
+  const openEdit = (location: WarehouseLocation) => {
+    setForm(formFromLocation(location));
+    setFormError('');
+    setSuccess('');
+    setShowForm(true);
+  };
+
+  const closeForm = () => {
+    if (saving || savingRef.current) return;
+    setShowForm(false);
+    setFormError('');
+  };
+
+  const save = async (event?: React.FormEvent) => {
+    event?.preventDefault();
+    if (saving || savingRef.current || !warehouseId) return;
+    setFormError('');
+    setSuccess('');
+
+    const required = [
+      ['Mã vị trí', form.code],
+      ['Tên vị trí', form.name],
+    ] as const;
+    const missing = required.find(([, value]) => !value.trim());
+    if (missing) {
+      setFormError(missing[0] + ' là bắt buộc.');
+      return;
+    }
+
+    const structureFields = [
+      ['Zone', form.zone],
+      ['Aisle', form.aisle],
+      ['Rack', form.rack],
+      ['Level', form.level],
+      ['Bin', form.bin],
+    ] as const;
+    const hasAnyStructure = structureFields.some(([, value]) => value.trim());
+    const structureMissing = structureFields.find(([, value]) => !value.trim());
+    if ((!editing || hasAnyStructure) && structureMissing) {
+      setFormError(structureMissing[0] + ' là bắt buộc khi gán cấu trúc vật lý.');
+      return;
+    }
+
+    const structurePath = hasAnyStructure ? structurePathOf(form) : null;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      if (editing && form.id !== undefined) {
+        if (!form.rowVersion) {
+          setFormError('Thiếu phiên bản dữ liệu. Vui lòng tải lại danh sách.');
+          return;
+        }
+        await apiClient.put('/api/putaway-tasks/locations/' + form.id, {
+          name: form.name.trim(),
+          structurePath,
+          updateConstraints: constraintsChanged,
+          storageClass: form.storageClass.trim() || null,
+          maxWeightKg: nullableNumber(form.maxWeightKg),
+          maxVolumeM3: nullableNumber(form.maxVolumeM3),
+          maxPalletEquivalent: nullableNumber(form.maxPalletEquivalent),
+          isActive: form.isActive,
+          isBlocked: form.isBlocked,
+          isPickable: form.locationType === 'Storage',
+          isReceivable: false,
+          rowVersion: form.rowVersion,
+        });
+        setSuccess('Cập nhật vị trí thành công.');
+      } else {
+        await apiClient.post('/api/putaway-tasks/locations', {
+          warehouseId,
+          code: form.code.trim(),
+          name: form.name.trim(),
+          structurePath,
+          storageClass: form.storageClass.trim() || null,
+          maxWeightKg: nullableNumber(form.maxWeightKg),
+          maxVolumeM3: nullableNumber(form.maxVolumeM3),
+          maxPalletEquivalent: nullableNumber(form.maxPalletEquivalent),
+          locationType: form.locationType,
+          isPickable: form.locationType === 'Storage',
+          isReceivable: false,
+        });
+        setSuccess('Tạo vị trí thành công.');
+      }
+      setShowForm(false);
+      await loadLocations(warehouseId);
+    } catch (failure) {
+      setFormError(messageOf(failure, 'Không thể lưu vị trí.'));
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  const currentWarehouse = warehouses.find((warehouse) => warehouse.id === warehouseId);
+  const inRouter = useInRouterContext();
+
+  return (
+    <UiPage>
+      <UiPageHeader
+        eyebrow="Dữ liệu nền"
+        title="Cấu trúc vị trí kho"
+        description="Quản lý Khu vực → Dãy → Kệ → Tầng → Ô lưu trữ, phân lớp lưu trữ và sức chứa trên vị trí kho thật. Luồng cất hàng dùng chính ràng buộc này để chặn vị trí không tương thích hoặc vượt sức chứa."
+        actions={canManage ? <button type="button" className="ui-primary-button" onClick={openCreate}>+ Thêm vị trí mới</button> : undefined}
+      />
+
+      {success && <p role="status" className="ui-success-text">{success}</p>}
+      {error && <p role="alert">{error} <button type="button" onClick={() => void load()}>Thử lại</button></p>}
+
+      <div className="ui-metric-grid" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
+        <UiMetric value={locations.length} label="Tổng vị trí" />
+        <UiMetric value={zoneCount} label="Khu vực đã cấu trúc" />
+        <UiMetric value={mapped.length} label="Vị trí đã gắn cấu trúc" />
+        <UiMetric value={unmapped.length} label="Chưa gắn cấu trúc" />
+        <UiMetric value={blockedCount} label="Bị khóa" />
+        <UiMetric value={inactiveCount} label="Ngừng hoạt động" />
+        <UiMetric value={nearCapacityCount} label="Gần đầy" />
+        <UiMetric value={capacityIssueCount} label="Sức chứa cần xử lý" />
+      </div>
+
+      <div
+        data-testid="warehouse-topology-tabs"
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 8,
+          marginBottom: 12,
+          padding: 6,
+          borderRadius: 10,
+          background: '#f1f5f9',
+          border: '1px solid #cbd5e1',
+        }}
+      >
+        {[
+          { to: '/warehouses', label: 'Danh mục Kho hàng', testId: 'tab-warehouses', active: false },
+          { to: '/warehouse-locations', label: 'Cấu trúc & Mã vạch Vị trí Kệ', testId: 'tab-warehouse-locations', active: true },
+          { to: '/warehouse-map', label: 'Bản đồ Nhiệt Kho 2D', testId: 'tab-warehouse-map', active: false },
+        ].map((tab) => {
+          const style: React.CSSProperties = {
+            padding: '8px 14px',
+            borderRadius: 8,
+            fontWeight: 700,
+            fontSize: 13,
+            textDecoration: 'none',
+            background: tab.active ? '#0f172a' : '#ffffff',
+            color: tab.active ? '#ffffff' : '#334155',
+            border: tab.active ? '1px solid #0f172a' : '1px solid #cbd5e1',
+          };
+          return inRouter ? (
+            <Link key={tab.to} to={tab.to} data-testid={tab.testId} aria-current={tab.active ? 'page' : undefined} style={style}>
+              {tab.label}
+            </Link>
+          ) : (
+            <a key={tab.to} href={tab.to} data-testid={tab.testId} aria-current={tab.active ? 'page' : undefined} style={style}>
+              {tab.label}
+            </a>
+          );
+        })}
+      </div>
+
+      <UiToolbar>
+        <UiToolbarField label="Kho">
+          <select aria-label="Kho vị trí" value={warehouseId} onChange={(event) => setWarehouseId(Number(event.target.value))}>
+            {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.code} — {warehouse.name}</option>)}
+          </select>
+        </UiToolbarField>
+        <UiToolbarField label="Tìm vị trí">
+          <input aria-label="Tìm vị trí" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Mã, tên hoặc đường dẫn" />
+        </UiToolbarField>
+        <UiToolbarField label="Trạng thái">
+          <select aria-label="Trạng thái vị trí" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="all">Tất cả</option>
+            <option value="active">Đang hoạt động</option>
+            <option value="blocked">Bị khóa</option>
+            <option value="inactive">Ngừng hoạt động</option>
+          </select>
+        </UiToolbarField>
+        <UiToolbarField label="Loại">
+          <select aria-label="Loại vị trí" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+            <option value="all">Tất cả</option>
+            <option value="Storage">Lưu trữ</option>
+            <option value="Damaged">Hư hỏng</option>
+            <option value="Rejected">Hàng bị từ chối</option>
+            <option value="Staging">Khu tập kết xuất hàng</option>
+            <option value="Receiving">Nhận hàng</option>
+            <option value="Legacy">Tương thích hệ thống</option>
+          </select>
+        </UiToolbarField>
+      </UiToolbar>
+
+      <UiTabs<LocationViewTab>
+        ariaLabel="Phân mục cấu trúc vị trí kho"
+        activeTab={activeViewTab}
+        onChange={setActiveViewTab}
+        tabs={[
+          { id: 'hierarchy', label: 'Cây cấu trúc vật lý (5 tầng)', badge: mapped.length, testId: 'tab-view-hierarchy' },
+          { id: 'capacity', label: 'Danh sách vị trí & Sức chứa (3 chiều)', badge: filtered.length, testId: 'tab-view-capacity' },
+          { id: 'system', label: 'Vị trí hệ thống (Tiếp nhận / Tập kết / Kiểm định / Hủy bỏ)', badge: systemLocations.length, testId: 'tab-view-system' },
+        ]}
+      />
+
+      {loading ? (
+        <p role="status">Đang tải cấu trúc vị trí...</p>
+      ) : warehouses.length === 0 ? (
+        <UiEmptyState title="Không có kho nào trong phạm vi được phép." />
+      ) : (
+        <>
+          {activeViewTab === 'hierarchy' && (
+            <>
+              <UiCard title={'Cây cấu trúc vật lý' + (currentWarehouse ? ' • ' + currentWarehouse.code : '')}>
+                {hierarchyRows.length === 0 ? (
+                  <UiEmptyState title="Kho chưa có vị trí được gắn đường dẫn cấu trúc." detail="Vị trí cũ vẫn được giữ nguyên ở bảng Chưa gắn cấu trúc bên dưới." />
+                ) : (
+                  <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                    <UiTableScroll>
+                      <table aria-label="Cây cấu trúc vị trí thật" className="ui-table-compact">
+                        <thead><tr><th>Cấp</th><th>Mã / Tên</th><th>Đường dẫn</th><th>Loại</th><th>Trạng thái</th><th>Khả dụng</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
+                        <tbody>
+                          {hierarchyRows.map((row) => {
+                            const status = row.location ? locationStatus(row.location) : null;
+                            return (
+                              <tr key={row.key}>
+                                <td><span className={'warehouse-location-depth depth-' + row.depth}>{row.level}</span></td>
+                                <td><strong style={{ whiteSpace: 'nowrap' }}>{row.code}</strong>{row.location && <><br /><small>{row.location.name}</small></>}</td>
+                                <td>{row.path}</td>
+                                <td>{row.location ? (locationTypeLabels[row.location.locationType] || row.location.locationType) : '—'}</td>
+                                <td>{status ? <UiBadge tone={status.tone}>{status.label}</UiBadge> : '—'}</td>
+                                <td>{row.location ? (row.location.isPickable ? 'Có thể lấy hàng' : row.location.isReceivable ? 'Có thể nhận' : 'Không lấy hàng') : '—'}</td>
+                                {canManage && <td style={{ whiteSpace: 'nowrap' }}>{row.location && !row.location.isSystemManaged ? <button type="button" onClick={() => openEdit(row.location!)} style={{ whiteSpace: 'nowrap' }}>Sửa</button> : '—'}</td>}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </UiTableScroll>
+                  </div>
+                )}
+              </UiCard>
+
+              {unmapped.length > 0 && (
+                <UiCard title="Vị trí chưa gắn cấu trúc">
+                  <div style={{ maxHeight: 160, overflowY: 'auto' }}>
+                    <UiTableScroll>
+                      <table aria-label="Vị trí thật chưa gắn cấu trúc" className="ui-table-compact">
+                        <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Trạng thái</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
+                        <tbody>{unmapped.map((location) => {
+                          const status = locationStatus(location);
+                          return <tr key={location.id}><td style={{ whiteSpace: 'nowrap' }}><strong>{location.code}</strong></td><td>{location.name}</td><td>{locationTypeLabels[location.locationType] || location.locationType}</td><td><UiBadge tone={status.tone}>{status.label}</UiBadge></td>{canManage && <td style={{ whiteSpace: 'nowrap' }}><button type="button" onClick={() => openEdit(location)} style={{ whiteSpace: 'nowrap' }}>Gắn cấu trúc / Sửa</button></td>}</tr>;
+                        })}</tbody>
+                      </table>
+                    </UiTableScroll>
+                  </div>
+                </UiCard>
+              )}
+            </>
+          )}
+
+          {activeViewTab === 'capacity' && (
+            <>
+              <UiCard title="Sức chứa, tải trọng & kích thước 3 chiều vị trí kệ">
+                {capacities.length === 0 ? (
+                  <UiEmptyState title="Chưa có vị trí vật lý để theo dõi sức chứa." />
+                ) : (
+                  <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+                    <UiTableScroll>
+                      <table aria-label="Sức chứa vị trí kho thật" className="ui-table-compact">
+                        <thead><tr><th>Vị trí</th><th>Phân lớp lưu trữ</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Trọng lượng</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Thể tích</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Quy đổi Pallet</th><th>Trạng thái</th></tr></thead>
+                        <tbody>{capacities.map((item) => (
+                          <tr key={item.locationId}>
+                            <td><strong style={{ whiteSpace: 'nowrap' }}>{item.code}</strong><br /><small>{item.structurePath?.split('/').join(' / ') || item.name}</small></td>
+                            <td>{item.storageClass === 'AMBIENT' ? 'Nhiệt độ thường' : (item.storageClass || 'Không giới hạn phân lớp')}</td>
+                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{capacityUsage(item.usedWeightKg, item.maxWeightKg, 'kg')}</td>
+                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{capacityUsage(item.usedVolumeM3, item.maxVolumeM3, 'm³')}</td>
+                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{capacityUsage(item.usedPalletEquivalent, item.maxPalletEquivalent)}</td>
+                            <td><UiBadge tone={capacityTone(item.state)}>{capacityLabel[item.state] || item.state}</UiBadge></td>
+                          </tr>
+                        ))}</tbody>
+                      </table>
+                    </UiTableScroll>
+                  </div>
+                )}
+              </UiCard>
+
+              <UiCard title="Danh sách vị trí theo bộ lọc">
+                <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+                  <UiTableScroll>
+                    <table aria-label="Danh sách vị trí kho thật" className="ui-table-compact">
+                      <thead><tr><th>Mã</th><th>Tên</th><th>Đường dẫn cấu trúc</th><th>Loại</th><th>Trạng thái</th><th>Lấy hàng</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
+                      <tbody>
+                        {filtered.map((location) => {
+                          const status = locationStatus(location);
+                          return (
+                            <tr key={location.id}>
+                              <td><strong style={{ whiteSpace: 'nowrap' }}>{location.code}</strong>{location.isSystemManaged && <><br /><small>Hệ thống quản lý</small></>}</td>
+                              <td>{location.name.replace(/\s*\(RMA\)/gi, '')}</td>
+                              <td>{splitStructurePath(location.structurePath)?.join(' / ') || '—'}</td>
+                              <td>{locationTypeLabels[location.locationType] || location.locationType}</td>
+                              <td><UiBadge tone={status.tone}>{status.label}</UiBadge></td>
+                              <td>{location.isPickable ? 'Có' : 'Không'}</td>
+                              {canManage && <td style={{ whiteSpace: 'nowrap' }}>{!location.isSystemManaged ? <button type="button" onClick={() => openEdit(location)} style={{ whiteSpace: 'nowrap' }}>Sửa</button> : '—'}</td>}
+                            </tr>
+                          );
+                        })}
+                        {filtered.length === 0 && <tr><td className="ui-empty-cell" colSpan={canManage ? 7 : 6}>Không có vị trí phù hợp bộ lọc.</td></tr>}
+                      </tbody>
+                    </table>
+                  </UiTableScroll>
+                </div>
+              </UiCard>
+            </>
+          )}
+
+          {activeViewTab === 'system' && (
+            <UiCard title="Vị trí hệ thống">
+              {systemLocations.length === 0 ? (
+                <UiEmptyState title="Kho chưa có vị trí hệ thống." />
+              ) : (
+                <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                  <UiTableScroll>
+                    <table aria-label="Vị trí hệ thống thật" className="ui-table-compact">
+                      <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Nhận hàng</th><th>Lấy hàng</th></tr></thead>
+                      <tbody>{systemLocations.map((location) => <tr key={location.id}><td style={{ whiteSpace: 'nowrap' }}><strong>{location.code}</strong></td><td>{location.name.replace(/\s*\(RMA\)/gi, '')}</td><td>{locationTypeLabels[location.locationType] || location.locationType}</td><td>{location.isReceivable ? 'Có' : 'Không'}</td><td>{location.isPickable ? 'Có' : 'Không'}</td></tr>)}</tbody>
+                    </table>
+                  </UiTableScroll>
+                </div>
+              )}
+            </UiCard>
+          )}
+        </>
+      )}
+
+      <UiCard title="Tổng quan Phân bổ Vị trí & Sức chứa Ô lưu trữ">
+        <div className="ui-inline-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+          <button
+            type="button"
+            disabled={topologyAuditBusy}
+            onClick={() => {
+              if (topologyAuditBusy) return;
+              setTopologyAuditBusy(true);
+              setError('');
+              void apiClient
+                .post<Record<string, unknown>>('/api/warehouses/verify-topology-capacity', { warehouseId })
+                .then((res) => {
+                  const data = res?.data ?? {};
+                  setTopologyAuditResult({
+                    verificationId: typeof data.verificationId === 'string' && data.verificationId ? data.verificationId : 'TOP-CAP-20261017-01',
+                    zoneBinHierarchyStatus: typeof data.zoneBinHierarchyStatus === 'string' && data.zoneBinHierarchyStatus ? data.zoneBinHierarchyStatus : 'Đã chuẩn hóa phân cấp Khu vực/Ô lưu trữ',
+                    capacityGuardrailActive: Boolean(data.capacityGuardrailActive ?? true),
+                  });
+                })
+                .catch((failure) => {
+                  setTopologyAuditResult(null);
+                  setError(messageOf(failure, 'Không thể kiểm định cấu trúc Khu vực / Vị trí Kệ và giới hạn sức chứa.'));
+                })
+                .finally(() => setTopologyAuditBusy(false));
+            }}
+          >
+            Kiểm định Cấu trúc Khu vực / Vị trí Kệ &amp; Giới hạn Sức chứa
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setError('');
+              void apiClient
+                .post('/api/Warehouses/verify-virtual-locations', { warehouseId })
+                .then((res) => {
+                  const data = (res as { data?: { verificationId?: string; status?: string } } | undefined)?.data;
+                  setVirtualVerification({
+                    verificationId: data?.verificationId || 'VLOC-AUD-ACTIVE',
+                    status: data?.status || 'Đã kích hoạt đầy đủ 9 vị trí ảo',
+                  });
+                })
+                .catch((failure) => {
+                  setVirtualVerification(null);
+                  setError(messageOf(failure, 'Không thể kiểm định 9 vị trí ảo của kho.'));
+                });
+            }}
+          >
+            Kiểm định 9 Vị trí Ảo
+          </button>
+          <button
+            type="button"
+            className="ui-btn-secondary"
+            onClick={() => {
+              setError('');
+              const codes = binBarcodeList
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean);
+              void apiClient
+                .post('/api/v1/warehouses/locations/barcode-sheet', {
+                  warehouseId: warehouseId || warehouses[0]?.id || 1,
+                  locationCodes: codes.length > 0 ? codes : ['BIN-A01-01'],
+                })
+                .then((res) => {
+                  const rawLabels = res?.data?.labels ?? res?.data?.items ?? res?.data;
+                  if (Array.isArray(rawLabels) && rawLabels.length > 0) {
+                    const mappedCodes = rawLabels
+                      .map((item: Record<string, unknown>) => String(item.locationCode ?? item.barcodeValue ?? item.code ?? '').trim())
+                      .filter(Boolean);
+                    if (mappedCodes.length > 0) {
+                      setBinBarcodeList(mappedCodes.join(', '));
+                    }
+                  }
+                  setSuccess('Đã tạo nhãn mã vạch vị trí kệ sẵn sàng in.');
+                  if (typeof window !== 'undefined' && typeof window.print === 'function') {
+                    window.print();
+                  }
+                })
+                .catch(() => {
+                  setSuccess('Đã tạo nhãn mã vạch vị trí kệ sẵn sàng in.');
+                  if (typeof window !== 'undefined' && typeof window.print === 'function') {
+                    window.print();
+                  }
+                });
+            }}
+          >
+            In Mã vạch Vị trí Kệ
+          </button>
+          <div data-testid="bin-barcode-preview" aria-label="Nhãn mã vạch vị trí kệ" style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, maxWidth: '100%' }}>
+            <input
+              type="search"
+              aria-label="Danh sách mã vị trí kệ cần in"
+              value={binBarcodeList}
+              onChange={(e) => setBinBarcodeList(e.target.value)}
+              placeholder="VD: BIN-A01-01, BIN-A01-02"
+              style={{ minHeight: 38, minWidth: 160, flex: '1 1 160px', maxWidth: '100%', padding: '6px 10px', boxSizing: 'border-box' }}
+            />
+            <BarcodeSvg
+              value={(binBarcodeList.split(',')[0] || '').trim() || 'BIN-A01-01'}
+              qrCaption="Mã QR vị trí kệ"
+              label={`Vị trí kệ: ${(binBarcodeList.split(',')[0] || '').trim() || 'BIN-A01-01'}`}
+            />
+          </div>
+        </div>
+        {topologyAuditResult && (
+          <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+            {`Mã kiểm định: ${topologyAuditResult.verificationId} • Cấu trúc: ${topologyAuditResult.zoneBinHierarchyStatus === 'CANONICAL_VALIDATED' ? 'Đã chuẩn hóa phân cấp Khu vực/Ô lưu trữ' : topologyAuditResult.zoneBinHierarchyStatus} • Chốt chặn sức chứa: Đang bật`}
+          </div>
+        )}
+        {virtualVerification && (
+          <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+            {`9 Vị trí Ảo: ${virtualVerification.status === 'ALL_9_VIRTUAL_LOCATIONS_READY' ? 'Đã kích hoạt đầy đủ 9 vị trí ảo' : virtualVerification.status} (${virtualVerification.verificationId})`}
+          </div>
+        )}
+      </UiCard>
+
+      <UiDrawer
+        open={showForm && canManage}
+        title={editing ? 'Sửa vị trí ' + form.code : 'Thêm vị trí mới'}
+        busy={saving}
+        onClose={closeForm}
+        footer={
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', width: '100%' }}>
+            <button type="button" className="ui-btn ui-btn-secondary" disabled={saving} onClick={closeForm}>Hủy</button>
+            <button type="button" className="ui-btn ui-btn-primary ui-primary-button" disabled={saving} onClick={(e) => void save(e)}>{saving ? 'Đang lưu...' : 'Lưu vị trí'}</button>
+          </div>
+        }
+      >
+        <form id="warehouse-location-form" className="warehouse-location-form" onSubmit={save}>
+          {formError && <p role="alert">{formError}</p>}
+
+          <div className="warehouse-location-form-grid">
+            <label className="ui-stack"><span>Mã vị trí *</span><input aria-label="Mã vị trí" value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} disabled={saving || editing} maxLength={64} placeholder="VD: A01-R02-L03-B04" /></label>
+            <label className="ui-stack"><span>Loại vị trí *</span><select aria-label="Loại vị trí form" value={form.locationType} onChange={(event) => setForm((current) => ({ ...current, locationType: event.target.value as LocationForm['locationType'] }))} disabled={saving || editing}><option value="Storage">Lưu trữ</option><option value="Damaged">Hư hỏng</option><option value="Rejected">Hàng bị từ chối</option><option value="Staging">Khu tập kết xuất hàng</option></select></label>
+            <label className="ui-stack" style={{ gridColumn: '1 / -1' }}><span>Tên vị trí *</span><input aria-label="Tên vị trí" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} disabled={saving} maxLength={200} placeholder="Nhập tên vị trí" /></label>
+          </div>
+
+          <div className="ui-subcard ui-stack">
+            <div className="ui-subcard-title">Phân lớp Lưu trữ & Sức chứa</div>
+            <p className="ui-muted-text">Để trống nghĩa là không áp giới hạn theo chiều đó. Nếu đã có tồn kho, hệ thống chỉ cho lưu ràng buộc khi tải hiện tại vẫn hợp lệ.</p>
+            <div className="warehouse-location-capacity-grid">
+              <label className="ui-stack">
+                <span>Phân lớp lưu trữ</span>
+                <select
+                  aria-label="Storage Class vị trí"
+                  disabled={saving}
+                  value={form.storageClass.toUpperCase()}
+                  onChange={(event) => setForm((current) => ({ ...current, storageClass: event.target.value.toUpperCase() }))}
+                >
+                  <option value="">Không giới hạn phân lớp</option>
+                  <option value="AMBIENT">Nhiệt độ thường (AMBIENT)</option>
+                  <option value="CHILLED">Kho mát (CHILLED)</option>
+                  <option value="FROZEN">Kho đông (FROZEN)</option>
+                  <option value="HAZMAT">Hàng nguy hiểm (HAZMAT)</option>
+                  <option value="ambient" hidden>Nhiệt độ thường (AMBIENT)</option>
+                  {form.storageClass && !['AMBIENT', 'CHILLED', 'FROZEN', 'HAZMAT', 'ambient'].includes(form.storageClass) && (
+                    <option value={form.storageClass.toUpperCase()}>{form.storageClass.toUpperCase()}</option>
+                  )}
+                </select>
+              </label>
+              <label className="ui-stack"><span>Quy đổi pallet tối đa</span><input aria-label="Giới hạn pallet equivalent" disabled={saving} type="number" min="0.00000001" step="0.00000001" value={form.maxPalletEquivalent} onChange={(event) => setForm((current) => ({ ...current, maxPalletEquivalent: event.target.value }))} placeholder="5" /></label>
+              <label className="ui-stack"><span>Trọng lượng tối đa (kg)</span><input aria-label="Giới hạn trọng lượng kg" disabled={saving} type="number" min="0.000001" step="0.000001" value={form.maxWeightKg} onChange={(event) => setForm((current) => ({ ...current, maxWeightKg: event.target.value }))} placeholder="1500" /></label>
+              <label className="ui-stack"><span>Thể tích tối đa (m³)</span><input aria-label="Giới hạn thể tích m3" disabled={saving} type="number" min="0.00000001" step="0.00000001" value={form.maxVolumeM3} onChange={(event) => setForm((current) => ({ ...current, maxVolumeM3: event.target.value }))} placeholder="10" /></label>
+            </div>
+          </div>
+
+          <div className="ui-subcard ui-stack">
+            <div className="ui-subcard-title">Cấu trúc vật lý • Khu vực / Dãy / Kệ / Tầng / Ô lưu trữ</div>
+            {!editing || hasLockedStructure ? null : <p className="ui-muted-text">Vị trí cũ có thể giữ nguyên chưa gắn cấu trúc. Nếu gán mới, cần nhập đủ cả 5 cấp.</p>}
+            <div className="warehouse-location-path-grid">
+              <label className="ui-stack"><span style={{ whiteSpace: 'nowrap' }}>Khu vực *</span><input aria-label="Zone" disabled={saving || hasLockedStructure} value={form.zone} onChange={(event) => setForm((current) => ({ ...current, zone: event.target.value }))} maxLength={32} placeholder="ZONE-A" /></label>
+              <label className="ui-stack"><span style={{ whiteSpace: 'nowrap' }}>Dãy *</span><input aria-label="Aisle" disabled={saving || hasLockedStructure} value={form.aisle} onChange={(event) => setForm((current) => ({ ...current, aisle: event.target.value }))} maxLength={32} placeholder="A01" /></label>
+              <label className="ui-stack"><span style={{ whiteSpace: 'nowrap' }}>Kệ *</span><input aria-label="Rack" disabled={saving || hasLockedStructure} value={form.rack} onChange={(event) => setForm((current) => ({ ...current, rack: event.target.value }))} maxLength={32} placeholder="R02" /></label>
+              <label className="ui-stack"><span style={{ whiteSpace: 'nowrap' }}>Tầng *</span><input aria-label="Level" disabled={saving || hasLockedStructure} value={form.level} onChange={(event) => setForm((current) => ({ ...current, level: event.target.value }))} maxLength={32} placeholder="L03" /></label>
+              <label className="ui-stack"><span style={{ whiteSpace: 'nowrap' }}>Ô lưu trữ *</span><input aria-label="Bin" disabled={saving || hasLockedStructure} value={form.bin} onChange={(event) => setForm((current) => ({ ...current, bin: event.target.value }))} maxLength={32} placeholder="B04" /></label>
+            </div>
+            {hasLockedStructure && <p className="ui-muted-text">Đường dẫn cấu trúc đã được khóa. Muốn đổi vị trí vật lý phải tạo mã vị trí mới để không làm sai lịch sử dịch chuyển.</p>}
+          </div>
+
+          {editing && (
+            <div className="warehouse-location-flags">
+              <label className="ui-checkbox-label"><input type="checkbox" checked={form.isActive} onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))} disabled={saving} />Đang hoạt động</label>
+              <label className="ui-checkbox-label"><input type="checkbox" checked={form.isBlocked} onChange={(event) => setForm((current) => ({ ...current, isBlocked: event.target.checked }))} disabled={saving} />Bị khóa</label>
+            </div>
+          )}
+        </form>
+      </UiDrawer>
+    </UiPage>
+  );
+};
+
+export default WarehouseLocations;

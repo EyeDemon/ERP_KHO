@@ -1,22 +1,50 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public class InventoryTransaction
+public class InventoryTransaction : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int ProductId { get; set; }
     public int WarehouseId { get; set; }
+    public int? LocationId { get; set; }
+    public int? FromLocationId { get; set; }
+    public int? ToLocationId { get; set; }
+    public int? LotId { get; set; }
+    public int? SerialId { get; set; }
+    public int? HandlingUnitId { get; set; }
+    public int? OwnerId { get; set; }
+    public InventoryStatus InventoryStatus { get; set; } = InventoryStatus.Available;
+    public InventoryStatus? FromInventoryStatus { get; set; }
+    public InventoryStatus? ToInventoryStatus { get; set; }
     public TransactionType TransactionType { get; set; }
     public decimal Quantity { get; set; }
+    public decimal UnitCost { get; set; }
     public int? ReferenceId { get; set; }
     public string? ReferenceType { get; set; }
+    public int? SourceDocumentLineId { get; set; }
+    public int? ReversalOfTransactionId { get; set; }
+    public int? CorrectiveTransactionId { get; set; }
     public DateTime TransactionDate { get; set; } = DateTime.UtcNow;
+    public DateTime ActualOccurredAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime PostedAtUtc { get; set; } = DateTime.UtcNow;
     public int CreatedBy { get; set; }
     public string? Note { get; set; }
+    // Present on reversal markers only; legacy history stays null.
+    public string? ReasonCode { get; set; }
 
     // Navigation
     public Product Product { get; set; } = null!;
     public Warehouse Warehouse { get; set; } = null!;
+    public WarehouseLocation? Location { get; set; }
+    public WarehouseLocation? FromLocation { get; set; }
+    public WarehouseLocation? ToLocation { get; set; }
+    public InventoryLot? Lot { get; set; }
+    public InventorySerial? Serial { get; set; }
+    public InventoryStatusDefinition StatusDefinition { get; set; } = null!;
+    public InventoryTransaction? ReversalOfTransaction { get; set; }
+    public InventoryTransaction? CorrectiveTransaction { get; set; }
     public User CreatedByUser { get; set; } = null!;
 }

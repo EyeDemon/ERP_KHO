@@ -9,5 +9,8 @@ namespace ERP.Application.DTOs
         public string Name { get; set; } = string.Empty;
 
         public bool IsActive { get; set; }
+
+        [Range(0, 4)]
+        public int DecimalPlaces { get; set; } = 4;
     }
 }

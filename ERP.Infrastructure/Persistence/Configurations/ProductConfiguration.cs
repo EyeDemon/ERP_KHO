@@ -11,13 +11,28 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.ToTable("Products");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Code).IsRequired().HasMaxLength(50);
-        builder.HasIndex(x => x.Code).IsUnique().HasDatabaseName("IX_ProductCode");
+        builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique().HasDatabaseName("UX_Products_TenantId_Code");
+        builder.HasIndex(x => x.StorageClass);
         builder.Property(x => x.Name).IsRequired().HasMaxLength(200);
         builder.Property(x => x.Description).HasMaxLength(500);
+        builder.Property(x => x.StorageClass).HasMaxLength(32);
+        builder.Property(x => x.UnitWeightKg).HasPrecision(18, 6);
+        builder.Property(x => x.UnitVolumeM3).HasPrecision(18, 8);
+        builder.Property(x => x.UnitPalletEquivalent).HasPrecision(18, 8);
+        builder.Property(x => x.MovingAverageCost).HasPrecision(19, 4);
+        builder.Property(x => x.TrackingType).HasConversion<int>();
+        builder.ToTable(t => t.HasCheckConstraint(
+            "CK_Products_TrackingPolicy",
+            "([ExpiryControl] = 0 OR [TrackingType] <> 0) AND ([ShelfLifeDays] IS NULL OR [ShelfLifeDays] > 0) AND ([ExpiryControl] = 1 OR [ShelfLifeDays] IS NULL)"));
 
         builder.HasOne(x => x.Unit)
                .WithMany(u => u.Products)
                .HasForeignKey(x => x.UnitId)
+               .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.Category)
+               .WithMany(x => x.Products)
+               .HasForeignKey(x => x.CategoryId)
                .OnDelete(DeleteBehavior.Restrict);
     }
 }

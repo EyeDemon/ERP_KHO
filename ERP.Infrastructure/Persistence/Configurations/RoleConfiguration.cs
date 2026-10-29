@@ -12,5 +12,6 @@ public class RoleConfiguration : IEntityTypeConfiguration<Role>
         builder.HasKey(x => x.Id);
         builder.Property(x => x.RoleName).IsRequired().HasMaxLength(50);
         builder.Property(x => x.Description).HasMaxLength(200);
+        builder.Property(x => x.RowVersion).IsConcurrencyToken();
     }
 }

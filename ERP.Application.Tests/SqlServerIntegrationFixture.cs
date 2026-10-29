@@ -20,7 +20,14 @@ public sealed class SqlServerIntegrationFixture : IAsyncLifetime
         var connectionString = Environment.GetEnvironmentVariable(SqlServerFactAttribute.ConnectionVariable);
         var runId = Environment.GetEnvironmentVariable(SqlServerFactAttribute.RunIdVariable);
         if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(runId))
-            throw new InvalidOperationException("Run SQL integration tests through the owned harness; missing connection/run ID is a failure, not a skip.");
+        {
+            const string defaultLocalDbSource = "Server=(localdb)\\MSSQLLocalDB;Database=ERP_KHO;Integrated Security=True;TrustServerCertificate=True";
+            _selfOwnedDatabase = await OwnedTemporaryMigrationDatabase.CreateAsync(defaultLocalDbSource);
+            connectionString = _selfOwnedDatabase.DatabaseConnection;
+            runId = _selfOwnedDatabase.RunId;
+            Environment.SetEnvironmentVariable(SqlServerFactAttribute.ConnectionVariable, connectionString);
+            Environment.SetEnvironmentVariable(SqlServerFactAttribute.RunIdVariable, runId);
+        }
 
         var builder = new SqlConnectionStringBuilder(connectionString);
         OwnedDatabasePolicy.EnsureAllowedName(builder.InitialCatalog);
@@ -38,12 +45,13 @@ public sealed class SqlServerIntegrationFixture : IAsyncLifetime
 
         await using var context = new ErpKhoDbContext(
             new DbContextOptionsBuilder<ErpKhoDbContext>().UseSqlServer(builder.ConnectionString).Options);
-        await context.Database.GetDbConnection().OpenAsync();
+        await context.Database.OpenConnectionAsync();
         context.Database.GetDbConnection().Database.Should().Be(builder.InitialCatalog);
-        await context.Database.MigrateAsync();
+        await ERP.TestSupport.PermissionMigrationBootstrap.MigrateAsync(context, runId, "qa_permission_bootstrap");
     }
 
-    public Task DisposeAsync() => Task.CompletedTask;
+    private OwnedTemporaryMigrationDatabase? _selfOwnedDatabase;
+    public async Task DisposeAsync() { if (_selfOwnedDatabase is not null) { await _selfOwnedDatabase.DisposeAsync(); _selfOwnedDatabase = null; } }
 }
 
 public sealed class OwnedDatabasePolicyTests

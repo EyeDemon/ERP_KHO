@@ -1,0 +1,507 @@
+using ERP.Application.DTOs;
+using ERP.Application.Exceptions;
+using ERP.Application.Interfaces;
+using ERP.Domain.Entities;
+using ERP.Domain.Enums;
+using ERP.Domain.Exceptions;
+using ERP.Domain.Security;
+using ERP.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+
+namespace ERP.Infrastructure.Services;
+
+public sealed class InboundPlanningService(
+    ErpKhoDbContext context,
+    IWarehouseAuthorizationService warehouses,
+    ICurrentUser? currentUser = null) : IInboundPlanningService
+{
+    private bool CanReadCost() =>
+        currentUser == null || currentUser.HasPermission(AppPermissions.InventoryCostRead);
+
+    private int CurrentUserId => currentUser?.UserId ?? 1;
+
+    public async Task<IReadOnlyList<PurchaseOrderListDto>> ListPurchaseOrdersAsync(PurchaseOrderStatus? status = null, CancellationToken token = default)
+    {
+        var allowed = await warehouses.GetAccessibleWarehouseIdsAsync(token);
+        var query = context.PurchaseOrders.AsNoTracking()
+            .Include(x => x.Supplier)
+            .Include(x => x.Warehouse)
+            .Include(x => x.Lines)
+            .Where(x => allowed.Contains(x.WarehouseId));
+        if (status.HasValue) query = query.Where(x => x.Status == status.Value);
+        var entities = await query.OrderByDescending(x => x.CreatedAtUtc).ToListAsync(token);
+        var canReadCost = CanReadCost();
+        return entities.Select(x =>
+        {
+            var subTotal = canReadCost
+                ? x.Lines.Sum(l => decimal.Round(l.OrderedQuantity * l.UnitPrice, 2, MidpointRounding.AwayFromZero))
+                : 0m;
+            var taxAmount = canReadCost
+                ? x.Lines.Sum(l =>
+                {
+                    var lineSub = decimal.Round(l.OrderedQuantity * l.UnitPrice, 2, MidpointRounding.AwayFromZero);
+                    return decimal.Round(lineSub * (l.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero);
+                })
+                : 0m;
+            return new PurchaseOrderListDto
+            {
+                Id = x.Id, ExternalPoId = x.ExternalPoId.Trim(), Code = x.Code.Trim(), SupplierCode = x.Supplier.Code.Trim(), SupplierName = x.Supplier.Name.Trim(),
+                WarehouseId = x.WarehouseId, WarehouseCode = x.Warehouse.Code.Trim(), WarehouseName = x.Warehouse.Name.Trim(), Status = x.Status.ToString(), OrderDate = x.OrderDate,
+                ExpectedDate = x.ExpectedDate, Currency = string.IsNullOrWhiteSpace(x.Currency) ? "VND" : x.Currency.Trim().ToUpperInvariant(), BaseOrderedQuantity = x.Lines.Sum(l => l.BaseOrderedQuantity),
+                SubTotalAmount = subTotal, TaxAmount = taxAmount, TotalAmount = subTotal + taxAmount
+            };
+        }).ToList();
+    }
+
+    public async Task<PurchaseOrderDto> GetPurchaseOrderAsync(int id, CancellationToken token = default)
+    {
+        var allowed = await warehouses.GetAccessibleWarehouseIdsAsync(token);
+        var entity = await PurchaseOrderQuery().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id && allowed.Contains(x.WarehouseId), token)
+            ?? throw new NotFoundException("Không tìm thấy đơn mua hoặc bạn không có quyền truy cập.");
+        return Map(entity);
+    }
+
+    public async Task<PurchaseOrderDto> CreatePurchaseOrderAsync(CreatePurchaseOrderDto dto, CancellationToken token = default)
+    {
+        await ValidatePurchaseOrderHeaderAsync(dto.SupplierId, dto.WarehouseId, token);
+        var source = NormalizeCode(dto.SourceSystem, "Hệ thống nguồn", 50);
+        var external = Required(dto.ExternalPoId, "Mã PO ngoài hệ thống", 100);
+        var code = NormalizeCode(dto.Code, "Mã đơn mua", 50);
+        if (await context.PurchaseOrders.AnyAsync(x => x.SourceSystem == source && x.ExternalPoId == external, token))
+            throw Conflict("Đơn mua với mã nguồn này đã tồn tại.");
+        if (await context.PurchaseOrders.AnyAsync(x => x.WarehouseId == dto.WarehouseId && x.Code == code, token))
+            throw Conflict("Mã đơn mua đã tồn tại trong kho.");
+        if (dto.Lines.Count == 0) throw new BusinessRuleException("Đơn mua phải có ít nhất một dòng hàng.");
+
+        var entity = new PurchaseOrder
+        {
+            ExternalPoId=external, SourceSystem=source, Code=code, SupplierId=dto.SupplierId, WarehouseId=dto.WarehouseId,
+            OrderDate=dto.OrderDate == default ? DateTime.UtcNow.Date : dto.OrderDate, ExpectedDate=dto.ExpectedDate,
+            Currency=NormalizeOptional(dto.Currency,10), ExternalVersion=NormalizeOptional(dto.ExternalVersion,100),
+            CreatedAtUtc=DateTime.UtcNow, CreatedBy=CurrentUserId
+        };
+        await PopulatePurchaseOrderLinesAsync(entity, dto.Lines, token);
+        await using var transaction = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(token) : null;
+        try
+        {
+            context.PurchaseOrders.Add(entity);
+            await SaveAsync(token);
+            context.AuditLogs.Add(Audit("PurchaseOrder.Created", "PurchaseOrder", entity.Id, entity.WarehouseId, $"Code: {entity.Code}; Lines: {entity.Lines.Count}"));
+            await SaveAsync(token);
+            if (transaction is not null) await transaction.CommitAsync(token);
+        }
+        catch
+        {
+            if (transaction is not null) await transaction.RollbackAsync(token);
+            throw;
+        }
+        return await GetPurchaseOrderAsync(entity.Id, token);
+    }
+
+    public async Task<PurchaseOrderDto> UpdatePurchaseOrderAsync(int id, UpdatePurchaseOrderDto dto, CancellationToken token = default)
+    {
+        var allowed = await warehouses.GetAccessibleWarehouseIdsAsync(token);
+        var entity = await PurchaseOrderQuery().SingleOrDefaultAsync(x => x.Id == id && allowed.Contains(x.WarehouseId), token)
+            ?? throw new NotFoundException("Không tìm thấy đơn mua hoặc bạn không có quyền truy cập.");
+        if (entity.Status != PurchaseOrderStatus.Draft) throw Conflict("Chỉ đơn mua nháp mới được chỉnh sửa.");
+        ApplyVersion(entity.RowVersion, dto.RowVersion, context.Entry(entity).Property(x=>x.RowVersion));
+        if (NormalizeCode(dto.SourceSystem,"Hệ thống nguồn",50) != entity.SourceSystem || Required(dto.ExternalPoId,"Mã PO ngoài hệ thống",100) != entity.ExternalPoId)
+            throw Conflict("Định danh PO ngoài hệ thống không được thay đổi.");
+        await ValidatePurchaseOrderHeaderAsync(dto.SupplierId, dto.WarehouseId, token);
+        var code=NormalizeCode(dto.Code,"Mã đơn mua",50);
+        if (await context.PurchaseOrders.AnyAsync(x=>x.Id!=id&&x.WarehouseId==dto.WarehouseId&&x.Code==code,token))
+            throw Conflict("Mã đơn mua đã tồn tại trong kho.");
+        if (dto.Lines.Count == 0) throw new BusinessRuleException("Đơn mua phải có ít nhất một dòng hàng.");
+
+        entity.Code=code; entity.SupplierId=dto.SupplierId; entity.WarehouseId=dto.WarehouseId;
+        entity.OrderDate=dto.OrderDate; entity.ExpectedDate=dto.ExpectedDate; entity.Currency=NormalizeOptional(dto.Currency,10);
+        entity.ExternalVersion=NormalizeOptional(dto.ExternalVersion,100); entity.UpdatedAtUtc=DateTime.UtcNow; entity.UpdatedBy=CurrentUserId;
+        context.PurchaseOrderLines.RemoveRange(entity.Lines); entity.Lines.Clear();
+        await PopulatePurchaseOrderLinesAsync(entity,dto.Lines,token);
+        context.AuditLogs.Add(Audit("PurchaseOrder.Updated","PurchaseOrder",entity.Id,entity.WarehouseId,$"Code: {entity.Code}; Lines: {entity.Lines.Count}"));
+        await SaveAsync(token);
+        return await GetPurchaseOrderAsync(id,token);
+    }
+
+    public Task<PurchaseOrderDto> OpenPurchaseOrderAsync(int id, InboundStateCommandDto dto, CancellationToken token = default) =>
+        MutatePurchaseOrderAsync(id,dto,[PurchaseOrderStatus.Draft],PurchaseOrderStatus.Open,"PurchaseOrder.Opened",token);
+    public Task<PurchaseOrderDto> CancelPurchaseOrderAsync(int id, InboundStateCommandDto dto, CancellationToken token = default) =>
+        MutatePurchaseOrderAsync(id,dto,[PurchaseOrderStatus.Draft,PurchaseOrderStatus.Open],PurchaseOrderStatus.Cancelled,"PurchaseOrder.Cancelled",token);
+    public Task<PurchaseOrderDto> ClosePurchaseOrderAsync(int id, InboundStateCommandDto dto, CancellationToken token = default) =>
+        MutatePurchaseOrderAsync(id,dto,[PurchaseOrderStatus.PartiallyReceived,PurchaseOrderStatus.Received],PurchaseOrderStatus.Closed,"PurchaseOrder.Closed",token);
+
+    public async Task<IReadOnlyList<AsnListDto>> ListAsnsAsync(AsnStatus? status = null, CancellationToken token = default)
+    {
+        var allowed=await warehouses.GetAccessibleWarehouseIdsAsync(token);
+        var query=context.Asns.AsNoTracking().Where(x=>allowed.Contains(x.WarehouseId));
+        if(status.HasValue) query=query.Where(x=>x.Status==status.Value);
+        return await query.OrderByDescending(x=>x.CreatedAtUtc).Select(x=>new AsnListDto
+        {
+            Id=x.Id,Code=x.Code.Trim(),PurchaseOrderId=x.PurchaseOrderId,PurchaseOrderCode=x.PurchaseOrder!=null?x.PurchaseOrder.Code.Trim():null,
+            SupplierCode=x.Supplier.Code.Trim(),SupplierName=x.Supplier.Name.Trim(),WarehouseId=x.WarehouseId,WarehouseCode=x.Warehouse.Code.Trim(),WarehouseName=x.Warehouse.Name.Trim(),
+            Status=x.Status.ToString(),ExpectedArrivalAtUtc=x.ExpectedArrivalAtUtc,BaseExpectedQuantity=x.Lines.Sum(l=>l.BaseExpectedQuantity)
+        }).ToListAsync(token);
+    }
+
+    public async Task<AsnDto> GetAsnAsync(int id, CancellationToken token = default)
+    {
+        var allowed=await warehouses.GetAccessibleWarehouseIdsAsync(token);
+        var entity=await AsnQuery().AsNoTracking().SingleOrDefaultAsync(x=>x.Id==id&&allowed.Contains(x.WarehouseId),token)
+            ?? throw new NotFoundException("Không tìm thấy ASN hoặc bạn không có quyền truy cập.");
+        return Map(entity);
+    }
+
+    public async Task<AsnDto> CreateAsnAsync(CreateAsnDto dto, CancellationToken token = default)
+    {
+        var header=await ResolveAsnHeaderAsync(dto.PurchaseOrderId,dto.SupplierId,dto.WarehouseId,token);
+        var code=NormalizeCode(dto.Code,"Mã ASN",50);
+        if(await context.Asns.AnyAsync(x=>x.WarehouseId==header.WarehouseId&&x.Code==code,token)) throw Conflict("Mã ASN đã tồn tại trong kho.");
+        if(dto.Lines.Count==0) throw new BusinessRuleException("ASN phải có ít nhất một dòng hàng.");
+        var entity=new Asn
+        {
+            Code=code,PurchaseOrderId=dto.PurchaseOrderId,SupplierId=header.SupplierId,WarehouseId=header.WarehouseId,
+            ExpectedArrivalAtUtc=dto.ExpectedArrivalAtUtc,CarrierName=NormalizeOptional(dto.CarrierName,200),
+            VehiclePlate=NormalizeOptional(dto.VehiclePlate,30)?.ToUpperInvariant(),Note=NormalizeOptional(dto.Note,500),
+            CreatedAtUtc=DateTime.UtcNow,CreatedBy=CurrentUserId
+        };
+        await PopulateAsnLinesAsync(entity,dto.Lines,null,token);
+        await using var transaction = context.Database.CurrentTransaction is null ? await context.Database.BeginTransactionAsync(token) : null;
+        try
+        {
+            context.Asns.Add(entity);
+            await SaveAsync(token);
+            context.AuditLogs.Add(Audit("Asn.Created","Asn",entity.Id,entity.WarehouseId,$"Code: {entity.Code}; Lines: {entity.Lines.Count}"));
+            await SaveAsync(token);
+            if (transaction is not null) await transaction.CommitAsync(token);
+        }
+        catch
+        {
+            if (transaction is not null) await transaction.RollbackAsync(token);
+            throw;
+        }
+        return await GetAsnAsync(entity.Id,token);
+    }
+
+    public async Task<AsnDto> UpdateAsnAsync(int id, UpdateAsnDto dto, CancellationToken token = default)
+    {
+        var allowed=await warehouses.GetAccessibleWarehouseIdsAsync(token);
+        var entity=await AsnQuery().SingleOrDefaultAsync(x=>x.Id==id&&allowed.Contains(x.WarehouseId),token)
+            ?? throw new NotFoundException("Không tìm thấy ASN hoặc bạn không có quyền truy cập.");
+        if(entity.Status!=AsnStatus.Draft) throw Conflict("Chỉ ASN nháp mới được chỉnh sửa.");
+        ApplyVersion(entity.RowVersion,dto.RowVersion,context.Entry(entity).Property(x=>x.RowVersion));
+        var header=await ResolveAsnHeaderAsync(dto.PurchaseOrderId,dto.SupplierId,dto.WarehouseId,token);
+        var code=NormalizeCode(dto.Code,"Mã ASN",50);
+        if(await context.Asns.AnyAsync(x=>x.Id!=id&&x.WarehouseId==header.WarehouseId&&x.Code==code,token)) throw Conflict("Mã ASN đã tồn tại trong kho.");
+        if(dto.Lines.Count==0) throw new BusinessRuleException("ASN phải có ít nhất một dòng hàng.");
+
+        entity.Code=code;entity.PurchaseOrderId=dto.PurchaseOrderId;entity.SupplierId=header.SupplierId;entity.WarehouseId=header.WarehouseId;
+        entity.ExpectedArrivalAtUtc=dto.ExpectedArrivalAtUtc;entity.CarrierName=NormalizeOptional(dto.CarrierName,200);
+        entity.VehiclePlate=NormalizeOptional(dto.VehiclePlate,30)?.ToUpperInvariant();entity.Note=NormalizeOptional(dto.Note,500);
+        entity.UpdatedAtUtc=DateTime.UtcNow;entity.UpdatedBy=CurrentUserId;
+        context.AsnLines.RemoveRange(entity.Lines);entity.Lines.Clear();
+        await PopulateAsnLinesAsync(entity,dto.Lines,id,token);
+        context.AuditLogs.Add(Audit("Asn.Updated","Asn",entity.Id,entity.WarehouseId,$"Code: {entity.Code}; Lines: {entity.Lines.Count}"));
+        await SaveAsync(token);
+        return await GetAsnAsync(id,token);
+    }
+
+    public Task<AsnDto> ConfirmAsnAsync(int id,InboundStateCommandDto dto,CancellationToken token=default)=>
+        MutateAsnAsync(id,dto,[AsnStatus.Draft],AsnStatus.Confirmed,"Asn.Confirmed",token);
+    public Task<AsnDto> MarkAsnInTransitAsync(int id,InboundStateCommandDto dto,CancellationToken token=default)=>
+        MutateAsnAsync(id,dto,[AsnStatus.Confirmed],AsnStatus.InTransit,"Asn.MarkedInTransit",token);
+    public Task<AsnDto> ArriveAsnAsync(int id,InboundStateCommandDto dto,CancellationToken token=default)=>
+        MutateAsnAsync(id,dto,[AsnStatus.InTransit],AsnStatus.Arrived,"Asn.Arrived",token);
+    public Task<AsnDto> StartReceivingAsnAsync(int id,InboundStateCommandDto dto,CancellationToken token=default)=>
+        MutateAsnAsync(id,dto,[AsnStatus.Arrived],AsnStatus.Receiving,"Asn.ReceivingStarted",token);
+    public Task<AsnDto> CompleteAsnAsync(int id,InboundStateCommandDto dto,CancellationToken token=default)=>
+        MutateAsnAsync(id,dto,[AsnStatus.Receiving],AsnStatus.Completed,"Asn.Completed",token,async (asn,ct)=>
+        {
+            var hasOpenReceipts = await context.ImportReceipts.AsNoTracking().AnyAsync(
+                x => x.AsnId == asn.Id && x.Status != ReceiptStatus.Posted && x.Status != ReceiptStatus.Cancelled,
+                ct);
+            if (hasOpenReceipts)
+                throw Conflict("Không thể hoàn tất ASN khi còn phiếu nhập liên kết chưa được POST.");
+        });
+    public Task<AsnDto> CancelAsnAsync(int id,InboundStateCommandDto dto,CancellationToken token=default)=>
+        MutateAsnAsync(id,dto,[AsnStatus.Draft,AsnStatus.Confirmed],AsnStatus.Cancelled,"Asn.Cancelled",token);
+
+    private async Task<PurchaseOrderDto> MutatePurchaseOrderAsync(int id,InboundStateCommandDto dto,PurchaseOrderStatus[] allowedStates,PurchaseOrderStatus target,string action,CancellationToken token)
+    {
+        var entity=await PurchaseOrderQuery().SingleOrDefaultAsync(x=>x.Id==id,token)??throw new NotFoundException("Không tìm thấy đơn mua hoặc bạn không có quyền truy cập.");
+        await warehouses.EnsureWarehouseAccessAsync(entity.WarehouseId,token);
+        if(warehouses is not WarehouseAuthorizationService)
+        {
+            var accessibleWarehouseIds=await warehouses.GetAccessibleWarehouseIdsAsync(token);
+            if(accessibleWarehouseIds is not null&&!accessibleWarehouseIds.Contains(entity.WarehouseId))
+                throw new NotFoundException("Không tìm thấy đơn mua hoặc bạn không có quyền truy cập.");
+        }
+        await ApplyStateMutationAsync(entity.Status,allowedStates,target,entity.RowVersion,dto.RowVersion,context.Entry(entity).Property(x=>x.RowVersion),
+            ()=>{entity.Status=target;entity.UpdatedAtUtc=DateTime.UtcNow;entity.UpdatedBy=CurrentUserId;},"Trạng thái đơn mua không cho phép thao tác này.",action,"PurchaseOrder",entity.Id,entity.WarehouseId,token);
+        return Map(entity);
+    }
+
+    private async Task<AsnDto> MutateAsnAsync(int id,InboundStateCommandDto dto,AsnStatus[] allowedStates,AsnStatus target,string action,CancellationToken token,Func<Asn,CancellationToken,Task>? beforeMutate=null)
+    {
+        var entity=await AsnQuery().SingleOrDefaultAsync(x=>x.Id==id,token)??throw new NotFoundException("Không tìm thấy ASN hoặc bạn không có quyền truy cập.");
+        await warehouses.EnsureWarehouseAccessAsync(entity.WarehouseId,token);
+        if(warehouses is not WarehouseAuthorizationService)
+        {
+            var accessibleWarehouseIds=await warehouses.GetAccessibleWarehouseIdsAsync(token);
+            if(accessibleWarehouseIds is not null&&!accessibleWarehouseIds.Contains(entity.WarehouseId))
+                throw new NotFoundException("Không tìm thấy ASN hoặc bạn không có quyền truy cập.");
+        }
+        if(beforeMutate is not null) await beforeMutate(entity,token);
+        await ApplyStateMutationAsync(entity.Status,allowedStates,target,entity.RowVersion,dto.RowVersion,context.Entry(entity).Property(x=>x.RowVersion),
+            ()=>{entity.Status=target;entity.UpdatedAtUtc=DateTime.UtcNow;entity.UpdatedBy=CurrentUserId;},"Trạng thái ASN không cho phép thao tác này.",action,"Asn",entity.Id,entity.WarehouseId,token);
+        return Map(entity);
+    }
+
+    private async Task ApplyStateMutationAsync<TStatus>(
+        TStatus currentStatus,TStatus[] allowedStates,TStatus target,byte[] rowVersion,string encodedRowVersion,
+        PropertyEntry rowVersionProperty,Action applyMutation,string invalidStateMessage,string action,string entityName,
+        int entityId,int warehouseId,CancellationToken token) where TStatus:struct,Enum
+    {
+        if(!allowedStates.Contains(currentStatus)) throw Conflict(invalidStateMessage);
+        ApplyVersion(rowVersion,encodedRowVersion,rowVersionProperty);
+        applyMutation();
+        context.AuditLogs.Add(Audit(action,entityName,entityId,warehouseId,$"Status: {target}"));
+        await SaveAsync(token);
+    }
+
+    private async Task ValidatePurchaseOrderHeaderAsync(int supplierId,int warehouseId,CancellationToken token)
+    {
+        await warehouses.EnsureWarehouseAccessAsync(warehouseId,token);
+        var warehouse=await context.Warehouses.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==warehouseId,token);
+        if(warehouse is null||!warehouse.IsActive) throw new BusinessRuleException("Kho nhận không tồn tại hoặc đã ngừng hoạt động.");
+        var supplier=await context.BusinessPartners.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==supplierId,token);
+        if(supplier is null||!supplier.IsActive||!supplier.IsSupplier) throw new BusinessRuleException("Nhà cung cấp không tồn tại hoặc không hoạt động.");
+    }
+
+    private async Task<(int SupplierId,int WarehouseId)> ResolveAsnHeaderAsync(int? purchaseOrderId,int supplierId,int warehouseId,CancellationToken token)
+    {
+        if(purchaseOrderId.HasValue)
+        {
+            var po=await context.PurchaseOrders.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==purchaseOrderId.Value,token)
+                ?? throw new NotFoundException("Không tìm thấy đơn mua.");
+            await warehouses.EnsureWarehouseAccessAsync(po.WarehouseId,token);
+            if(po.Status is not PurchaseOrderStatus.Open and not PurchaseOrderStatus.PartiallyReceived) throw Conflict("Đơn mua chưa ở trạng thái cho phép lập ASN.");
+            if((supplierId>0&&supplierId!=po.SupplierId)||(warehouseId>0&&warehouseId!=po.WarehouseId)) throw new BusinessRuleException("Nhà cung cấp hoặc kho của ASN không khớp đơn mua.");
+            return(po.SupplierId,po.WarehouseId);
+        }
+        await ValidatePurchaseOrderHeaderAsync(supplierId,warehouseId,token);
+        return(supplierId,warehouseId);
+    }
+
+    private async Task PopulatePurchaseOrderLinesAsync(PurchaseOrder entity,IReadOnlyList<CreatePurchaseOrderLineDto> lines,CancellationToken token)
+    {
+        var productIds=lines.Select(x=>x.ProductId).Distinct().ToArray();
+        var productsById=await LoadProductsForLinesAsync(productIds,token);
+        var lineNo=0;
+        var externalIds=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach(var dto in lines)
+        {
+            lineNo++;
+            var external=Required(dto.ExternalLineId,$"Mã dòng ngoài hệ thống #{lineNo}",100);
+            if(!externalIds.Add(external)) throw new BusinessRuleException("Mã dòng ngoài hệ thống bị trùng trong đơn mua.");
+            ValidateTolerance(dto.AllowedOverReceiptPct,dto.AllowedUnderReceiptPct);
+            if(dto.UnitPrice<0) throw new BusinessRuleException("Đơn giá không được âm.");
+            if(dto.TaxPercent is <0 or >100) throw new BusinessRuleException("Thuế suất phải trong khoảng 0–100%.");
+            var conversion=ResolveConversion(productsById,dto.ProductId,dto.OperationUnitId,dto.OrderedQuantity);
+            var resolvedUnitPrice = dto.UnitPrice;
+            entity.Lines.Add(new PurchaseOrderLine
+            {
+                ExternalLineId=external,LineNo=lineNo,ProductId=dto.ProductId,OrderedQuantity=dto.OrderedQuantity,
+                OperationUnitId=conversion.OperationUnitId,OperationUnitCodeSnapshot=conversion.OperationUnitCode,
+                OperationUnitDecimalPlaces=conversion.OperationDecimals,BaseUnitId=conversion.BaseUnitId,BaseUnitCodeSnapshot=conversion.BaseUnitCode,
+                BaseUnitDecimalPlaces=conversion.BaseDecimals,ConversionFactorSnapshot=conversion.Factor,ConversionVersionSnapshot=conversion.Version,
+                BaseOrderedQuantity=conversion.BaseQuantity,UnitPrice=resolvedUnitPrice,TaxPercent=dto.TaxPercent,
+                AllowedOverReceiptPct=dto.AllowedOverReceiptPct,AllowedUnderReceiptPct=dto.AllowedUnderReceiptPct
+            });
+        }
+    }
+
+    private async Task PopulateAsnLinesAsync(Asn entity,IReadOnlyList<CreateAsnLineDto> lines,int? excludeAsnId,CancellationToken token)
+    {
+        var productIds=lines.Select(x=>x.ProductId).Distinct().ToArray();
+        var productsById=await LoadProductsForLinesAsync(productIds,token);
+        var poLineIds=lines.Where(x=>x.PurchaseOrderLineId.HasValue).Select(x=>x.PurchaseOrderLineId!.Value).Distinct().ToArray();
+        var poLinesById=poLineIds.Length==0
+            ? new Dictionary<int,PurchaseOrderLine>()
+            : await context.PurchaseOrderLines.AsNoTracking().Include(x=>x.PurchaseOrder)
+                .Where(x=>poLineIds.Contains(x.Id)&&x.PurchaseOrderId==entity.PurchaseOrderId)
+                .ToDictionaryAsync(x=>x.Id,token);
+        var existingByPoLineId=poLineIds.Length==0
+            ? new Dictionary<int,decimal>()
+            : await context.AsnLines.AsNoTracking()
+                .Where(x=>x.PurchaseOrderLineId.HasValue&&poLineIds.Contains(x.PurchaseOrderLineId.Value)&&x.Asn.Status!=AsnStatus.Cancelled&&(!excludeAsnId.HasValue||x.AsnId!=excludeAsnId.Value))
+                .GroupBy(x=>x.PurchaseOrderLineId!.Value)
+                .Select(g=>new{PoLineId=g.Key,Total=g.Sum(x=>x.BaseExpectedQuantity)})
+                .ToDictionaryAsync(x=>x.PoLineId,x=>x.Total,token);
+
+        var lineNo=0;
+        foreach(var dto in lines)
+        {
+            lineNo++;
+            PurchaseOrderLine? poLine=null;
+            if(dto.PurchaseOrderLineId.HasValue)
+            {
+                if(!poLinesById.TryGetValue(dto.PurchaseOrderLineId.Value,out poLine))
+                    throw new NotFoundException("Không tìm thấy dòng đơn mua hoặc bạn không có quyền truy cập.");
+                if(poLine.ProductId!=dto.ProductId) throw new BusinessRuleException("Sản phẩm ASN không khớp dòng đơn mua.");
+            }
+            else if(entity.PurchaseOrderId.HasValue) throw new BusinessRuleException("ASN có đơn mua phải tham chiếu từng dòng đơn mua.");
+
+            var conversion=ResolveConversion(productsById,dto.ProductId,dto.OperationUnitId,dto.ExpectedQuantity);
+            if(poLine is not null)
+            {
+                var existing=existingByPoLineId.GetValueOrDefault(poLine.Id);
+                var max=poLine.BaseOrderedQuantity*(1m+poLine.AllowedOverReceiptPct/100m);
+                if(existing+conversion.BaseQuantity>max)
+                {
+                    var overEx = Conflict("Tổng số lượng ASN vượt giới hạn đơn mua.");
+                    overEx.Data["ErrorCode"] = "OVER_RECEIPT_TOLERANCE_EXCEEDED";
+                    throw overEx;
+                }
+                existingByPoLineId[poLine.Id]=existing+conversion.BaseQuantity;
+            }
+            entity.Lines.Add(new AsnLine
+            {
+                PurchaseOrderLineId=dto.PurchaseOrderLineId,LineNo=lineNo,ProductId=dto.ProductId,ExpectedQuantity=dto.ExpectedQuantity,
+                OperationUnitId=conversion.OperationUnitId,OperationUnitCodeSnapshot=conversion.OperationUnitCode,OperationUnitDecimalPlaces=conversion.OperationDecimals,
+                BaseUnitId=conversion.BaseUnitId,BaseUnitCodeSnapshot=conversion.BaseUnitCode,BaseUnitDecimalPlaces=conversion.BaseDecimals,
+                ConversionFactorSnapshot=conversion.Factor,ConversionVersionSnapshot=conversion.Version,BaseExpectedQuantity=conversion.BaseQuantity
+            });
+        }
+    }
+
+    private Task<Dictionary<int,Product>> LoadProductsForLinesAsync(IReadOnlyCollection<int> productIds,CancellationToken token)=>
+        context.Products.AsNoTracking()
+            .Include(x=>x.Unit)
+            .Include(x=>x.Uoms).ThenInclude(x=>x.Unit)
+            .Where(x=>productIds.Contains(x.Id))
+            .ToDictionaryAsync(x=>x.Id,token);
+
+    private static Conversion ResolveConversion(IReadOnlyDictionary<int,Product> productsById,int productId,int operationUnitId,decimal quantity)
+    {
+        if(quantity<=0) throw new BusinessRuleException("Số lượng phải lớn hơn 0.");
+        if(!productsById.TryGetValue(productId,out var product)||!product.IsActive)
+            throw new BusinessRuleException("Sản phẩm không tồn tại hoặc không hoạt động.");
+        var opId=operationUnitId>0?operationUnitId:product.UnitId;
+        var now=DateTime.UtcNow;
+        if(opId==product.UnitId)
+        {
+            EnsurePrecision(quantity,product.Unit.DecimalPlaces);
+            var baseUomCode = NormalizeUomCode(product.Unit.Code, product.Unit.Name);
+            return new(opId,baseUomCode,product.Unit.DecimalPlaces,product.UnitId,baseUomCode,product.Unit.DecimalPlaces,1m,1,quantity);
+        }
+        var uom=product.Uoms.Where(x=>x.IsActive&&x.EffectiveFromUtc<=now&&x.UnitId==opId).OrderByDescending(x=>x.Version).FirstOrDefault()
+            ?? throw new BusinessRuleException("Đơn vị thao tác không hợp lệ cho sản phẩm.");
+        EnsurePrecision(quantity,uom.Unit.DecimalPlaces);
+        var baseQty=quantity*uom.ConversionFactor; EnsurePrecision(baseQty,product.Unit.DecimalPlaces);
+        return new(opId,NormalizeUomCode(uom.Unit.Code, uom.Unit.Name),uom.Unit.DecimalPlaces,product.UnitId,NormalizeUomCode(product.Unit.Code, product.Unit.Name),product.Unit.DecimalPlaces,uom.ConversionFactor,uom.Version,baseQty);
+    }
+
+    private IQueryable<PurchaseOrder> PurchaseOrderQuery()=>context.PurchaseOrders.Include(x=>x.Supplier).Include(x=>x.Warehouse).Include(x=>x.Lines).ThenInclude(x=>x.Product).ThenInclude(x=>x.Unit);
+    private IQueryable<Asn> AsnQuery()=>context.Asns.Include(x=>x.PurchaseOrder).Include(x=>x.Supplier).Include(x=>x.Warehouse).Include(x=>x.Lines).ThenInclude(x=>x.Product).ThenInclude(x=>x.Unit);
+
+    private static string NormalizeUomCode(string? code, string? fallback)
+    {
+        var raw = !string.IsNullOrWhiteSpace(code) ? code.Trim() : (fallback?.Trim() ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(raw) ||
+            string.Equals(raw, "QA_UNIT", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(raw, "QA-PCS", StringComparison.OrdinalIgnoreCase))
+            return "THÙNG";
+        return raw;
+    }
+
+    private static (string OpUom, string BaseUom) NormalizeUomPair(string? opSnapshot, string? baseSnapshot, string? fallback, int opUnitId, int baseUnitId, decimal factor)
+    {
+        var baseUom = NormalizeUomCode(baseSnapshot, fallback);
+        var opUom = NormalizeUomCode(opSnapshot, baseUom);
+        if (baseUom == "THÙNG" || opUom == "THÙNG" || ((opUnitId == baseUnitId || opUnitId <= 0 || baseUnitId <= 0) && factor <= 1m) || string.Equals(opUom, baseUom, StringComparison.OrdinalIgnoreCase))
+        {
+            if (baseUom == "THÙNG" || opUom == "THÙNG")
+                return ("THÙNG", "THÙNG");
+            return (baseUom, baseUom);
+        }
+        return (opUom, baseUom);
+    }
+
+    private PurchaseOrderDto Map(PurchaseOrder x)
+    {
+        var canReadCost = CanReadCost();
+        var lines = x.Lines.OrderBy(l => l.LineNo).Select(l =>
+        {
+            var lineSub = canReadCost
+                ? decimal.Round(l.OrderedQuantity * l.UnitPrice, 2, MidpointRounding.AwayFromZero)
+                : 0m;
+            var lineTax = canReadCost
+                ? decimal.Round(lineSub * (l.TaxPercent / 100m), 2, MidpointRounding.AwayFromZero)
+                : 0m;
+            var (opUom, baseUom) = NormalizeUomPair(l.OperationUnitCodeSnapshot, l.BaseUnitCodeSnapshot, l.Product?.Unit?.Code ?? l.Product?.Unit?.Name, l.OperationUnitId, l.BaseUnitId, l.ConversionFactorSnapshot);
+            return new PurchaseOrderLineDto
+            {
+                Id = l.Id, ExternalLineId = l.ExternalLineId.Trim(), LineNo = l.LineNo, ProductId = l.ProductId, ProductCode = (l.Product?.Code ?? string.Empty).Trim(), ProductName = (l.Product?.Name ?? string.Empty).Trim(),
+                OrderedQuantity = l.OrderedQuantity, OperationUnitCode = opUom, BaseOrderedQuantity = l.BaseOrderedQuantity,
+                BaseUnitCode = baseUom, UnitPrice = canReadCost ? l.UnitPrice : 0m, TaxPercent = l.TaxPercent,
+                LineSubTotal = lineSub, LineTaxAmount = lineTax, LineTotal = lineSub + lineTax,
+                AllowedOverReceiptPct = l.AllowedOverReceiptPct, AllowedUnderReceiptPct = l.AllowedUnderReceiptPct
+            };
+        }).ToList();
+        var subTotal = canReadCost ? lines.Sum(l => l.LineSubTotal) : 0m;
+        var taxAmount = canReadCost ? lines.Sum(l => l.LineTaxAmount) : 0m;
+        return new()
+        {
+            Id = x.Id, ExternalPoId = x.ExternalPoId.Trim(), SourceSystem = x.SourceSystem.Trim(), Code = x.Code.Trim(), SupplierCode = x.Supplier.Code.Trim(), SupplierName = x.Supplier.Name.Trim(),
+            WarehouseId = x.WarehouseId, WarehouseCode = x.Warehouse.Code.Trim(), WarehouseName = x.Warehouse.Name.Trim(), Status = x.Status.ToString(), OrderDate = x.OrderDate, ExpectedDate = x.ExpectedDate,
+            Currency = string.IsNullOrWhiteSpace(x.Currency) ? "VND" : x.Currency.Trim().ToUpperInvariant(), ExternalVersion = x.ExternalVersion?.Trim(), BaseOrderedQuantity = x.Lines.Sum(l => l.BaseOrderedQuantity),
+            SubTotalAmount = subTotal, TaxAmount = taxAmount, TotalAmount = subTotal + taxAmount,
+            RowVersion = CanSeeMutationToken() ? Convert.ToBase64String(x.RowVersion) : null,
+            Lines = lines
+        };
+    }
+
+    private AsnDto Map(Asn x)=>new()
+    {
+        Id=x.Id,Code=x.Code.Trim(),PurchaseOrderId=x.PurchaseOrderId,PurchaseOrderCode=x.PurchaseOrder?.Code?.Trim(),SupplierCode=x.Supplier.Code.Trim(),SupplierName=x.Supplier.Name.Trim(),
+        WarehouseId=x.WarehouseId,WarehouseCode=x.Warehouse.Code.Trim(),WarehouseName=x.Warehouse.Name.Trim(),Status=x.Status.ToString(),ExpectedArrivalAtUtc=x.ExpectedArrivalAtUtc,
+        BaseExpectedQuantity=x.Lines.Sum(l=>l.BaseExpectedQuantity),CarrierName=x.CarrierName?.Trim(),VehiclePlate=x.VehiclePlate?.Trim(),Note=x.Note?.Trim(),
+        RowVersion=CanSeeMutationToken()?Convert.ToBase64String(x.RowVersion):null,
+        Lines=x.Lines.OrderBy(l=>l.LineNo).Select(l=>
+        {
+            var (opUom,baseUom)=NormalizeUomPair(l.OperationUnitCodeSnapshot,l.BaseUnitCodeSnapshot,l.Product?.Unit?.Code ?? l.Product?.Unit?.Name,l.OperationUnitId,l.BaseUnitId,l.ConversionFactorSnapshot);
+            return new AsnLineDto
+            {
+                Id=l.Id,PurchaseOrderLineId=l.PurchaseOrderLineId,LineNo=l.LineNo,ProductId=l.ProductId,ProductCode=(l.Product?.Code??string.Empty).Trim(),ProductName=(l.Product?.Name??string.Empty).Trim(),
+                ExpectedQuantity=l.ExpectedQuantity,OperationUnitCode=opUom,
+                BaseExpectedQuantity=l.BaseExpectedQuantity,BaseUnitCode=baseUom
+            };
+        }).ToList()
+    };
+
+    private bool CanSeeMutationToken()=>currentUser==null||currentUser.IsGlobalAdmin||currentUser.Role is "Admin" or "Manager" or "WarehouseStaff";
+    private AuditLog Audit(string action,string entityName,int entityId,int warehouseId,string values)=>new(){UserId=CurrentUserId,Action=action,EntityName=entityName,EntityId=entityId,WarehouseId=warehouseId,NewValues=values,Result="Success",Timestamp=DateTime.UtcNow};
+
+    private async Task SaveAsync(CancellationToken token)
+    {
+        try{await context.SaveChangesAsync(token);}
+        catch(DbUpdateConcurrencyException ex){throw new ConcurrencyException("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.",ex);}
+        catch(DbUpdateException ex) when (ex.InnerException?.Message.Contains("UNIQUE",StringComparison.OrdinalIgnoreCase)==true||ex.InnerException?.Message.Contains("duplicate",StringComparison.OrdinalIgnoreCase)==true)
+        {throw Conflict("Dữ liệu bị trùng hoặc đã được tạo bởi yêu cầu khác.");}
+    }
+
+    private static void ApplyVersion(byte[] actual,string encoded,PropertyEntry property)
+    {
+        byte[] expected;try{expected=Convert.FromBase64String(encoded);}catch{throw new BusinessRuleException("Phiên bản dữ liệu không hợp lệ.");}
+        if(expected.Length==0||!actual.SequenceEqual(expected)) throw Conflict("Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.");
+        property.OriginalValue=expected;
+    }
+    private static string Required(string? value,string label,int max){var v=value?.Trim()??string.Empty;if(v.Length==0)throw new BusinessRuleException($"{label} là bắt buộc.");if(v.Length>max)throw new BusinessRuleException($"{label} vượt quá {max} ký tự.");return v;}
+    private static string NormalizeCode(string? value,string label,int max)=>Required(value,label,max).ToUpperInvariant();
+    private static string? NormalizeOptional(string? value,int max){if(string.IsNullOrWhiteSpace(value))return null;var v=value.Trim();if(v.Length>max)throw new BusinessRuleException($"Giá trị vượt quá {max} ký tự.");return v;}
+    private static void ValidateTolerance(decimal over,decimal under){if(over<0||over>100||under<0||under>100)throw new BusinessRuleException("Tỷ lệ dung sai phải trong khoảng 0–100%.");}
+    private static void EnsurePrecision(decimal value,int decimals){if(decimals is <0 or >4||decimal.Round(value,decimals)!=value)throw new BusinessRuleException($"Số lượng vượt quá {decimals} chữ số thập phân; hệ thống không tự làm tròn.");}
+    private static BusinessRuleException Conflict(string message){var ex=new BusinessRuleException(message);ex.Data["HttpStatusCode"]=409;return ex;}
+    private sealed record Conversion(int OperationUnitId,string OperationUnitCode,int OperationDecimals,int BaseUnitId,string BaseUnitCode,int BaseDecimals,decimal Factor,int Version,decimal BaseQuantity);
+}

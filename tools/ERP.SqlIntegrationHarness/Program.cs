@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Reflection;
+using System.Text.RegularExpressions;
 using ERP.SqlIntegrationHarness;
 using Microsoft.Data.SqlClient;
 
@@ -57,7 +59,7 @@ try
     }
 
     Console.WriteLine($"SQL integration target created: {databaseName} (Integrated Security; server redacted).");
-    var result = await RunTestsAsync(databaseBuilder.ConnectionString, runId);
+    var result = await RunTestsAsync(source, databaseBuilder.ConnectionString, runId);
     return result;
 }
 finally
@@ -67,26 +69,148 @@ finally
     source = null;
 }
 
-static async Task<int> RunTestsAsync(string connectionString, string runId)
+static (IReadOnlyList<string> Classes, int FileCount, int MethodCount) DiscoverSqlTestClassesByAttribute(string projectDirectory)
+{
+    var classes = new SortedSet<string>(StringComparer.Ordinal);
+    var fileCount = 0;
+    var totalSqlMethods = 0;
+
+    var csFiles = Directory.GetFiles(projectDirectory, "*.cs", SearchOption.AllDirectories)
+        .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) &&
+                    !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase));
+
+    var sqlAttrRegex = new Regex(@"\[\s*(?:SqlServerFact|SqlServerTheory|ApprovalSqlServerFact)(?:Attribute)?\b", RegexOptions.Compiled);
+    var anyTestAttrRegex = new Regex(@"\[\s*(?:SqlServerFact|SqlServerTheory|ApprovalSqlServerFact|Fact|Theory)(?:Attribute)?\b", RegexOptions.Compiled);
+    var publicClassRegex = new Regex(@"\bpublic\s+(?:sealed\s+|partial\s+)*class\s+([A-Za-z0-9_]+)", RegexOptions.Compiled);
+    var excludedClassRegex = new Regex(@"(?:Attribute|Fixture|Collection|Parallelization|OwnedHttpAuthentication)$", RegexOptions.Compiled);
+
+    foreach (var file in csFiles)
+    {
+        var fileName = Path.GetFileNameWithoutExtension(file);
+        var content = File.ReadAllText(file);
+        var isSqlSuiteFile = sqlAttrRegex.IsMatch(content) ||
+                             fileName.Contains("SqlServer", StringComparison.Ordinal) ||
+                             fileName.Contains("MigrationSnapshotParity", StringComparison.Ordinal);
+        if (!isSqlSuiteFile)
+            continue;
+
+        var testMatches = anyTestAttrRegex.Matches(content);
+        if (testMatches.Count == 0)
+            continue;
+
+        var matchedInFile = false;
+        foreach (Match classMatch in publicClassRegex.Matches(content))
+        {
+            var className = classMatch.Groups[1].Value;
+            if (excludedClassRegex.IsMatch(className))
+                continue;
+
+            classes.Add(className);
+            matchedInFile = true;
+        }
+
+        if (matchedInFile)
+        {
+            fileCount++;
+            totalSqlMethods += testMatches.Count;
+        }
+    }
+
+    return (classes.ToList(), fileCount, totalSqlMethods);
+}
+
+static async Task<int> RunTestsAsync(string adminConnectionString, string testConnectionString, string runId)
+{
+    var workspaceRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+    var appTestsDir = Path.Combine(workspaceRoot, "ERP.Application.Tests");
+    var apiTestsDir = Path.Combine(workspaceRoot, "ERP.Api.Tests");
+
+    var (appClasses, appFiles, appMethods) = DiscoverSqlTestClassesByAttribute(appTestsDir);
+    var (apiClasses, apiFiles, apiMethods) = DiscoverSqlTestClassesByAttribute(apiTestsDir);
+    var totalFiles = appFiles + apiFiles;
+    var totalClasses = appClasses.Count + apiClasses.Count;
+    var totalMethods = appMethods + apiMethods;
+
+    Console.WriteLine(
+        $"Discovered SQL Server integration suites by [SqlServerFact]/[SqlServerTheory]/[ApprovalSqlServerFact]: " +
+        $"{totalFiles} SQL test class files ({totalClasses} compiled classes / {totalMethods} SQL fact/theory methods) across " +
+        $"ERP.Application.Tests ({appFiles} files / {appClasses.Count} classes / {appMethods} methods) and " +
+        $"ERP.Api.Tests ({apiFiles} files / {apiClasses.Count} classes / {apiMethods} methods).");
+
+    var explicitFilter = Environment.GetEnvironmentVariable("ERP_KHO_SQLSERVER_TEST_FILTER");
+
+    var appFilter = !string.IsNullOrWhiteSpace(explicitFilter)
+        ? explicitFilter
+        : string.Join("|", appClasses.Select(c => $"FullyQualifiedName~{c}"));
+
+    var appExit = await ExecuteDotnetTestAsync(
+        workspaceRoot,
+        "ERP.Application.Tests/ERP.Application.Tests.csproj",
+        "application.trx",
+        appFilter,
+        adminConnectionString,
+        testConnectionString,
+        runId);
+
+    if (appExit != 0)
+        return appExit;
+
+    if (!string.IsNullOrWhiteSpace(explicitFilter))
+    {
+        var matchesApi = apiClasses.Any(c => explicitFilter.Contains(c, StringComparison.OrdinalIgnoreCase));
+        if (!matchesApi)
+            return 0;
+    }
+
+    var apiFilter = !string.IsNullOrWhiteSpace(explicitFilter)
+        ? explicitFilter
+        : string.Join("|", apiClasses.Select(c => $"FullyQualifiedName~{c}"));
+
+    var apiExit = await ExecuteDotnetTestAsync(
+        workspaceRoot,
+        "ERP.Api.Tests/ERP.Api.Tests.csproj",
+        "api.trx",
+        apiFilter,
+        adminConnectionString,
+        testConnectionString,
+        runId);
+
+    return apiExit;
+}
+
+static async Task<int> ExecuteDotnetTestAsync(
+    string workspaceRoot,
+    string projectRelativePath,
+    string trxFileName,
+    string filter,
+    string adminConnectionString,
+    string testConnectionString,
+    string runId)
 {
     var startInfo = new ProcessStartInfo("dotnet")
     {
         UseShellExecute = false,
-        WorkingDirectory = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."))
+        WorkingDirectory = workspaceRoot
     };
     startInfo.ArgumentList.Add("test");
-    startInfo.ArgumentList.Add("ERP.Application.Tests/ERP.Application.Tests.csproj");
+    startInfo.ArgumentList.Add(projectRelativePath);
     startInfo.ArgumentList.Add("--configuration");
     startInfo.ArgumentList.Add("Release");
     startInfo.ArgumentList.Add("--no-build");
     startInfo.ArgumentList.Add("--logger");
-    startInfo.ArgumentList.Add("trx;LogFileName=application.trx");
+    startInfo.ArgumentList.Add($"trx;LogFileName={trxFileName}");
     startInfo.ArgumentList.Add("--results-directory");
     startInfo.ArgumentList.Add(Path.Combine("TestResults", "SqlIntegration", runId));
     startInfo.ArgumentList.Add("--verbosity");
     startInfo.ArgumentList.Add("minimal");
-    startInfo.Environment["ERP_KHO_SQLSERVER_TEST_CONNECTION"] = connectionString;
+    if (!string.IsNullOrWhiteSpace(filter))
+    {
+        startInfo.ArgumentList.Add("--filter");
+        startInfo.ArgumentList.Add(filter);
+    }
+    startInfo.Environment["ERP_KHO_SQLSERVER_TEST_CONNECTION"] = testConnectionString;
     startInfo.Environment["ERP_KHO_SQLSERVER_TEST_RUN_ID"] = runId;
+    startInfo.Environment["ERP_KHO_APPROVAL_SQLSERVER_ADMIN_CONNECTION"] = adminConnectionString;
     startInfo.Environment.Remove("ERP_KHO_SQLSERVER_ADMIN_CONNECTION");
     using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Unable to start SQL integration tests.");
     await process.WaitForExitAsync();

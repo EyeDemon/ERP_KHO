@@ -10,8 +10,11 @@ using Microsoft.AspNetCore.Mvc;
 namespace ERP.Api.Controllers
 {
     [Authorize(Roles = AppRoles.AllRoles)]
+    [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
     [ApiController]
     [Route("api/[controller]")]
+    [Route("api/inventory-transactions")]
+    [Route("api/v1/inventory-transactions")]
     public class InventoryTransactionsController : ControllerBase
     {
         private readonly IInventoryTransactionQueryService _queryService;

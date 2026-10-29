@@ -1,0 +1,77 @@
+.dock-yard-page {
+  display: grid;
+  gap: var(--ui-space-4);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.dock-yard-page table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0 !important;
+}
+
+.dock-yard-page th,
+.dock-yard-page td {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  vertical-align: top;
+}
+
+.dock-yard-page .ui-cell-nowrap strong {
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .dock-yard-page .ui-table-scroll {
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .dock-yard-page table {
+    display: table;
+    table-layout: fixed;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .dock-yard-page th,
+  .dock-yard-page td,
+  .dock-yard-page .ui-table-compact th,
+  .dock-yard-page .ui-table-compact td,
+  .dock-yard-page .ui-table-compact tr > :last-child,
+  .dock-yard-page .ui-cell-nowrap,
+  .dock-yard-page .ui-cell-nowrap strong,
+  .dock-yard-page .ui-cell-nowrap small {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    padding: 6px 4px !important;
+    font-size: 12px;
+  }
+
+  .dock-yard-page .ui-table-compact .ui-badge {
+    white-space: normal !important;
+    font-size: 0.7rem !important;
+    padding: 2px 5px !important;
+    line-height: 1.2;
+    text-align: center;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .dock-yard-page .ui-table-compact button {
+    max-width: 100%;
+    white-space: normal;
+    padding: 4px 6px;
+    font-size: 11px;
+  }
+}

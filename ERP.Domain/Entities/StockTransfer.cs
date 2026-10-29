@@ -1,15 +1,21 @@
+using ERP.Domain.Common;
 using ERP.Domain.Enums;
 
 namespace ERP.Domain.Entities;
 
-public class StockTransfer
+public class StockTransfer : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string Code { get; set; } = string.Empty;
     public int SourceWarehouseId { get; set; }
     public int DestinationWarehouseId { get; set; }
     public StockTransferStatus Status { get; set; } = StockTransferStatus.Draft;
+    public int DraftRevision { get; set; } = 1;
     public string? Note { get; set; }
+    public int? ReverseOfTransferId { get; set; }
+    public string? ReverseReasonCode { get; set; }
+    public string? ReverseReason { get; set; }
     public int CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public int? ApprovedBy { get; set; }

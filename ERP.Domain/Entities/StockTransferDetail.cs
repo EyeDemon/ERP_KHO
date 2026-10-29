@@ -1,8 +1,11 @@
+using ERP.Domain.Common;
+
 namespace ERP.Domain.Entities;
 
-public class StockTransferDetail
+public class StockTransferDetail : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int StockTransferId { get; set; }
     public int ProductId { get; set; }
     public decimal RequestedQuantity { get; set; }

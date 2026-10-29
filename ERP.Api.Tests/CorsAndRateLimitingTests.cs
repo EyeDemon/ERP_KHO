@@ -45,8 +45,10 @@ public sealed class CorsAndRateLimitingTests
         using var allowed = new HttpRequestMessage(HttpMethod.Options, "/api/Auth/login");
         allowed.Headers.Add("Origin", "https://allowed.test");
         allowed.Headers.Add("Access-Control-Request-Method", "POST");
+        allowed.Headers.Add("Access-Control-Request-Headers", "idempotency-key,content-type");
         var allowedResponse = await client.SendAsync(allowed);
         allowedResponse.Headers.GetValues("Access-Control-Allow-Origin").Should().Contain("https://allowed.test");
+        allowedResponse.Headers.GetValues("Access-Control-Allow-Headers").Should().Contain(value => value.Contains("Idempotency-Key", StringComparison.OrdinalIgnoreCase));
 
         using var denied = new HttpRequestMessage(HttpMethod.Options, "/api/Auth/login");
         denied.Headers.Add("Origin", "https://denied.test");

@@ -7,5 +7,6 @@ public enum StockTransferStatus
     InTransit = 2,
     Received = 3,
     Completed = 4,
-    Cancelled = 5
+    Cancelled = 5,
+    Returned = 6
 }

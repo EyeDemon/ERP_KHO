@@ -54,7 +54,7 @@ namespace ERP.Application.Tests
         [Fact]
         public async Task ApproveStocktakeAsync_NotDraft_ThrowsBusinessRuleExceptionAndRollbacks()
         {
-            var stocktake = new Stocktake { Id = 1, Status = ReceiptStatus.Approved };
+            var stocktake = new Stocktake { Id = 1, Status = StocktakeStatus.Approved };
             _mockStocktakeRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(stocktake);
 
             var act = async () => await _service.ApproveStocktakeAsync(1, 99);
@@ -72,7 +72,7 @@ namespace ERP.Application.Tests
             var stocktake = new Stocktake 
             { 
                 Id = 1, 
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 Details = new List<StocktakeDetail> { new StocktakeDetail { ProductId = 1, ActualQuantity = null } }
             };
             _mockStocktakeRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(stocktake);
@@ -93,7 +93,7 @@ namespace ERP.Application.Tests
             { 
                 Id = 1, 
                 WarehouseId = 2,
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 Details = new List<StocktakeDetail> { new StocktakeDetail { ProductId = 1, SystemQuantity = 10, ActualQuantity = 15 } }
             };
             var existingStock = new InventoryStock { ProductId = 1, WarehouseId = 2, Quantity = 10 };
@@ -103,7 +103,7 @@ namespace ERP.Application.Tests
 
             await _service.ApproveStocktakeAsync(1, 99);
 
-            stocktake.Status.Should().Be(ReceiptStatus.Approved);
+            stocktake.Status.Should().Be(StocktakeStatus.Approved);
             stocktake.ApprovedBy.Should().Be(99);
             stocktake.Details.First().DifferenceQuantity.Should().Be(5);
             existingStock.Quantity.Should().Be(15);
@@ -126,7 +126,7 @@ namespace ERP.Application.Tests
             { 
                 Id = 1, 
                 WarehouseId = 2,
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 Details = new List<StocktakeDetail> { new StocktakeDetail { ProductId = 1, SystemQuantity = 10, ActualQuantity = 5 } }
             };
             var existingStock = new InventoryStock { ProductId = 1, WarehouseId = 2, Quantity = 10 };
@@ -136,7 +136,7 @@ namespace ERP.Application.Tests
 
             await _service.ApproveStocktakeAsync(1, 99);
 
-            stocktake.Status.Should().Be(ReceiptStatus.Approved);
+            stocktake.Status.Should().Be(StocktakeStatus.Approved);
             stocktake.ApprovedBy.Should().Be(99);
             stocktake.Details.First().DifferenceQuantity.Should().Be(-5);
             existingStock.Quantity.Should().Be(5);
@@ -159,15 +159,17 @@ namespace ERP.Application.Tests
             { 
                 Id = 1, 
                 WarehouseId = 2,
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 Details = new List<StocktakeDetail> { new StocktakeDetail { ProductId = 1, SystemQuantity = 10, ActualQuantity = 10 } }
             };
+            var existingStock = new InventoryStock { ProductId = 1, WarehouseId = 2, Quantity = 10 };
             
             _mockStocktakeRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(stocktake);
+            _mockStockRepo.Setup(x => x.GetByProductAndWarehouseAsync(1, 2)).ReturnsAsync(existingStock);
 
             await _service.ApproveStocktakeAsync(1, 99);
 
-            stocktake.Status.Should().Be(ReceiptStatus.Approved);
+            stocktake.Status.Should().Be(StocktakeStatus.Approved);
             stocktake.Details.First().DifferenceQuantity.Should().Be(0);
             
             _mockStockRepo.Verify(x => x.UpdateAsync(It.IsAny<InventoryStock>()), Times.Never);
@@ -178,13 +180,71 @@ namespace ERP.Application.Tests
         }
 
         [Fact]
+        public async Task ApproveStocktakeAsync_WhenStockChangedSinceSnapshot_ThrowsConflict409AndDoesNotOverwriteStockOrLedger()
+        {
+            var stocktake = new Stocktake
+            {
+                Id = 1,
+                WarehouseId = 2,
+                Status = StocktakeStatus.Draft,
+                Details = new List<StocktakeDetail>
+                {
+                    new StocktakeDetail { ProductId = 1, SystemQuantity = 10, ActualQuantity = 15 }
+                }
+            };
+            var currentStock = new InventoryStock { ProductId = 1, WarehouseId = 2, Quantity = 12 };
+
+            _mockStocktakeRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(stocktake);
+            _mockStockRepo.Setup(x => x.GetByProductAndWarehouseAsync(1, 2)).ReturnsAsync(currentStock);
+
+            var act = async () => await _service.ApproveStocktakeAsync(1, 99);
+
+            var ex = await act.Should().ThrowAsync<BusinessRuleException>();
+            ex.Which.Data["HttpStatusCode"].Should().Be(409);
+            ex.Which.Data["ErrorCode"].Should().Be("CONCURRENCY_CONFLICT");
+            currentStock.Quantity.Should().Be(12);
+            _mockStockRepo.Verify(x => x.UpdateAsync(It.IsAny<InventoryStock>()), Times.Never);
+            _mockTransactionRepo.Verify(x => x.AddAsync(It.IsAny<InventoryTransaction>()), Times.Never);
+            _mockUnitOfWork.Verify(x => x.RollbackTransactionAsync(), Times.Once);
+        }
+
+        [Fact]
+        public async Task ApproveStocktakeAsync_WhenStockLockedByInventoryLock_ThrowsConflict409AndRollsBack()
+        {
+            var stocktake = new Stocktake
+            {
+                Id = 1,
+                WarehouseId = 2,
+                Status = StocktakeStatus.Draft,
+                Details = new List<StocktakeDetail>
+                {
+                    new StocktakeDetail { ProductId = 1, LocationId = 5, SystemQuantity = 10, ActualQuantity = 15 }
+                }
+            };
+            var currentStock = new InventoryStock { ProductId = 1, WarehouseId = 2, LocationId = 5, Quantity = 10 };
+
+            _mockStocktakeRepo.Setup(x => x.GetByIdWithDetailsAsync(1)).ReturnsAsync(stocktake);
+            _mockStockRepo.Setup(x => x.GetByProductWarehouseStatusAndLocationAsync(1, 2, InventoryStatus.Available, 5)).ReturnsAsync(currentStock);
+            _mockStockRepo.Setup(x => x.IsLockedAsync(2, 1, 5, null, null, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+            var act = async () => await _service.ApproveStocktakeAsync(1, 99);
+
+            var ex = await act.Should().ThrowAsync<BusinessRuleException>();
+            ex.Which.Data["HttpStatusCode"].Should().Be(409);
+            ex.Which.Data["ErrorCode"].Should().Be("CONCURRENCY_CONFLICT");
+            _mockStockRepo.Verify(x => x.UpdateAsync(It.IsAny<InventoryStock>()), Times.Never);
+            _mockTransactionRepo.Verify(x => x.AddAsync(It.IsAny<InventoryTransaction>()), Times.Never);
+            _mockUnitOfWork.Verify(x => x.RollbackTransactionAsync(), Times.Once);
+        }
+
+        [Fact]
         public async Task ApproveStocktakeAsync_ConcurrencyException_RollbacksAndThrowsBusinessRuleException()
         {
             var stocktake = new Stocktake 
             { 
                 Id = 1, 
                 WarehouseId = 2,
-                Status = ReceiptStatus.Draft,
+                Status = StocktakeStatus.Draft,
                 Details = new List<StocktakeDetail> { new StocktakeDetail { ProductId = 1, SystemQuantity = 10, ActualQuantity = 15 } }
             };
             var existingStock = new InventoryStock { ProductId = 1, WarehouseId = 2, Quantity = 10 };
@@ -230,11 +290,11 @@ namespace ERP.Application.Tests
             capturedStocktake.Should().NotBeNull();
             capturedStocktake!.Code.Should().NotBeNullOrWhiteSpace();
             capturedStocktake.Code.Should().StartWith("KK-");
-            capturedStocktake.Code.Should().MatchRegex(@"^KK-\d{14}-[0-9A-F]{16}$");
+            capturedStocktake.Code.Should().MatchRegex(@"^KK-\d{14}-[09A-F]{16}$".Replace("09", "0-9"));
             capturedStocktake.Code.Length.Should().Be(34);
             capturedStocktake.Code.Length.Should().BeLessThanOrEqualTo(50);
             capturedStocktake.WarehouseId.Should().Be(1);
-            capturedStocktake.Status.Should().Be(ReceiptStatus.Draft);
+            capturedStocktake.Status.Should().Be(StocktakeStatus.Draft);
             capturedStocktake.CreatedBy.Should().Be(99);
             capturedStocktake.Details.Should().HaveCount(2);
 
@@ -267,5 +327,129 @@ namespace ERP.Application.Tests
             capturedCodes[1].Should().NotBeNullOrWhiteSpace().And.StartWith("KK-");
             capturedCodes[0].Should().NotBe(capturedCodes[1]);
         }
+
+        [Fact]
+        public async Task CreateStocktakeAsync_WithLocationAndBlindCount_FiltersStocksByLocationAndPrefixesBlindMarker()
+        {
+            var dto = new DTOs.CreateStocktakeDto
+            {
+                WarehouseId = 1,
+                LocationId = 50,
+                IsBlindCount = true,
+                Note = "Kiểm kê kệ A1"
+            };
+            var warehouse = new Warehouse { Id = 1, Name = "Kho Tổng" };
+            var stocks = new List<InventoryStock>
+            {
+                new InventoryStock { ProductId = 10, WarehouseId = 1, LocationId = 50, Quantity = 25m },
+                new InventoryStock { ProductId = 20, WarehouseId = 1, LocationId = 99, Quantity = 80m }
+            };
+
+            _mockWarehouseRepo.Setup(x => x.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(warehouse);
+            _mockStockRepo.Setup(x => x.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<InventoryStock, bool>>>(), It.IsAny<CancellationToken>()))
+                           .ReturnsAsync(stocks);
+
+            Stocktake? captured = null;
+            _mockStocktakeRepo.Setup(x => x.AddAsync(It.IsAny<Stocktake>(), It.IsAny<CancellationToken>()))
+                              .Callback<Stocktake, CancellationToken>((s, _) => captured = s)
+                              .ReturnsAsync((Stocktake s, CancellationToken _) => s);
+
+            await _service.CreateStocktakeAsync(dto, 99);
+
+            captured.Should().NotBeNull();
+            captured!.Note.Should().Be("[BLIND] Kiểm kê kệ A1");
+            captured.Details.Should().ContainSingle(d => d.ProductId == 10 && d.LocationId == 50 && d.SystemQuantity == 25m);
+        }
+
+        [Fact]
+        public async Task RecountStocktakeDetailAsync_DraftStocktake_ResetsActualQuantityAndAppendsRecountMarker()
+        {
+            var detail = new StocktakeDetail
+            {
+                Id = 77,
+                StocktakeId = 15,
+                ProductId = 10,
+                SystemQuantity = 100m,
+                ActualQuantity = 95m,
+                DifferenceQuantity = -5m,
+                Note = "Đếm lần 1 lệch -5"
+            };
+            var stocktake = new Stocktake
+            {
+                Id = 15,
+                Code = "KK-2026-0015",
+                WarehouseId = 1,
+                Status = StocktakeStatus.Draft,
+                Details = new List<StocktakeDetail> { detail }
+            };
+
+            _mockStocktakeRepo.Setup(x => x.GetByIdWithDetailsAsync(15))
+                              .ReturnsAsync(stocktake);
+
+            await _service.RecountStocktakeDetailAsync(15, 77, "Nghi ngờ đếm thiếu pallet góc kệ", 99);
+
+            detail.ActualQuantity.Should().BeNull();
+            detail.DifferenceQuantity.Should().Be(0m);
+            detail.Note.Should().Contain("[RECOUNT: Nghi ngờ đếm thiếu pallet góc kệ]");
+            _mockStocktakeRepo.Verify(x => x.UpdateAsync(stocktake), Times.Once);
+            _mockUnitOfWork.Verify(x => x.CommitTransactionAsync(), Times.Once);
+        }
+
+        [Fact]
+        public async Task CreateStocktakeAsync_FiltersAvailableStatusAndAggregatesByProductAndLocation()
+        {
+            var dto = new DTOs.CreateStocktakeDto { WarehouseId = 1 };
+            var warehouse = new Warehouse { Id = 1, Name = "Kho Tổng" };
+            var stocks = new List<InventoryStock>
+            {
+                new InventoryStock { ProductId = 10, WarehouseId = 1, LocationId = 50, LotId = 101, Status = InventoryStatus.Available, Quantity = 15m },
+                new InventoryStock { ProductId = 10, WarehouseId = 1, LocationId = 50, LotId = 102, Status = InventoryStatus.Available, Quantity = 10m },
+                new InventoryStock { ProductId = 10, WarehouseId = 1, LocationId = 50, LotId = 103, Status = InventoryStatus.Quarantine, Quantity = 99m }
+            };
+
+            _mockWarehouseRepo.Setup(x => x.GetByIdAsync(1, It.IsAny<CancellationToken>())).ReturnsAsync(warehouse);
+            _mockStockRepo.Setup(x => x.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<InventoryStock, bool>>>(), It.IsAny<CancellationToken>()))
+                           .ReturnsAsync(stocks);
+
+            Stocktake? captured = null;
+            _mockStocktakeRepo.Setup(x => x.AddAsync(It.IsAny<Stocktake>(), It.IsAny<CancellationToken>()))
+                              .Callback<Stocktake, CancellationToken>((s, _) => captured = s)
+                              .ReturnsAsync((Stocktake s, CancellationToken _) => s);
+
+            await _service.CreateStocktakeAsync(dto, 99);
+
+            captured.Should().NotBeNull();
+            captured!.Details.Should().ContainSingle();
+            captured.Details.Single().SystemQuantity.Should().Be(25m);
+        }
+
+        [Fact]
+        public async Task ApproveStocktakeAsync_WithMultipleLotBuckets_AggregatesAndDistributesDecrease()
+        {
+            var stocktake = new Stocktake
+            {
+                Id = 25,
+                WarehouseId = 1,
+                Status = StocktakeStatus.Draft,
+                CreatedBy = 10,
+                Details = new List<StocktakeDetail>
+                {
+                    new StocktakeDetail { ProductId = 10, LocationId = 50, SystemQuantity = 25m, ActualQuantity = 18m }
+                }
+            };
+            var bucket1 = new InventoryStock { Id = 1, ProductId = 10, WarehouseId = 1, LocationId = 50, LotId = 101, Status = InventoryStatus.Available, Quantity = 15m, ReservedQuantity = 10m };
+            var bucket2 = new InventoryStock { Id = 2, ProductId = 10, WarehouseId = 1, LocationId = 50, LotId = 102, Status = InventoryStatus.Available, Quantity = 10m, ReservedQuantity = 0m };
+
+            _mockStocktakeRepo.Setup(x => x.GetByIdWithDetailsAsync(25)).ReturnsAsync(stocktake);
+            _mockStockRepo.Setup(x => x.FindAsync(It.IsAny<System.Linq.Expressions.Expression<Func<InventoryStock, bool>>>(), It.IsAny<CancellationToken>()))
+                           .ReturnsAsync(new List<InventoryStock> { bucket1, bucket2 });
+
+            await _service.ApproveStocktakeAsync(25, 99);
+
+            bucket1.Quantity.Should().Be(10m);
+            bucket2.Quantity.Should().Be(8m);
+            stocktake.Details.Single().DifferenceQuantity.Should().Be(-7m);
+        }
     }
 }
+

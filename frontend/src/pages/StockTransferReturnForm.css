@@ -1,0 +1,51 @@
+.transfer-return-form {
+  display: grid;
+  gap: var(--ui-space-2);
+  margin-top: var(--ui-space-4);
+  padding: var(--ui-space-4);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-surface);
+}
+
+.transfer-return-form h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.transfer-return-form p {
+  margin: 0;
+  color: var(--ui-muted);
+}
+
+.transfer-return-form select,
+.transfer-return-form textarea {
+  width: 100%;
+  min-width: 0;
+}
+
+.transfer-return-form textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.transfer-return-form button {
+  min-height: 44px;
+  justify-self: start;
+}
+
+.transfer-return-form .danger {
+  color: var(--ui-danger);
+  border-color: var(--ui-danger);
+}
+
+.transfer-return-result {
+  padding: var(--ui-space-3);
+  border: 1px solid var(--ui-border);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .transfer-return-form { padding: var(--ui-space-3); }
+  .transfer-return-form button { width: 100%; }
+}

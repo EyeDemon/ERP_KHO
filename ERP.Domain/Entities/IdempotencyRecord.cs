@@ -1,12 +1,18 @@
+using System.ComponentModel.DataAnnotations.Schema;
+using ERP.Domain.Common;
+
 namespace ERP.Domain.Entities;
 
 public enum IdempotencyStatus { Processing = 0, Completed = 1 }
 
-public class IdempotencyRecord
+public class IdempotencyRecord : ITenantEntity
 {
     public long Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public int UserId { get; set; }
     public string CommandScope { get; set; } = string.Empty;
+    [NotMapped]
+    public string ScopeKey => $"{TenantId}:{UserId}:{CommandScope}";
     public string KeyHash { get; set; } = string.Empty;
     public string RequestFingerprint { get; set; } = string.Empty;
     public IdempotencyStatus Status { get; set; }

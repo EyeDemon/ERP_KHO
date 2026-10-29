@@ -1,8 +1,11 @@
+using ERP.Domain.Common;
+
 namespace ERP.Domain.Entities;
 
-public class User
+public class User : ITenantEntity
 {
     public int Id { get; set; }
+    public int TenantId { get; set; } = 1;
     public string Username { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
     public string FullName { get; set; } = string.Empty;
@@ -14,6 +17,8 @@ public class User
     public int FailedLoginCount { get; set; }
     public DateTime? LockoutEnd { get; set; }
     public DateTime? LastFailedLoginAt { get; set; }
+    public long WarehouseAccessRevision { get; set; }
+    public long SecurityRevision { get; set; }
 
     // Navigation
     public Role Role { get; set; } = null!;

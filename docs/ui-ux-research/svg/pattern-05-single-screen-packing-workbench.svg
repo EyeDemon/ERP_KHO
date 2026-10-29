@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="100%" height="100%" font-family="Inter, 'Be Vietnam Pro', system-ui, -apple-system, sans-serif">
+  <defs>
+    <style>
+      .num { font-variant-numeric: tabular-nums; }
+      .mono { font-family: 'JetBrains Mono', Consolas, monospace; font-variant-numeric: tabular-nums; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="#F8FAFC" />
+
+  <!-- Top Header + Mode Tabs (Y=0..64px) -->
+  <rect x="0" y="0" width="1440" height="64" fill="#0F172A" />
+  <text x="24" y="26" fill="#94A3B8" font-size="11" font-weight="700" letter-spacing="0.06em">TRẠM ĐÓNG GÓI THƯƠNG MẠI ĐIỆN TỬ • KHO WH01 • BÀN PACK-STATION-02</text>
+  <text x="24" y="48" fill="#FFFFFF" font-size="18" font-weight="700">Bàn Đóng gói Hợp nhất 1 Màn hình (0px Cuộn dọc • Quét mã + Video SHA-256 + Cước DIM + In AWB)</text>
+
+  <!-- Workspace Tabs on Dark Header -->
+  <rect x="940" y="14" width="210" height="36" rx="6" fill="#059669" />
+  <text x="1045" y="37" fill="#FFFFFF" font-size="12" font-weight="700" text-anchor="middle">● Bàn đóng gói trực tiếp</text>
+  <rect x="1160" y="14" width="140" height="36" rx="6" fill="#1E293B" stroke="#334155" />
+  <text x="1230" y="37" fill="#CBD5E1" font-size="12" font-weight="600" text-anchor="middle">Ds Phiên (14)</text>
+  <rect x="1310" y="14" width="110" height="36" rx="6" fill="#1E293B" stroke="#334155" />
+  <text x="1365" y="37" fill="#CBD5E1" font-size="12" font-weight="600" text-anchor="middle">Kitting/VAS</text>
+
+  <!-- Sticky Auto-Focus Barcode Scanner Bar (Y=78..136px) -->
+  <rect x="20" y="76" width="1400" height="58" rx="8" fill="#FFFFFF" stroke="#059669" stroke-width="2" />
+  <rect x="34" y="88" width="140" height="34" rx="6" fill="#ECFDF5" />
+  <text x="104" y="110" fill="#047857" font-size="12" font-weight="700" text-anchor="middle">||||| AUTO-FOCUS</text>
+  <text x="190" y="110" fill="#0F172A" font-size="15" font-weight="600" class="mono">8938501928114_ (Quét mã Giỏ Pick / Mã vạch SKU / Lệnh đóng thùng...)</text>
+  <rect x="1110" y="88" width="296" height="34" rx="6" fill="#ECFDF5" stroke="#059669" />
+  <circle cx="1128" cy="105" r="5" fill="#047857" />
+  <text x="1142" y="110" fill="#047857" font-size="12" font-weight="700">Đơn #SO-99218: HỢP LỆ (Chưa báo hủy sàn)</text>
+
+  <!-- LEFT COLUMN (7/12 Width: X=20..840, Y=148..880) -->
+  <rect x="20" y="148" width="820" height="732" rx="8" fill="#FFFFFF" stroke="#E6E8EA" />
+
+  <!-- Session Progress Header -->
+  <text x="40" y="180" fill="#0F172A" font-size="16" font-weight="700">1. Kiểm đếm Sản phẩm trong Phiên: PACK-2026-089 (Từ giỏ: PICK-441)</text>
+  <text x="820" y="180" fill="#047857" font-size="14" font-weight="700" text-anchor="end" class="num">Đã quét: 18 / 20 Sản phẩm (90%)</text>
+
+  <!-- Progress Bar -->
+  <rect x="40" y="192" width="780" height="12" rx="6" fill="#E2E8F0" />
+  <rect x="40" y="192" width="702" height="12" rx="6" fill="#059669" />
+
+  <!-- Picked Items Table to Pack -->
+  <rect x="40" y="218" width="780" height="36" fill="#F2F3F4" stroke="#CBD5E1" />
+  <text x="54" y="241" fill="#475569" font-size="11" font-weight="700">MÃ SKU / BARCODE</text>
+  <text x="210" y="241" fill="#475569" font-size="11" font-weight="700">TÊN SẢN PHẨM &amp; LÔ/SÊ-RI</text>
+  <text x="530" y="241" fill="#475569" font-size="11" font-weight="700" text-anchor="end">ĐÃ NHẶT</text>
+  <text x="625" y="241" fill="#475569" font-size="11" font-weight="700" text-anchor="end">ĐÃ ĐÓNG</text>
+  <text x="710" y="241" fill="#475569" font-size="11" font-weight="700" text-anchor="end">CÒN LẠI</text>
+  <text x="806" y="241" fill="#475569" font-size="11" font-weight="700" text-anchor="end">TRẠNG THÁI</text>
+
+  <!-- Item Row 1 (Completed) -->
+  <g transform="translate(40, 254)">
+    <rect x="0" y="0" width="780" height="54" fill="#F8FAFC" stroke="#E6E8EA" />
+    <text x="14" y="24" fill="#0F172A" font-size="13" font-weight="700" class="mono">SKU-AUDIO-101</text>
+    <text x="14" y="42" fill="#64748B" font-size="11" class="mono">8934673100120</text>
+    <text x="170" y="24" fill="#0F172A" font-size="13" font-weight="600">Tai nghe Bluetooth Chống ồn Pro X1</text>
+    <text x="170" y="42" fill="#64748B" font-size="11">Lô: LOT-202609 • Thùng đích: HU-CARTON-01</text>
+    <text x="490" y="32" fill="#0F172A" font-size="14" font-weight="600" text-anchor="end" class="num">10</text>
+    <text x="585" y="32" fill="#047857" font-size="14" font-weight="700" text-anchor="end" class="num">10</text>
+    <text x="670" y="32" fill="#64748B" font-size="14" font-weight="600" text-anchor="end" class="num">0</text>
+    <rect x="694" y="15" width="74" height="24" rx="12" fill="#ECFDF5" />
+    <text x="731" y="31" fill="#047857" font-size="11" font-weight="700" text-anchor="middle">✓ Đủ hàng</text>
+  </g>
+
+  <!-- Item Row 2 (Active Scanning Row!) -->
+  <g transform="translate(40, 308)">
+    <rect x="0" y="0" width="780" height="64" fill="#FFFBEB" stroke="#F59E0B" stroke-width="2" />
+    <text x="14" y="26" fill="#92400E" font-size="13" font-weight="700" class="mono">▶ SKU-ELEC-88</text>
+    <text x="14" y="46" fill="#B45309" font-size="11" class="mono">8938501928114</text>
+    <text x="170" y="26" fill="#0F172A" font-size="13" font-weight="700">Sạc dự phòng không dây 20.000mAh</text>
+    <text x="170" y="46" fill="#92400E" font-size="12" font-weight="600">👉 Quét thêm 2 cái nữa để hoàn tất đóng thùng HU-CARTON-01</text>
+    <text x="490" y="36" fill="#0F172A" font-size="15" font-weight="700" text-anchor="end" class="num">10</text>
+    <text x="585" y="36" fill="#92400E" font-size="15" font-weight="700" text-anchor="end" class="num">8</text>
+    <text x="670" y="36" fill="#B91C1C" font-size="16" font-weight="700" text-anchor="end" class="num">2</text>
+    <rect x="690" y="17" width="80" height="30" rx="6" fill="#334155" />
+    <text x="730" y="36" fill="#FFFFFF" font-size="11" font-weight="700" text-anchor="middle">+1 Quét</text>
+  </g>
+
+  <!-- Handling Units (Boxes/Pallets) in Session (Y=394..860px) -->
+  <text x="40" y="408" fill="#0F172A" font-size="15" font-weight="700">2. Kiện hàng (Handling Units / SSCC) trong Phiên này</text>
+  <rect x="650" y="386" width="170" height="32" rx="6" fill="#F8FAFC" stroke="#CBD5E1" />
+  <text x="735" y="407" fill="#334155" font-size="12" font-weight="600" text-anchor="middle">+ Tạo kiện Carton mới</text>
+
+  <!-- Active Carton Box Card -->
+  <rect x="40" y="426" width="780" height="120" rx="8" fill="#F8FAFC" stroke="#059669" stroke-width="1.5" />
+  <text x="58" y="452" fill="#047857" font-size="14" font-weight="700" class="mono">📦 HU-CARTON-01 (SSCC: 003893467300000182) — ĐANG MỞ ĐÓNG GÓI</text>
+  <text x="58" y="474" fill="#475569" font-size="12">Chứa: 10× SKU-AUDIO-101, 8× SKU-ELEC-88 • Lồng trong Pallet: HU-PALLET-MASTER-09</text>
+  <rect x="58" y="492" width="140" height="34" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+  <text x="128" y="514" fill="#334155" font-size="12" font-weight="600" text-anchor="middle">In nhãn SSCC</text>
+  <rect x="210" y="492" width="160" height="34" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+  <text x="290" y="514" fill="#334155" font-size="12" font-weight="600" text-anchor="middle">Gán vào Pallet cha</text>
+  <rect x="382" y="492" width="170" height="34" rx="6" fill="#FEF2F2" stroke="#FCA5A5" />
+  <text x="467" y="514" fill="#B91C1C" font-size="12" font-weight="600" text-anchor="middle">Báo ngoại lệ thiếu hàng</text>
+
+  <!-- Put-to-Wall Status Mini Strip -->
+  <rect x="40" y="564" width="780" height="296" rx="8" fill="#F8FAFC" stroke="#E2E8F0" />
+  <text x="58" y="592" fill="#0F172A" font-size="14" font-weight="700">3. Trạng thái Ô Tường Chia Chọn (Put-to-Wall SLOT-01..04)</text>
+  <g transform="translate(58, 608)">
+    <rect x="0" y="0" width="176" height="84" rx="6" fill="#ECFDF5" stroke="#059669" stroke-width="2" />
+    <text x="14" y="24" fill="#047857" font-size="12" font-weight="700" class="mono">SLOT-01 (Đơn #99218)</text>
+    <text x="14" y="48" fill="#0F172A" font-size="16" font-weight="700" class="num">18 / 20 SP</text>
+    <text x="14" y="68" fill="#047857" font-size="11" font-weight="600">Đang đóng gói tại bàn</text>
+
+    <rect x="190" y="0" width="176" height="84" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+    <text x="204" y="24" fill="#334155" font-size="12" font-weight="700" class="mono">SLOT-02 (Đơn #99219)</text>
+    <text x="204" y="48" fill="#047857" font-size="16" font-weight="700" class="num">12 / 12 SP ✓</text>
+    <text x="204" y="68" fill="#047857" font-size="11" font-weight="700">Sẵn sàng đóng gói</text>
+
+    <rect x="380" y="0" width="176" height="84" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+    <text x="394" y="24" fill="#334155" font-size="12" font-weight="700" class="mono">SLOT-03 (Đơn #99220)</text>
+    <text x="394" y="48" fill="#475569" font-size="16" font-weight="700" class="num">4 / 6 SP</text>
+    <text x="394" y="68" fill="#64748B" font-size="11">Đang chờ nhặt nốt</text>
+
+    <rect x="570" y="0" width="174" height="84" rx="6" fill="#FEF2F2" stroke="#FCA5A5" />
+    <text x="584" y="24" fill="#B91C1C" font-size="12" font-weight="700" class="mono">SLOT-04 (Đơn #99221)</text>
+    <text x="584" y="48" fill="#B91C1C" font-size="14" font-weight="700">⛔ KHÁCH HỦY SÀN</text>
+    <text x="584" y="68" fill="#B91C1C" font-size="11" font-weight="600">Chờ hoàn kệ (Putback)</text>
+  </g>
+
+  <!-- Keyboard Shortcuts Helper -->
+  <rect x="58" y="712" width="744" height="128" rx="6" fill="#FFFFFF" stroke="#E2E8F0" />
+  <text x="74" y="738" fill="#0F172A" font-size="12" font-weight="700">Phím tắt &amp; Lệnh mã vạch không cần dùng chuột (Hands-Free Packing):</text>
+  <text x="74" y="764" fill="#475569" font-size="12">• Quét mã vạch SKU + Enter: Tự động cộng +1 vào thùng đang mở và phát âm báo "Bíp" xanh.</text>
+  <text x="74" y="788" fill="#475569" font-size="12">• Quét mã lệnh CMD-CLOSE-BOX hoặc nhấn phím [F9]: Niêm phong thùng, chốt video SHA-256 &amp; in tem AWB.</text>
+  <text x="74" y="812" fill="#475569" font-size="12">• Quét trúng đơn vừa hủy trên Shopee/TikTok: Khóa nút In tem ngay lập tức và bật cảnh báo đỏ.</text>
+
+  <!-- RIGHT COLUMN (5/12 Width: X=856..1420, Y=148..880) -->
+  <rect x="856" y="148" width="564" height="732" rx="8" fill="#FFFFFF" stroke="#E6E8EA" />
+
+  <!-- 1. Camera Video Recording & SHA-256 Evidence -->
+  <text x="876" y="180" fill="#0F172A" font-size="15" font-weight="700">4. Ghi hình Bằng chứng Đóng gói (Chống tráo/hoàn hàng)</text>
+  <rect x="876" y="194" width="524" height="220" rx="8" fill="#0F172A" />
+  <circle cx="900" cy="218" r="6" fill="#EF4444" />
+  <text x="914" y="222" fill="#FFFFFF" font-size="12" font-weight="700" class="mono">REC ● 00:01:14 • CAM-OVERHEAD-02 (1080p 30fps)</text>
+  <text x="892" y="254" fill="#94A3B8" font-size="12" class="mono">Overlay: WH01 | PACK-2026-089 | AWB: SPXVN049281920 | 2026-10-25 19:55:12</text>
+  <!-- Simulated Box View in Camera -->
+  <rect x="1030" y="274" width="210" height="90" rx="6" fill="#1E293B" stroke="#059669" stroke-dasharray="4,4" />
+  <text x="1135" y="324" fill="#ECFDF5" font-size="12" font-weight="600" text-anchor="middle">[Khung nhận diện Thùng &amp; SKU]</text>
+  <rect x="892" y="376" width="492" height="26" rx="4" fill="#1E293B" />
+  <text x="904" y="393" fill="#34D399" font-size="11" class="mono">SHA-256 Video Seal: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</text>
+
+  <!-- 2. Carton Box Recommendation & DIM Weight Calculator -->
+  <text x="876" y="446" fill="#0F172A" font-size="15" font-weight="700">5. Gợi ý Thùng Carton &amp; Kiểm soát Cước Quy đổi (DIM Weight)</text>
+  <rect x="876" y="460" width="524" height="216" rx="8" fill="#F8FAFC" stroke="#CBD5E1" />
+
+  <text x="894" y="486" fill="#475569" font-size="12" font-weight="600">Loại thùng Carton sử dụng (Hệ thống gợi ý theo tổng thể tích SKU):</text>
+  <rect x="894" y="494" width="488" height="38" rx="6" fill="#FFFFFF" stroke="#334155" />
+  <text x="908" y="518" fill="#0F172A" font-size="13" font-weight="700">Thùng Carton Mã B (30 × 20 × 15 cm) — Sức chứa tối ưu 92% ▾</text>
+
+  <!-- Weight Comparison Grid -->
+  <rect x="894" y="544" width="236" height="64" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+  <text x="908" y="566" fill="#64748B" font-size="11" font-weight="600">TRỌNG LƯỢNG CÂN THỰC TẾ</text>
+  <text x="908" y="594" fill="#0F172A" font-size="18" font-weight="700" class="num">2,45 kg</text>
+
+  <rect x="1146" y="544" width="236" height="64" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+  <text x="1160" y="566" fill="#64748B" font-size="11" font-weight="600">TRỌNG LƯỢNG QUY ĐỔI (D×R×C/6000)</text>
+  <text x="1160" y="594" fill="#047857" font-size="18" font-weight="700" class="num">1,50 kg (An toàn)</text>
+
+  <rect x="894" y="620" width="488" height="42" rx="6" fill="#ECFDF5" stroke="#059669" />
+  <text x="910" y="646" fill="#047857" font-size="12" font-weight="700">✓ Không bị phạt cước thể tích DIM (Cước ĐVVC tính theo 2,45 kg thực tế)</text>
+
+  <!-- 3. Primary Seal & Print AWB CTA -->
+  <text x="876" y="706" fill="#0F172A" font-size="15" font-weight="700">6. Hoàn tất Đóng gói &amp; Phát hành Tem nhiệt Vận đơn</text>
+
+  <rect x="876" y="720" width="524" height="62" rx="8" fill="#059669" />
+  <text x="1138" y="748" fill="#FFFFFF" font-size="16" font-weight="700" text-anchor="middle">🖨️ NIÊM PHONG THÙNG &amp; IN TEM AWB 100×150mm (F9)</text>
+  <text x="1138" y="768" fill="#ECFDF5" font-size="12" text-anchor="middle">Tự động chốt Video SHA-256 + Sinh luồng %PDF-1.4 chuẩn máy in nhiệt</text>
+
+  <rect x="876" y="796" width="254" height="44" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+  <text x="1003" y="823" fill="#334155" font-size="13" font-weight="600" text-anchor="middle">Xem trước Tem AWB / SSCC</text>
+
+  <rect x="1146" y="796" width="254" height="44" rx="6" fill="#FFFFFF" stroke="#CBD5E1" />
+  <text x="1273" y="823" fill="#334155" font-size="13" font-weight="600" text-anchor="middle">Tạm hoãn phiên (Hold)</text>
+</svg>

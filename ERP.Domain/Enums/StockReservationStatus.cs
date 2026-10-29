@@ -7,5 +7,7 @@ public enum StockReservationStatus
     Consumed = 2,
     Released = 3,
     Expired = 4,
-    Cancelled = 5
+    Cancelled = 5,
+    PartiallyAllocated = 6,
+    Allocated = 7
 }

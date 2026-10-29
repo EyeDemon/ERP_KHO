@@ -7,8 +7,10 @@ using Microsoft.AspNetCore.Mvc;
 namespace ERP.Api.Controllers
 {
     [Authorize(Roles = AppRoles.AllRoles)]
+    [PermissionAuthorize(AppPermissions.InventoryRead)]
     [ApiController]
     [Route("api/[controller]")]
+    [Route("api/v1/inventory-stocks")]
     public class InventoryStocksController : ControllerBase
     {
         private readonly IInventoryQueryService _inventoryQueryService;
@@ -22,8 +24,8 @@ namespace ERP.Api.Controllers
         public async Task<ActionResult<IEnumerable<InventoryStockDto>>> GetCurrentStock(
             [FromQuery] int? warehouseId, 
             [FromQuery] int? productId, 
-            [FromQuery] string? keyword, 
-            [FromQuery] decimal? lowStockThreshold)
+            [FromQuery] string? keyword,
+            [FromQuery] decimal? lowStockThreshold = null)
         {
             var stocks = await _inventoryQueryService.GetCurrentStockAsync(warehouseId, productId, keyword, lowStockThreshold);
             return Ok(stocks);
