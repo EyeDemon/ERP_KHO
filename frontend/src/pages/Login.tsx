@@ -51,8 +51,6 @@ const Login = () => {
       setPassword('');
     };
     clearAutofill();
-    const timer = window.setTimeout(clearAutofill, 120);
-    return () => window.clearTimeout(timer);
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -131,7 +129,7 @@ const Login = () => {
             <span>Tên đăng nhập</span>
             <input
               id="login-username"
-              autoComplete="off"
+              autoComplete="username"
               type="text"
               placeholder="Nhập tên đăng nhập"
               value={username}
@@ -158,7 +156,7 @@ const Login = () => {
               <button
                 type="button"
                 data-testid="toggle-password-visibility"
-                aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                aria-label={showPassword ? 'Ẩn ký tự' : 'Hiện ký tự'}
                 aria-pressed={showPassword}
                 onClick={() => setShowPassword((prev) => !prev)}
                 style={{ width: 'auto', minHeight: 40, padding: '0 14px', whiteSpace: 'nowrap', flexShrink: 0 }}

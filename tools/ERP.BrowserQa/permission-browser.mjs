@@ -196,7 +196,7 @@ async function main(manifestPath) {
       page.on('pageerror', observeError);
       try {
         await page.goto(manifest.FrontendUrl + '/inventory-reconciliation');
-        await page.getByRole('heading', { name: 'Đối chiếu tồn kho & ledger' }).waitFor();
+        await page.getByRole('heading', { name: /Đối chiếu tồn kho & (sổ cái|ledger)/i }).waitFor();
 
         const field = page.getByLabel('ID sản phẩm');
         await field.fill('1.5');
@@ -292,7 +292,7 @@ async function main(manifestPath) {
         // download its warehouse/ledger evidence after permission denial.
         await reader.page.goto(manifest.FrontendUrl + '/inventory-reconciliation');
         await reader.page.getByRole('heading', { name: 'Không có quyền truy cập' }).waitFor();
-        assert.equal(await reader.page.getByRole('heading', { name: 'Đối chiếu tồn kho & ledger' }).count(), 0);
+        assert.equal(await reader.page.getByRole('heading', { name: /Đối chiếu tồn kho & (sổ cái|ledger)/i }).count(), 0);
         const forbidden = await fetchFromBrowser(reader,
           `/api/InventoryReconciliation/investigation?warehouseId=${fixture.warehouse}&productId=${product.id}`);
         expectStatus(forbidden, 403);

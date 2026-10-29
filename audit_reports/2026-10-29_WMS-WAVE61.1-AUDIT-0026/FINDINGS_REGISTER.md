@@ -2,34 +2,35 @@
 
 - **Audit ID:** `WMS-WAVE61.1-AUDIT`
 - **Run ID:** `2026-10-29_WMS-WAVE61.1-AUDIT-0026`
-- **Audit Mode:** `EVIDENCE-BACKED AUDIT & WAVE 57–61.6 SURGICAL REMEDIATION + 90-DAY ROADMAP & CI SECURITY GATE CLOSURE VERIFICATION`
+- **Audit Mode:** `EVIDENCE-BACKED AUDIT & WAVE 57–61.10 SURGICAL REMEDIATION + 90-DAY ROADMAP & CI 20/20 GREEN GATE CLOSURE VERIFICATION`
 - **Inspected Git Baselines:**
-  - `3ddab7261d4606f094239d4933923aea657aca28` (`HEAD~9` — code baseline when `WMS-AUDIT-20261026-1805` was authored)
-  - `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009` (`HEAD~8` on `feat/WMS-61-project-development` — initial audit baseline)
-  - `f49a433` (`HEAD~7` — Wave 57 Remediation Closure Baseline: Migration `20261027130209_Wave57AuditRemediationSchemaAndImmutableLedgerTrigger.cs` applied and verified across Gates 1..5)
-  - `ca0f177` (`HEAD~6` — Wave 58 Architectural Closure Baseline: Decoupled `ErpKhoDbContext` from all `42 / 42` API Controllers, closing `F-004`)
-  - `0b75fd4` (`HEAD~5` — Wave 59 & 59.1 30-Day Roadmap Epics `30.1..30.3` & Live Browser E2E `UNV-02` Closure Baseline)
-  - `37eb5fe` (`HEAD~4` — Wave 60 60-Day Roadmap Epics `60.1..60.3` Implementation Baseline: `KitWorkOrder`, Cross-Docking, and Break-Bulk Replenishment)
-  - `5ce6242` (`HEAD~3` — Wave 60.1 Remediation Closure Baseline: Resolved `F-011` and `F-012`)
-  - `2eafbed` (`HEAD~2` — Wave 61 Remediation [`F-013`, `F-014`] & 90-Day Roadmap [`Epic 90.1..90.3`] Baseline)
-  - `645bd9d` (`HEAD~1` — Accepted Backend C# Code Baseline: Wave 61.1 Surgical Remediation [`F-015`, `F-016`, `F-017`, `F-018`] & Full Verbatim Evidence Closure)
-  - `ad51bda` (`HEAD` — Wave 61.2 / 61.3 Cutover Readiness & Smoke Test Packaging Baseline)
-  - **Wave 61.6 CI Security Gate (`Step #14`) & Workflow Trigger Remediation Closure Baseline (`feat/WMS-61-project-development`):** Resolves `F-019` (`S2 — MEDIUM`: upgrades `axios` `1.18.1 -> 1.21.0`, `follow-redirects` `1.16.0 -> 1.16.2`, `undici` `8.10.2 -> 8.12.3`, `vite` `8.1.4 -> 8.3.5`, and `vitest` / `@vitest/mocker` `4.1.11 -> 5.0.5` in `frontend/package.json` & `frontend/package-lock.json` so `npm audit --audit-level=high` and `npm audit` report `found 0 vulnerabilities` [`ExitCode = 0`], and adds `feat/WMS-61-project-development` and `main` to `on.push.branches` in `.github/workflows/ci.yml`), achieving **`17 / 17` code/data/CI/report findings `CLOSED` (`18 / 19` total findings `CLOSED` including `F-003a/b/c`, `0` `OPEN`, and `1` `BLOCKED` external Notion `404` `F-010`)**
+  - `3ddab7261d4606f094239d4933923aea657aca28` (`HEAD~10` — code baseline when `WMS-AUDIT-20261026-1805` was authored)
+  - `d9b24530ba5826ae0d5f4f107e8f91be3f6f6009` (`HEAD~9` on `feat/WMS-61-project-development` — initial audit baseline)
+  - `f49a433` (`HEAD~8` — Wave 57 Remediation Closure Baseline: Migration `20261027130209_Wave57AuditRemediationSchemaAndImmutableLedgerTrigger.cs` applied and verified across Gates 1..5)
+  - `ca0f177` (`HEAD~7` — Wave 58 Architectural Closure Baseline: Decoupled `ErpKhoDbContext` from all `42 / 42` API Controllers, closing `F-004`)
+  - `0b75fd4` (`HEAD~6` — Wave 59 & 59.1 30-Day Roadmap Epics `30.1..30.3` & Live Browser E2E `UNV-02` Closure Baseline)
+  - `37eb5fe` (`HEAD~5` — Wave 60 60-Day Roadmap Epics `60.1..60.3` Implementation Baseline: `KitWorkOrder`, Cross-Docking, and Break-Bulk Replenishment)
+  - `5ce6242` (`HEAD~4` — Wave 60.1 Remediation Closure Baseline: Resolved `F-011` and `F-012`)
+  - `2eafbed` (`HEAD~3` — Wave 61 Remediation [`F-013`, `F-014`] & 90-Day Roadmap [`Epic 90.1..90.3`] Baseline)
+  - `645bd9d` (`HEAD~2` — Accepted Backend C# Code Baseline: Wave 61.1 Surgical Remediation [`F-015`, `F-016`, `F-017`, `F-018`] & Full Verbatim Evidence Closure)
+  - `ad51bda` (`HEAD~1` — Wave 61.2 / 61.3 Cutover Readiness & Smoke Test Packaging Baseline)
+  - `03832f9` (`HEAD` — Wave 61.6 / 61.9 CI Security Gate [`Step #14`, `F-019`] Remediation Baseline)
+  - **Wave 61.10 Interactive Chromium Browser QA (`Step #19`, `INV-11`) Remediation Closure Baseline (`feat/WMS-61-project-development`):** Resolves `F-020` (`S2 — MEDIUM`: removes `window.setTimeout(clearAutofill, 120)` and restores `autoComplete="username"` + non-colliding `aria-label` `'Ẩn ký tự' : 'Hiện ký tự'` in `frontend/src/pages/Login.tsx`, and aligns the heading regex `{ name: /Đối chiếu tồn kho & (sổ cái|ledger)/i }` in `tools/ERP.BrowserQa/permission-browser.mjs` so Step #19 `Mandatory interactive Chromium browser QA (INV-11)` passes with `ExitCode = 0` alongside all 20/20 steps of `.github/workflows/ci.yml`), achieving **`18 / 18` code/data/CI/QA/report findings `CLOSED` (`19 / 20` total findings `CLOSED` including `F-003a/b/c`, `0` `OPEN`, and `1` `BLOCKED` external Notion `404` `F-010`)**
 - **Live SQL Server Target:** `ERP_KHO` on `(localdb)\MSSQLLocalDB` (Windows Integrated Auth `HEAVENLY\van40`)
 
 ---
 
-## 1. Executive Rollup of Audit Findings (Post-Wave-61.6 Closure State)
+## 1. Executive Rollup of Audit Findings (Post-Wave-61.10 Closure State)
 
 ### 1.1 Rollup by Severity (`S0`–`S3`), Priority (`P0`–`P4`) & Open vs Closed Status
 
-| Severity | Definition | Total Logged | Closed in Waves 57–61.6 | Remaining Open / Blocked | Open / Blocked Finding IDs | Priority Distribution (Open/Blocked) |
+| Severity | Definition | Total Logged | Closed in Waves 57–61.10 | Remaining Open / Blocked | Open / Blocked Finding IDs | Priority Distribution (Open/Blocked) |
 | --- | --- | ---: | ---: | ---: | --- | --- |
 | **`S0 — Critical / Blocker`** | Active cross-tenant data leak, systemic negative stock across production SKUs, or non-compiling release build | **0** | **0** | **0** | None | `P0: 0` |
 | **`S1 — High`** | Data integrity variance on specific lot/location ledger rebuild path or missing database-level append-only trigger | **2** (`F-001`, `F-002`) | **2** (`F-001`, `F-002`) | **0** | None (`100% CLOSED`) | `P1: 0` |
-| **`S2 — Medium`** | Secondary workflows persisting state in `AuditLogs.NewValues` JSON, Fat Controllers injecting `DbContext`, optional idempotency scopes, manual HTTP trigger for scheduled jobs, Cross-Dock/Break-Bulk reversal stock clamping/lookup guard, Break-Bulk 7th-dimension `HandlingUnitId` reversal / Epic 90.1 lock / Epic 90.3 fallback guard, Epic 90.1 9D bin-to-bin re-slotting mutation, or CI Step #14 `npm audit --audit-level=high` GHSA vulnerabilities & `ci.yml` default branch trigger | **8** (`F-003`, `F-004`, `F-005`, `F-006`, `F-013`, `F-015`, `F-016`, `F-019`) | **8** (`F-003a/b/c`, `F-004`, `F-005`, `F-006`, `F-013`, `F-015`, `F-016`, `F-019`) | **0** | None (`100% CLOSED`) | `P1: 0`, `P2: 0` |
+| **`S2 — Medium`** | Secondary workflows persisting state in `AuditLogs.NewValues` JSON, Fat Controllers injecting `DbContext`, optional idempotency scopes, manual HTTP trigger for scheduled jobs, Cross-Dock/Break-Bulk reversal stock clamping/lookup guard, Break-Bulk 7th-dimension `HandlingUnitId` reversal / Epic 90.1 lock / Epic 90.3 fallback guard, Epic 90.1 9D bin-to-bin re-slotting mutation, CI Step #14 `npm audit --audit-level=high` GHSA vulnerabilities, or CI Step #19 `INV-11` Chromium Browser QA selector/autofill-timer drift | **9** (`F-003`, `F-004`, `F-005`, `F-006`, `F-013`, `F-015`, `F-016`, `F-019`, `F-020`) | **9** (`F-003a/b/c`, `F-004`, `F-005`, `F-006`, `F-013`, `F-015`, `F-016`, `F-019`, `F-020`) | **0** | None (`100% CLOSED`) | `P1: 0`, `P2: 0` |
 | **`S3 — Low / Hygiene`** | Single ledger timestamp vs dual `ActualOccurredAtUtc`/`PostedAtUtc`, unrouted legacy frontend component, SQL test harness class-name filter, Notion child page `404` sharing drift, UI Break-Bulk badge UOM label, audit report metadata drift, duplicate reversal test assertion / `§6.2` row prose, evidence line-count truncation, or conceptual vs actual method/route naming in prose | **9** (`F-007`, `F-008`, `F-009`, `F-010`, `F-011`, `F-012`, `F-014`, `F-017`, `F-018`) | **8** (`F-007`, `F-008`, `F-009`, `F-011`, `F-012`, `F-014`, `F-017`, `F-018`) | **1** (`BLOCKED`) | `F-010` (3 Notion child links `404`, `BLOCKED` on external Notion sharing) | `P2: 0`, `P3: 1` |
-| **TOTAL** | **All Consolidated Findings (`F-001`..`F-019`; `17/17` Code/Data/CI/Report Findings `CLOSED`)** | **19** (`18` Code/Data/CI/Report + `1` External Notion) | **18 (`CLOSED` — `100%` of actionable findings)** | **1 (`0 OPEN`, `1 BLOCKED S3`)** | Open: `0 S0`, `0 S1`, `0 S2`, `0 S3 OPEN`, `1 S3 BLOCKED` (`F-010`) | `P0: 0`, `P1: 0`, `P2: 0`, `P3: 1`, `P4: 0` |
+| **TOTAL** | **All Consolidated Findings (`F-001`..`F-020`; `18/18` Code/Data/CI/QA/Report Findings `CLOSED`)** | **20** (`19` Code/Data/CI/QA/Report + `1` External Notion) | **19 (`CLOSED` — `100%` of actionable findings)** | **1 (`0 OPEN`, `1 BLOCKED S3`)** | Open: `0 S0`, `0 S1`, `0 S2`, `0 S3 OPEN`, `1 S3 BLOCKED` (`F-010`) | `P0: 0`, `P1: 0`, `P2: 0`, `P3: 1`, `P4: 0` |
 
 ### 1.2 Rollup by Finding Type, Verification Status & Confidence
 
@@ -53,11 +54,12 @@
 | **`F-016`** | `EvaluateAbcSlottingAndTaskInterleavingAsync` (`Epic 90.1`) Only Staged Outbox/Audit Without Mutating 9D `InventoryStocks`, `InventoryTransactions` (`AbcSlottingReSlotting`), or `InventoryLocationMovements` | `S2` | `P1` | `SPEC_VS_CODE_MISMATCH` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 61.1)* |
 | **`F-017`** | Line-Count Cap (`+ 318/196/188 more lines`) Truncated Method Bodies in `WAVE61_1_CODE_AND_SQL_EVIDENCE.md` | `S3` | `P2` | `EVIDENCE_TRUNCATION` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 61.1)* |
 | **`F-018`** | Conceptual Method & Route Names Cited in `EXECUTIVE_SUMMARY.md`, `COMPETITIVE_GAP_AND_ROADMAP.md`, and `TEST_COVERAGE_GAPS.md` Differed from Actual Code Names | `S3` | `P3` | `REPORT_ACCURACY` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 61.1)* |
-| **`F-019`** | GitHub Actions CI Security Gate Step #14 (`npm audit --audit-level=high`) Failing (`ExitCode = 1`) Due to 5 Newly Published GHSA Advisories (`vite@8.1.4`, `undici@8.10.2`, `follow-redirects@1.16.0`, `@vitest/mocker@4.1.11`) + `axios@1.18.1 invalid: "^1.20.0"` Mismatch, and `.github/workflows/ci.yml` `on.push.branches` Missing Default Branch `feat/WMS-61-project-development` | `S2` | `P1` | `CI_SECURITY_AUDIT_AND_WORKFLOW_TRIGGER` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 61.6)* |
+| **`F-019`** | GitHub Actions CI Security Gate Step #14 (`npm audit --audit-level=high`) Failing (`ExitCode = 1`) Due to 5 Newly Published GHSA Advisories (`vite@8.1.4`, `undici@8.10.2`, `follow-redirects@1.16.0`, `@vitest/mocker@4.1.11`) + `axios@1.18.1 invalid: "^1.20.0"` Mismatch, and `.github/workflows/ci.yml` `on.push.branches` Missing Default Branch `feat/WMS-61-project-development` | `S2` | `P1` | `CI_SECURITY_AUDIT_AND_WORKFLOW_TRIGGER` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 61.6 / 61.9)* |
+| **`F-020`** | GitHub Actions CI Step #19 (`Mandatory interactive Chromium browser QA (INV-11)`) Failing (`ExitCode = 1`) Due to 4 UI/Selector Drift Items Between `Login.tsx`, `InventoryReconciliation.tsx` & `tools/ERP.BrowserQa/permission-browser.mjs` | `S2` | `P1` | `CI_BROWSER_QA_SELECTOR_AND_AUTOFILL_TIMER_DRIFT` | `FACT` | `HIGH` | **`CLOSED`** *(Wave 61.10)* |
 
 ---
 
-## 2. Detailed Forensic Findings (`F-001` through `F-019`)
+## 2. Detailed Forensic Findings (`F-001` through `F-020`)
 
 ### `F-001` — `WH01 / QA-LOT-002` (`ProductId=517`) `-60.0000` Stock-vs-Ledger Variance Caused by `RebuildBalancesAsync` Iterating Only Existing `InventoryStocks` Rows & Clamping Negative Sums
 - **Severity / Priority:** `S1` / `P1`
@@ -470,7 +472,32 @@
        - `vitest` & `@vitest/mocker`: `4.1.11 -> 5.0.5` (`devDependencies: "vitest": "^5.0.5"`)
     2. Verified `npm --prefix D:\ERP_KHO\frontend ls --depth=0` (`ExitCode = 0`, `0` `invalid` or `ERR!` lines), `npm --prefix D:\ERP_KHO\frontend audit --audit-level=high` (**`found 0 vulnerabilities`**, `ExitCode = 0`), and `npm --prefix D:\ERP_KHO\frontend audit` across all severity levels (**`found 0 vulnerabilities`**, `ExitCode = 0`).
     3. Executed CI Steps `#14` through `#17` sequentially (`Step #14: npm audit --audit-level=high` `ExitCode = 0`; `Step #15: npm run lint` `0 errors, 18 warnings, ExitCode = 0`; `Step #16: npm test` `73/73` test files, `406/406` tests `PASS`, `ExitCode = 0`; `Step #17: npm run build` `tsc -b && vite v8.3.5 build` `1,711` modules transformed, `ExitCode = 0`).
-  - **CI Workflow Branch Synchronization (`TASK-W61.6-CI-WORKFLOW-SYNC`):**
-    1. Updated [ci.yml](file:///d:/ERP_KHO/.github/workflows/ci.yml#L3-L10) (`on.push.branches`) to prepend `feat/WMS-61-project-development` and `main` ahead of `handoff/approval-complete-20260906` and `fix/audit-p0-remediation` while keeping all security and test gates in `ci.yml` 100% intact.
+  - **CI Workflow Branch Synchronization & Wave 61.9 Cloud Verification (`TASK-W61.6-CI-WORKFLOW-SYNC`):**
+    1. Pushed commit `03832f94843c6bfaec3701ba4109eeb85ed5bd4c` to `origin/feat/WMS-61-project-development` without `.github/workflows/` mutation (passing GitHub OAuth `workflow` scope check) and verified on GitHub Actions Cloud Runner (`run_id = 24974166402`, `job_id = 73198153283`, `windows-2025`) that Steps `#1` through `#18` and `#20` (`19 / 20` steps, including `Step #14: Audit Frontend Dependencies`) achieved `conclusion = success`.
+
+---
+
+### `F-020` — GitHub Actions CI Step #19 (`Mandatory interactive Chromium browser QA (INV-11)`) Failing (`ExitCode = 1`) Due to 4 UI/Selector Drift Items Between `Login.tsx`, `InventoryReconciliation.tsx` & `tools/ERP.BrowserQa/permission-browser.mjs`
+- **Severity / Priority:** `S2` / `P1`
+- **Finding Type:** `CI_BROWSER_QA_SELECTOR_AND_AUTOFILL_TIMER_DRIFT`
+- **Related Requirement & Workflow IDs:** `FE-007`, `TST-001`, `REP-001`, `REP-002`
+- **Related Subagent Cross-References:** `CUTOVER_AND_INTEGRATION_READINESS.md §6`, `AUDIT_STATE.md §2.9`
+- **Verification Label & Confidence:** `FACT` | `HIGH`
+- **Source & CI Evidence Prior to Wave 61.10 (`File:Line` & GitHub Actions Run `#24974166402` on `03832f9`):**
+  1. **GitHub Actions `ci.yml` Step #19 Failure (`ExitCode = 1`):**
+     - On commit `03832f94843c6bfaec3701ba4109eeb85ed5bd4c`, GitHub Actions workflow `.github/workflows/ci.yml` (`build-and-test`, job ID `73198153283`, runner `windows-2025`) passed Steps `#1` through `#18` (`UTF-8 Encoding Check`, `Setup .NET 10.0.x`, `Restore`, `Build`, `Audit NuGet Vulnerability Gate`, `Start SQL Server LocalDB`, `Application Tests`, `API Tests`, `Setup Node.js 22`, `Install Frontend Dependencies`, `Step #14: Audit Frontend Dependencies`, `Lint Frontend`, `Test Frontend`, `Build Frontend`, `Install Playwright Chromium for mandatory browser QA`), and failed only at **Step #19 (`Mandatory interactive Chromium browser QA (INV-11)`)** due to 4 UI/selector contract drifts between `frontend/src/pages/Login.tsx`, `frontend/src/pages/InventoryReconciliation.tsx`, and `tools/ERP.BrowserQa/permission-browser.mjs`:
+       - **Drift 1 (`autoComplete` attribute on `#login-username`):** `permission-browser.mjs:115` asserts `assert.equal(await userInput.getAttribute('autocomplete'), 'username')`, whereas `frontend/src/pages/Login.tsx:132` had `autoComplete="off"`.
+       - **Drift 2 (`getByLabel('Mật khẩu')` strict-mode collision):** `permission-browser.mjs:110` locates the password input via `page.getByLabel('Mật khẩu')`, which collided in Playwright strict mode (`2 elements matched`) because `<button data-testid="toggle-password-visibility">` in `Login.tsx:159` had `aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}` (containing the substring `'mật khẩu'`).
+       - **Drift 3 (`window.setTimeout(clearAutofill, 120)` race condition):** `Login.tsx:44-54` scheduled `const timer = window.setTimeout(clearAutofill, 120);` inside `useEffect`, which wiped out the username and password values filled by Playwright (`await userInput.fill(username); await passInput.fill(password);`) ~120ms after page mount.
+       - **Drift 4 (`heading` text localization on `/inventory-reconciliation`):** `permission-browser.mjs:199` and `:295` waited for `page.getByRole('heading', { name: 'Đối chiếu tồn kho & ledger' })`, whereas `frontend/src/pages/InventoryReconciliation.tsx:726` had been localized to pure Vietnamese (`'Đối chiếu Tồn kho & Sổ cái'`) in Wave 56.
+- **Wave 61.10 Closure Evidence (`FACT` — Status: `CLOSED`):**
+  - **Surgical Frontend & Browser QA Selector Remediation (`TASK-W61.10-BROWSER-QA-FIX`):**
+    1. Updated [Login.tsx](file:///d:/ERP_KHO/frontend/src/pages/Login.tsx#L36-L51) and [Login.tsx](file:///d:/ERP_KHO/frontend/src/pages/Login.tsx#L120-L165):
+       - Removed `const timer = window.setTimeout(clearAutofill, 120);` and `window.clearTimeout(timer);` from `useEffect` (`L36-L46`) so synchronous mount initialization clears initial state without wiping out subsequent Playwright/user input 120ms later.
+       - Restored `autoComplete="username"` on `<input id="login-username" ... />` (`L130`) while keeping `autoComplete="current-password"` on `<input id="login-password" ... />` (`L145`).
+       - Updated `aria-label` on `<button data-testid="toggle-password-visibility" ... />` (`L157`) to `aria-label={showPassword ? 'Ẩn ký tự' : 'Hiện ký tự'}` so `page.getByLabel('Mật khẩu')` uniquely resolves to `<input id="login-password">`.
+    2. Updated [permission-browser.mjs](file:///d:/ERP_KHO/tools/ERP.BrowserQa/permission-browser.mjs#L199) and [permission-browser.mjs](file:///d:/ERP_KHO/tools/ERP.BrowserQa/permission-browser.mjs#L295) to match `{ name: /Đối chiếu tồn kho & (sổ cái|ledger)/i }` while keeping all assertions in `permission-browser.mjs` 100% intact.
+    3. Verified locally via `check-encoding.ps1` (`ExitCode = 0`), `npm audit --audit-level=high` (`found 0 vulnerabilities`, `ExitCode = 0`), `npm run lint` (`0 errors`, `ExitCode = 0`), `npm test` (`73/73` test files, `406/406` tests `PASS`), `npm run build` (`ExitCode = 0`), and live Chromium `INV-11` Browser QA (`PASS: INV-11 interactive reconciliation and unauthorized route`, `ExitCode = 0`), and verified `20 / 20` green steps on GitHub Actions Cloud Runner (`windows-2025`).
+
 
 

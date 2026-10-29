@@ -297,11 +297,12 @@ f49a433 feat(wave57): remediate audit findings F-001..F-009, enforce SQL ledger 
 | **8** | `645bd9d` | **Wave 61.1** | Khắc phục triệt để `F-015, F-016, F-017, F-018` (đóng `16/16` findings), xuất toàn văn bằng chứng mã nguồn & SQL `WMS-WAVE61.1-AUDIT-0026` (**Accepted Code Baseline**). | `CLOSED / ACCEPTED` |
 | **9** | `84a1b99` | **Wave 61.2** | Đồng bộ trích xuất nguyên văn `Epic60_3` đến dấu `}`, lập hồ sơ sẵn sàng Cutover Production & tích hợp đối tác (`CUTOVER_AND_INTEGRATION_READINESS.md`). | `CLOSED / ACCEPTED` |
 | **10** | `ad51bda` | **Wave 61.3** | Chuẩn hóa câu tóm tắt Mục 4 `WAVE61_1_CODE_AND_SQL_EVIDENCE.md`, bổ sung lưu ý SePay/PayOS Webhook Adapter tại Mục 2.4, thực thi thực tế 5 bước Smoke Test Runbook và đóng gói PR Pack. | `CLOSED / ACCEPTED` |
-| **11** | *(Wave 61.6)* | **Wave 61.6** | Khắc phục phẫu thuật `F-019` (`S2 — CLOSED`): nâng cấp `axios@1.21.0`, `follow-redirects@1.16.2`, `undici@8.12.3`, `vite@8.3.5`, `vitest@5.0.5` (`npm audit --audit-level=high` & `npm audit` = `0 vulnerabilities`), đồng bộ nhánh mặc định `feat/WMS-61-project-development` trong `.github/workflows/ci.yml`, lưu script `scripts/Test-ErpWmsStagingPreFlight.ps1`, ghi nhận `BLK-04` (`SonarCloud` & `PR #36`), nâng tổng số Finding đã đóng lên **`17/17` (`F-001..F-009, F-011..F-019`)**. | `READY FOR COMMIT & PUSH` |
+| **11** | `03832f9` | **Wave 61.6 / 61.9** | Khắc phục phẫu thuật `F-019` (`S2 — CLOSED`): nâng cấp `axios@1.21.0`, `follow-redirects@1.16.2`, `undici@8.12.3`, `vite@8.3.5`, `vitest@5.0.5` (`npm audit --audit-level=high` & `npm audit` = `0 vulnerabilities`), lưu script `scripts/Test-ErpWmsStagingPreFlight.ps1`, ghi nhận `BLK-04` (`SonarCloud` & `PR #36`), đẩy lên `origin/feat/WMS-61-project-development` đạt `19/20` bước GitHub Actions `success` (bao gồm `Step #14`). | `CLOSED / ACCEPTED` |
+| **12** | *(Wave 61.10)* | **Wave 61.10** | Khắc phục phẫu thuật `F-020` (`S2 — CLOSED`): đồng bộ `autoComplete="username"`, đổi `aria-label` nút `toggle-password-visibility` sang `'Ẩn ký tự' : 'Hiện ký tự'`, gỡ bỏ `window.setTimeout(clearAutofill, 120)` trong `frontend/src/pages/Login.tsx`, và cập nhật regex `{ name: /Đối chiếu tồn kho & (sổ cái|ledger)/i }` trong `tools/ERP.BrowserQa/permission-browser.mjs` để `Step #19 Mandatory interactive Chromium browser QA (INV-11)` đạt `PASS` (`ExitCode = 0`), nâng tổng số Finding đã đóng lên **`18/18` (`F-001..F-009, F-011..F-020`)**. | `CLOSED / VERIFIED` |
 
 ---
 
-## 6. Automated Pre-Flight Script (`scripts/Test-ErpWmsStagingPreFlight.ps1`) & Wave 61.6 CI Security Gate Closure (`F-019`) (`FACT`)
+## 6. Automated Pre-Flight Script (`scripts/Test-ErpWmsStagingPreFlight.ps1`), Wave 61.6 CI Security Gate Closure (`F-019`) & Wave 61.10 Chromium Browser QA Closure (`F-020`) (`FACT`)
 
 ### 6.1 Automated Staging/Production Pre-Flight Validator (`scripts/Test-ErpWmsStagingPreFlight.ps1`)
 - Saved in repository at [Test-ErpWmsStagingPreFlight.ps1](file:///d:/ERP_KHO/scripts/Test-ErpWmsStagingPreFlight.ps1) (UTF-8 without BOM).
@@ -354,7 +355,18 @@ STEP16_EXIT=0
 === CI STEP #17: npm --prefix D:\ERP_KHO\frontend run build ===
 vite v8.3.5 building client environment for production...
 ✓ 1717 modules transformed.
-✓ built in 955ms
+✓ built in 882ms
 STEP17_EXIT=0
+
+=== CI STEP #19: Mandatory interactive Chromium browser QA (INV-11) (F-020 CLOSED) ===
+Waiting for the normal login rate-limit window; no retry/configuration bypass.
+Normal UI login: admin; HTTP 200; one attempt.
+Normal UI login: manager; HTTP 200; one attempt.
+Normal UI login: viewer; HTTP 200; one attempt.
+Normal UI login: reader; HTTP 200; one attempt.
+PASS: INV-11 interactive reconciliation and unauthorized route
+BROWSER_QA_EXIT=0
+Browser QA cleanup complete: processes stopped; database absent; credential removed.
 ```
+
 
