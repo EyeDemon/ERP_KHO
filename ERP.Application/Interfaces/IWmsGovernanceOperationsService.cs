@@ -96,7 +96,9 @@ public interface IWmsGovernanceOperationsService
         decimal? storageRatePerUnit,
         decimal? inboundRatePerUnit,
         decimal? outboundRatePerUnit,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        DateTime? periodFromUtc = null,
+        DateTime? periodToUtc = null);
     Task<WmsEndpointOutcome> Generate3PlStatementAsync(
         int? partnerId,
         int? warehouseId,
@@ -106,7 +108,9 @@ public interface IWmsGovernanceOperationsService
         decimal? outboundRatePerUnit,
         bool createReceivableInvoice,
         int? actorUserId,
-        CancellationToken ct = default);
+        CancellationToken ct = default,
+        DateTime? periodFromUtc = null,
+        DateTime? periodToUtc = null);
     Task<int> CountActiveBusinessPartnersAsync(CancellationToken ct = default);
 
     // HandlingUnitsController
@@ -311,6 +315,12 @@ public interface IWmsGovernanceOperationsService
         int? actorUserId,
         CancellationToken cancellationToken = default);
     Task<string?> GetUsernameByIdAsync(int userId, CancellationToken cancellationToken = default);
+    Task<WmsEndpointOutcome> SetupTotpAsync(int userId, int? actorUserId, CancellationToken cancellationToken = default);
+    Task<WmsEndpointOutcome> RevealTotpSecretAsync(int userId, CancellationToken cancellationToken = default);
+    Task<WmsEndpointOutcome> VerifyTotpAsync(int userId, string? candidateCode, int? actorUserId, CancellationToken cancellationToken = default);
+    Task<WmsEndpointOutcome> ConfirmTotpActivationAsync(int userId, int? actorUserId, CancellationToken cancellationToken = default);
+    Task<WmsEndpointOutcome> CancelTotpEnrollmentAsync(int userId, int? actorUserId, CancellationToken cancellationToken = default);
+    Task<WmsEndpointOutcome> RegenerateRecoveryCodesAsync(int userId, string? candidateCode, int? actorUserId, CancellationToken cancellationToken = default);
     Task LogTotpAuditAsync(
         int userId,
         int? actorUserId,

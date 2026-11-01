@@ -11,7 +11,9 @@ namespace ERP.Api.Controllers;
 [ApiController]
 [Route("api/v1/saas-billing")]
 [Route("api/saas-billing")]
-public sealed class SaasBillingController(ISaasBillingService billingService) : ControllerBase
+public sealed class SaasBillingController(
+    ISaasBillingService billingService,
+    ICurrentUser currentUser) : ControllerBase
 {
     private readonly ISaasBillingService _billingService = billingService;
 
@@ -38,12 +40,12 @@ public sealed class SaasBillingController(ISaasBillingService billingService) : 
     [HttpPost("enforce-quota")]
     [HttpPost("quota-check")]
     [IdempotentCommand("SaaS.EnforceQuotaCheck")]
-    [PermissionAuthorize(AppPermissions.PermissionRead)]
+    [PermissionAuthorize(AppPermissions.UserManage)]
     public async Task<IActionResult> EnforceQuota(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SaasSubscriptionQuotaRequest? request = null,
         CancellationToken ct = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(currentUser, AppPermissions.UserManage))
             return Forbid();
 
         var actorUserId = ResolveActorUserId();
@@ -54,12 +56,12 @@ public sealed class SaasBillingController(ISaasBillingService billingService) : 
     [HttpPost("vietqr-invoice")]
     [HttpPost("vietqr-invoices")]
     [IdempotentCommand("SaaS.CreateVietQrInvoice")]
-    [PermissionAuthorize(AppPermissions.PermissionRead)]
+    [PermissionAuthorize(AppPermissions.UserManage)]
     public async Task<IActionResult> GenerateVietQrInvoice(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SaasCreateVietQrInvoiceRequest? request = null,
         CancellationToken ct = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(currentUser, AppPermissions.UserManage))
             return Forbid();
 
         var actorUserId = ResolveActorUserId();
@@ -69,42 +71,41 @@ public sealed class SaasBillingController(ISaasBillingService billingService) : 
 
     [AllowAnonymous]
     [HttpPost("vietqr-webhook")]
+    [HttpPost("webhook/vietqr")]
+    [HttpPost("~/api/v1/webhooks/billing/vietqr")]
     [IdempotentCommand("SaaS.VietQrBillingWebhook")]
     public async Task<IActionResult> HandleVietQrBillingWebhook(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SaasVietQrWebhookRequest? request = null,
         CancellationToken ct = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (User?.Identity?.IsAuthenticated == true && !this.HasActionPermission(currentUser, AppPermissions.UserManage))
             return Forbid();
 
+        string? providedSig = null;
         if (HttpContext?.Request?.Headers != null &&
             HttpContext.Request.Headers.TryGetValue("X-VietQR-Signature", out var sigValues))
         {
-            var providedSig = sigValues.ToString().Trim();
-            if (!string.IsNullOrEmpty(providedSig))
-            {
-                const string secret = "ERP-KHO-VIETQR-WEBHOOK-SECRET-2026";
-                var canonicalPayload = $"{request?.InvoiceCode ?? string.Empty}|{request?.PlanCode ?? string.Empty}|{request?.PaidAmountVnd?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty}";
-                using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(secret));
-                var expectedHex = Convert.ToHexString(hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(canonicalPayload)));
-                var isValid = string.Equals(providedSig, expectedHex, StringComparison.OrdinalIgnoreCase) ||
-                              string.Equals(providedSig, "VALID_VIETQR_HMAC", StringComparison.OrdinalIgnoreCase);
-                if (!isValid)
-                {
-                    return Unauthorized(new
-                    {
-                        code = "INVALID_WEBHOOK_SIGNATURE",
-                        errorCode = "INVALID_WEBHOOK_SIGNATURE",
-                        message = "Chữ ký HMAC-SHA256 (X-VietQR-Signature) không hợp lệ."
-                    });
-                }
-            }
+            providedSig = sigValues.ToString().Trim();
+        }
+        if (string.IsNullOrWhiteSpace(providedSig) && !string.IsNullOrWhiteSpace(request?.ChecksumSignature))
+        {
+            providedSig = request.ChecksumSignature.Trim();
         }
 
         var actorUserId = ResolveActorUserId();
-        var (invalidReason, errorMessage, payload) = await _billingService.HandleVietQrWebhookAsync(request, actorUserId, ct);
+        var (invalidReason, errorMessage, payload) = await _billingService.HandleVietQrWebhookAsync(request, actorUserId, ct, providedSig);
         if (invalidReason)
         {
+            if (string.Equals(errorMessage, "INVALID_WEBHOOK_SIGNATURE", StringComparison.Ordinal))
+            {
+                return Unauthorized(new
+                {
+                    code = "INVALID_WEBHOOK_SIGNATURE",
+                    errorCode = "INVALID_WEBHOOK_SIGNATURE",
+                    message = "Chữ ký HMAC-SHA256 (X-VietQR-Signature) bị thiếu hoặc không hợp lệ."
+                });
+            }
+
             return BadRequest(new
             {
                 code = "INVALID_VIETQR_WEBHOOK",

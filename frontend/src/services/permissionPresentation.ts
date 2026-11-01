@@ -51,6 +51,8 @@ const resources: Record<string, string> = {
   stock_transfer: 'phiếu điều chuyển kho',
   stocktake: 'phiếu kiểm kê',
   stock_reservation: 'giữ hàng tồn kho',
+  inventory_opening_balance: 'tồn kho đầu kỳ (Excel/CSV)',
+  return: 'hàng hoàn và đổi trả (RMA)',
 };
 
 const actions: Record<string, string> = {
@@ -88,11 +90,21 @@ const actions: Record<string, string> = {
   assign_dock: 'Phân cửa kho cho',
   checkout: 'Xác nhận xe rời bãi cho',
   confirm: 'Xác nhận',
+  import: 'Nhập',
+  inspect: 'Kiểm định chất lượng',
+  disposition: 'Định đoạt xử lý',
 };
 
 
 export const PERMISSION_DESCRIPTIONS: Record<string, string> = {
   'inventory.cost.read': 'Cho phép xem đơn giá mua/bán, giá vốn bình quân (MAC) và giá trị chênh lệch kiểm kê trên các chứng từ và báo cáo kho.',
+  'inventory_opening_balance.import': 'Cho phép tải lên và ghi sổ tồn kho đầu kỳ từ tệp Excel/CSV vào kho.',
+  'return.read': 'Cho phép xem danh sách phiếu hàng hoàn & đổi trả (RMA), trạng thái biệt trữ và kết quả định đoạt.',
+  'return.create': 'Cho phép tạo phiếu tiếp nhận hàng hoàn trả (RMA) mới từ vận đơn AWB hoặc đơn hàng gốc.',
+  'return.receive': 'Cho phép quét tiếp nhận kiện hàng hoàn trả vào khu vực Biệt trữ (Quarantine).',
+  'return.inspect': 'Cho phép kiểm định tình trạng vật lý kiện hoàn (Nguyên vẹn / Hỏng vỏ hộp / Lỗi kỹ thuật).',
+  'return.disposition': 'Cho phép chọn hướng định đoạt hàng hoàn (Nhập lại kệ, Tân trang thay hộp, Xuất trả NCC, Thanh hủy).',
+  'return.post': 'Cho phép thực thi định đoạt hàng hoàn và ghi sổ Sổ cái tồn kho.',
 };
 
 export const CONFLICT_ERROR_MESSAGES: Record<string, string> = {
@@ -124,6 +136,7 @@ export const permissionDescription = (code: string, fallbackDescription?: string
 export const permissionLabel = (code: string): string => {
   if (code === 'permission.assign') return 'Cấp và thu hồi quyền truy cập';
   if (code === 'inventory.cost.read') return 'Xem đơn giá, giá vốn và giá trị tồn kho';
+  if (code === 'inventory_opening_balance.import') return 'Nhập tồn kho đầu kỳ (Excel/CSV)';
   const [resource, action] = code.split('.');
   return resources[resource] && actions[action] ? `${actions[action]} ${resources[resource]}` : 'Quyền chưa có diễn giải';
 };

@@ -43,7 +43,7 @@ describe('Warehouses page with UiDrawer', { timeout: 20000 }, () => {
     fireEvent.click(view.getByRole('button', { name: 'Lưu kho' }));
 
     await waitFor(() =>
-      expect(post).toHaveBeenCalledWith('/api/warehouses', {
+      expect(post).toHaveBeenCalledWith('/api/v1/warehouses', {
         code: 'WH-HN-01',
         name: 'DC Hà Nội',
         address: 'Hà Nội',
@@ -62,7 +62,7 @@ describe('Warehouses page with UiDrawer', { timeout: 20000 }, () => {
     fireEvent.click(view.getByRole('button', { name: 'Lưu kho' }));
 
     await waitFor(() =>
-      expect(put).toHaveBeenCalledWith('/api/warehouses/1', {
+      expect(put).toHaveBeenCalledWith('/api/v1/warehouses/1', {
         name: 'DC Hồ Chí Minh Mới',
         address: 'TP.HCM',
         isActive: true,

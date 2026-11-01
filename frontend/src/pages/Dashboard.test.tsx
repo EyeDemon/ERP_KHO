@@ -17,7 +17,7 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
     vi.resetAllMocks();
     localStorage.clear();
     get.mockImplementation(async (url) => {
-      if (url === '/api/Reports/operational-dashboard') {
+      if (url === '/api/v1/reports/operational-dashboard') {
         return {
           data: {
             warehouseCount: 2,
@@ -33,7 +33,7 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
           },
         } as never;
       }
-      if (url === '/api/Reports/multi-warehouse-control-tower') {
+      if (url === '/api/v1/reports/multi-warehouse-control-tower') {
         return {
           data: {
             totalWarehouses: 2,
@@ -138,7 +138,7 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
       ),
     ).toBeTruthy();
     expect(post).toHaveBeenCalledWith(
-      '/api/sales-orders/marketplace-shops/sync-inventory',
+      '/api/v1/sales-orders/marketplace-shops/sync-inventory',
       expect.objectContaining({ safetyBufferPercent: 5 }),
     );
 
@@ -172,7 +172,7 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
 
   it('Wave 60 [W60-01]: translates DEKIT_DISASSEMBLE_EXECUTED and formats INVENTORY_HOLD exception without .0000 or raw enum numbers', async () => {
     get.mockImplementation(async (url) => {
-      if (url === '/api/Reports/operational-dashboard') {
+      if (url === '/api/v1/reports/operational-dashboard') {
         return {
           data: {
             warehouseCount: 2,
@@ -199,7 +199,7 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
           },
         } as never;
       }
-      if (url === '/api/Reports/operational-exceptions') {
+      if (url === '/api/v1/reports/operational-exceptions') {
         return {
           data: [
             {
@@ -232,5 +232,11 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
       view.getByText('Tồn khóa / biệt trữ: 10 (Cảnh báo: 5 • Hư hỏng / Cách ly: 12) tại BIN-DMG-01'),
     ).toBeTruthy();
     expect(view.container.textContent).not.toContain('12.0000');
+
+    const toggleTowerBtn = view.getByTestId('toggle-control-tower-btn');
+    expect(toggleTowerBtn.textContent).toContain('Mở rộng Tháp điều khiển đa kho');
+    expect(view.queryByText('Trung tâm Điều hành Kho phân tán & Bộ máy Hàng đợi Nhiệm vụ')).toBeNull();
+    fireEvent.click(toggleTowerBtn);
+    expect(view.getByText('Trung tâm Điều hành Kho phân tán & Bộ máy Hàng đợi Nhiệm vụ')).toBeTruthy();
   });
 });

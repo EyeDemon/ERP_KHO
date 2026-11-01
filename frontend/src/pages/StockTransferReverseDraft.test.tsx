@@ -33,13 +33,13 @@ describe('Native reverse transfer after receipt', () => {
     localStorage.setItem('permissions', '["inventory_reversal.create"]');
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     get.mockImplementation(async url => {
-      if (url === '/api/stock-transfers') return { data: { items: [received], totalPages: 1 } } as never;
-      if (url === '/api/stock-transfers/91') return { data: received } as never;
-      if (url === '/api/stock-transfers/92') return { data: draft } as never;
-      if (url === '/api/stock-transfers/return-reasons') return {
+      if (url === '/api/v1/stock-transfers') return { data: { items: [received], totalPages: 1 } } as never;
+      if (url === '/api/v1/stock-transfers/91') return { data: received } as never;
+      if (url === '/api/v1/stock-transfers/92') return { data: draft } as never;
+      if (url === '/api/v1/stock-transfers/return-reasons') return {
         data: [{ code: 'TRANSFER_ROUTE_ERROR', name: 'Sai tuyến điều chuyển' }],
       } as never;
-      if (url === '/api/warehouses' || url === '/api/products') return { data: [] } as never;
+      if (url === '/api/v1/warehouses' || url === '/api/v1/products') return { data: [] } as never;
       return { data: [] } as never;
     });
     post.mockResolvedValue({ data: draft } as never);
@@ -57,7 +57,7 @@ describe('Native reverse transfer after receipt', () => {
       { target: { value: 'Đã nhận sai tuyến' } });
     fireEvent.click(button);
     await waitFor(() => expect(post).toHaveBeenCalledWith(
-      '/api/stock-transfers/91/reverse-draft',
+      '/api/v1/stock-transfers/91/reverse-draft',
       { reasonCode: 'TRANSFER_ROUTE_ERROR', reason: 'Đã nhận sai tuyến' },
       { headers: expect.objectContaining({ 'Idempotency-Key': expect.any(String) }) }
     ));
@@ -70,14 +70,14 @@ describe('Native reverse transfer after receipt', () => {
     fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-91' }));
     expect(await view.findByRole('dialog', { name: 'TRF-91' })).toBeTruthy();
     expect(view.queryByRole('button', { name: 'Tạo phiếu điều chuyển ngược' })).toBeNull();
-    expect(get.mock.calls.some(([url]) => url === '/api/stock-transfers/return-reasons')).toBe(false);
+    expect(get.mock.calls.some(([url]) => url === '/api/v1/stock-transfers/return-reasons')).toBe(false);
   });
 
   it('fails closed when reason catalog cannot be fetched', async () => {
     get.mockImplementation(async url => {
-      if (url === '/api/stock-transfers/return-reasons') throw new Error('offline');
-      if (url === '/api/stock-transfers') return { data: { items: [received], totalPages: 1 } } as never;
-      if (url === '/api/stock-transfers/91') return { data: received } as never;
+      if (url === '/api/v1/stock-transfers/return-reasons') throw new Error('offline');
+      if (url === '/api/v1/stock-transfers') return { data: { items: [received], totalPages: 1 } } as never;
+      if (url === '/api/v1/stock-transfers/91') return { data: received } as never;
       return { data: [] } as never;
     });
     const view = render(<StockTransfers />);

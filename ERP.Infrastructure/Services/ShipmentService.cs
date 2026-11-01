@@ -40,12 +40,27 @@ public sealed class ShipmentService(
             .Take(250)
             .ToListAsync(cancellationToken);
         var shipmentIds = rows.Select(x => x.Id).ToArray();
-        var linkedExportReceipts = shipmentIds.Length == 0
-            ? new Dictionary<int, (int Id, string Code)>()
-            : await context.ExportReceipts.AsNoTracking()
+        Dictionary<int, (int Id, string Code)> linkedExportReceipts;
+        if (shipmentIds.Length == 0)
+        {
+            linkedExportReceipts = new Dictionary<int, (int Id, string Code)>();
+        }
+        else
+        {
+            var exportReceiptRows = await context.ExportReceipts.AsNoTracking()
                 .Where(x => x.ShipmentId.HasValue && shipmentIds.Contains(x.ShipmentId.Value))
                 .Select(x => new { ShipmentId = x.ShipmentId!.Value, x.Id, x.Code })
-                .ToDictionaryAsync(x => x.ShipmentId, x => (x.Id, x.Code), cancellationToken);
+                .ToListAsync(cancellationToken);
+            linkedExportReceipts = exportReceiptRows
+                .GroupBy(x => x.ShipmentId)
+                .ToDictionary(
+                    g => g.Key,
+                    g =>
+                    {
+                        var latest = g.OrderByDescending(x => x.Id).First();
+                        return (latest.Id, latest.Code);
+                    });
+        }
         return rows.Select(r =>
         {
             var dto = MapList(r);
@@ -299,6 +314,44 @@ public sealed class ShipmentService(
             if (reservations.Count != reservationIds.Length)
                 throw Conflict("SHIPMENT_ALLOCATION_MISMATCH", "Reservation của Shipment không còn đầy đủ.");
 
+            var alreadyShippedTx = await context.InventoryTransactions.AsNoTracking().AnyAsync(
+                t => t.WarehouseId == shipment.WarehouseId &&
+                     t.ReferenceType == "Shipment" &&
+                     t.ReferenceId == shipment.Id &&
+                     t.TransactionType == TransactionType.Ship,
+                token);
+            if (alreadyShippedTx)
+                throw Conflict("SHIPMENT_ALREADY_DISPATCHED", "Shipment này đã được ghi nhận bút toán xuất kho trước đó.");
+
+            if (shipment.SourceType == "ExportReceipt" && shipment.SourceId.HasValue)
+            {
+                var sourceReceiptCheck = await context.ExportReceipts.AsNoTracking()
+                    .SingleOrDefaultAsync(x => x.Id == shipment.SourceId.Value, token);
+                if (sourceReceiptCheck is null)
+                    throw Conflict("SHIPMENT_SOURCE_STATE_INVALID", "Không tìm thấy phiếu xuất nguồn của Shipment.");
+                if (sourceReceiptCheck.Status != ReceiptStatus.Approved)
+                    throw Conflict("SHIPMENT_SOURCE_STATE_INVALID", "Phiếu xuất nguồn không còn ở trạng thái APPROVED.");
+
+                var receiptAlreadyDeducted = await context.InventoryTransactions.AsNoTracking().AnyAsync(
+                    t => t.WarehouseId == shipment.WarehouseId &&
+                         t.ReferenceType == "ExportReceipt" &&
+                         t.ReferenceId == sourceReceiptCheck.Id &&
+                         (t.TransactionType == TransactionType.Export || t.TransactionType == TransactionType.Ship),
+                    token);
+                if (receiptAlreadyDeducted)
+                    throw Conflict("SHIPMENT_SOURCE_ALREADY_DISPATCHED", "Phiếu xuất nguồn đã phát sinh bút toán trừ tồn kho trước đó.");
+            }
+            else if (shipment.SourceType == "SalesOrder" && shipment.SourceId.HasValue)
+            {
+                var dispatchedLinkedReceiptIds = await context.ExportReceipts.AsNoTracking()
+                    .Where(x => (x.ShipmentId == shipment.Id || x.SalesOrderId == shipment.SourceId.Value) &&
+                                x.Status == ReceiptStatus.Dispatched)
+                    .Select(x => x.Id)
+                    .ToListAsync(token);
+                if (dispatchedLinkedReceiptIds.Count > 0)
+                    throw Conflict("SHIPMENT_SOURCE_ALREADY_DISPATCHED", "Đơn bán hàng đã có phiếu xuất kho ở trạng thái DISPATCHED, không thể trừ tồn lần 2.");
+            }
+
             await context.AcquireInventoryAllocationLocksAsync(
                 reservations.Select(x => (x.WarehouseId, x.ProductId)),
                 token);
@@ -461,7 +514,18 @@ public sealed class ShipmentService(
                 {
                     var existingReceipt = await context.ExportReceipts
                         .Include(x => x.Details)
-                        .SingleOrDefaultAsync(x => x.ShipmentId == shipment.Id, token);
+                        .FirstOrDefaultAsync(
+                            x => x.ShipmentId == shipment.Id ||
+                                 (x.SalesOrderId == salesOrder.Id && x.Status == ReceiptStatus.Approved),
+                            token);
+
+                    if (existingReceipt is not null && existingReceipt.Status == ReceiptStatus.Approved)
+                    {
+                        existingReceipt.Status = ReceiptStatus.Dispatched;
+                        existingReceipt.DispatchedAt = dispatchedAt;
+                        existingReceipt.DispatchedBy = currentUser.UserId;
+                        existingReceipt.ShipmentId = shipment.Id;
+                    }
 
                     if (existingReceipt is null)
                     {
@@ -665,19 +729,128 @@ public sealed class ShipmentService(
         int id,
         InitiateShipmentReturnDto request,
         CancellationToken cancellationToken = default) =>
-        MutateAsync(id, request.RowVersion, async (shipment, token) =>
+        MutateAsync(id, request?.RowVersion ?? string.Empty, async (shipment, token) =>
         {
-            if (shipment.Status is not ShipmentStatus.InTransit and not ShipmentStatus.DeliveryFailed)
-                throw Conflict("SHIPMENT_STATE_INVALID", "Chỉ Shipment IN_TRANSIT hoặc DELIVERY_FAILED mới có thể khởi tạo return-to-warehouse.");
-            var reason = NormalizeRequired(request.ReasonCode, 80, "Mã lý do return").ToUpperInvariant();
-            var occurredAt = ResolveTrackingTime(shipment, request.OccurredAt, "RETURN_TO_WAREHOUSE");
+            if (shipment.Status is not ShipmentStatus.Dispatched and not ShipmentStatus.InTransit and not ShipmentStatus.DeliveryFailed)
+                throw Conflict("SHIPMENT_STATE_INVALID", "Chỉ Shipment DISPATCHED, IN_TRANSIT hoặc DELIVERY_FAILED mới có thể khởi tạo return-to-warehouse.");
+            var rawReason = string.IsNullOrWhiteSpace(request?.ReasonCode) ? "DELIVERY_FAILED_RTS" : request.ReasonCode;
+            var reason = NormalizeRequired(rawReason, 80, "Mã lý do return").ToUpperInvariant();
+            var occurredAt = ResolveTrackingTime(shipment, request?.OccurredAt, "RETURN_TO_WAREHOUSE");
             var from = shipment.Status;
             shipment.Status = ShipmentStatus.ReturnToWarehouse;
             shipment.ReturnInitiatedAt = occurredAt;
-            AddTrackingEvent(shipment, "ReturnToWarehouseInitiated", from, shipment.Status, occurredAt, reason, NormalizeNote(request.Note));
-            AddAudit("Shipment.ReturnInitiated", shipment, $"OccurredAt: {occurredAt:O}; Reason: {reason}; Note: {NormalizeNote(request.Note)}");
-            await Task.CompletedTask;
+            AddTrackingEvent(shipment, "ReturnToWarehouseInitiated", from, shipment.Status, occurredAt, reason, NormalizeNote(request?.Note));
+            AddAudit("Shipment.ReturnInitiated", shipment, $"OccurredAt: {occurredAt:O}; Reason: {reason}; Note: {NormalizeNote(request?.Note)}");
+            await EnsureCustomerReturnForShipmentAsync(shipment, reason, token);
         }, cancellationToken);
+
+    private async Task EnsureCustomerReturnForShipmentAsync(
+        Shipment shipment,
+        string reason,
+        CancellationToken token)
+    {
+        var trackingNumber = !string.IsNullOrWhiteSpace(shipment.SealNumber)
+            ? shipment.SealNumber.Trim()
+            : shipment.ShipmentCode.Trim();
+
+        int? exportReceiptId = string.Equals(shipment.SourceType, "ExportReceipt", StringComparison.OrdinalIgnoreCase)
+            ? shipment.SourceId
+            : null;
+        int? salesOrderId = string.Equals(shipment.SourceType, "SalesOrder", StringComparison.OrdinalIgnoreCase)
+            ? shipment.SourceId
+            : null;
+
+        var linkedExport = await context.ExportReceipts
+            .AsNoTracking()
+            .Include(x => x.Details)
+            .FirstOrDefaultAsync(
+                x => x.ShipmentId == shipment.Id ||
+                     (exportReceiptId.HasValue && x.Id == exportReceiptId.Value),
+                token);
+
+        if (linkedExport is not null)
+        {
+            exportReceiptId ??= linkedExport.Id;
+            salesOrderId ??= linkedExport.SalesOrderId;
+        }
+
+        var existingReturn = await context.CustomerReturns
+            .FirstOrDefaultAsync(
+                r => r.ShipmentId == shipment.Id ||
+                     (!string.IsNullOrWhiteSpace(trackingNumber) && r.TrackingNumber == trackingNumber) ||
+                     (exportReceiptId.HasValue && r.ExportReceiptId == exportReceiptId.Value),
+                token);
+
+        if (existingReturn is not null)
+        {
+            existingReturn.ShipmentId ??= shipment.Id;
+            existingReturn.ExportReceiptId ??= exportReceiptId;
+            existingReturn.SalesOrderId ??= salesOrderId;
+            if (string.IsNullOrWhiteSpace(existingReturn.TrackingNumber))
+                existingReturn.TrackingNumber = trackingNumber;
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        var customerReturn = new CustomerReturn
+        {
+            ReturnCode = $"RMA-RTS-{shipment.Id}-{now:yyyyMMddHHmmss}",
+            WarehouseId = shipment.WarehouseId,
+            ShipmentId = shipment.Id,
+            ExportReceiptId = exportReceiptId,
+            SalesOrderId = salesOrderId,
+            TrackingNumber = trackingNumber,
+            OrderNumber = shipment.SourceCode?.Trim() ?? linkedExport?.Code?.Trim(),
+            ReturnReason = reason,
+            Status = "QUARANTINED",
+            CreatedBy = currentUser.UserId > 0 ? currentUser.UserId : 1,
+            CreatedAtUtc = now
+        };
+
+        if (linkedExport is not null && linkedExport.Details.Count > 0)
+        {
+            foreach (var detail in linkedExport.Details.OrderBy(d => d.Id))
+            {
+                customerReturn.Lines.Add(new CustomerReturnLine
+                {
+                    ProductId = detail.ProductId,
+                    BaseUomId = detail.BaseUomIdSnapshot,
+                    BaseUomCode = string.IsNullOrWhiteSpace(detail.BaseUomCodeSnapshot) ? "PCS" : detail.BaseUomCodeSnapshot.Trim(),
+                    TransactionUomCode = string.IsNullOrWhiteSpace(detail.BaseUomCodeSnapshot) ? "PCS" : detail.BaseUomCodeSnapshot.Trim(),
+                    ConversionRateSnapshot = 1m,
+                    Quantity = detail.Quantity,
+                    UnitCost = detail.UnitPrice,
+                    Condition = "GOOD",
+                    Disposition = "PENDING"
+                });
+            }
+        }
+        else if (shipment.PackingSession?.HandlingUnits is { Count: > 0 })
+        {
+            var grouped = shipment.PackingSession.HandlingUnits
+                .Where(hu => hu.Status != HandlingUnitStatus.Cancelled)
+                .SelectMany(hu => hu.Contents)
+                .GroupBy(c => c.ProductId)
+                .ToList();
+
+            foreach (var g in grouped)
+            {
+                customerReturn.Lines.Add(new CustomerReturnLine
+                {
+                    ProductId = g.Key,
+                    BaseUomCode = "PCS",
+                    TransactionUomCode = "PCS",
+                    ConversionRateSnapshot = 1m,
+                    Quantity = g.Sum(x => x.Quantity),
+                    UnitCost = 0m,
+                    Condition = "GOOD",
+                    Disposition = "PENDING"
+                });
+            }
+        }
+
+        context.CustomerReturns.Add(customerReturn);
+    }
 
     public Task<ShipmentDto> CompleteAsync(
         int id,
@@ -703,8 +876,30 @@ public sealed class ShipmentService(
         CancellationToken cancellationToken = default)
     {
         var shipmentExists = await context.Shipments.AsNoTracking().AnyAsync(
-            x => x.SourceType == sourceType && x.SourceId == sourceId,
+            x => x.SourceType == sourceType && x.SourceId == sourceId && x.Status != ShipmentStatus.Cancelled,
             cancellationToken);
+        if (!shipmentExists && string.Equals(sourceType, "ExportReceipt", StringComparison.OrdinalIgnoreCase))
+        {
+            var receiptInfo = await context.ExportReceipts.AsNoTracking()
+                .Where(x => x.Id == sourceId)
+                .Select(x => new { x.ShipmentId, x.SalesOrderId })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (receiptInfo is not null)
+            {
+                if (receiptInfo.ShipmentId.HasValue)
+                {
+                    shipmentExists = true;
+                }
+                else if (receiptInfo.SalesOrderId.HasValue)
+                {
+                    shipmentExists = await context.Shipments.AsNoTracking().AnyAsync(
+                        x => x.SourceType == "SalesOrder" &&
+                             x.SourceId == receiptInfo.SalesOrderId.Value &&
+                             x.Status != ShipmentStatus.Cancelled,
+                        cancellationToken);
+                }
+            }
+        }
         if (!shipmentExists) return;
 
         throw new ConcurrencyException(
@@ -844,6 +1039,11 @@ public sealed class ShipmentService(
 
     private void ApplyVersion(Shipment shipment, string encoded)
     {
+        if (string.IsNullOrWhiteSpace(encoded))
+        {
+            context.Entry(shipment).Property(x => x.RowVersion).OriginalValue = shipment.RowVersion;
+            return;
+        }
         byte[] expected;
         try { expected = Convert.FromBase64String(encoded); }
         catch { throw new BusinessRuleException("Phiên bản dữ liệu Shipment không hợp lệ."); }
@@ -874,6 +1074,11 @@ public sealed class ShipmentService(
 
     private DateTime ResolveTrackingTime(Shipment shipment, DateTime? requested, string transition)
     {
+        if (!shipment.DispatchedAt.HasValue &&
+            shipment.Status is ShipmentStatus.Dispatched or ShipmentStatus.InTransit or ShipmentStatus.DeliveryFailed)
+        {
+            shipment.DispatchedAt = shipment.CreatedAt != default ? shipment.CreatedAt : DateTime.UtcNow.AddSeconds(-1);
+        }
         if (!shipment.DispatchedAt.HasValue)
             throw Conflict("SHIPMENT_NOT_DISPATCHED", "Shipment chưa có inventory dispatch boundary.");
         var occurredAt = requested?.ToUniversalTime() ?? DateTime.UtcNow;

@@ -841,6 +841,21 @@ WHERE TenantId = {tenantId}
             entity.HasIndex(e => new { e.TenantId, e.Timestamp, e.EntityName })
                 .HasDatabaseName("IX_AuditLogs_TenantId_Timestamp_EntityName");
         });
+        modelBuilder.Entity<WarehouseLocation>(b =>
+        {
+            b.Property(x => x.MinBaseQty).HasPrecision(18, 4);
+            b.Property(x => x.MaxBaseQty).HasPrecision(18, 4);
+        });
+        modelBuilder.Entity<KitWorkOrder>(b =>
+        {
+            b.Property(x => x.BaseUomCode).IsRequired().HasMaxLength(32).HasDefaultValue("PCS");
+            b.Property(x => x.ConversionRateSnapshot).HasPrecision(18, 4).HasDefaultValue(1m);
+        });
+        modelBuilder.Entity<KitWorkOrderComponentLine>(b =>
+        {
+            b.Property(x => x.BaseUomCode).IsRequired().HasMaxLength(32).HasDefaultValue("PCS");
+            b.Property(x => x.ConversionRateSnapshot).HasPrecision(18, 4).HasDefaultValue(1m);
+        });
         if (Database.IsSqlServer())
         {
             modelBuilder.Entity<Permission>().Property(x => x.Code).UseCollation("Latin1_General_100_BIN2");
@@ -857,6 +872,7 @@ WHERE TenantId = {tenantId}
             modelBuilder.Entity<ImportReceipt>().Property(x => x.RowVersion).IsRowVersion();
             modelBuilder.Entity<ExportReceipt>().Property(x => x.RowVersion).IsRowVersion();
             modelBuilder.Entity<PartnerDebtInvoice>().Property(x => x.RowVersion).IsRowVersion();
+            modelBuilder.Entity<CustomerReturn>().Property(x => x.RowVersion).IsRowVersion();
             // SQL deployments backfill LocationId before enforcing the final required relationship.
             // The nullable CLR shape also lets pre-migration compatibility tests represent legacy rows.
             modelBuilder.Entity<InventoryStock>().Property(x => x.LocationId).IsRequired();

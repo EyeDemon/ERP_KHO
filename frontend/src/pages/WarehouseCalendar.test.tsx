@@ -42,9 +42,9 @@ describe('WarehouseCalendar timezone and date placeholder', { timeout: 20000 }, 
     localStorage.setItem('role', 'Admin');
     localStorage.setItem('permissions', '["warehouse_calendar.read","warehouse_calendar.manage"]');
     get.mockImplementation(async (url) => {
-      if (url === '/api/warehouses') return { data: warehouses } as never;
-      if (url === '/api/warehouses/1/calendar') return { data: calendarPayload } as never;
-      if (url === '/api/warehouses/1/calendar/exceptions') return { data: [] } as never;
+      if (url === '/api/v1/warehouses') return { data: warehouses } as never;
+      if (url === '/api/v1/warehouses/1/calendar') return { data: calendarPayload } as never;
+      if (url === '/api/v1/warehouses/1/calendar/exceptions') return { data: [] } as never;
       return { data: [] } as never;
     });
     put.mockResolvedValue({ data: {} } as never);

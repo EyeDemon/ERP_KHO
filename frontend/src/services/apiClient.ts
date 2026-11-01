@@ -10,15 +10,45 @@ const AUTH_ME_CACHE_TTL_MS = 60_000;
 const isVitestEnv = Boolean(
   typeof import.meta !== 'undefined' && (import.meta.env?.VITEST || import.meta.env?.MODE === 'test')
 );
+let externalTokenOverride = false;
 let accessToken: string | null = (() => {
   if (isVitestEnv) return null;
   try {
-    return typeof window !== 'undefined' ? window.sessionStorage?.getItem(ACCESS_TOKEN_SESSION_KEY) : null;
+    if (typeof window === 'undefined') return null;
+    const localToken =
+      window.localStorage?.getItem('token') ||
+      window.localStorage?.getItem('accessToken') ||
+      window.localStorage?.getItem('jwt');
+    const sessionToken = window.sessionStorage?.getItem(ACCESS_TOKEN_SESSION_KEY);
+    if (localToken && localToken !== sessionToken) {
+      externalTokenOverride = true;
+      window.sessionStorage?.removeItem(AUTH_ME_CACHE_SESSION_KEY);
+      return localToken;
+    }
+    return sessionToken || localToken || null;
   } catch {
     return null;
   }
 })();
 let isRedirecting = false;
+
+const isJwtLikelyValid = (token: string | null): boolean => {
+  if (!token) return false;
+  const parts = token.split('.');
+  if (parts.length !== 3) return false;
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = typeof atob === 'function' ? atob(base64) : '';
+    if (!json) return false;
+    const payload = JSON.parse(json) as { exp?: number };
+    if (typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now()) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 type RetryConfig = InternalAxiosRequestConfig & {
   _authRetry?: boolean;
@@ -73,13 +103,25 @@ const buildRequestFingerprint = (method: string, config: Record<string, unknown>
 
 export const setAccessToken = (token: string | null): void => {
   accessToken = token;
+  externalTokenOverride = false;
+  if (token) {
+    isRedirecting = false;
+  }
   getResponseCache.clear();
   if (!isVitestEnv) {
     try {
-      if (typeof window !== 'undefined' && window.sessionStorage) {
-        window.sessionStorage.removeItem(AUTH_ME_CACHE_SESSION_KEY);
-        if (token) window.sessionStorage.setItem(ACCESS_TOKEN_SESSION_KEY, token);
-        else window.sessionStorage.removeItem(ACCESS_TOKEN_SESSION_KEY);
+      if (typeof window !== 'undefined') {
+        window.sessionStorage?.removeItem(AUTH_ME_CACHE_SESSION_KEY);
+        if (token) {
+          window.sessionStorage?.setItem(ACCESS_TOKEN_SESSION_KEY, token);
+          window.localStorage?.setItem('token', token);
+          window.localStorage?.setItem('accessToken', token);
+        } else {
+          window.sessionStorage?.removeItem(ACCESS_TOKEN_SESSION_KEY);
+          window.localStorage?.removeItem('token');
+          window.localStorage?.removeItem('accessToken');
+          window.localStorage?.removeItem('jwt');
+        }
       }
     } catch {
       // Ignore storage access errors in restricted environments
@@ -92,7 +134,12 @@ export const resetRedirectGuard = (): void => { isRedirecting = false; };
 export const shouldRedirectToLogin = (pathname: string, requestUrl?: string, redirecting = false): boolean => {
   if (redirecting || pathname === '/login' || pathname.endsWith('/login')) return false;
   const lowerUrl = requestUrl?.toLowerCase() ?? '';
-  return !(lowerUrl.includes('/api/auth/login') || lowerUrl.includes('/api/auth/refresh'));
+  return !(
+    lowerUrl.includes('/api/auth/login') ||
+    lowerUrl.includes('/api/auth/refresh') ||
+    lowerUrl.includes('/api/v1/auth/login') ||
+    lowerUrl.includes('/api/v1/auth/refresh')
+  );
 };
 
 const apiClient = axios.create({ baseURL, withCredentials: true, headers: { 'Content-Type': 'application/json' } });
@@ -106,8 +153,11 @@ export const createSingleFlight = <T>(operation: () => Promise<T>): (() => Promi
   };
 };
 
-const refreshAccessToken = createSingleFlight<string>(() =>
-  refreshClient.post('/api/Auth/refresh')
+const refreshAccessToken = createSingleFlight<string>(() => {
+  if (externalTokenOverride) {
+    return Promise.reject(new Error('External token override rejected by server'));
+  }
+  return refreshClient.post('/api/v1/auth/refresh', {})
       .then(async (response) => {
         const token = response.data.token as string;
         setAccessToken(token);
@@ -116,26 +166,29 @@ const refreshAccessToken = createSingleFlight<string>(() =>
         const refreshUid = response.data?.userId ?? response.data?.id;
         if (refreshUid !== undefined && refreshUid !== null) localStorage.setItem('userId', String(refreshUid));
         const revision = beginPermissionRefresh();
-        const identity = await refreshClient.get('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
+        const identity = await refreshClient.get('/api/v1/auth/me', { headers: { Authorization: `Bearer ${token}` } });
         if (identity.data?.username) localStorage.setItem('username', String(identity.data.username));
         if (identity.data?.role) localStorage.setItem('role', String(identity.data.role));
         const uid = identity.data?.userId ?? identity.data?.id;
         if (uid !== undefined && uid !== null) localStorage.setItem('userId', String(uid));
         setCurrentPermissions(identity.data.permissions, revision);
         return token;
-      })
-);
+      });
+});
 
-const clearAuthentication = (): void => {
+export const clearAuthentication = (): void => {
   setAccessToken(null);
   autoIdempotencyCache.clear();
   getResponseCache.clear();
-  localStorage.removeItem('username');
-  localStorage.removeItem('role');
-  localStorage.removeItem('userId');
-  localStorage.removeItem('tenantId');
-  localStorage.removeItem('tenantCode');
   try {
+    localStorage.removeItem('token');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('jwt');
+    localStorage.removeItem('username');
+    localStorage.removeItem('role');
+    localStorage.removeItem('userId');
+    localStorage.removeItem('tenantId');
+    localStorage.removeItem('tenantCode');
     sessionStorage.clear();
   } catch {
     // Ignore storage access errors in restricted environments
@@ -146,6 +199,24 @@ const clearAuthentication = (): void => {
 apiClient.interceptors.request.use((config) => {
   if (isReadOnlyDemoRuntime()) {
     config.adapter = createReadOnlyDemoApiAdapter(config);
+  }
+  if (!isVitestEnv && typeof window !== 'undefined') {
+    try {
+      const localToken =
+        window.localStorage?.getItem('token') ||
+        window.localStorage?.getItem('accessToken') ||
+        window.localStorage?.getItem('jwt');
+      const sessionToken = window.sessionStorage?.getItem(ACCESS_TOKEN_SESSION_KEY);
+      if (localToken && localToken !== accessToken) {
+        accessToken = localToken;
+        if (localToken !== sessionToken) {
+          externalTokenOverride = true;
+          window.sessionStorage?.removeItem(AUTH_ME_CACHE_SESSION_KEY);
+        }
+      }
+    } catch {
+      // Ignore storage access errors
+    }
   }
   if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
   const retryConfig = config as RetryConfig;
@@ -232,11 +303,15 @@ apiClient.interceptors.response.use(
     const config = error.config as RetryConfig | undefined;
     const requestUrl = config?.url;
     const lowerUrl = requestUrl?.toLowerCase() ?? '';
-    const isAuthEndpoint = lowerUrl.includes('/api/auth/login') || lowerUrl.includes('/api/auth/refresh');
+    const isAuthEndpoint =
+      lowerUrl.includes('/api/auth/login') ||
+      lowerUrl.includes('/api/auth/refresh') ||
+      lowerUrl.includes('/api/v1/auth/login') ||
+      lowerUrl.includes('/api/v1/auth/refresh');
     if (error.response?.status === 403 && accessToken) {
       const revision = beginPermissionRefresh();
       try {
-        const identity = await refreshClient.get('/api/auth/me', { headers: { Authorization: `Bearer ${accessToken}` } });
+        const identity = await refreshClient.get('/api/v1/auth/me', { headers: { Authorization: `Bearer ${accessToken}` } });
         if (identity.data?.username) localStorage.setItem('username', String(identity.data.username));
         if (identity.data?.role) localStorage.setItem('role', String(identity.data.role));
         const uid = identity.data?.userId ?? identity.data?.id;
@@ -255,19 +330,29 @@ apiClient.interceptors.response.use(
       await new Promise((resolve) => setTimeout(resolve, delayMs));
       return apiClient.request(config);
     }
-    if (error.response?.status === 401 && config && !config._authRetry && !isAuthEndpoint) {
-      config._authRetry = true;
-      try {
-        const token = await refreshAccessToken();
-        config.headers.Authorization = `Bearer ${token}`;
-        return apiClient.request(config);
-      } catch {
-        releaseAutoIdempotencyKey(config);
+    if (error.response?.status === 401 && !isAuthEndpoint) {
+      if (config && !config._authRetry && !externalTokenOverride) {
+        config._authRetry = true;
+        try {
+          const token = await refreshAccessToken();
+          config.headers.Authorization = `Bearer ${token}`;
+          return apiClient.request(config);
+        } catch {
+          releaseAutoIdempotencyKey(config);
+          clearAuthentication();
+          const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+          if (!isVitestEnv && shouldRedirectToLogin(pathname, requestUrl, isRedirecting)) {
+            isRedirecting = true;
+            window.location.replace('/login');
+          }
+        }
+      } else {
+        if (config) releaseAutoIdempotencyKey(config);
         clearAuthentication();
         const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
-        if (shouldRedirectToLogin(pathname, requestUrl, isRedirecting)) {
+        if (!isVitestEnv && shouldRedirectToLogin(pathname, requestUrl, isRedirecting)) {
           isRedirecting = true;
-          window.location.href = '/login';
+          window.location.replace('/login');
         }
       }
     }
@@ -282,16 +367,16 @@ apiClient.interceptors.response.use(
 );
 
 export const logout = async (): Promise<void> => {
-  try { await apiClient.post('/api/Auth/logout'); } finally {
+  try { await apiClient.post('/api/v1/auth/logout'); } finally {
     clearAuthentication();
-    window.location.href = '/login';
+    window.location.replace('/login');
   }
 };
 
 export const logoutAll = async (): Promise<void> => {
-  try { await apiClient.post('/api/Auth/logout-all'); } finally {
+  try { await apiClient.post('/api/v1/auth/logout-all'); } finally {
     clearAuthentication();
-    window.location.href = '/login';
+    window.location.replace('/login');
   }
 };
 
@@ -304,7 +389,8 @@ if (!isTestRuntime) {
   apiClient.get = ((url: string, config?: Parameters<typeof rawGet>[1]) => {
     const now = Date.now();
     const normalizedUrl = url.trim().toLowerCase();
-    if (normalizedUrl === '/api/auth/me' && accessToken && typeof window !== 'undefined') {
+    const isAuthMeUrl = normalizedUrl === '/api/auth/me' || normalizedUrl === '/api/v1/auth/me';
+    if (isAuthMeUrl && accessToken && !externalTokenOverride && isJwtLikelyValid(accessToken) && typeof window !== 'undefined') {
       try {
         const rawCached = window.sessionStorage?.getItem(AUTH_ME_CACHE_SESSION_KEY);
         if (rawCached) {
@@ -333,7 +419,7 @@ if (!isTestRuntime) {
     }
     const reqPromise = rawGet(url, config)
       .then((res) => {
-        if (normalizedUrl === '/api/auth/me' && accessToken && res?.data && typeof window !== 'undefined') {
+        if (isAuthMeUrl && accessToken && res?.data && typeof window !== 'undefined') {
           try {
             window.sessionStorage?.setItem(
               AUTH_ME_CACHE_SESSION_KEY,

@@ -11,6 +11,7 @@ public sealed class SupportImpersonationMiddleware(RequestDelegate next)
     public const string SupportSessionCodeHeader = "X-Support-Session-Code";
     public const string ImpersonatedBySupportUserIdItemKey = "ImpersonatedBySupportUserId";
     public const string ImpersonationSessionCodeItemKey = "ImpersonationSessionCode";
+    public const string ImpersonatedTenantIdItemKey = "ImpersonatedTenantId";
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -66,6 +67,11 @@ public sealed class SupportImpersonationMiddleware(RequestDelegate next)
 
         context.Items[ImpersonatedBySupportUserIdItemKey] = session.SupportAgentUserId;
         context.Items[ImpersonationSessionCodeItemKey] = session.SessionCode;
+        if (session.TenantId > 0)
+        {
+            context.Items[ImpersonatedTenantIdItemKey] = session.TenantId;
+            db.UseTenant(session.TenantId);
+        }
 
         if (session.ReadOnlyScope && IsMutationMethod(context.Request.Method))
         {

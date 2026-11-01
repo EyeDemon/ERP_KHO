@@ -74,7 +74,7 @@ describe('StockReservations production UI', () => {
     fireEvent.click(view.getByRole('button', { name: 'Giải phóng RSV-2026-0007' }));
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
-    expect(post).toHaveBeenCalledWith('/api/stock-reservations/7/release', {
+    expect(post).toHaveBeenCalledWith('/api/v1/stock-reservations/7/release', {
       reason: 'Released from reservation screen',
     });
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));

@@ -4,12 +4,13 @@ namespace ERP.Api.Authorization
     {
         public const string Admin = "Admin";
         public const string Manager = "Manager";
+        public const string Accountant = "Accountant";
         public const string WarehouseStaff = "WarehouseStaff";
         public const string Viewer = "Viewer";
 
         public const string AdminOrManager = Admin + "," + Manager;
         public const string AdminManagerOrStaff = Admin + "," + Manager + "," + WarehouseStaff;
-        public const string AdminManagerOrViewer = Admin + "," + Manager + "," + Viewer;
-        public const string AllRoles = Admin + "," + Manager + "," + WarehouseStaff + "," + Viewer;
+        public const string AdminManagerOrViewer = Admin + "," + Manager + "," + Accountant + "," + Viewer;
+        public const string AllRoles = Admin + "," + Manager + "," + Accountant + "," + WarehouseStaff + "," + Viewer;
     }
 }

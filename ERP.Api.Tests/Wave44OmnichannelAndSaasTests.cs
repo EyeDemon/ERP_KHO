@@ -44,7 +44,8 @@ public class Wave44OmnichannelAndSaasTests
         var controlController = new InventoryControlController(
             new Mock<IInventoryLockService>().Object,
             new Mock<IInventoryMovementService>().Object,
-            controlOps);
+            controlOps,
+            Mock.Of<IWarehouseAuthorizationService>());
         var repRes = await controlController.ExecuteReplenishment(
             new InventoryControlController.ExecuteReplenishmentRequest(
                 WarehouseId: 1,
@@ -65,7 +66,11 @@ public class Wave44OmnichannelAndSaasTests
         repMoves.Single(t => t.LocationId == 10).Quantity.Should().Be(-10m);
         repMoves.Single(t => t.LocationId == 11).Quantity.Should().Be(10m);
 
-        var dockController = new DockYardController(new Mock<IDockYardService>().Object, new WmsGovernanceOperationsService(db));
+        var dockController = new DockYardController(
+            new Mock<IDockYardService>().Object,
+            new WmsGovernanceOperationsService(db),
+            Mock.Of<IWarehouseAuthorizationService>(),
+            Mock.Of<ICurrentUser>());
         var xdRes = await dockController.DispatchCrossdock(
             new DispatchCrossdockRequest(
                 WarehouseId: 1,
@@ -85,7 +90,11 @@ public class Wave44OmnichannelAndSaasTests
         xdMoves.Single(t => t.LocationId == 12).Quantity.Should().Be(-6m);
         xdMoves.Single(t => t.LocationId == 13).Quantity.Should().Be(6m);
 
-        var importController = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, null, new ImportReceiptOperationsService(db));
+        var importController = new ImportReceiptsController(
+            new Mock<IImportReceiptService>().Object,
+            Mock.Of<IReceivingDiscrepancyService>(),
+            new ImportReceiptOperationsService(db),
+            Mock.Of<IWarehouseAuthorizationService>());
         var refRes = await importController.ExecuteRtvRefurbish(
             new ImportReceiptsController.ExecuteRtvRefurbishRequest(
                 WarehouseId: 1,
@@ -175,8 +184,9 @@ public class Wave44OmnichannelAndSaasTests
         var recController = new InventoryReconciliationController(
             new Mock<IInventoryReconciliationQueryService>().Object,
             new WmsGovernanceOperationsService(db),
-            null!,
-            new Mock<IStockReservationService>().Object);
+            Mock.Of<IWarehouseAuthorizationService>(),
+            new Mock<IStockReservationService>().Object,
+            Mock.Of<ICurrentUser>());
         recController.ControllerContext = new ControllerContext
         {
             HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
@@ -274,7 +284,10 @@ public class Wave44OmnichannelAndSaasTests
         var soServiceMock = new Mock<ISalesOrderBackorderService>();
         soServiceMock.Setup(s => s.GetSalesOrderAsync(401, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ERP.Application.DTOs.SalesOrderDto { Id = 401, OrderCode = "SO-W44-401", Status = "Cancelled" });
-        var soController = new SalesOrdersController(soServiceMock.Object, new SalesOrderOperationsService(db));
+        var soController = new SalesOrdersController(
+            soServiceMock.Object,
+            new SalesOrderOperationsService(db),
+            Mock.Of<IWarehouseAuthorizationService>());
         var cancelPutbackRes = await soController.ConfirmCancelPutback(401, new ConfirmCancelPutbackRequest(Note: "Đã cất trả kệ PICK-01"), default);
         cancelPutbackRes.Should().BeOfType<OkObjectResult>();
 
@@ -282,7 +295,10 @@ public class Wave44OmnichannelAndSaasTests
         updatedStock.AllocatedQuantity.Should().Be(0m);
         updatedStock.ReservedQuantity.Should().Be(0m);
 
-        var shpController = new ShipmentsController(new Mock<IShipmentService>().Object, new ShipmentOperationsService(db));
+        var shpController = new ShipmentsController(
+            new Mock<IShipmentService>().Object,
+            new ShipmentOperationsService(db),
+            Mock.Of<IWarehouseAuthorizationService>());
         var rtsRes = await shpController.CompleteRtsReturn(
             601,
             new CompleteShipmentRtsReturnRequest(QuarantineLocationId: 14, ProductId: 101, Quantity: 4m),
@@ -295,7 +311,9 @@ public class Wave44OmnichannelAndSaasTests
         var stController = new StocktakesController(
             new Mock<IStocktakeService>().Object,
             new Mock<IStocktakeQueryService>().Object,
-            new StocktakeOperationsService(db));
+            new StocktakeOperationsService(db),
+            Mock.Of<IWarehouseAuthorizationService>(),
+            Mock.Of<ICurrentUser>());
         var smallAdjRes = await stController.CreateAdjustmentProposal(
             new StocktakesController.CreateAdjustmentProposalRequest(
                 WarehouseId: 1,
@@ -335,7 +353,10 @@ public class Wave44OmnichannelAndSaasTests
         await db.SaveChangesAsync();
 
         var soServiceMock = new Mock<ISalesOrderBackorderService>();
-        var soController = new SalesOrdersController(soServiceMock.Object, new SalesOrderOperationsService(db));
+        var soController = new SalesOrdersController(
+            soServiceMock.Object,
+            new SalesOrderOperationsService(db),
+            Mock.Of<IWarehouseAuthorizationService>());
 
         var connectPrimary = await soController.ConnectMarketplaceShop(new SalesOrdersController.ConnectMarketplaceShopRequest(
             ChannelCode: "SHOPEE",
@@ -472,7 +493,12 @@ public class Wave44OmnichannelAndSaasTests
         [
             new ERP.Application.DTOs.ExportReceiptDto { Id = 701, Code = "EXP-AWB-701", Status = "Approved", MarketplaceOrderId = "SP-ORD-701", MarketplaceShipByUtc = now.AddMinutes(45) }
         ]);
-        var expController = new ExportReceiptsController(expServiceMock.Object, new ExportReceiptOperationsService(db));
+        var expController = new ExportReceiptsController(
+            expServiceMock.Object,
+            new ExportReceiptOperationsService(db),
+            Mock.Of<IWarehouseAuthorizationService>(),
+            Mock.Of<ICurrentUser>(),
+            new HandoverManifestService(db, expServiceMock.Object));
 
         var pipeRes = await expController.GetPipelineSummary();
         using var pipeDoc = System.Text.Json.JsonSerializer.SerializeToDocument(pipeRes.Should().BeOfType<OkObjectResult>().Subject.Value);
@@ -525,7 +551,12 @@ public class Wave44OmnichannelAndSaasTests
         db.Products.Add(new ERP.Domain.Entities.Product { Id = 301, Code = "SKU-OPN-301", Name = "Kem Dưỡng Ẩm Đầu Kỳ", UnitId = 1, IsActive = true, MovingAverageCost = 0m });
         await db.SaveChangesAsync();
 
-        var expController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, new ExportReceiptOperationsService(db));
+        var expController = new ExportReceiptsController(
+            new Mock<IExportReceiptService>().Object,
+            new ExportReceiptOperationsService(db),
+            Mock.Of<IWarehouseAuthorizationService>(),
+            Mock.Of<ICurrentUser>(),
+            new HandoverManifestService(db, Mock.Of<IExportReceiptService>()));
         var openRes = await expController.ImportOpeningBalance(
             new ExportReceiptsController.ImportOpeningBalanceRequest(
                 WarehouseId: 1,
@@ -543,7 +574,10 @@ public class Wave44OmnichannelAndSaasTests
         stock.MovingAverageCost.Should().Be(115000m);
         (await db.InventoryTransactions.AnyAsync(t => t.ProductId == 301 && t.ReferenceType == "OPENING_BALANCE" && t.UnitCost == 115000m)).Should().BeTrue();
 
-        var permController = new PermissionsController(new PermissionOperationsService(db));
+        var permController = new PermissionsController(
+            new PermissionOperationsService(db),
+            Mock.Of<IWarehouseAuthorizationService>(),
+            Mock.Of<ICurrentUser>());
         var provRes = await permController.ProvisionSaaSTenant(new PermissionsController.ProvisionTenantRequest(CompanyName: "Mỹ Phẩm Thảo Mộc", PlanCode: "STARTER"), default);
         provRes.Should().BeOfType<OkObjectResult>();
 
@@ -565,6 +599,12 @@ public class Wave44OmnichannelAndSaasTests
         var invRes = await permController.CreateVietQrInvoice(new PermissionsController.CreateVietQrInvoiceRequest(PlanCode: "PRO", AmountVnd: 1490000m), default);
         using var invDoc = System.Text.Json.JsonSerializer.SerializeToDocument(invRes.Should().BeOfType<OkObjectResult>().Subject.Value);
         var invCode = invDoc.RootElement.GetProperty("invoiceCode").GetString()!;
+
+        const string w44Secret = "TEST_W44_VIETQR_SECRET";
+        Environment.SetEnvironmentVariable("SAAS_VIETQR_WEBHOOK_SECRET", w44Secret);
+        var w44HttpCtx = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        w44HttpCtx.Request.Headers["X-VietQR-Signature"] = SaasBillingService.ComputeVietQrSignature(w44Secret, invCode, "PRO", 1490000m);
+        permController.ControllerContext = new ControllerContext { HttpContext = w44HttpCtx };
 
         var webhookRes = await permController.HandleVietQrBillingWebhook(new PermissionsController.VietQrWebhookRequest(InvoiceCode: invCode, PlanCode: "PRO", PaidAmountVnd: 1490000m), default);
         using var webhookDoc = System.Text.Json.JsonSerializer.SerializeToDocument(webhookRes.Should().BeOfType<OkObjectResult>().Subject.Value);
@@ -597,7 +637,11 @@ public class Wave44OmnichannelAndSaasTests
         });
         await db.SaveChangesAsync();
 
-        var reportsController = new ReportsController(new Mock<IReportService>().Object, new ReportOperationsService(db));
+        var reportsController = new ReportsController(
+            new Mock<IReportService>().Object,
+            new ReportOperationsService(db),
+            Mock.Of<IWarehouseAuthorizationService>(),
+            Mock.Of<ICurrentUser>());
 
         var codVerify = await reportsController.VerifyCodAndSettlementReconciliation(
             new ReportsController.VerifyCodSettlementRequest(
@@ -627,13 +671,21 @@ public class Wave44OmnichannelAndSaasTests
         gpDoc.RootElement.GetProperty("movingAverageCogs").GetDecimal().Should().Be(450000m);
         gpDoc.RootElement.GetProperty("netPocketProfit").GetDecimal().Should().BeGreaterThan(0m);
 
-        var expController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, new ExportReceiptOperationsService(db));
+        var expController = new ExportReceiptsController(
+            new Mock<IExportReceiptService>().Object,
+            new ExportReceiptOperationsService(db),
+            Mock.Of<IWarehouseAuthorizationService>(),
+            Mock.Of<ICurrentUser>(),
+            new HandoverManifestService(db, Mock.Of<IExportReceiptService>()));
         var misaRes = await expController.GetMisaExcelExport(1, "json", default);
         using var misaDoc = System.Text.Json.JsonSerializer.SerializeToDocument(misaRes.Should().BeOfType<OkObjectResult>().Subject.Value);
         misaDoc.RootElement.GetProperty("defaultDebitCogsAccount").GetString().Should().Be("632");
         misaDoc.RootElement.GetProperty("defaultCreditInventoryAccount").GetString().Should().Be("1561");
 
-        var packController = new PackingSessionsController(new Mock<IPackingService>().Object, new PackingSessionOperationsService(db));
+        var packController = new PackingSessionsController(
+            new Mock<IPackingService>().Object,
+            new PackingSessionOperationsService(db),
+            Mock.Of<IWarehouseAuthorizationService>());
         var vidRec = await packController.RecordPackingVideoEvidence(
             new PackingSessionsController.RecordPackingVideoEvidenceRequest(
                 ExportReceiptId: 801,
@@ -650,7 +702,8 @@ public class Wave44OmnichannelAndSaasTests
         var secController = new AccountSecurityController(
             new Mock<IAccountAdminService>().Object,
             new Mock<IUserSessionService>().Object,
-            new WmsGovernanceOperationsService(db));
+            new WmsGovernanceOperationsService(db),
+            Mock.Of<IPasswordHasherService>());
         var impRes = await secController.GrantSupportImpersonation(
             new AccountSecurityController.GrantSupportImpersonationRequest(SupportTicketCode: "SUP-2026-99", ExpiresInMinutes: 30, ReadOnlyScope: true),
             default);
@@ -717,7 +770,10 @@ public class Wave44OmnichannelAndSaasTests
         });
         await db.SaveChangesAsync();
 
-        var permController = new PermissionsController(new PermissionOperationsService(db));
+        var permController = new PermissionsController(
+            new PermissionOperationsService(db),
+            Mock.Of<IWarehouseAuthorizationService>(),
+            Mock.Of<ICurrentUser>());
 
         var wizRes = await permController.GetSaaSSetupWizard(default);
         using var wizDoc = System.Text.Json.JsonSerializer.SerializeToDocument(wizRes.Should().BeOfType<OkObjectResult>().Subject.Value);
@@ -731,7 +787,7 @@ public class Wave44OmnichannelAndSaasTests
         subDoc.RootElement.GetProperty("planCode").GetString().Should().Be("STARTER");
         subDoc.RootElement.GetProperty("subscriptionStatus").GetString().Should().Be("ACTIVE");
         subDoc.RootElement.GetProperty("quotaTierCode").GetString().Should().Be("NORMAL");
-        (await db.TenantSubscriptions.CountAsync()).Should().Be(1);
+        (await db.TenantSubscriptions.CountAsync()).Should().Be(0);
 
         var invRes = await permController.CreateVietQrInvoice(
             new PermissionsController.CreateVietQrInvoiceRequest(PlanCode: "PRO", AmountVnd: 1490000m),
@@ -740,6 +796,12 @@ public class Wave44OmnichannelAndSaasTests
         var invCode = invDoc.RootElement.GetProperty("invoiceCode").GetString()!;
         invCode.Should().StartWith("INV-VQR-");
         invDoc.RootElement.GetProperty("status").GetString().Should().Be("UNPAID");
+
+        const string w46Secret = "TEST_W46_VIETQR_SECRET";
+        Environment.SetEnvironmentVariable("SAAS_VIETQR_WEBHOOK_SECRET", w46Secret);
+        var w46HttpCtx = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        w46HttpCtx.Request.Headers["X-VietQR-Signature"] = SaasBillingService.ComputeVietQrSignature(w46Secret, null, "PRO", 1490000m);
+        permController.ControllerContext = new ControllerContext { HttpContext = w46HttpCtx };
 
         var whRes = await permController.HandleVietQrBillingWebhook(
             new PermissionsController.VietQrWebhookRequest(InvoiceCode: null, PlanCode: "PRO", PaidAmountVnd: 1490000m),
@@ -808,7 +870,12 @@ public class Wave44OmnichannelAndSaasTests
         });
         await db.SaveChangesAsync();
 
-        var expController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, new ExportReceiptOperationsService(db));
+        var expController = new ExportReceiptsController(
+            new Mock<IExportReceiptService>().Object,
+            new ExportReceiptOperationsService(db),
+            Mock.Of<IWarehouseAuthorizationService>(),
+            Mock.Of<ICurrentUser>(),
+            new HandoverManifestService(db, Mock.Of<IExportReceiptService>()));
 
         var firstPrint = await expController.BatchPrintAwb(new ExportReceiptsController.BatchPrintAwbRequest(WarehouseId: 1), default);
         using var firstDoc = System.Text.Json.JsonSerializer.SerializeToDocument(firstPrint.Should().BeOfType<OkObjectResult>().Subject.Value);
@@ -928,7 +995,10 @@ public class Wave44OmnichannelAndSaasTests
         });
         await db.SaveChangesAsync();
 
-        var soController = new SalesOrdersController(new Mock<ISalesOrderBackorderService>().Object, new SalesOrderOperationsService(db));
+        var soController = new SalesOrdersController(
+            new Mock<ISalesOrderBackorderService>().Object,
+            new SalesOrderOperationsService(db),
+            Mock.Of<IWarehouseAuthorizationService>());
         var syncRes = await soController.SyncMarketplaceInventory(
             new SalesOrdersController.SyncMarketplaceInventoryRequest(WarehouseId: 1, ShopId: null),
             default);
@@ -941,7 +1011,11 @@ public class Wave44OmnichannelAndSaasTests
         var syncByShopRes = await soController.SyncMarketplaceInventoryByShop(1, null, default);
         syncByShopRes.Should().BeOfType<OkObjectResult>();
 
-        var reportsController = new ReportsController(new Mock<IReportService>().Object, new ReportOperationsService(db));
+        var reportsController = new ReportsController(
+            new Mock<IReportService>().Object,
+            new ReportOperationsService(db),
+            Mock.Of<IWarehouseAuthorizationService>(),
+            Mock.Of<ICurrentUser>());
         var codVerifyRes = await reportsController.VerifyCodAndSettlementReconciliation(
             new ReportsController.VerifyCodSettlementRequest(
                 WarehouseId: 1,
@@ -977,5 +1051,774 @@ public class Wave44OmnichannelAndSaasTests
         pnlDoc.RootElement.GetProperty("shippingFeeDifferentials").GetDecimal().Should().Be(10000m);
         pnlDoc.RootElement.GetProperty("packagingCost").GetDecimal().Should().Be(25000m);
         pnlDoc.RootElement.GetProperty("netPocketProfit").GetDecimal().Should().Be(660000m);
+    }
+
+    [Fact]
+    public async Task Wave62_1_DoD1_VietQrWebhook_RejectsMissingInvalidAndBackdoorSignatures_And_ReplaysIdempotentlyWithoutDoubleExtendingPeriod()
+    {
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+            .UseInMemoryDatabase($"Wave62_1_DoD1_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+        const string testSecret = "W62_1_HMAC_SECRET_KEY_2026";
+        Environment.SetEnvironmentVariable("SAAS_VIETQR_WEBHOOK_SECRET", testSecret);
+
+        var saasService = new SaasBillingService(db);
+        var saasCtrl = new SaasBillingController(saasService, Mock.Of<ICurrentUser>());
+
+        var invRes = await saasCtrl.GenerateVietQrInvoice(
+            new SaasCreateVietQrInvoiceRequest(PlanCode: "PRO", AmountVnd: 1490000m),
+            default);
+        using var invDoc = System.Text.Json.JsonSerializer.SerializeToDocument(invRes.Should().BeOfType<OkObjectResult>().Subject.Value);
+        var invCode = invDoc.RootElement.GetProperty("invoiceCode").GetString()!;
+
+        // 1. Missing X-VietQR-Signature header -> 401 Unauthorized
+        saasCtrl.ControllerContext = new ControllerContext { HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext() };
+        var missingHeaderRes = await saasCtrl.HandleVietQrBillingWebhook(
+            new SaasVietQrWebhookRequest(InvoiceCode: invCode, PlanCode: "PRO", PaidAmountVnd: 1490000m),
+            default);
+        missingHeaderRes.Should().BeOfType<UnauthorizedObjectResult>();
+
+        // 2. Wrong signature -> 401 Unauthorized
+        var wrongSigCtx = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        wrongSigCtx.Request.Headers["X-VietQR-Signature"] = "deadbeef0000111122223333444455556666777788889999aaaabbbbccccdddd";
+        saasCtrl.ControllerContext = new ControllerContext { HttpContext = wrongSigCtx };
+        var wrongSigRes = await saasCtrl.HandleVietQrBillingWebhook(
+            new SaasVietQrWebhookRequest(InvoiceCode: invCode, PlanCode: "PRO", PaidAmountVnd: 1490000m),
+            default);
+        wrongSigRes.Should().BeOfType<UnauthorizedObjectResult>();
+
+        // 3. Backdoor string "VALID_VIETQR_HMAC" -> 401 Unauthorized (backdoor eliminated)
+        var backdoorCtx = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        backdoorCtx.Request.Headers["X-VietQR-Signature"] = "VALID_VIETQR_HMAC";
+        saasCtrl.ControllerContext = new ControllerContext { HttpContext = backdoorCtx };
+        var backdoorRes = await saasCtrl.HandleVietQrBillingWebhook(
+            new SaasVietQrWebhookRequest(InvoiceCode: invCode, PlanCode: "PRO", PaidAmountVnd: 1490000m),
+            default);
+        backdoorRes.Should().BeOfType<UnauthorizedObjectResult>();
+
+        // 4. Valid HMAC signature -> 200 OK & upgrades subscription
+        var validSig = SaasBillingService.ComputeVietQrSignature(testSecret, invCode, "PRO", 1490000m);
+        var validCtx = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        validCtx.Request.Headers["X-VietQR-Signature"] = validSig;
+        saasCtrl.ControllerContext = new ControllerContext { HttpContext = validCtx };
+
+        var firstOk = await saasCtrl.HandleVietQrBillingWebhook(
+            new SaasVietQrWebhookRequest(InvoiceCode: invCode, PlanCode: "PRO", PaidAmountVnd: 1490000m),
+            default);
+        firstOk.Should().BeOfType<OkObjectResult>();
+
+        var subAfterFirst = await db.TenantSubscriptions.SingleAsync();
+        var periodEndAfterFirst = subAfterFirst.CurrentPeriodEndUtc;
+        var invoiceCountAfterFirst = await db.SaasBillingInvoices.CountAsync();
+        invoiceCountAfterFirst.Should().Be(1);
+
+        // 5. Idempotent replay (2nd call with same InvoiceCode & valid HMAC) -> 200 OK, does NOT double-extend CurrentPeriodEndUtc or create duplicate invoice
+        var secondOk = await saasCtrl.HandleVietQrBillingWebhook(
+            new SaasVietQrWebhookRequest(InvoiceCode: invCode, PlanCode: "PRO", PaidAmountVnd: 1490000m),
+            default);
+        using var secondDoc = System.Text.Json.JsonSerializer.SerializeToDocument(secondOk.Should().BeOfType<OkObjectResult>().Subject.Value);
+        secondDoc.RootElement.GetProperty("idempotentReplay").GetBoolean().Should().BeTrue();
+
+        var subAfterSecond = await db.TenantSubscriptions.SingleAsync();
+        subAfterSecond.CurrentPeriodEndUtc.Should().Be(periodEndAfterFirst);
+        (await db.SaasBillingInvoices.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Wave62_1_DoD2_ThreePlBilling_IsolatesByDepositorOwnerId_And_PreventsSameDayMultiPartnerInvoiceCodeCollision()
+    {
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+            .UseInMemoryDatabase($"Wave62_1_DoD2_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+        db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH-3PL", Name = "Kho 3PL Đa Chủ Hàng", IsActive = true });
+        db.BusinessPartners.AddRange(
+            new ERP.Domain.Entities.BusinessPartner { Id = 6201, Code = "DEP-A", Name = "Chủ Hàng Depositor A", IsSupplier = true, IsCustomer = true, IsActive = true },
+            new ERP.Domain.Entities.BusinessPartner { Id = 6202, Code = "DEP-B", Name = "Chủ Hàng Depositor B", IsSupplier = true, IsCustomer = true, IsActive = true });
+
+        // Stock & Transactions in the same warehouse for Owner A (6201) and Owner B (6202)
+        db.InventoryStocks.AddRange(
+            new ERP.Domain.Entities.InventoryStock { Id = 1, WarehouseId = 1, ProductId = 1, LocationId = 10, OwnerId = 6201, Status = ERP.Domain.Enums.InventoryStatus.Available, Quantity = 100m },
+            new ERP.Domain.Entities.InventoryStock { Id = 2, WarehouseId = 1, ProductId = 1, LocationId = 11, OwnerId = 6202, Status = ERP.Domain.Enums.InventoryStatus.Available, Quantity = 500m });
+        db.InventoryTransactions.AddRange(
+            new ERP.Domain.Entities.InventoryTransaction { Id = 10, WarehouseId = 1, ProductId = 1, OwnerId = 6201, TransactionType = ERP.Domain.Enums.TransactionType.Import, InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available, Quantity = 20m, TransactionDate = DateTime.UtcNow, CreatedBy = 1 },
+            new ERP.Domain.Entities.InventoryTransaction { Id = 11, WarehouseId = 1, ProductId = 1, OwnerId = 6202, TransactionType = ERP.Domain.Enums.TransactionType.Import, InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available, Quantity = 300m, TransactionDate = DateTime.UtcNow, CreatedBy = 1 });
+        await db.SaveChangesAsync();
+
+        var controller = new BusinessPartnersController(
+            new Mock<IBusinessPartnerService>().Object,
+            new WmsGovernanceOperationsService(db),
+            Mock.Of<ICurrentUser>());
+
+        var resA = await controller.Generate3PlStatement(
+            new BusinessPartnersController.Generate3PlStatementRequest(PartnerId: 6201, WarehouseId: 1, BillingPeriod: "2026-10", CreateReceivableInvoice: true),
+            default);
+        using var docA = System.Text.Json.JsonSerializer.SerializeToDocument(resA.Should().BeOfType<OkObjectResult>().Subject.Value);
+        docA.RootElement.GetProperty("totalOnHandUnits").GetDecimal().Should().Be(100m); // Strictly Owner A's 100 units, NOT 600
+        docA.RootElement.GetProperty("inboundUnits").GetDecimal().Should().Be(20m); // Strictly Owner A's 20 units, NOT 320
+        docA.RootElement.GetProperty("receivableInvoiceCode").GetString().Should().Be($"AR-3PL-6201-{DateTime.UtcNow:yyyyMMdd}");
+
+        var resB = await controller.Generate3PlStatement(
+            new BusinessPartnersController.Generate3PlStatementRequest(PartnerId: 6202, WarehouseId: 1, BillingPeriod: "2026-10", CreateReceivableInvoice: true),
+            default);
+        using var docB = System.Text.Json.JsonSerializer.SerializeToDocument(resB.Should().BeOfType<OkObjectResult>().Subject.Value);
+        docB.RootElement.GetProperty("totalOnHandUnits").GetDecimal().Should().Be(500m);
+        docB.RootElement.GetProperty("inboundUnits").GetDecimal().Should().Be(300m);
+        docB.RootElement.GetProperty("receivableInvoiceCreated").GetBoolean().Should().BeTrue();
+        docB.RootElement.GetProperty("receivableInvoiceCode").GetString().Should().Be($"AR-3PL-6202-{DateTime.UtcNow:yyyyMMdd}");
+
+        (await db.PartnerDebtInvoices.CountAsync()).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Wave62_1_DoD3_SubscriptionQuota_PreventsDoubleCountingSalesOrderAndExportReceipt_And_EnforcesMaxWarehouses()
+    {
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+            .UseInMemoryDatabase($"Wave62_1_DoD3_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+        db.Warehouses.Add(new ERP.Domain.Entities.Warehouse { Id = 1, Code = "WH01", Name = "Kho 01", IsActive = true });
+        var sub = new ERP.Domain.Entities.TenantSubscription
+        {
+            Id = 1,
+            TenantId = 1,
+            PlanCode = "STARTER",
+            Status = "ACTIVE",
+            MonthlyOrderQuota = 1000,
+            CurrentMonthOrderCount = 10,
+            MaxWarehouses = 1
+        };
+        db.TenantSubscriptions.Add(sub);
+        db.SalesOrders.Add(new ERP.Domain.Entities.SalesOrder
+        {
+            Id = 5001,
+            OrderCode = "SO-5001",
+            ExternalOrderId = "EXT-5001",
+            CustomerId = 1,
+            WarehouseId = 1,
+            Status = ERP.Domain.Enums.SalesOrderStatus.Released,
+            CreatedBy = 1
+        });
+        // Simulate SalesOrder creation already incrementing CurrentMonthOrderCount from 10 -> 11
+        sub.CurrentMonthOrderCount += 1;
+        await db.SaveChangesAsync();
+
+        var expOps = new ExportReceiptOperationsService(db);
+        // Linked ExportReceipt with SalesOrderId = 5001 must NOT increment CurrentMonthOrderCount again
+        await expOps.IncrementSubscriptionOrderCountAsync(default, salesOrderId: 5001, marketplaceOrderId: null);
+        (await db.TenantSubscriptions.SingleAsync()).CurrentMonthOrderCount.Should().Be(11);
+
+        // Standalone ExportReceipt (no SalesOrderId / MarketplaceOrderId) DOES increment from 11 -> 12
+        await expOps.IncrementSubscriptionOrderCountAsync(default, salesOrderId: null, marketplaceOrderId: null);
+        (await db.TenantSubscriptions.SingleAsync()).CurrentMonthOrderCount.Should().Be(12);
+
+        // Enforce MaxWarehouses = 1 in WarehouseService.CreateWarehouseAsync
+        var whRepo = new ERP.Infrastructure.Repositories.WarehouseRepository(db);
+        var whService = new ERP.Application.Services.WarehouseService(whRepo, new Mock<IWarehouseAuthorizationService>().Object);
+        var actCreateSecondWh = async () => await whService.CreateWarehouseAsync(new ERP.Application.DTOs.CreateWarehouseDto
+        {
+            Code = "WH02",
+            Name = "Kho Vượt Trần Gói Cước"
+        }, "admin");
+        var quotaEx = await actCreateSecondWh.Should().ThrowAsync<ERP.Application.Exceptions.ForbiddenException>();
+        quotaEx.Which.Data["ErrorCode"].Should().Be("SUBSCRIPTION_QUOTA_EXCEEDED");
+
+        // Enforce MaxSkus in ProductService.CreateProductAsync when repository reports quota exceeded
+        var prodRepoMock = new Mock<ERP.Domain.Interfaces.IProductRepository>();
+        prodRepoMock.Setup(x => x.IsMaxSkusExceededAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
+        var prodService = new ERP.Application.Services.ProductService(prodRepoMock.Object, new Mock<IProductCatalogService>().Object);
+        var actCreateExceedSku = async () => await prodService.CreateProductAsync(new ERP.Application.DTOs.CreateProductDto
+        {
+            Code = "SKU-OVER-QUOTA",
+            Name = "SKU Vượt Trần Gói Cước",
+            UnitId = 1,
+            CategoryId = 1
+        }, "admin");
+        var skuQuotaEx = await actCreateExceedSku.Should().ThrowAsync<ERP.Application.Exceptions.ForbiddenException>();
+        skuQuotaEx.Which.Data["ErrorCode"].Should().Be("SUBSCRIPTION_MAX_SKUS_EXCEEDED");
+    }
+
+    [Fact]
+    public async Task Wave62_1_DoD4_ProvisionedTenantOwner_AuthenticatesViaAuthService_And_SupportImpersonationSwitchesTenantId()
+    {
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+            .UseInMemoryDatabase($"Wave62_1_DoD4_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+        var hasher = new ERP.Infrastructure.Services.PasswordHasherService();
+        var permOps = new PermissionOperationsService(db, passwordHasher: hasher);
+
+        var provisionRes = await permOps.ProvisionSaaSTenantAsync(
+            new ProvisionTenantInput(
+                CompanyName: "Công ty W62",
+                TaxCode: "0109998888",
+                OwnerEmail: "owner@w62.vn",
+                IndustryTemplate: "ECOMMERCE_3ZONES",
+                PlanCode: "STARTER",
+                AllocateNewTenant: true,
+                OwnerUsername: "owner_w62",
+                OwnerPassword: "OwnerSecret!2026"),
+            default);
+        using var provDoc = System.Text.Json.JsonSerializer.SerializeToDocument(provisionRes.Payload);
+        var provisionedTenantId = provDoc.RootElement.GetProperty("tenantId").GetInt32();
+        provisionedTenantId.Should().BeGreaterThan(1);
+
+        var ownerUser = await db.Users.IgnoreQueryFilters().SingleAsync(u => u.TenantId == provisionedTenantId && u.Username == "owner_w62");
+        ownerUser.PasswordHash.Should().NotBe("PROVISIONED_TENANT_OWNER");
+        hasher.VerifyPassword(ownerUser.PasswordHash, "OwnerSecret!2026").Should().BeTrue();
+
+        // Also verify full AuthService.LoginAsync succeeds for the provisioned Tenant Owner
+        var userRepo = new ERP.Infrastructure.Repositories.UserRepository(db);
+        var tokenServiceMock = new Mock<ITokenService>();
+        tokenServiceMock.Setup(x => x.GenerateToken(It.IsAny<ERP.Domain.Entities.User>())).Returns("jwt-provisioned-owner");
+        var authService = new ERP.Application.Services.AuthService(
+            userRepo,
+            hasher,
+            tokenServiceMock.Object,
+            new ERP.Application.Common.AuthSecurityOptions { MaxFailedAttempts = 5, LockoutMinutes = 15 },
+            null,
+            null,
+            null);
+        var loginResp = await authService.LoginAsync(
+            new ERP.Application.DTOs.LoginRequestDto
+            {
+                Username = "owner_w62",
+                Password = "OwnerSecret!2026",
+                TenantId = provisionedTenantId
+            },
+            new ERP.Application.DTOs.SessionContextDto { IpAddress = "127.0.0.1", UserAgent = "Wave62.1" });
+        loginResp.Token.Should().Be("jwt-provisioned-owner");
+        loginResp.TenantId.Should().Be(provisionedTenantId);
+
+        // Verify SupportImpersonationMiddleware + HttpTenantContext switches TenantId to session.TenantId
+        db.SupportImpersonationSessions.Add(new ERP.Domain.Entities.SupportImpersonationSession
+        {
+            Id = 9001,
+            TenantId = provisionedTenantId,
+            SessionCode = "IMP-W62-TOKEN",
+            TokenHash = "IMP-W62-TOKEN",
+            SupportTicketCode = "SUP-W62-01",
+            GrantedByUserId = ownerUser.Id,
+            SupportAgentUserId = 1,
+            ReadOnlyScope = true,
+            Status = "ACTIVE",
+            ExpiresAtUtc = DateTime.UtcNow.AddMinutes(30)
+        });
+        await db.SaveChangesAsync();
+
+        var sp = new Mock<IServiceProvider>();
+        sp.Setup(x => x.GetService(typeof(ERP.Infrastructure.Persistence.ErpKhoDbContext))).Returns(db);
+        var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        httpContext.Request.Method = "GET";
+        httpContext.Request.Headers["X-Support-Impersonation-Token"] = "IMP-W62-TOKEN";
+        httpContext.RequestServices = sp.Object;
+        var accessor = new Microsoft.AspNetCore.Http.HttpContextAccessor { HttpContext = httpContext };
+        var tenantContext = new ERP.Api.Authorization.HttpTenantContext(accessor);
+
+        var middleware = new ERP.Api.Middleware.SupportImpersonationMiddleware(_ => Task.CompletedTask);
+        await middleware.InvokeAsync(httpContext);
+
+        tenantContext.TenantId.Should().Be(provisionedTenantId);
+        db.CurrentTenantId.Should().Be(provisionedTenantId);
+
+        // Also verify concurrent ProvisionSaaSTenantAsync calls on separate DbContext instances allocate distinct TenantIds
+        await using var dbA = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+        await using var dbB = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+        var permOpsA = new PermissionOperationsService(dbA, passwordHasher: hasher);
+        var permOpsB = new PermissionOperationsService(dbB, passwordHasher: hasher);
+        var concurrentResults = await Task.WhenAll(
+            permOpsA.ProvisionSaaSTenantAsync(new ProvisionTenantInput(CompanyName: "Concurrent A", AllocateNewTenant: true, OwnerUsername: "owner_conc_a", OwnerPassword: "OwnerSecret!2026"), default),
+            permOpsB.ProvisionSaaSTenantAsync(new ProvisionTenantInput(CompanyName: "Concurrent B", AllocateNewTenant: true, OwnerUsername: "owner_conc_b", OwnerPassword: "OwnerSecret!2026"), default));
+        using var docA = System.Text.Json.JsonSerializer.SerializeToDocument(concurrentResults[0].Payload);
+        using var docB = System.Text.Json.JsonSerializer.SerializeToDocument(concurrentResults[1].Payload);
+        var tenantIdA = docA.RootElement.GetProperty("tenantId").GetInt32();
+        var tenantIdB = docB.RootElement.GetProperty("tenantId").GetInt32();
+        tenantIdA.Should().NotBe(tenantIdB);
+    }
+
+    [Fact]
+    public async Task Wave63_4_SaasPlanCatalogAndProvisioning_AcrossAllTiers_EnforcesConsistentQuotasAndPricing()
+    {
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+            .UseInMemoryDatabase($"Wave63_4_SaasCatalog_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+        var hasher = new ERP.Infrastructure.Services.PasswordHasherService();
+        var permOps = new PermissionOperationsService(db, passwordHasher: hasher);
+        var saasBilling = new SaasBillingService(db);
+
+        // 1. Provision ENTERPRISE tenant (AllocateNewTenant = true) -> verifies exact ENTERPRISE quotas (100000 / 20 / 100)
+        var entRes = await permOps.ProvisionSaaSTenantAsync(
+            new ProvisionTenantInput(
+                CompanyName: "Tập Đoàn Enterprise W63.4",
+                TaxCode: "0108889999",
+                OwnerEmail: "ent@w634.vn",
+                IndustryTemplate: "ECOMMERCE_3ZONES",
+                PlanCode: "ENTERPRISE",
+                AllocateNewTenant: true,
+                OwnerUsername: "ent_owner_w634",
+                OwnerPassword: "OwnerSecret!2026"),
+            default);
+        using var entDoc = System.Text.Json.JsonSerializer.SerializeToDocument(entRes.Payload);
+        var entTenantId = entDoc.RootElement.GetProperty("tenantId").GetInt32();
+        entDoc.RootElement.GetProperty("planCode").GetString().Should().Be("ENTERPRISE");
+        entDoc.RootElement.GetProperty("monthlyOrderQuota").GetInt32().Should().Be(100000);
+        entDoc.RootElement.GetProperty("maxWarehouses").GetInt32().Should().Be(20);
+        entDoc.RootElement.GetProperty("maxUsers").GetInt32().Should().Be(100);
+
+        var entSub = await db.TenantSubscriptions
+            .IgnoreQueryFilters()
+            .SingleAsync(s => s.TenantId == entTenantId);
+        entSub.PlanCode.Should().Be("ENTERPRISE");
+        entSub.MonthlyOrderQuota.Should().Be(100000);
+        entSub.MaxWarehouses.Should().Be(20);
+        entSub.MaxUsers.Should().Be(100);
+
+        // 2. Provision FREE_TRIAL tenant (AllocateNewTenant = true) -> verifies exact FREE_TRIAL quotas (300 / 1 / 3)
+        var trialRes = await permOps.ProvisionSaaSTenantAsync(
+            new ProvisionTenantInput(
+                CompanyName: "Cửa Hàng Dùng Thử W63.4",
+                TaxCode: "0107776666",
+                OwnerEmail: "trial@w634.vn",
+                IndustryTemplate: "ECOMMERCE_3ZONES",
+                PlanCode: "FREE_TRIAL",
+                AllocateNewTenant: true,
+                OwnerUsername: "trial_owner_w634",
+                OwnerPassword: "OwnerSecret!2026"),
+            default);
+        using var trialDoc = System.Text.Json.JsonSerializer.SerializeToDocument(trialRes.Payload);
+        var trialTenantId = trialDoc.RootElement.GetProperty("tenantId").GetInt32();
+        trialDoc.RootElement.GetProperty("planCode").GetString().Should().Be("FREE_TRIAL");
+        trialDoc.RootElement.GetProperty("monthlyOrderQuota").GetInt32().Should().Be(300);
+        trialDoc.RootElement.GetProperty("maxWarehouses").GetInt32().Should().Be(1);
+        trialDoc.RootElement.GetProperty("maxUsers").GetInt32().Should().Be(3);
+
+        var trialSub = await db.TenantSubscriptions
+            .IgnoreQueryFilters()
+            .SingleAsync(s => s.TenantId == trialTenantId);
+        trialSub.PlanCode.Should().Be("FREE_TRIAL");
+        trialSub.MonthlyOrderQuota.Should().Be(300);
+        trialSub.MaxWarehouses.Should().Be(1);
+        trialSub.MaxUsers.Should().Be(3);
+
+        // 3. Re-provisioning an existing tenant (sub != null) to GROWTH updates quotas in-place (10000 / 3 / 20)
+        db.UseTenant(trialTenantId);
+        var upgradeRes = await permOps.ProvisionSaaSTenantAsync(
+            new ProvisionTenantInput(
+                CompanyName: "Cửa Hàng Nâng Cấp Growth W63.4",
+                PlanCode: "GROWTH",
+                AllocateNewTenant: false),
+            default);
+        using var upgradeDoc = System.Text.Json.JsonSerializer.SerializeToDocument(upgradeRes.Payload);
+        upgradeDoc.RootElement.GetProperty("planCode").GetString().Should().Be("GROWTH");
+        upgradeDoc.RootElement.GetProperty("monthlyOrderQuota").GetInt32().Should().Be(10000);
+        upgradeDoc.RootElement.GetProperty("maxWarehouses").GetInt32().Should().Be(3);
+        upgradeDoc.RootElement.GetProperty("maxUsers").GetInt32().Should().Be(20);
+
+        var upgradedSub = await db.TenantSubscriptions
+            .IgnoreQueryFilters()
+            .SingleAsync(s => s.TenantId == trialTenantId);
+        upgradedSub.PlanCode.Should().Be("GROWTH");
+        upgradedSub.MonthlyOrderQuota.Should().Be(10000);
+        upgradedSub.MaxWarehouses.Should().Be(3);
+        upgradedSub.MaxUsers.Should().Be(20);
+
+        // 4. Verify SaasPlans catalog parity between SaasBillingService and PermissionOperationsService (DB table)
+        var plansPayload = await saasBilling.GetPlansAsync(default);
+        using var plansDoc = System.Text.Json.JsonSerializer.SerializeToDocument(plansPayload);
+        var planItems = plansDoc.RootElement.GetProperty("plans").EnumerateArray().ToList();
+        planItems.Should().HaveCountGreaterThanOrEqualTo(4);
+
+        var dbPlans = await db.SaasPlans.AsNoTracking().ToDictionaryAsync(p => p.PlanCode, StringComparer.OrdinalIgnoreCase);
+        var expectedSpecs = new (string Code, decimal Price, int Orders, int Warehouses, int Users, int Skus)[]
+        {
+            ("FREE_TRIAL", 0m, 300, 1, 3, 500),
+            ("STARTER", 490000m, 1500, 1, 5, 2000),
+            ("GROWTH", 1490000m, 10000, 3, 20, 20000),
+            ("PRO", 1490000m, 10000, 3, 20, 20000),
+            ("ENTERPRISE", 3490000m, 100000, 20, 100, 100000)
+        };
+
+        foreach (var exp in expectedSpecs)
+        {
+            dbPlans.Should().ContainKey(exp.Code);
+            var dbPlan = dbPlans[exp.Code];
+            dbPlan.MonthlyPriceVnd.Should().Be(exp.Price);
+            dbPlan.MonthlyOrderQuota.Should().Be(exp.Orders);
+            dbPlan.MaxWarehouses.Should().Be(exp.Warehouses);
+            dbPlan.MaxUsers.Should().Be(exp.Users);
+
+            var resolved = SaasBillingService.ResolvePlanSpec(exp.Code);
+            resolved.MonthlyPriceVnd.Should().Be(exp.Price);
+            resolved.MonthlyOrderQuota.Should().Be(exp.Orders);
+            resolved.MaxWarehouses.Should().Be(exp.Warehouses);
+            resolved.MaxUsers.Should().Be(exp.Users);
+            resolved.MaxSkus.Should().Be(exp.Skus);
+
+            ERP.Application.Services.ProductService.ResolveMaxSkusForPlan(exp.Code).Should().Be(exp.Skus);
+        }
+    }
+
+    [Fact]
+    public async Task Wave63_5_VietQrWebhook_RestoresOriginalTenantContextAndReleasesGateOnException()
+    {
+        const string webhookSecret = "W63_5_WEBHOOK_HMAC_SECRET_2026";
+        Environment.SetEnvironmentVariable("SAAS_VIETQR_WEBHOOK_SECRET", webhookSecret);
+
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+            .UseInMemoryDatabase($"Wave63_5_WebhookLock_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+
+        // 1. Verify VietQrWebhookGate is released in finally even when DbContext throws ObjectDisposedException
+        var brokenDb = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+        await brokenDb.DisposeAsync();
+
+        var brokenSaasService = new SaasBillingService(brokenDb);
+        var brokenPermService = new PermissionOperationsService(brokenDb);
+        var brokenSig = SaasBillingService.ComputeVietQrSignature(webhookSecret, "INV-BROKEN-635", "ENTERPRISE", 3490000m);
+
+        var actBrokenSaas = async () => await brokenSaasService.HandleVietQrWebhookAsync(
+            new SaasVietQrWebhookRequest(InvoiceCode: "INV-BROKEN-635", PlanCode: "ENTERPRISE", PaidAmountVnd: 3490000m),
+            actorUserId: 1,
+            cancellationToken: default,
+            providedSignature: brokenSig);
+        await actBrokenSaas.Should().ThrowAsync<ObjectDisposedException>();
+        SaasBillingService.VietQrWebhookGate.CurrentCount.Should().Be(1);
+
+        var actBrokenPerm = async () => await brokenPermService.HandleVietQrBillingWebhookAsync(
+            new VietQrWebhookInput(InvoiceCode: "INV-BROKEN-635", PlanCode: "ENTERPRISE", PaidAmountVnd: 3490000m),
+            providedSignature: brokenSig,
+            actorUserId: 1,
+            ct: default);
+        await actBrokenPerm.Should().ThrowAsync<ObjectDisposedException>();
+        SaasBillingService.VietQrWebhookGate.CurrentCount.Should().Be(1);
+
+        // 2. Verify originalTenantId is restored to 1 after processing cross-tenant webhook for Tenant 2 (and on idempotent replay)
+        await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+        db.UseTenant(2);
+        db.SaasBillingInvoices.Add(new ERP.Domain.Entities.SaasBillingInvoice
+        {
+            TenantId = 2,
+            InvoiceCode = "INV-W635-SAAS-T2",
+            PlanCode = "ENTERPRISE",
+            AmountVnd = 3490000m,
+            PaymentProvider = "VIETQR",
+            Status = "UNPAID",
+            QrPayload = "QR-W635-SAAS-T2",
+            CreatedAtUtc = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        db.UseTenant(3);
+        db.SaasBillingInvoices.Add(new ERP.Domain.Entities.SaasBillingInvoice
+        {
+            TenantId = 3,
+            InvoiceCode = "INV-W635-PERM-T3",
+            PlanCode = "ENTERPRISE",
+            AmountVnd = 3490000m,
+            PaymentProvider = "VIETQR",
+            Status = "UNPAID",
+            QrPayload = "QR-W635-PERM-T3",
+            CreatedAtUtc = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var saasService = new SaasBillingService(db);
+        var permService = new PermissionOperationsService(db);
+
+        // 2a. SaasBillingService.HandleVietQrWebhookAsync for Tenant 2 while db is on Tenant 1
+        db.UseTenant(1);
+        db.CurrentTenantId.Should().Be(1);
+        var sigT2 = SaasBillingService.ComputeVietQrSignature(webhookSecret, "INV-W635-SAAS-T2", "ENTERPRISE", 3490000m);
+
+        var firstSaasRes = await saasService.HandleVietQrWebhookAsync(
+            new SaasVietQrWebhookRequest(InvoiceCode: "INV-W635-SAAS-T2", PlanCode: "ENTERPRISE", PaidAmountVnd: 3490000m),
+            actorUserId: 1,
+            cancellationToken: default,
+            providedSignature: sigT2);
+        firstSaasRes.InvalidReason.Should().BeFalse();
+        db.CurrentTenantId.Should().Be(1);
+
+        var invT2 = await db.SaasBillingInvoices.IgnoreQueryFilters().SingleAsync(i => i.InvoiceCode == "INV-W635-SAAS-T2");
+        invT2.Status.Should().Be("PAID");
+        var subT2 = await db.TenantSubscriptions.IgnoreQueryFilters().SingleAsync(s => s.TenantId == 2);
+        subT2.PlanCode.Should().Be("ENTERPRISE");
+        subT2.MonthlyOrderQuota.Should().Be(100000);
+        subT2.MaxWarehouses.Should().Be(20);
+        subT2.MaxUsers.Should().Be(100);
+
+        var replaySaasRes = await saasService.HandleVietQrWebhookAsync(
+            new SaasVietQrWebhookRequest(InvoiceCode: "INV-W635-SAAS-T2", PlanCode: "ENTERPRISE", PaidAmountVnd: 3490000m),
+            actorUserId: 1,
+            cancellationToken: default,
+            providedSignature: sigT2);
+        using var replaySaasDoc = System.Text.Json.JsonSerializer.SerializeToDocument(replaySaasRes.Payload);
+        replaySaasDoc.RootElement.GetProperty("idempotentReplay").GetBoolean().Should().BeTrue();
+        db.CurrentTenantId.Should().Be(1);
+
+        // 2b. PermissionOperationsService.HandleVietQrBillingWebhookAsync for Tenant 3 while db is on Tenant 1
+        db.UseTenant(1);
+        var sigT3 = SaasBillingService.ComputeVietQrSignature(webhookSecret, "INV-W635-PERM-T3", "ENTERPRISE", 3490000m);
+
+        var firstPermRes = await permService.HandleVietQrBillingWebhookAsync(
+            new VietQrWebhookInput(InvoiceCode: "INV-W635-PERM-T3", PlanCode: "ENTERPRISE", PaidAmountVnd: 3490000m),
+            providedSignature: sigT3,
+            actorUserId: 1,
+            ct: default);
+        using var firstPermDoc = System.Text.Json.JsonSerializer.SerializeToDocument(firstPermRes.Payload);
+        firstPermDoc.RootElement.GetProperty("idempotentReplay").GetBoolean().Should().BeFalse();
+        db.CurrentTenantId.Should().Be(1);
+
+        var invT3 = await db.SaasBillingInvoices.IgnoreQueryFilters().SingleAsync(i => i.InvoiceCode == "INV-W635-PERM-T3");
+        invT3.Status.Should().Be("PAID");
+        var subT3 = await db.TenantSubscriptions.IgnoreQueryFilters().SingleAsync(s => s.TenantId == 3);
+        subT3.PlanCode.Should().Be("ENTERPRISE");
+        subT3.MonthlyOrderQuota.Should().Be(100000);
+        subT3.MaxWarehouses.Should().Be(20);
+        subT3.MaxUsers.Should().Be(100);
+
+        var replayPermRes = await permService.HandleVietQrBillingWebhookAsync(
+            new VietQrWebhookInput(InvoiceCode: "INV-W635-PERM-T3", PlanCode: "ENTERPRISE", PaidAmountVnd: 3490000m),
+            providedSignature: sigT3,
+            actorUserId: 1,
+            ct: default);
+        using var replayPermDoc = System.Text.Json.JsonSerializer.SerializeToDocument(replayPermRes.Payload);
+        replayPermDoc.RootElement.GetProperty("idempotentReplay").GetBoolean().Should().BeTrue();
+        db.CurrentTenantId.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Wave63_7_CreateVietQrInvoice_UsesConfiguredCorporateBankAcrossServices()
+    {
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+            .UseInMemoryDatabase($"Wave63_7_VietQrTpBank_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+
+        await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+        var saasService = new SaasBillingService(db);
+        var permService = new PermissionOperationsService(db);
+
+        // 1. Verify SaasBillingService.CreateVietQrInvoiceAsync
+        var saasRes = await saasService.CreateVietQrInvoiceAsync(
+            new SaasCreateVietQrInvoiceRequest(PlanCode: "GROWTH", CustomAmountVnd: null, AmountVnd: 1490000m),
+            actorUserId: 1,
+            cancellationToken: default);
+
+        using var saasDoc = System.Text.Json.JsonSerializer.SerializeToDocument(saasRes);
+        var saasRoot = saasDoc.RootElement;
+        var saasInvoiceCode = saasRoot.GetProperty("invoiceCode").GetString();
+        var saasPayload = saasRoot.GetProperty("vietQrPayload").GetString();
+
+        saasRoot.GetProperty("bankCode").GetString().Should().Be("TPB");
+        saasRoot.GetProperty("bankName").GetString().Should().Be("TPBank");
+        saasRoot.GetProperty("bankBin").GetString().Should().Be("970423");
+        saasRoot.GetProperty("accountNo").GetString().Should().Be("000010002026");
+        saasPayload.Should().Contain("0006970423");
+        saasPayload.Should().Contain("000010002026");
+        saasPayload.Should().NotContain("98418102005");
+        saasPayload.Should().NotContain("1903888999999");
+
+        var dynamicCustomPayload = SaasBillingService.BuildVietQrPayload(1490000m, "INV-VQR-TEST", "970423", "1234567890123");
+        dynamicCustomPayload.Should().Contain("38570010A00000072701270006970423011312345678901230208QRIBFTTA");
+
+        var savedSaasInvoice = await db.SaasBillingInvoices
+            .IgnoreQueryFilters()
+            .SingleAsync(i => i.InvoiceCode == saasInvoiceCode);
+        savedSaasInvoice.QrPayload.Should().Contain("000010002026");
+        savedSaasInvoice.QrPayload.Should().Contain("0006970423");
+        savedSaasInvoice.QrPayload.Should().NotContain("98418102005");
+
+        // 2. Verify PermissionOperationsService.CreateVietQrInvoiceAsync
+        var permOutcome = await permService.CreateVietQrInvoiceAsync(
+            new CreateVietQrInvoiceInput(PlanCode: "ENTERPRISE", AmountVnd: 3490000m),
+            ct: default);
+
+        using var permDoc = System.Text.Json.JsonSerializer.SerializeToDocument(permOutcome.Payload);
+        var permRoot = permDoc.RootElement;
+        var permInvoiceCode = permRoot.GetProperty("invoiceCode").GetString();
+        var permPayload = permRoot.GetProperty("vietQrPayload").GetString();
+
+        permRoot.GetProperty("bankCode").GetString().Should().Be("TPB");
+        permRoot.GetProperty("bankName").GetString().Should().Be("TPBank");
+        permRoot.GetProperty("bankBin").GetString().Should().Be("970423");
+        permRoot.GetProperty("accountNo").GetString().Should().Be("000010002026");
+        permPayload.Should().Contain("0006970423");
+        permPayload.Should().Contain("000010002026");
+        permPayload.Should().NotContain("98418102005");
+
+        var savedPermInvoice = await db.SaasBillingInvoices
+            .IgnoreQueryFilters()
+            .SingleAsync(i => i.InvoiceCode == permInvoiceCode);
+        savedPermInvoice.QrPayload.Should().Contain("000010002026");
+        savedPermInvoice.QrPayload.Should().Contain("0006970423");
+        savedPermInvoice.QrPayload.Should().NotContain("98418102005");
+    }
+
+    [Fact]
+    public async Task Wave64_0_VietQrIdempotentInvoice_AlphanumericTransferContent_And_DynamicTotpSecret()
+    {
+        const string webhookSecret = "W64_0_WEBHOOK_HMAC_SECRET_2026";
+        Environment.SetEnvironmentVariable("SAAS_VIETQR_WEBHOOK_SECRET", webhookSecret);
+
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+            .UseInMemoryDatabase($"Wave64_0_IdempotentAndTotp_{Guid.NewGuid():N}")
+            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+
+        await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+        db.UseTenant(1);
+        db.Users.Add(new ERP.Domain.Entities.User
+        {
+            Id = 1,
+            TenantId = 1,
+            Username = "qa_admin",
+            FullName = "QA Admin",
+            PasswordHash = "HASH",
+            RoleId = 1,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var saasService = new SaasBillingService(db);
+        var permService = new PermissionOperationsService(db);
+
+        // 1. Idempotent pending invoice reuse in SaasBillingService + alphanumeric transferContent without '-'
+        var firstInvoice = await saasService.CreateVietQrInvoiceAsync(
+            new SaasCreateVietQrInvoiceRequest(PlanCode: "GROWTH", CustomAmountVnd: null, AmountVnd: 1490000m),
+            actorUserId: 1,
+            cancellationToken: default);
+        using var firstDoc = System.Text.Json.JsonSerializer.SerializeToDocument(firstInvoice);
+        var firstCode = firstDoc.RootElement.GetProperty("invoiceCode").GetString()!;
+        var firstTransferContent = firstDoc.RootElement.GetProperty("transferContent").GetString()!;
+        var firstQrPayload = firstDoc.RootElement.GetProperty("vietQrPayload").GetString()!;
+
+        firstDoc.RootElement.GetProperty("reusedPendingInvoice").GetBoolean().Should().BeFalse();
+        firstDoc.RootElement.GetProperty("accountName").GetString().Should().Be("ERP KHO WMS SAAS");
+        firstTransferContent.Should().NotContain("-");
+        firstTransferContent.Should().NotContain(" ");
+        firstTransferContent.Should().StartWith("ERPKHO");
+        var cleanRef = SaasBillingService.NormalizeVietQrReference(firstCode);
+        cleanRef.Should().NotContain("-");
+        firstTransferContent.Should().Be($"ERPKHO{cleanRef}");
+        firstQrPayload.Should().Contain(cleanRef);
+
+        var secondInvoice = await saasService.CreateVietQrInvoiceAsync(
+            new SaasCreateVietQrInvoiceRequest(PlanCode: "GROWTH", CustomAmountVnd: null, AmountVnd: 1490000m),
+            actorUserId: 1,
+            cancellationToken: default);
+        using var secondDoc = System.Text.Json.JsonSerializer.SerializeToDocument(secondInvoice);
+        secondDoc.RootElement.GetProperty("invoiceCode").GetString().Should().Be(firstCode);
+        secondDoc.RootElement.GetProperty("reusedPendingInvoice").GetBoolean().Should().BeTrue();
+        secondDoc.RootElement.GetProperty("transferContent").GetString().Should().Be(firstTransferContent);
+
+        var growthInvoicesCount = await db.SaasBillingInvoices
+            .CountAsync(i => i.TenantId == 1 && i.PlanCode == "GROWTH" && i.Status == "UNPAID");
+        growthInvoicesCount.Should().Be(1);
+
+        // 2. Webhook matches normalized alphanumeric reference (without '-') and activates subscription
+        var sigNoHyphen = SaasBillingService.ComputeVietQrSignature(webhookSecret, cleanRef, "GROWTH", 1490000m);
+        var webhookRes = await saasService.HandleVietQrWebhookAsync(
+            new SaasVietQrWebhookRequest(InvoiceCode: cleanRef, PlanCode: "GROWTH", PaidAmountVnd: 1490000m),
+            actorUserId: 1,
+            cancellationToken: default,
+            providedSignature: sigNoHyphen);
+        webhookRes.InvalidReason.Should().BeFalse();
+
+        var paidInvoice = await db.SaasBillingInvoices.SingleAsync(i => i.InvoiceCode == firstCode);
+        paidInvoice.Status.Should().Be("PAID");
+
+        // 3. Dynamic cryptographic TOTP secret persisted to DB (20-byte random Base32, never static sample)
+        var secController = new ERP.Api.Controllers.AccountSecurityController(
+            new Mock<IAccountAdminService>().Object,
+            new Mock<IUserSessionService>().Object,
+            new WmsGovernanceOperationsService(db),
+            Mock.Of<IPasswordHasherService>());
+        var setupRes = await secController.SetupTotp(1, default);
+        var setupOk = setupRes.Should().BeOfType<OkObjectResult>().Subject;
+        using var enrollDoc = System.Text.Json.JsonSerializer.SerializeToDocument(setupOk.Value);
+        enrollDoc.RootElement.TryGetProperty("secret", out _).Should().BeFalse();
+        enrollDoc.RootElement.TryGetProperty("base32Secret", out _).Should().BeFalse();
+        enrollDoc.RootElement.TryGetProperty("secretKeyBase32", out _).Should().BeFalse();
+        enrollDoc.RootElement.GetProperty("recoveryCodes").GetArrayLength().Should().Be(0);
+        enrollDoc.RootElement.TryGetProperty("currentTotpCode", out _).Should().BeFalse();
+
+        var revealRes = await secController.RevealTotpSecret(1);
+        var revealOk = revealRes.Should().BeOfType<OkObjectResult>().Subject;
+        using var revealDoc = System.Text.Json.JsonSerializer.SerializeToDocument(revealOk.Value);
+        var enrolledSecret = revealDoc.RootElement.GetProperty("secretKeyBase32").GetString()!;
+        enrolledSecret.Length.Should().Be(32);
+
+        var currentOtp = ERP.Api.Controllers.AccountSecurityController.ComputeTotpCode(
+            ERP.Api.Controllers.AccountSecurityController.DecodeBase32(enrolledSecret),
+            DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30);
+        var wrongOtp = currentOtp == "000000" ? "999999" : "000000";
+
+        var invalidVerifyRes = await secController.VerifyTotp(
+            1,
+            new ERP.Api.Controllers.AccountSecurityController.VerifyTotpRequest(Code: wrongOtp),
+            default);
+        var badReq = invalidVerifyRes.Should().BeOfType<BadRequestObjectResult>().Subject;
+        using var invalidDoc = System.Text.Json.JsonSerializer.SerializeToDocument(badReq.Value);
+        invalidDoc.RootElement.GetProperty("verified").GetBoolean().Should().BeFalse();
+        invalidDoc.RootElement.GetProperty("errorCode").GetString().Should().Be("INVALID_TOTP_CODE");
+
+        var verifyRes = await secController.VerifyTotp(
+            1,
+            new ERP.Api.Controllers.AccountSecurityController.VerifyTotpRequest(Code: currentOtp),
+            default);
+        var verifyOk = verifyRes.Should().BeOfType<OkObjectResult>().Subject;
+        using var verifyDoc = System.Text.Json.JsonSerializer.SerializeToDocument(verifyOk.Value);
+        verifyDoc.RootElement.GetProperty("verified").GetBoolean().Should().BeTrue();
+        verifyDoc.RootElement.GetProperty("status").GetString().Should().Be("PENDING_RECOVERY_ACK");
+        verifyDoc.RootElement.GetProperty("recoveryCodes").GetArrayLength().Should().Be(8);
+        (await db.Users.AsNoTracking().SingleAsync(u => u.Id == 1)).TotpEnrollmentStatus.Should().Be("PENDING_RECOVERY_ACK");
+
+        var confirmRes = await secController.ConfirmTotpActivation(1, default);
+        var confirmOk = confirmRes.Should().BeOfType<OkObjectResult>().Subject;
+        using var confirmDoc = System.Text.Json.JsonSerializer.SerializeToDocument(confirmOk.Value);
+        confirmDoc.RootElement.GetProperty("status").GetString().Should().Be("ACTIVE");
+        (await db.Users.AsNoTracking().SingleAsync(u => u.Id == 1)).TotpEnrollmentStatus.Should().Be("ACTIVE");
+
+        var regenRes = await secController.RegenerateRecoveryCodes(
+            1,
+            new ERP.Api.Controllers.AccountSecurityController.VerifyTotpRequest(Code: currentOtp),
+            default);
+        var regenOk = regenRes.Should().BeOfType<OkObjectResult>().Subject;
+        using var regenDoc = System.Text.Json.JsonSerializer.SerializeToDocument(regenOk.Value);
+        regenDoc.RootElement.GetProperty("recoveryCodes").GetArrayLength().Should().Be(8);
+
+        // 4. Downgrade guard in SaasBillingService & PermissionOperationsService when usage exceeds target plan ceiling
+        db.Warehouses.AddRange(
+            new ERP.Domain.Entities.Warehouse { Id = 11, TenantId = 1, Code = "WH-01", Name = "Kho 1", IsActive = true },
+            new ERP.Domain.Entities.Warehouse { Id = 12, TenantId = 1, Code = "WH-02", Name = "Kho 2", IsActive = true },
+            new ERP.Domain.Entities.Warehouse { Id = 13, TenantId = 1, Code = "WH-03", Name = "Kho 3", IsActive = true });
+        await db.SaveChangesAsync();
+
+        var downgradeAct = () => saasService.CreateVietQrInvoiceAsync(
+            new SaasCreateVietQrInvoiceRequest(PlanCode: "STARTER", CustomAmountVnd: null, AmountVnd: 490000m),
+            actorUserId: 1,
+            cancellationToken: default);
+        await downgradeAct.Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>()
+            .Where(ex => Equals(ex.Data["ErrorCode"], "PLAN_DOWNGRADE_USAGE_EXCEEDED"));
+
+        var permDowngradeAct = () => permService.CreateVietQrInvoiceAsync(
+            new CreateVietQrInvoiceInput(PlanCode: "STARTER", AmountVnd: 490000m),
+            ct: default);
+        await permDowngradeAct.Should().ThrowAsync<ERP.Application.Exceptions.BusinessRuleException>()
+            .Where(ex => Equals(ex.Data["ErrorCode"], "PLAN_DOWNGRADE_USAGE_EXCEEDED"));
     }
 }

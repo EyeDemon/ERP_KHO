@@ -7,289 +7,28 @@ import { canViewApprovals, canViewStocktakes, hasPermission, usePermissionSet } 
 import { isReadOnlyDemoRuntime } from '../services/runtimeMode';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 import DashboardMetrics from '../components/dashboard/DashboardMetrics';
-import DashboardRecentActivity, { type DashboardRecentActivityItem } from '../components/dashboard/DashboardRecentActivity';
+import DashboardRecentActivity from '../components/dashboard/DashboardRecentActivity';
 import DashboardExceptionAlerts, {
   type DashboardOperationalExceptionItem,
   type DashboardWarehouseTaskItem,
 } from '../components/dashboard/DashboardExceptionAlerts';
-import DashboardQuickActions from '../components/dashboard/DashboardQuickActions';
+import PdaFloorLauncher from '../components/common/PdaFloorLauncher';
+import {
+  actionLabel,
+  entityNameLabel,
+  entityTypeLabel,
+  exceptionCategoryLabel,
+  priorityLabel,
+  sanitizeOperationalException,
+  severityLabel,
+  taskStatusLabel,
+  taskTypeLabel,
+  type GlobalSearchResultItem,
+  type MultiWarehouseControlTowerDto,
+  type OperationalDashboardSummary,
+} from '../modules/governance/DashboardLabelsAndTypes';
+import { DashboardControlTowerPanel } from '../modules/governance/DashboardControlTowerPanel';
 import './Dashboard.css';
-
-type OperationalDashboardSummary = {
-  warehouseCount: number;
-  productCount: number;
-  inventoryBucketCount: number;
-  invalidStockCount: number;
-  openTaskCount: number;
-  openInboundCount: number;
-  openPutawayCount: number;
-  openOutboundCount: number;
-  openTransferCount: number;
-  recentActivities: DashboardRecentActivityItem[];
-};
-
-type GlobalSearchResultItem = {
-  entityType: string;
-  code: string;
-  title: string;
-  subtitle: string;
-  route: string;
-};
-
-type ControlTowerWarehouseItem = {
-  warehouseId: number;
-  warehouseCode: string;
-  warehouseName: string;
-  isActive: boolean;
-  onHandQuantity: number;
-  reservedQuantity: number;
-  openPutawayCount: number;
-  openPickingCount: number;
-  activeLocksCount: number;
-  healthStatus: string;
-};
-
-type TaskEngineQueueItem = {
-  taskType: string;
-  openCount: number;
-  route: string;
-};
-
-type MultiWarehouseControlTowerDto = {
-  totalWarehouses: number;
-  healthyWarehousesCount: number;
-  attentionWarehousesCount: number;
-  warehouses: ControlTowerWarehouseItem[];
-  taskEngineQueues: TaskEngineQueueItem[];
-};
-
-const entityTypeLabel = (type: string) => ({
-  PRODUCT: 'Sản phẩm',
-  LOCATION: 'Vị trí',
-  IMPORT_RECEIPT: 'Phiếu nhập',
-  EXPORT_RECEIPT: 'Phiếu xuất',
-  SHIPMENT: 'Lô giao hàng',
-  PURCHASE_ORDER: 'Đơn mua hàng',
-  ASN: 'Thông báo giao trước',
-  STOCK_TRANSFER: 'Phiếu điều chuyển',
-  STOCKTAKE: 'Phiếu kiểm kê',
-  HANDLING_UNIT: 'Kiện hàng',
-}[type] || type);
-
-const taskTypeLabel = (type: string) => ({
-  PUTAWAY: 'Cất hàng',
-  PICK: 'Lấy hàng',
-  PICKING: 'Lấy hàng',
-  PACK: 'Đóng gói',
-  PACKING: 'Đóng gói',
-  INBOUND_RECEIPT: 'Phiếu nhập nháp',
-  STOCKTAKE: 'Kiểm kê',
-  TRANSFER: 'Điều chuyển',
-  DOCK_YARD: 'Cửa nhận / Bãi xe',
-}[type] || type);
-
-const taskStatusLabel = (status: string) => ({
-  OPEN: 'Đang mở',
-  Open: 'Đang mở',
-  PENDING: 'Chờ xử lý',
-  Pending: 'Chờ xử lý',
-  IN_PROGRESS: 'Đang thực hiện',
-  InProgress: 'Đang thực hiện',
-  DRAFT: 'Nháp',
-  Draft: 'Bản nháp',
-  ASSIGNED: 'Đã phân công',
-  Assigned: 'Đã phân công',
-  ShortPick: 'Thiếu hàng',
-  SCHEDULED: 'Đã lên lịch',
-  Scheduled: 'Đã lên lịch',
-  Arrived: 'Đã đến cổng',
-  CHECKED_IN: 'Đã vào bãi',
-  CheckedIn: 'Đã vào bãi',
-  AT_DOCK: 'Tại cửa nhận/xuất',
-  DockAssigned: 'Đã gán cửa kho',
-  InService: 'Đang bốc dỡ',
-}[status] || status);
-
-const priorityLabel = (priority: string) => ({
-  HIGH: 'Cao',
-  NORMAL: 'Bình thường',
-  MEDIUM: 'Trung bình',
-  LOW: 'Thấp',
-  URGENT: 'Khẩn cấp',
-}[priority] || priority);
-
-const healthStatusLabel = (status: string) => ({
-  HEALTHY: 'Ổn định',
-  ATTENTION: 'Cần chú ý',
-  WARNING: 'Cảnh báo',
-  CRITICAL: 'Nghiêm trọng',
-}[status] || status);
-
-const exceptionCategoryLabel = (category: string) => ({
-  NEGATIVE_OR_INVALID_STOCK: 'Tồn kho bất thường',
-  STALLED_PUTAWAY: 'Cất hàng tồn đọng',
-  STALLED_PICKING: 'Lấy hàng tồn đọng',
-  ACTIVE_INVENTORY_LOCK: 'Khóa tồn kho',
-  INVENTORY_HOLD: 'Tồn kho đang bị khóa / biệt trữ',
-  PUTAWAY_EXCEPTION: 'Ngoại lệ cất hàng',
-  SHORT_PICK: 'Lấy thiếu hàng',
-  RECEIVING_DISCREPANCY: 'Chênh lệch nhận hàng',
-  SHIPMENT_EXCEPTION: 'Sự cố giao hàng',
-  OVERDUE_TRANSFER: 'Điều chuyển quá hạn',
-  UNRESOLVED_DISCREPANCY: 'Chênh lệch chưa xử lý',
-  CAPACITY_WARNING: 'Cảnh báo sức chứa',
-  EXPIRY_RISK: 'Rủi ro hết hạn',
-}[category] || category);
-
-const sanitizeOperationalException = (ex: DashboardOperationalExceptionItem & { description?: string }): DashboardOperationalExceptionItem => {
-  const rawSummary = (ex.summary || ex.description || '').replace(/(\d+)\.0000\b/g, '$1');
-  const legacyHoldMatch = rawSummary.match(/Tồn biệt trữ\/cảnh báo\s+(\d+)\s*\((\d+)\)\s*tại\s+(.+)/i);
-  const summary = legacyHoldMatch
-    ? `Tồn khóa / biệt trữ: 10 (Cảnh báo: ${legacyHoldMatch[1]} • Hư hỏng / Cách ly: ${legacyHoldMatch[2]}) tại ${legacyHoldMatch[3].trim()}`
-    : rawSummary;
-  return {
-    ...ex,
-    summary,
-  };
-};
-
-const severityLabel = (severity: string) => ({
-  HIGH: 'Cao',
-  MEDIUM: 'Trung bình',
-  LOW: 'Thấp',
-  CRITICAL: 'Nghiêm trọng',
-  WARNING: 'Cảnh báo',
-}[severity] || severity);
-
-const actionLabel = (action: string, serverLabel?: string | null): string => {
-  const rawAction = (action ?? '').trim();
-  const upperAction = rawAction.toUpperCase();
-  if (
-    upperAction === 'DEKIT_DISASSEMBLE_EXECUTED' ||
-    upperAction === 'DEKIT_DISASSEMBLE' ||
-    upperAction === 'DEKIT' ||
-    upperAction.includes('DEKIT') ||
-    upperAction.includes('DE-KIT') ||
-    upperAction.includes('XẢ BỘ') ||
-    upperAction.includes('RÃ BỘ')
-  ) {
-    return 'Đã xả bộ hàng lắp ráp';
-  }
-  if (
-    upperAction === 'KIT_ASSEMBLE_EXECUTED' ||
-    upperAction === 'KITTING_VAS' ||
-    upperAction === 'KIT_ASSEMBLE' ||
-    upperAction.includes('KIT')
-  ) {
-    return 'Đã đóng bộ hàng lắp ráp';
-  }
-  const map: Record<string, string> = {
-    Create: 'Tạo mới',
-    CREATE: 'Tạo mới',
-    Update: 'Cập nhật',
-    UPDATE: 'Cập nhật',
-    Delete: 'Xóa',
-    DELETE: 'Xóa',
-    Approve: 'Phê duyệt',
-    APPROVE: 'Phê duyệt',
-    Reject: 'Từ chối',
-    REJECT: 'Từ chối',
-    Complete: 'Hoàn tất',
-    COMPLETE: 'Hoàn tất',
-    Cancel: 'Hủy',
-    CANCEL: 'Hủy',
-    Dispatch: 'Xuất giao',
-    DISPATCH: 'Xuất giao',
-    Receive: 'Tiếp nhận',
-    RECEIVE: 'Tiếp nhận',
-    Login: 'Đăng nhập',
-    LOGIN: 'Đăng nhập',
-    Logout: 'Đăng xuất',
-    LOGOUT: 'Đăng xuất',
-    Post: 'Ghi sổ',
-    POST: 'Ghi sổ',
-    Lock: 'Khóa',
-    LOCK: 'Khóa',
-    Unlock: 'Mở khóa',
-    UNLOCK: 'Mở khóa',
-    Acknowledge: 'Tiếp nhận xử lý',
-    ACKNOWLEDGE: 'Tiếp nhận xử lý',
-    AuditDecisionPolicies: 'Kiểm toán chính sách quyết định',
-    AUDITDECISIONPOLICIES: 'Kiểm toán chính sách quyết định',
-    AUDIT_DECISION_POLICIES: 'Kiểm toán chính sách quyết định',
-    WhatIfSimulation: 'Mô phỏng kịch bản tồn kho (What-If)',
-    WHATIFSIMULATION: 'Mô phỏng kịch bản tồn kho (What-If)',
-    WHAT_IF_SIMULATION: 'Mô phỏng kịch bản tồn kho (What-If)',
-    'Authentication.RefreshRotated': 'Làm mới phiên đăng nhập',
-    'Authentication.LoginSucceeded': 'Đăng nhập thành công',
-    'Authentication.LogoutSucceeded': 'Đăng xuất',
-    'QA.IamAndOperationalSeedApplied': 'Khởi tạo dữ liệu vận hành chuẩn',
-    AUTO_BREAK_BULK_REPLENISH: 'Đã xả thùng chẵn bổ sung kệ nhặt lẻ',
-    MOVE_HANDLING_UNIT_LPN: 'Đã di chuyển kiện hàng (LPN)',
-    EVALUATE_ATP_ROUTING: 'Đã định tuyến & phân bổ đơn hàng đa kho',
-    PACKING_CARTON_RECOMMENDED: 'Đã tính toán gợi ý thùng đóng gói 3D',
-  };
-  if (map[rawAction]) return map[rawAction];
-  if (map[upperAction]) return map[upperAction];
-  const trimmedServerLabel = (serverLabel ?? '').trim();
-  if (trimmedServerLabel) {
-    if (map[trimmedServerLabel]) return map[trimmedServerLabel];
-    const upperServer = trimmedServerLabel.toUpperCase();
-    if (map[upperServer]) return map[upperServer];
-    if (upperServer.includes('DEKIT') || upperServer.includes('DE-KIT') || upperServer.includes('XẢ BỘ') || upperServer.includes('RÃ BỘ')) {
-      return 'Đã xả bộ hàng lắp ráp';
-    }
-    if (upperServer.includes('KIT')) return 'Đã đóng bộ hàng lắp ráp';
-    if (!/^[A-Z][a-zA-Z0-9]+$/.test(trimmedServerLabel) && !/^[a-zA-Z0-9_.:-]+$/.test(trimmedServerLabel)) {
-      return trimmedServerLabel;
-    }
-  }
-  if (/^[A-Z][a-zA-Z0-9]+$/.test(rawAction) || /^[a-zA-Z0-9_.:-]+$/.test(rawAction)) {
-    return 'Ghi nhận tác vụ vận hành hệ thống';
-  }
-  return rawAction || 'Ghi nhận tác vụ vận hành hệ thống';
-};
-
-const entityNameLabel = (entityName: string) => ({
-  ImportReceipt: 'Phiếu nhập',
-  ExportReceipt: 'Phiếu xuất',
-  PutawayTask: 'Tác vụ cất hàng',
-  PickingTask: 'Tác vụ lấy hàng',
-  PackingSession: 'Phiên đóng gói',
-  PACKING_SESSION: 'Phiên đóng gói',
-  HandlingUnit: 'Đơn vị chứa hàng (LPN)',
-  HANDLING_UNIT: 'Đơn vị chứa hàng (LPN)',
-  KittingVas: 'Lệnh lắp ráp / xả bộ',
-  KITTING_VAS: 'Lệnh lắp ráp / xả bộ',
-  SalesOrder: 'Đơn đặt hàng (SO)',
-  SALES_ORDER: 'Đơn đặt hàng (SO)',
-  OutboundShipment: 'Lô hàng vận chuyển',
-  OUTBOUND_SHIPMENT: 'Lô hàng vận chuyển',
-  Shipment: 'Chuyến giao hàng',
-  StockTransfer: 'Phiếu điều chuyển',
-  Stocktake: 'Phiếu kiểm kê',
-  STOCKTAKE: 'Phiếu kiểm kê',
-  Product: 'Sản phẩm',
-  Warehouse: 'Kho',
-  WarehouseLocation: 'Vị trí kho',
-  InventoryLock: 'Khóa tồn kho',
-  StockReservation: 'Giữ hàng',
-  StockAllocation: 'Phân bổ tồn kho',
-  BusinessPartner: 'Đối tác',
-  User: 'Người dùng',
-  UserSession: 'Phiên đăng nhập',
-  LocalQaOperationalSeed: 'Bộ dữ liệu chuẩn',
-  WarehouseCalendarException: 'Ngoại lệ lịch kho',
-  InventoryLocationMovement: 'Di chuyển vị trí kho',
-  DecisionPolicy: 'Chính sách quyết định',
-  AuditDecisionPolicies: 'Chính sách quyết định',
-  WhatIfSimulation: 'Kịch bản mô phỏng tồn kho',
-  OperationalException: 'Ngoại lệ vận hành',
-  CodReconciliation: 'Đối soát COD',
-  PutToWallSortation: 'Chia chọn đơn hàng theo ô tường',
-  BreakBulkReplenishment: 'Bổ sung kệ nhặt lẻ xả thùng',
-  ChannelSkuMapping: 'Ánh xạ SKU đa sàn TMĐT',
-}[entityName] || (/^[a-zA-Z0-9_.:-]+$/.test(entityName) ? 'Nghiệp vụ hệ thống' : entityName));
 
 const Dashboard = () => {
   const demoRuntime = isReadOnlyDemoRuntime();
@@ -329,7 +68,7 @@ const Dashboard = () => {
     setAcknowledgingCode(code);
     setLiveError('');
     try {
-      await apiClient.post('/api/Reports/operational-exceptions/acknowledge', {
+      await apiClient.post('/api/v1/reports/operational-exceptions/acknowledge', {
         exceptionCode: code,
         resolutionNote: 'Tiếp nhận từ Trung tâm điều hành',
       });
@@ -347,7 +86,31 @@ const Dashboard = () => {
     setLiveLoading(true);
     setLiveError('');
     let auxError = '';
+    const redirectIfUnauthorized = (err: any): boolean => {
+      const isVitest = Boolean(
+        typeof import.meta !== 'undefined' && (import.meta.env?.VITEST || import.meta.env?.MODE === 'test'),
+      );
+      if (
+        err?.response?.status === 401 &&
+        !isVitest &&
+        typeof window !== 'undefined' &&
+        !window.location.pathname.startsWith('/login')
+      ) {
+        try {
+          localStorage.removeItem('token');
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('jwt');
+          sessionStorage.clear();
+        } catch {
+          // Ignore storage errors
+        }
+        window.location.replace('/login');
+        return true;
+      }
+      return false;
+    };
     const captureAuxError = <T,>(fallback: T, message: string) => (err: any): T => {
+      if (redirectIfUnauthorized(err)) return fallback;
       if (err?.response?.status && err.response.status >= 400 && !auxError) {
         auxError = err.response?.data?.message || message;
       }
@@ -397,14 +160,15 @@ const Dashboard = () => {
       })
       .catch(() => null);
 
-    void Promise.resolve(apiClient.get<OperationalDashboardSummary>('/api/Reports/operational-dashboard'))
+    void Promise.resolve(apiClient.get<OperationalDashboardSummary>('/api/v1/reports/operational-dashboard'))
       .then((summaryRes) => {
         if (!active) return;
         if (summaryRes?.data && typeof summaryRes.data.warehouseCount === 'number') {
           setLiveSummary(summaryRes.data);
         }
       })
-      .catch(() => {
+      .catch((err: any) => {
+        if (redirectIfUnauthorized(err)) return;
         if (active) setLiveError('Không thể tải số liệu tổng quan trực tiếp.');
       })
       .finally(() => {
@@ -412,9 +176,9 @@ const Dashboard = () => {
       });
 
     Promise.all([
-      apiClient.get<DashboardWarehouseTaskItem[]>('/api/Reports/warehouse-tasks').catch(captureAuxError({ data: [] as DashboardWarehouseTaskItem[] }, 'Không thể tải danh sách tác vụ kho.')),
-      apiClient.get<DashboardOperationalExceptionItem[]>('/api/Reports/operational-exceptions').catch(captureAuxError({ data: [] as DashboardOperationalExceptionItem[] }, 'Không thể tải danh sách ngoại lệ vận hành.')),
-      apiClient.get<MultiWarehouseControlTowerDto>('/api/Reports/multi-warehouse-control-tower').catch(captureAuxError(null, 'Không thể tải dữ liệu tháp điều hành đa kho.')),
+      apiClient.get<DashboardWarehouseTaskItem[]>('/api/v1/reports/warehouse-tasks').catch(captureAuxError({ data: [] as DashboardWarehouseTaskItem[] }, 'Không thể tải danh sách tác vụ kho.')),
+      apiClient.get<DashboardOperationalExceptionItem[]>('/api/v1/reports/operational-exceptions').catch(captureAuxError({ data: [] as DashboardOperationalExceptionItem[] }, 'Không thể tải danh sách ngoại lệ vận hành.')),
+      apiClient.get<MultiWarehouseControlTowerDto>('/api/v1/reports/multi-warehouse-control-tower').catch(captureAuxError(null, 'Không thể tải dữ liệu tháp điều hành đa kho.')),
     ])
       .then(([tasksRes, exRes, towerRes]) => {
         if (!active) return;
@@ -422,6 +186,9 @@ const Dashboard = () => {
         setLiveExceptions(Array.isArray(exRes.data) ? exRes.data.map((ex) => sanitizeOperationalException(ex)) : []);
         if (towerRes?.data && Array.isArray(towerRes.data.warehouses)) {
           setControlTower(towerRes.data);
+          if (towerRes.data.warehouses.length > 1) {
+            setShowEcommerceDetails(true);
+          }
         }
         if (auxError) setLiveError(auxError);
       })
@@ -441,7 +208,7 @@ const Dashboard = () => {
     setSearchLoading(true);
     setLiveError('');
     try {
-      const res = await apiClient.get<GlobalSearchResultItem[]>(`/api/Reports/global-search?q=${encodeURIComponent(q)}`);
+      const res = await apiClient.get<GlobalSearchResultItem[]>(`/api/v1/reports/global-search?q=${encodeURIComponent(q)}`);
       setSearchResults(Array.isArray(res.data) ? res.data : []);
     } catch {
       setSearchResults([]);
@@ -488,6 +255,8 @@ const Dashboard = () => {
       />
 
       {liveError && <p role="alert">{liveError}</p>}
+
+      {typeof window !== 'undefined' && window.innerWidth <= 768 && <PdaFloorLauncher compactOnly />}
 
       {!demoRuntime && (
         <UiCard title="Tìm kiếm toàn doanh nghiệp">
@@ -564,185 +333,28 @@ const Dashboard = () => {
         />
       )}
 
-      <UiCard
-        title="Báo cáo Lợi nhuận Gộp Ước tính Chủ Shop, Đối soát Tiền Thu Hộ (COD) & Đồng bộ Tồn kho Đa Sàn"
-        subtitle="Tổng hợp doanh thu thực xuất, giá vốn bình quân gia quyền, đối soát công nợ COD 3 chiều và tiến trình 5 bước khởi tạo kho nhanh"
-      >
-        <div className="ui-stack" style={{ gap: 10 }}>
-          <div style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#ffffff' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a' }}>
-                Lối tắt Quản trị Tài chính, Đối soát COD &amp; Lộ trình 5 Bước Thiết lập Kho Nhanh:
-              </span>
-              <button
-                type="button"
-                className="ui-btn-secondary"
-                data-testid="toggle-ecommerce-workbench"
-                onClick={() => setShowEcommerceDetails((prev) => !prev)}
-                style={{ fontSize: 12, padding: '4px 10px', minHeight: 30 }}
-              >
-                {showEcommerceDetails ? 'Thu gọn biểu mẫu liên kết & tháp điều hành' : 'Mở rộng liên kết gian hàng & tháp điều hành đa kho'}
-              </button>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', fontSize: 12, color: '#475569', marginBottom: 8 }}>
-              <span>Bước 1: Khởi tạo sơ đồ kệ mẫu (3 giây)</span>
-              <span>Bước 2: Nhập danh mục sản phẩm chuẩn</span>
-              <span>Bước 3: Nhập tồn kho đầu kỳ kèm giá vốn</span>
-              <span>Bước 4: Liên kết gian hàng Shopee / TikTok Shop</span>
-              <span>Bước 5: In gộp tem nhiệt &amp; xuất đơn đầu tiên</span>
-            </div>
-            <DashboardQuickActions />
-          </div>
-
-          <div style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc' }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a', marginBottom: 6 }}>
-              Quản lý Gian hàng Sàn TMĐT &amp; Ánh xạ Mã Sản phẩm Đa Sàn
-            </div>
-            <div className="ui-inline-wrap" style={{ gap: 8 }}>
-              <input
-                aria-label="Tên gian hàng sàn"
-                maxLength={120}
-                value={shopNameInput}
-                onChange={(e) => setShopNameInput(e.target.value)}
-                placeholder="VD: Gian hàng Shopee Chính hãng"
-                style={{ minHeight: 36, minWidth: 260, width: 280, padding: '4px 10px' }}
-              />
-              <select
-                aria-label="Nền tảng sàn TMĐT"
-                value={shopPlatformInput}
-                onChange={(e) => setShopPlatformInput(e.target.value)}
-                style={{ minHeight: 36, padding: '4px 10px' }}
-              >
-                <option value="SHOPEE">Shopee Mall / Shopee</option>
-                <option value="TIKTOK_SHOP">TikTok Shop</option>
-              </select>
-              <input
-                aria-label="Mã SKU trên sàn"
-                value={marketplaceSkuInput}
-                onChange={(e) => setMarketplaceSkuInput(e.target.value)}
-                placeholder="VD: SP-SKU-001"
-                style={{ minHeight: 36, padding: '4px 10px' }}
-              />
-              <input
-                aria-label="Mã sản phẩm nội bộ kho"
-                value={internalSkuInput}
-                onChange={(e) => setInternalSkuInput(e.target.value)}
-                placeholder="VD: SP-NOIBO-001"
-                style={{ minHeight: 36, padding: '4px 10px' }}
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setLiveError('');
-                  setMarketplaceSyncNotice(null);
-                  const resolvedShopName = shopNameInput.trim() || 'Gian hàng Shopee Chính hãng';
-                  const resolvedMarketSku = marketplaceSkuInput.trim() || 'SP-SKU-001';
-                  const resolvedInternalSku = internalSkuInput.trim() || 'SP-NOIBO-001';
-                  void Promise.resolve(
-                    apiClient.post('/api/sales-orders/marketplace-shops/sync-inventory', {
-                      shopName: resolvedShopName,
-                      platform: shopPlatformInput,
-                      marketplaceSku: resolvedMarketSku,
-                      internalProductCode: resolvedInternalSku,
-                      channels: [shopPlatformInput],
-                      safetyBufferPercent: 5,
-                    }),
-                  )
-                    .then(() => {
-                      setMarketplaceSyncNotice(`Đã liên kết gian hàng ${resolvedShopName} (${shopPlatformInput}) & ánh xạ mã ${resolvedMarketSku} → ${resolvedInternalSku}.`);
-                    })
-                    .catch((err: any) => {
-                      setMarketplaceSyncNotice(null);
-                      setLiveError(err?.response?.data?.message || 'Không thể liên kết gian hàng và ánh xạ SKU sàn.');
-                    });
-                }}
-              >
-                Liên kết Gian hàng &amp; Ánh xạ SKU Sàn
-              </button>
-            </div>
-          </div>
-
-          <div className="ui-inline-wrap" style={{ gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => {
-                setLiveError('');
-                setMarketplaceSyncNotice(null);
-                void Promise.resolve(
-                  apiClient.post('/api/sales-orders/marketplace-shops/sync-inventory', {
-                    channels: ['SHOPEE', 'TIKTOK_SHOP'],
-                    safetyBufferPercent: 5,
-                  }),
-                )
-                  .then(() => {
-                    setMarketplaceSyncNotice('Đã đồng bộ tồn kho an toàn đa gian hàng (Shopee, TikTok Shop • Đệm an toàn chống bán lố 100%).');
-                  })
-                  .catch((err: any) => {
-                    setMarketplaceSyncNotice(null);
-                    setLiveError(err?.response?.data?.message || 'Không thể đồng bộ tồn kho an toàn đa gian hàng.');
-                  });
-              }}
-            >
-              Đồng bộ Tồn kho An toàn Đa Gian hàng
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setLiveError('');
-                setCodReconcileNotice(null);
-                void Promise.resolve(
-                  apiClient.post<Record<string, unknown>>('/api/v1/reports/cod-reconciliation/verify', {
-                    reconcileMode: 'THREE_WAY_COD_AND_MARKETPLACE_FEE',
-                  }),
-                )
-                  .then((res) => {
-                    const d = (res?.data ?? {}) as Record<string, unknown>;
-                    const items = Array.isArray(d.items) ? d.items : (Array.isArray(d.ledgers) ? d.ledgers : []);
-                    const discrepancyCount = Number(
-                      d.discrepancyCount ??
-                      d.feeDiscrepancyWarnings ??
-                      d.discrepancyWarningCount ??
-                      ownerFinance.codWarningCount ??
-                      0,
-                    );
-                    const totalCount = Number(d.totalShipments ?? d.totalCount ?? items.length);
-                    const matchedCount = Number(
-                      d.matchedShipments ??
-                      d.matchedCount ??
-                      Math.max(0, totalCount - discrepancyCount),
-                    );
-                    const matchRatePct =
-                      d.matchRatePct !== undefined
-                        ? Number(d.matchRatePct)
-                        : totalCount > 0
-                          ? Math.round((matchedCount * 1000) / totalCount) / 10
-                          : 100;
-                    setCodReconcileNotice(
-                      `Đã đối soát ${matchedCount}/${totalCount} vận đơn (${matchRatePct}%), phát hiện ${discrepancyCount} cảnh báo lệch phí/chậm hoàn.`,
-                    );
-                  })
-                  .catch((err: any) => {
-                    setCodReconcileNotice(null);
-                    setLiveError(err?.response?.data?.message || 'Không thể chạy đối soát 3 chiều tiền thu hộ COD.');
-                  });
-              }}
-            >
-              Chạy Đối soát 3 Chiều Tiền Thu Hộ &amp; Quyết toán Phí Sàn
-            </button>
-          </div>
-
-          {marketplaceSyncNotice && (
-            <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
-              {marketplaceSyncNotice}
-            </div>
-          )}
-          {codReconcileNotice && (
-            <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
-              {codReconcileNotice}
-            </div>
-          )}
-        </div>
-      </UiCard>
+      <DashboardControlTowerPanel
+        demoRuntime={demoRuntime}
+        liveSummary={liveSummary}
+        controlTower={controlTower}
+        showEcommerceDetails={showEcommerceDetails}
+        setShowEcommerceDetails={setShowEcommerceDetails}
+        shopNameInput={shopNameInput}
+        setShopNameInput={setShopNameInput}
+        shopPlatformInput={shopPlatformInput}
+        setShopPlatformInput={setShopPlatformInput}
+        marketplaceSkuInput={marketplaceSkuInput}
+        setMarketplaceSkuInput={setMarketplaceSkuInput}
+        internalSkuInput={internalSkuInput}
+        setInternalSkuInput={setInternalSkuInput}
+        marketplaceSyncNotice={marketplaceSyncNotice}
+        setMarketplaceSyncNotice={setMarketplaceSyncNotice}
+        codReconcileNotice={codReconcileNotice}
+        setCodReconcileNotice={setCodReconcileNotice}
+        ownerFinance={ownerFinance}
+        setLiveError={setLiveError}
+        visibleProductionNavigation={visibleProductionNavigation}
+      />
 
       <div className="dashboard-grid">
         <UiCard title="Tiếp tục công việc">
@@ -784,75 +396,6 @@ const Dashboard = () => {
           </UiCard>
         )}
       </div>
-
-      {!demoRuntime && showEcommerceDetails && (
-        <div className="dashboard-grid">
-          <UiCard title="Trung tâm Điều hành Kho phân tán & Bộ máy Hàng đợi Nhiệm vụ">
-            <div className="ui-inline-wrap" style={{ gap: '6px 14px', fontSize: 12.5, color: '#334155', marginBottom: 8 }}>
-              <span><strong>Kho ổn định:</strong> {`${controlTower?.healthyWarehousesCount ?? 0}/${controlTower?.totalWarehouses ?? (liveSummary?.warehouseCount ?? 0)}`}</span>
-              <span>• <strong>Kho cần chú ý:</strong> {controlTower?.attentionWarehousesCount ?? 0}</span>
-              {(controlTower?.taskEngineQueues ?? [
-                { taskType: 'PUTAWAY', openCount: liveSummary?.openPutawayCount ?? 0, route: '/putaway-tasks' },
-                { taskType: 'PICK', openCount: 0, route: '/picking-tasks' },
-                { taskType: 'PACK', openCount: 0, route: '/packing-sessions' },
-                { taskType: 'STOCKTAKE', openCount: 0, route: '/stocktakes' },
-                { taskType: 'TRANSFER', openCount: liveSummary?.openTransferCount ?? 0, route: '/stock-transfers' },
-                { taskType: 'DOCK_YARD', openCount: 0, route: '/dock-yard' },
-              ]).map((queue) => (
-                <span key={queue.taskType}>
-                  {`• Hàng đợi ${taskTypeLabel(queue.taskType)}: ${queue.openCount}`}
-                </span>
-              ))}
-            </div>
-            {controlTower && controlTower.warehouses.length > 0 && (
-              <UiTableScroll>
-                <table className="ui-table-compact" aria-label="Bảng sức khỏe kho phân tán">
-                  <thead>
-                    <tr>
-                      <th>Kho</th>
-                      <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Tồn thực tế</th>
-                      <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Đã giữ</th>
-                      <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Cất hàng mở</th>
-                      <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Lấy hàng mở</th>
-                      <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Khóa tồn</th>
-                      <th>Trạng thái sức khỏe</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {controlTower.warehouses.map((wh) => (
-                      <tr key={wh.warehouseId}>
-                        <td><strong>{wh.warehouseCode}</strong> — {wh.warehouseName}</td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{wh.onHandQuantity}</td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{wh.reservedQuantity}</td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{wh.openPutawayCount}</td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{wh.openPickingCount}</td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{wh.activeLocksCount}</td>
-                        <td>
-                          <UiBadge tone={wh.healthStatus === 'ATTENTION' ? 'warning' : 'success'}>
-                            {healthStatusLabel(wh.healthStatus)}
-                          </UiBadge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </UiTableScroll>
-            )}
-          </UiCard>
-
-          <UiCard title="Màn hình nghiệp vụ đã kích hoạt">
-            <div className="dashboard-screen-count">{visibleProductionNavigation.length + 1}</div>
-            <div className="dashboard-screen-list" style={{ maxHeight: 220, overflowY: 'auto' }}>
-              {visibleProductionNavigation.map((item) => (
-                <Link key={item.path} to={item.path}>
-                  <span>{item.label}</span>
-                  <small>{item.section}</small>
-                </Link>
-              ))}
-            </div>
-          </UiCard>
-        </div>
-      )}
 
       {demoRuntime && (
         <UiCard title="Trạng thái môi trường">

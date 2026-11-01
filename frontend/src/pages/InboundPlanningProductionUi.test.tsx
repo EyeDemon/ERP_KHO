@@ -33,7 +33,7 @@ describe('Inbound planning production UI',()=>{
   it('renders Purchase Order as read-only with no master-data overfetch',async()=>{
     localStorage.setItem('permissions','["purchase_order.read"]');
     get.mockImplementation(async(url)=>{
-      if(url==='/api/purchase-orders')return {data:[po]} as never;
+      if(url==='/api/v1/purchase-orders')return {data:[po]} as never;
       return {data:[]} as never;
     });
 
@@ -44,16 +44,16 @@ describe('Inbound planning production UI',()=>{
     expect(poCode.closest('tr')?.textContent).toContain('Đang mở');
     expect(view.queryByText('Tạo đơn mua nháp')).toBeNull();
     expect(view.queryByRole('button',{name:'Mở đơn mua'})).toBeNull();
-    expect(get).toHaveBeenCalledWith('/api/purchase-orders',{params:{status:undefined}});
-    expect(get).not.toHaveBeenCalledWith('/api/warehouses');
-    expect(get).not.toHaveBeenCalledWith('/api/products');
-    expect(get).not.toHaveBeenCalledWith('/api/business-partners',expect.anything());
+    expect(get).toHaveBeenCalledWith('/api/v1/purchase-orders',{params:{status:undefined}});
+    expect(get).not.toHaveBeenCalledWith('/api/v1/warehouses');
+    expect(get).not.toHaveBeenCalledWith('/api/v1/products');
+    expect(get).not.toHaveBeenCalledWith('/api/v1/business-partners',expect.anything());
   });
 
   it('renders ASN as read-only and does not expose workflow actions',async()=>{
     localStorage.setItem('permissions','["asn.read"]');
     get.mockImplementation(async(url)=>{
-      if(url==='/api/asns')return {data:[asn]} as never;
+      if(url==='/api/v1/asns')return {data:[asn]} as never;
       return {data:[]} as never;
     });
 
@@ -64,9 +64,9 @@ describe('Inbound planning production UI',()=>{
     expect(asnCode.closest('tr')?.textContent).toContain('Đang vận chuyển');
     expect(view.queryByText('Tạo ASN nháp')).toBeNull();
     expect(view.queryByRole('button',{name:'Ghi nhận đến kho'})).toBeNull();
-    expect(get).toHaveBeenCalledWith('/api/asns',{params:{status:undefined}});
-    expect(get).not.toHaveBeenCalledWith('/api/purchase-orders');
-    expect(get).not.toHaveBeenCalledWith('/api/warehouses');
-    expect(get).not.toHaveBeenCalledWith('/api/products');
+    expect(get).toHaveBeenCalledWith('/api/v1/asns',{params:{status:undefined}});
+    expect(get).not.toHaveBeenCalledWith('/api/v1/purchase-orders');
+    expect(get).not.toHaveBeenCalledWith('/api/v1/warehouses');
+    expect(get).not.toHaveBeenCalledWith('/api/v1/products');
   });
 });

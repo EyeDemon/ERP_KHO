@@ -26,8 +26,8 @@ public sealed record ConfirmCancelPutbackRequest(
 [ApiController, Route("api/sales-orders"), Route("api/v1/sales-orders"), Authorize]
 public sealed class SalesOrdersController(
     ISalesOrderBackorderService service,
-    ISalesOrderOperationsService salesOrderOps = null!,
-    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
+    ISalesOrderOperationsService salesOrderOps,
+    IWarehouseAuthorizationService warehouseAccess) : ControllerBase
 {
     public sealed record SplitFulfillmentPlanItemDto(
         int ProductId, string ProductCode, string ProductName, decimal RequestedQty, int AllocatedWarehouseId,
@@ -86,14 +86,13 @@ public sealed class SalesOrdersController(
 
     [HttpPost("expedite-backorder")]
     [IdempotentCommand("SalesOrder.ExpediteBackorder")]
-    [PermissionAuthorize(AppPermissions.SalesOrderRead)]
+    [PermissionAuthorize(AppPermissions.SalesOrderRelease, AppPermissions.BackorderManage, AppPermissions.SalesOrderCreate)]
     public async Task<IActionResult> ExpediteBackorder(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ExpediteBackorderRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (!this.HasActionPermission(null, AppPermissions.SalesOrderRelease, AppPermissions.BackorderManage, AppPermissions.SalesOrderCreate)) return Forbid();
         var orders = (await service.ListSalesOrdersAsync(request?.WarehouseId, null, cancellationToken)) ?? [];
-        if (salesOrderOps == null) return ForbidOrStatusCode503();
         return (await salesOrderOps.ExpediteBackorderAsync(
             request, orders, GetCurrentUserId(), warehouseAccess, cancellationToken)).ToActionResult(this);
     }
@@ -101,23 +100,19 @@ public sealed class SalesOrdersController(
     [HttpGet("{id}/split-fulfillment-preview")]
     [HttpPost("{id}/split-fulfillment-preview")]
     [HttpPost("split-fulfillment-preview")]
-    [PermissionAuthorize(AppPermissions.SalesOrderRead)]
+    [PermissionAuthorize(AppPermissions.SalesOrderRead, AppPermissions.SalesOrderUpdate)]
     public async Task<IActionResult> SplitFulfillmentPreview(
-        [FromRoute] string? id = null, [FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
-    {
-        if (salesOrderOps == null)
-            return Ok(new { salesOrderId = 0, orderCode = id ?? "SO-PREVIEW", warehouseId = warehouseId ?? 1, canFulfillSingleWarehouse = true, splitShipmentCount = 1, splitFulfillmentPlan = Array.Empty<SplitFulfillmentPlanItemDto>(), items = Array.Empty<SplitFulfillmentPlanItemDto>() });
-        return (await salesOrderOps.SplitFulfillmentPreviewAsync(id, warehouseId, warehouseAccess, cancellationToken)).ToActionResult(this);
-    }
+        [FromRoute] string? id = null, [FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default) =>
+        (await salesOrderOps.SplitFulfillmentPreviewAsync(id, warehouseId, warehouseAccess, cancellationToken)).ToActionResult(this);
 
     [HttpPost("evaluate-atp-routing")]
-    [PermissionAuthorize(AppPermissions.SalesOrderRead)]
+    [PermissionAuthorize(AppPermissions.SalesOrderRelease, AppPermissions.SalesOrderCreate)]
     public async Task<IActionResult> EvaluateAtpRouting(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] EvaluateAtpRoutingRequest? request = null,
         CancellationToken cancellationToken = default)
     {
+        if (!this.HasActionPermission(null, AppPermissions.SalesOrderRelease, AppPermissions.SalesOrderCreate)) return Forbid();
         var orders = (await service.ListSalesOrdersAsync(request?.WarehouseId, null, cancellationToken)) ?? [];
-        if (salesOrderOps == null) return ForbidOrStatusCode503();
         return (await salesOrderOps.EvaluateAtpRoutingAsync(request, orders, warehouseAccess, cancellationToken)).ToActionResult(this);
     }
 
@@ -186,23 +181,17 @@ public sealed class SalesOrdersController(
     public async Task<IActionResult> ConfirmCancelPutback(
         int id,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ConfirmCancelPutbackRequest? request = null,
-        CancellationToken cancellationToken = default)
-    {
-        if (salesOrderOps == null) return Ok(await service.GetSalesOrderAsync(id, cancellationToken));
-        return (await salesOrderOps.ConfirmCancelPutbackAsync(
+        CancellationToken cancellationToken = default) =>
+        (await salesOrderOps.ConfirmCancelPutbackAsync(
             id, request, GetCurrentUserId(), service, warehouseAccess, cancellationToken)).ToActionResult(this);
-    }
 
     [HttpGet("~/api/v1/marketplace-shops")]
     [HttpGet("~/api/marketplace-shops")]
     [HttpGet("marketplace-shops")]
     [PermissionAuthorize(AppPermissions.SalesOrderRead)]
     public async Task<IActionResult> GetMarketplaceShops(
-        [FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
-    {
-        if (salesOrderOps == null) return Ok(new { items = Array.Empty<object>(), totalCount = 0 });
-        return (await salesOrderOps.GetMarketplaceShopsAsync(warehouseId, warehouseAccess, cancellationToken)).ToActionResult(this);
-    }
+        [FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default) =>
+        (await salesOrderOps.GetMarketplaceShopsAsync(warehouseId, warehouseAccess, cancellationToken)).ToActionResult(this);
 
     [HttpPost("~/api/v1/marketplace-shops")]
     [HttpPost("~/api/marketplace-shops")]
@@ -214,8 +203,7 @@ public sealed class SalesOrdersController(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ConnectMarketplaceShopRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (salesOrderOps == null) return ForbidOrStatusCode503();
+        if (!this.HasActionPermission(null, AppPermissions.SalesOrderCreate)) return Forbid();
         return (await salesOrderOps.ConnectMarketplaceShopAsync(request, warehouseAccess, cancellationToken)).ToActionResult(this);
     }
 
@@ -228,8 +216,7 @@ public sealed class SalesOrdersController(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] MarketplaceOAuthExchangeRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (salesOrderOps == null) return ForbidOrStatusCode503();
+        if (!this.HasActionPermission(null, AppPermissions.SalesOrderCreate)) return Forbid();
         return (await salesOrderOps.ExchangeMarketplaceOAuthAsync(request, warehouseAccess, cancellationToken)).ToActionResult(this);
     }
 
@@ -240,8 +227,7 @@ public sealed class SalesOrdersController(
     [IdempotentCommand("MarketplaceShop.OAuthRefresh")]
     public async Task<IActionResult> RefreshMarketplaceOAuthToken(int shopId, CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (salesOrderOps == null) return ForbidOrStatusCode503();
+        if (!this.HasActionPermission(null, AppPermissions.SalesOrderCreate)) return Forbid();
         return (await salesOrderOps.RefreshMarketplaceOAuthTokenAsync(shopId, warehouseAccess, cancellationToken)).ToActionResult(this);
     }
 
@@ -252,21 +238,20 @@ public sealed class SalesOrdersController(
     [HttpPost("~/api/v1/integrations/marketplace/sync-inventory")]
     [HttpPost("~/api/Reports/sync-marketplace-stock")]
     [HttpPost("~/api/v1/reports/sync-marketplace-stock")]
-    [PermissionAuthorize(AppPermissions.SalesOrderRead)]
+    [PermissionAuthorize(AppPermissions.SalesOrderCreate, AppPermissions.SalesOrderRelease)]
     [IdempotentCommand("MarketplaceShop.SyncInventory")]
     public async Task<IActionResult> SyncMarketplaceInventory(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] SyncMarketplaceInventoryRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (salesOrderOps == null) return Ok(new { syncedCount = 0, items = Array.Empty<object>() });
+        if (!this.HasActionPermission(null, AppPermissions.SalesOrderCreate, AppPermissions.SalesOrderRelease)) return Forbid();
         return (await salesOrderOps.SyncMarketplaceInventoryAsync(request, warehouseAccess, cancellationToken)).ToActionResult(this);
     }
 
     [HttpPost("marketplace-shops/{shopId:int}/sync-inventory")]
     [HttpPost("~/api/v1/marketplace-shops/{shopId:int}/sync-inventory")]
     [HttpPost("~/api/marketplace-shops/{shopId:int}/sync-inventory")]
-    [PermissionAuthorize(AppPermissions.SalesOrderRead)]
+    [PermissionAuthorize(AppPermissions.SalesOrderCreate, AppPermissions.SalesOrderRelease)]
     [IdempotentCommand("MarketplaceShop.SyncInventoryByShop")]
     public Task<IActionResult> SyncMarketplaceInventoryByShop(
         int shopId,
@@ -285,8 +270,7 @@ public sealed class SalesOrdersController(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] BuyerCancellationWebhookRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (salesOrderOps == null) return Ok(new { decision = "ACCEPT", accepted = true });
+        if (!this.HasActionPermission(null, AppPermissions.SalesOrderCancel)) return Forbid();
         var hdrSig = Request?.Headers["X-Marketplace-Signature"].FirstOrDefault()
             ?? Request?.Headers["X-Shopee-Signature"].FirstOrDefault()
             ?? Request?.Headers["X-TikTok-Signature"].FirstOrDefault();
@@ -315,12 +299,8 @@ public sealed class SalesOrdersController(
     [HttpGet("~/api/v1/promotions/gift-rules"), HttpGet("promotions/gift-rules"), HttpGet("promotion-gift-rules")]
     [PermissionAuthorize(AppPermissions.SalesOrderRead)]
     public async Task<IActionResult> GetPromotionGiftRules(
-        [FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
-    {
-        if (salesOrderOps == null)
-            return Ok(new { warehouseId, totalCount = 0, items = Array.Empty<object>(), rules = Array.Empty<object>() });
-        return (await salesOrderOps.GetPromotionGiftRulesAsync(warehouseId, cancellationToken)).ToActionResult(this);
-    }
+        [FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default) =>
+        (await salesOrderOps.GetPromotionGiftRulesAsync(warehouseId, cancellationToken)).ToActionResult(this);
 
     [HttpPost("~/api/v1/promotions/gift-rules"), HttpPost("promotions/gift-rules"), HttpPost("promotion-gift-rules")]
     [PermissionAuthorize(AppPermissions.SalesOrderCreate), IdempotentCommand("PromotionGiftRule.Create")]
@@ -328,24 +308,22 @@ public sealed class SalesOrdersController(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CreatePromotionGiftRuleRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (salesOrderOps == null) return ForbidOrStatusCode503();
+        if (!this.HasActionPermission(null, AppPermissions.SalesOrderCreate)) return Forbid();
         return (await salesOrderOps.CreatePromotionGiftRuleAsync(request, cancellationToken)).ToActionResult(this);
     }
 
     [HttpPost("~/api/v1/promotions/gift-rules/evaluate"), HttpPost("promotions/gift-rules/evaluate"), HttpPost("promotion-gift-rules/evaluate")]
-    [PermissionAuthorize(AppPermissions.SalesOrderRead), IdempotentCommand("PromotionGiftRule.Evaluate")]
+    [PermissionAuthorize(AppPermissions.SalesOrderCreate, AppPermissions.SalesOrderRelease), IdempotentCommand("PromotionGiftRule.Evaluate")]
     public async Task<IActionResult> EvaluatePromotionGiftRules(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] EvaluateGiftRulesRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (salesOrderOps == null) return ForbidOrStatusCode503();
+        if (!this.HasActionPermission(null, AppPermissions.SalesOrderCreate, AppPermissions.SalesOrderRelease)) return Forbid();
         return (await salesOrderOps.EvaluatePromotionGiftRulesAsync(request, warehouseAccess, cancellationToken)).ToActionResult(this);
     }
 
     [HttpPost("{id:int}/evaluate-promotion-gifts")]
-    [PermissionAuthorize(AppPermissions.SalesOrderRead), IdempotentCommand("PromotionGiftRule.EvaluateByOrder")]
+    [PermissionAuthorize(AppPermissions.SalesOrderCreate, AppPermissions.SalesOrderRelease), IdempotentCommand("PromotionGiftRule.EvaluateByOrder")]
     public Task<IActionResult> EvaluatePromotionGiftRulesByOrder(
         int id,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] EvaluateGiftRulesRequest? request = null,
@@ -361,8 +339,7 @@ public sealed class SalesOrdersController(
         CancellationToken cancellationToken = default,
         [ModelBinder(BinderType = typeof(FlexibleFormFileModelBinder))] Microsoft.AspNetCore.Http.IFormFile? file = null)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (salesOrderOps == null) return Ok(new { importedCount = 0, skippedDuplicatesCount = 0 });
+        if (!this.HasActionPermission(null, AppPermissions.SalesOrderCreate)) return Forbid();
 
         var uploadedFile = file ?? (Request?.HasFormContentType == true && Request.Form.Files.Count > 0 ? Request.Form.Files[0] : null);
         var parsedFileRows = WmsControllerExcelHelper.ParseMarketplaceOrdersExcel(uploadedFile);
@@ -375,7 +352,4 @@ public sealed class SalesOrdersController(
 
     private int? GetCurrentUserId() =>
         int.TryParse(User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value, out var userId) ? userId : null;
-
-    private ObjectResult ForbidOrStatusCode503() =>
-        StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." });
 }

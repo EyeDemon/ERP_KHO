@@ -17,20 +17,28 @@ namespace ERP.Api.Controllers
     public class InventoryReconciliationController : ControllerBase
     {
         private readonly IInventoryReconciliationQueryService _queryService;
-        private readonly IWmsGovernanceOperationsService? _govOps;
-        private readonly IWarehouseAuthorizationService? _warehouseAccess;
-        private readonly IStockReservationService? _reservationService;
+        private readonly IWmsGovernanceOperationsService _govOps;
+        private readonly IWarehouseAuthorizationService _warehouseAccess;
+        private readonly IStockReservationService _reservationService;
+        private readonly ICurrentUser _currentUser;
 
         public InventoryReconciliationController(
             IInventoryReconciliationQueryService queryService,
-            IWmsGovernanceOperationsService govOps = null!,
-            IWarehouseAuthorizationService warehouseAccess = null!,
-            IStockReservationService reservationService = null!)
+            IWmsGovernanceOperationsService govOps,
+            IWarehouseAuthorizationService warehouseAccess,
+            IStockReservationService reservationService,
+            ICurrentUser currentUser)
         {
+            System.ArgumentNullException.ThrowIfNull(queryService);
+            System.ArgumentNullException.ThrowIfNull(govOps);
+            System.ArgumentNullException.ThrowIfNull(warehouseAccess);
+            System.ArgumentNullException.ThrowIfNull(reservationService);
+            System.ArgumentNullException.ThrowIfNull(currentUser);
             _queryService = queryService;
             _govOps = govOps;
             _warehouseAccess = warehouseAccess;
             _reservationService = reservationService;
+            _currentUser = currentUser;
         }
 
         public sealed record RebuildBalancesRequest(int? WarehouseId = null, int? ProductId = null);
@@ -39,30 +47,22 @@ namespace ERP.Api.Controllers
         [HttpPost("rebuild-stocks")]
         [HttpPost("~/api/inventory/reconciliation/rebuild-stocks")]
         [HttpPost("~/api/v1/inventory/reconciliation/rebuild-stocks")]
-        [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
+        [PermissionAuthorize(AppPermissions.InventoryMovementCreate, AppPermissions.InventoryReversalCreate)]
         public async Task<IActionResult> RebuildBalances(
             [FromQuery] int? warehouseId = null,
             [FromQuery] int? productId = null,
             [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] RebuildBalancesRequest? request = null,
             CancellationToken cancellationToken = default)
         {
-            if (User?.IsInRole(AppRoles.Viewer) == true)
+            if (!this.HasActionPermission(_currentUser, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryReversalCreate))
                 return Forbid();
 
             var effectiveWarehouseId = warehouseId ?? request?.WarehouseId;
             var effectiveProductId = productId ?? request?.ProductId;
-            if (effectiveWarehouseId.HasValue && _warehouseAccess != null)
+            if (effectiveWarehouseId.HasValue)
                 await _warehouseAccess.EnsureWarehouseCommandAccessAsync(effectiveWarehouseId.Value, cancellationToken);
 
-            var rebuiltBucketsCount = 0;
-            if (_reservationService != null)
-            {
-                rebuiltBucketsCount = await _reservationService.RebuildBalancesAsync(effectiveWarehouseId, effectiveProductId, cancellationToken);
-            }
-            else if (_govOps != null)
-            {
-                rebuiltBucketsCount = await _govOps.CountInventoryStocksAsync(effectiveWarehouseId, effectiveProductId, cancellationToken);
-            }
+            var rebuiltBucketsCount = await _reservationService.RebuildBalancesAsync(effectiveWarehouseId, effectiveProductId, cancellationToken);
 
             return Ok(new
             {
@@ -82,13 +82,8 @@ namespace ERP.Api.Controllers
             [FromQuery] int? productId = null,
             CancellationToken cancellationToken = default)
         {
-            if (warehouseId.HasValue && _warehouseAccess != null)
+            if (warehouseId.HasValue)
                 await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
-
-            if (_govOps == null)
-            {
-                return Ok(new { items = System.Array.Empty<object>(), totalValuation = 0m });
-            }
 
             var outcome = await _govOps.GetInventoryValuationAsync(warehouseId, productId, cancellationToken);
             return outcome.ToActionResult(this);
@@ -269,13 +264,13 @@ namespace ERP.Api.Controllers
         [HttpPost("outbox-messages/dispatch")]
         [HttpPost("outbox-messages/dispatch-pending")]
         [ERP.Api.Infrastructure.IdempotentCommand("InventoryReconciliation.DispatchOutbox")]
-        [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
+        [PermissionAuthorize(AppPermissions.InventoryMovementCreate, AppPermissions.InventoryReversalCreate)]
         public async Task<IActionResult> DispatchPendingOutboxMessages(
             [FromQuery] int? warehouseId = null,
             [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] DispatchOutboxRequest? request = null,
             CancellationToken cancellationToken = default)
         {
-            if (User?.IsInRole(AppRoles.Viewer) == true)
+            if (!this.HasActionPermission(_currentUser, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryReversalCreate))
                 return Forbid();
 
             var effectiveWarehouseId = warehouseId ?? request?.WarehouseId;
@@ -312,13 +307,13 @@ namespace ERP.Api.Controllers
         [HttpPost("verify-site-readiness")]
         [HttpPost("export-gl-journal")]
         [HttpPost("export-erp-gl-journal")]
-        [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
+        [PermissionAuthorize(AppPermissions.InventoryMovementCreate, AppPermissions.InventoryReversalCreate)]
         public async Task<IActionResult> VerifySiteReadiness(
             [FromQuery] int? warehouseId = null,
             [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifySiteReadinessRequest? body = null,
             CancellationToken cancellationToken = default)
         {
-            if (User?.IsInRole(AppRoles.Viewer) == true)
+            if (!this.HasActionPermission(_currentUser, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryReversalCreate))
                 return Forbid();
 
             var effectiveWarehouseId = warehouseId ?? body?.WarehouseId;

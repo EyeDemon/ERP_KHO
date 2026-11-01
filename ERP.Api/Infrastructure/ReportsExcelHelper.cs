@@ -12,11 +12,11 @@ public static class ReportsExcelHelper
 {
     public static async Task<IActionResult> ExecuteReportOpAsync(
         ControllerBase controller,
-        IReportOperationsService? ops,
-        Func<IReportOperationsService, Task<WmsEndpointOutcome>> invokeOp,
-        Func<Task<WmsEndpointOutcome>> invokeFallback)
+        IReportOperationsService ops,
+        Func<IReportOperationsService, Task<WmsEndpointOutcome>> invokeOp)
     {
-        var outcome = ops != null ? await invokeOp(ops) : await invokeFallback();
+        ArgumentNullException.ThrowIfNull(ops);
+        var outcome = await invokeOp(ops);
         return controller.ToActionResult(outcome);
     }
 
@@ -185,6 +185,89 @@ public static class ReportsExcelHelper
         }
 
         worksheet.Columns().AdjustToContents();
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
+
+    public static byte[] BuildStockCardS12DnExcel(StockCardS12DnReportDto card)
+    {
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Thẻ kho S12-DN");
+
+        ws.Cell(1, 1).Value = "Đơn vị: Hệ thống Quản trị Kho ERP_KHO";
+        ws.Cell(2, 1).Value = $"Kho: {card.WarehouseName} ({card.WarehouseCode})";
+        ws.Cell(1, 8).Value = card.FormCode;
+        ws.Cell(2, 8).Value = card.CircularReference;
+        ws.Range("H1:J1").Merge().Style.Font.Bold = true;
+        ws.Range("H2:J2").Merge().Style.Font.Italic = true;
+
+        ws.Cell(4, 1).Value = card.ReportTitle;
+        ws.Range("A4:J4").Merge();
+        ws.Cell(4, 1).Style.Font.Bold = true;
+        ws.Cell(4, 1).Style.Font.FontSize = 14;
+        ws.Cell(4, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        ws.Cell(5, 1).Value = $"Tên, nhãn hiệu, quy cách vật tư, hàng hóa: {card.ProductName} | Mã số (SKU): {card.ProductCode} | Đơn vị tính: {card.UnitName}";
+        ws.Range("A5:J5").Merge();
+        if (!string.IsNullOrWhiteSpace(card.LotNumber))
+        {
+            ws.Cell(6, 1).Value = $"Số lô (Lot): {card.LotNumber}";
+            ws.Range("A6:J6").Merge();
+        }
+
+        const int headerRow = 8;
+        ws.Cell(headerRow, 1).Value = "STT";
+        ws.Cell(headerRow, 2).Value = "Ngày tháng ghi sổ";
+        ws.Cell(headerRow, 3).Value = "Số hiệu chứng từ Nhập";
+        ws.Cell(headerRow, 4).Value = "Số hiệu chứng từ Xuất";
+        ws.Cell(headerRow, 5).Value = "Ngày tháng chứng từ";
+        ws.Cell(headerRow, 6).Value = "Diễn giải";
+        ws.Cell(headerRow, 7).Value = "Số lượng Nhập";
+        ws.Cell(headerRow, 8).Value = "Số lượng Xuất";
+        ws.Cell(headerRow, 9).Value = "Số lượng Tồn";
+        ws.Cell(headerRow, 10).Value = "Ký xác nhận của Kế toán";
+        ws.Range($"A{headerRow}:J{headerRow}").Style.Font.Bold = true;
+
+        var row = headerRow + 1;
+        ws.Cell(row, 6).Value = "Số dư đầu kỳ";
+        ws.Cell(row, 6).Style.Font.Bold = true;
+        ws.Cell(row, 9).Value = card.OpeningBalance;
+        ws.Cell(row, 9).Style.Font.Bold = true;
+        ws.Cell(row, 9).Style.NumberFormat.Format = "#,##0.0000";
+        row++;
+
+        foreach (var item in card.Rows)
+        {
+            ws.Cell(row, 1).Value = item.LineNumber;
+            ws.Cell(row, 2).Value = item.EntryDate.ToString("dd/MM/yyyy HH:mm");
+            ws.Cell(row, 3).Value = item.InboundVoucherCode;
+            ws.Cell(row, 4).Value = item.OutboundVoucherCode;
+            ws.Cell(row, 5).Value = item.VoucherDate.ToString("dd/MM/yyyy HH:mm");
+            ws.Cell(row, 6).Value = item.Description;
+            ws.Cell(row, 7).Value = item.InboundQty;
+            ws.Cell(row, 8).Value = item.OutboundQty;
+            ws.Cell(row, 9).Value = item.RunningBalance;
+            ws.Cell(row, 10).Value = item.SignatureConfirmation;
+            ws.Range($"G{row}:I{row}").Style.NumberFormat.Format = "#,##0.0000";
+            row++;
+        }
+
+        ws.Cell(row, 6).Value = "Cộng phát sinh trong kỳ & Số dư cuối kỳ";
+        ws.Cell(row, 6).Style.Font.Bold = true;
+        ws.Cell(row, 7).Value = card.TotalInbound;
+        ws.Cell(row, 8).Value = card.TotalOutbound;
+        ws.Cell(row, 9).Value = card.ClosingBalance;
+        ws.Range($"G{row}:I{row}").Style.Font.Bold = true;
+        ws.Range($"G{row}:I{row}").Style.NumberFormat.Format = "#,##0.0000";
+
+        var sigRow = row + 2;
+        ws.Cell(sigRow, 2).Value = "Người lập biểu";
+        ws.Cell(sigRow, 6).Value = "Thủ kho";
+        ws.Cell(sigRow, 9).Value = "Kế toán trưởng";
+        ws.Range($"A{sigRow}:J{sigRow}").Style.Font.Bold = true;
+
+        ws.Columns().AdjustToContents();
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         return stream.ToArray();

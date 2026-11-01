@@ -48,87 +48,117 @@ public sealed class ThreePlDailySnapshotJob(
             return 0;
         }
 
-        db.UseTenant(1);
+        var activeTenantIds = await db.Warehouses
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(w => w.IsActive && w.TenantId > 0)
+            .Select(w => w.TenantId)
+            .Distinct()
+            .OrderBy(t => t)
+            .ToListAsync(cancellationToken);
+
+        if (activeTenantIds.Count == 0)
+        {
+            activeTenantIds.Add(1);
+        }
+
         var now = DateTime.UtcNow;
         var today = now.Date;
         var snapshotCode = $"3PL-SNAP-{now:yyyyMMdd}";
-
-        var stocks = await db.InventoryStocks
-            .AsNoTracking()
-            .Include(x => x.Product)
-            .Where(x => x.Quantity > 0m)
-            .ToListAsync(cancellationToken);
-
-        if (stocks.Count == 0)
-        {
-            return 0;
-        }
-
-        var existingToday = await db.ThreePlStorageSnapshots
-            .Where(s => s.SnapshotDateUtc == today)
-            .ToListAsync(cancellationToken);
-
-        var grouped = stocks
-            .GroupBy(x => new { x.WarehouseId, x.OwnerId })
-            .ToList();
-
+        var originalTenantId = db.CurrentTenantId > 0 ? db.CurrentTenantId : 1;
         var upserted = 0;
-        foreach (var g in grouped)
+
+        try
         {
-            var distinctSkuCount = g.Select(x => x.ProductId).Distinct().Count();
-            var occupiedBinCount = g.Where(x => x.LocationId.HasValue).Select(x => x.LocationId!.Value).Distinct().Count();
-            var ownerOnHandQty = g.Sum(x => x.Quantity);
-            var ownerVolumeCbm = Math.Round(
-                g.Sum(x => x.Quantity * (x.Product?.UnitVolumeM3 is > 0m ? x.Product.UnitVolumeM3.Value : 0.002m)),
-                3);
-            var palletEquivalentCount = Math.Max(1m, Math.Round(ownerVolumeCbm / 1.2m, 2));
-            const decimal dailyPalletRateVnd = 18000m;
-            const decimal dailyCbmRateVnd = 15000m;
-            const decimal dailyBinRateVnd = 5000m;
-            var estimatedDailyStorageFeeVnd = Math.Round((palletEquivalentCount * dailyPalletRateVnd) + (occupiedBinCount * dailyBinRateVnd), 0);
-            var estimatedMonthlyStorageFeeVnd = estimatedDailyStorageFeeVnd * 30m;
-
-            var existing = existingToday.FirstOrDefault(s => s.WarehouseId == g.Key.WarehouseId && s.OwnerId == g.Key.OwnerId);
-            if (existing == null)
+            foreach (var tenantId in activeTenantIds)
             {
-                db.ThreePlStorageSnapshots.Add(new ThreePlStorageSnapshot
+                db.UseTenant(tenantId);
+
+                var stocks = await db.InventoryStocks
+                    .AsNoTracking()
+                    .Include(x => x.Product)
+                    .Where(x => x.TenantId == tenantId && x.Quantity > 0m)
+                    .ToListAsync(cancellationToken);
+
+                if (stocks.Count == 0)
                 {
-                    TenantId = 1,
-                    WarehouseId = g.Key.WarehouseId,
-                    OwnerId = g.Key.OwnerId,
-                    OwnerCode = g.Key.OwnerId.HasValue ? $"OWN-{g.Key.OwnerId.Value}" : "OWN-DEFAULT",
-                    OwnerName = "Chủ hàng 3PL",
-                    SnapshotCode = snapshotCode,
-                    SnapshotDateUtc = today,
-                    DistinctSkuCount = distinctSkuCount,
-                    OccupiedBinCount = occupiedBinCount,
-                    TotalOnHandQty = ownerOnHandQty,
-                    TotalVolumeCbm = ownerVolumeCbm,
-                    PalletEquivalentCount = palletEquivalentCount,
-                    DailyPalletRateVnd = dailyPalletRateVnd,
-                    DailyCbmRateVnd = dailyCbmRateVnd,
-                    DailyBinRateVnd = dailyBinRateVnd,
-                    EstimatedDailyStorageFeeVnd = estimatedDailyStorageFeeVnd,
-                    EstimatedMonthlyStorageFeeVnd = estimatedMonthlyStorageFeeVnd,
-                    CapturedAtUtc = now
-                });
-            }
-            else
-            {
-                existing.DistinctSkuCount = distinctSkuCount;
-                existing.OccupiedBinCount = occupiedBinCount;
-                existing.TotalOnHandQty = ownerOnHandQty;
-                existing.TotalVolumeCbm = ownerVolumeCbm;
-                existing.PalletEquivalentCount = palletEquivalentCount;
-                existing.EstimatedDailyStorageFeeVnd = estimatedDailyStorageFeeVnd;
-                existing.EstimatedMonthlyStorageFeeVnd = estimatedMonthlyStorageFeeVnd;
-                existing.CapturedAtUtc = now;
+                    continue;
+                }
+
+                var existingToday = await db.ThreePlStorageSnapshots
+                    .Where(s => s.TenantId == tenantId && s.SnapshotDateUtc == today)
+                    .ToListAsync(cancellationToken);
+
+                var grouped = stocks
+                    .GroupBy(x => new { x.WarehouseId, x.OwnerId })
+                    .ToList();
+
+                foreach (var g in grouped)
+                {
+                    var distinctSkuCount = g.Select(x => x.ProductId).Distinct().Count();
+                    var occupiedBinCount = g.Where(x => x.LocationId.HasValue).Select(x => x.LocationId!.Value).Distinct().Count();
+                    var ownerOnHandQty = g.Sum(x => x.Quantity);
+                    var ownerVolumeCbm = Math.Round(
+                        g.Sum(x => x.Quantity * (x.Product?.UnitVolumeM3 is > 0m ? x.Product.UnitVolumeM3.Value : 0.002m)),
+                        3);
+                    var palletEquivalentCount = Math.Max(1m, Math.Round(ownerVolumeCbm / 1.2m, 2));
+                    const decimal dailyPalletRateVnd = 18000m;
+                    const decimal dailyCbmRateVnd = 15000m;
+                    const decimal dailyBinRateVnd = 5000m;
+                    var estimatedDailyStorageFeeVnd = Math.Round((palletEquivalentCount * dailyPalletRateVnd) + (occupiedBinCount * dailyBinRateVnd), 0);
+                    var estimatedMonthlyStorageFeeVnd = estimatedDailyStorageFeeVnd * 30m;
+
+                    var existing = existingToday.FirstOrDefault(s => s.WarehouseId == g.Key.WarehouseId && s.OwnerId == g.Key.OwnerId);
+                    if (existing == null)
+                    {
+                        db.ThreePlStorageSnapshots.Add(new ThreePlStorageSnapshot
+                        {
+                            TenantId = tenantId,
+                            WarehouseId = g.Key.WarehouseId,
+                            OwnerId = g.Key.OwnerId,
+                            OwnerCode = g.Key.OwnerId.HasValue ? $"OWN-{g.Key.OwnerId.Value}" : "OWN-DEFAULT",
+                            OwnerName = "Chủ hàng 3PL",
+                            SnapshotCode = snapshotCode,
+                            SnapshotDateUtc = today,
+                            DistinctSkuCount = distinctSkuCount,
+                            OccupiedBinCount = occupiedBinCount,
+                            TotalOnHandQty = ownerOnHandQty,
+                            TotalVolumeCbm = ownerVolumeCbm,
+                            PalletEquivalentCount = palletEquivalentCount,
+                            DailyPalletRateVnd = dailyPalletRateVnd,
+                            DailyCbmRateVnd = dailyCbmRateVnd,
+                            DailyBinRateVnd = dailyBinRateVnd,
+                            EstimatedDailyStorageFeeVnd = estimatedDailyStorageFeeVnd,
+                            EstimatedMonthlyStorageFeeVnd = estimatedMonthlyStorageFeeVnd,
+                            CapturedAtUtc = now
+                        });
+                    }
+                    else
+                    {
+                        existing.DistinctSkuCount = distinctSkuCount;
+                        existing.OccupiedBinCount = occupiedBinCount;
+                        existing.TotalOnHandQty = ownerOnHandQty;
+                        existing.TotalVolumeCbm = ownerVolumeCbm;
+                        existing.PalletEquivalentCount = palletEquivalentCount;
+                        existing.EstimatedDailyStorageFeeVnd = estimatedDailyStorageFeeVnd;
+                        existing.EstimatedMonthlyStorageFeeVnd = estimatedMonthlyStorageFeeVnd;
+                        existing.CapturedAtUtc = now;
+                    }
+
+                    upserted++;
+                }
             }
 
-            upserted++;
+            if (upserted > 0)
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+        }
+        finally
+        {
+            db.UseTenant(originalTenantId);
         }
 
-        await db.SaveChangesAsync(cancellationToken);
         return upserted;
     }
 }

@@ -45,8 +45,9 @@ public sealed record DispatchCrossdockRequest(
 [Route("api/v1/dock-yard")]
 public sealed class DockYardController(
     IDockYardService service,
-    IWmsGovernanceOperationsService govOps = null!,
-    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
+    IWmsGovernanceOperationsService govOps,
+    IWarehouseAuthorizationService warehouseAccess,
+    ICurrentUser currentUser) : ControllerBase
 {
     [HttpGet("warehouses")]
     [PermissionAuthorize(AppPermissions.DockAppointmentRead)]
@@ -156,87 +157,51 @@ public sealed class DockYardController(
     }
 
     [HttpPost("dispatch-crossdock")]
-    [PermissionAuthorize(AppPermissions.DockAppointmentRead)]
+    [PermissionAuthorize(AppPermissions.DockAppointmentManage)]
     public async Task<IActionResult> DispatchCrossdock(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] DispatchCrossdockRequest? request = null,
         CancellationToken token = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(currentUser, AppPermissions.DockAppointmentManage))
             return Forbid();
 
         var warehouseId = request?.WarehouseId;
         var targetWarehouseId = warehouseId ?? 1;
-        if (warehouseAccess != null)
+        if (warehouseId.HasValue)
         {
-            if (warehouseId.HasValue)
-            {
-                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, token);
-            }
-            else
-            {
-                var accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(token);
-                if (accessibleIds.Count == 0)
-                    return Forbid();
-                targetWarehouseId = accessibleIds[0];
-            }
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, token);
+        }
+        else
+        {
+            var accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(token);
+            if (accessibleIds.Count == 0)
+                return Forbid();
+            targetWarehouseId = accessibleIds[0];
         }
 
-        if (govOps != null)
-        {
-            var actorUserId = int.TryParse(
-                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
-                out var uid) ? uid : (int?)null;
+        var actorUserId = int.TryParse(
+            User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+            out var uid) ? uid : (int?)null;
 
-            var outcome = await govOps.DispatchCrossdockAsync(
-                new WmsDispatchCrossdockInput(
-                    targetWarehouseId,
-                    request?.DockDoorCode,
-                    request?.InboundAppointmentCode,
-                    request?.OutboundReferenceCode,
-                    request?.ProductId,
-                    request?.ProductCode,
-                    request?.SourceLocationId,
-                    request?.SourceLocationCode,
-                    request?.TargetLocationId,
-                    request?.TargetLocationCode,
-                    request?.FromLocationCode,
-                    request?.ToLocationCode,
-                    request?.Quantity,
-                    request?.ExecuteStockMutation ?? false,
-                    actorUserId),
-                token);
-            return outcome.ToActionResult(this);
-        }
-
-        var inboundAppointmentCode = string.IsNullOrWhiteSpace(request?.InboundAppointmentCode)
-            ? $"APPT-IN-{targetWarehouseId:D2}"
-            : request.InboundAppointmentCode.Trim();
-        var outboundReferenceCode = string.IsNullOrWhiteSpace(request?.OutboundReferenceCode)
-            ? $"SO-XD-{targetWarehouseId:D2}"
-            : request.OutboundReferenceCode.Trim();
-        var now = DateTime.UtcNow;
-
-        return Ok(new
-        {
-            dispatchId = $"XDOCK-{now:yyyyMMdd-HHmm}",
-            warehouseId = targetWarehouseId,
-            dockDoorCode = string.IsNullOrWhiteSpace(request?.DockDoorCode) ? "DOCK-XD-01" : request.DockDoorCode.Trim(),
-            stagedHuCount = 4,
-            inboundAppointmentCode,
-            outboundReferenceCode,
-            dispatchStatus = "Đã phát lệnh điều phối trung chuyển thẳng",
-            priorityLabel = "Ưu tiên cao",
-            status = "Đã phát lệnh điều phối trung chuyển thẳng",
-            statusLabel = "Đã phát lệnh điều phối trung chuyển thẳng",
-            executedStockMutation = false,
-            ledgerUpdated = false,
-            routedQuantity = 0m,
-            movedQuantity = 0m,
-            sourceRemainingQuantity = (decimal?)null,
-            targetResultingQuantity = (decimal?)null,
-            ledgerTransactionId = (int?)null,
-            routedAtUtc = now,
-        });
+        var outcome = await govOps.DispatchCrossdockAsync(
+            new WmsDispatchCrossdockInput(
+                targetWarehouseId,
+                request?.DockDoorCode,
+                request?.InboundAppointmentCode,
+                request?.OutboundReferenceCode,
+                request?.ProductId,
+                request?.ProductCode,
+                request?.SourceLocationId,
+                request?.SourceLocationCode,
+                request?.TargetLocationId,
+                request?.TargetLocationCode,
+                request?.FromLocationCode,
+                request?.ToLocationCode,
+                request?.Quantity,
+                request?.ExecuteStockMutation ?? false,
+                actorUserId),
+            token);
+        return outcome.ToActionResult(this);
     }
 
     [HttpGet("docks")]

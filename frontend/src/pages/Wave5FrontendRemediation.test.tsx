@@ -90,8 +90,8 @@ describe('Wave-5 Frontend Remediation (W5-12, W5-13, W5-22, W5-23, W5-24, W5-30)
 
   it('W5-13: InventoryReversals fails closed when verify-chain-integrity returns an empty payload without verificationId', async () => {
     vi.spyOn(apiClient, 'get').mockImplementation((url: string) => {
-      if (url.includes('/api/inventory/reversal-reasons')) return Promise.resolve({ data: [] });
-      if (url.includes('/api/inventory/reversal-warehouses')) return Promise.resolve({ data: [] });
+      if (url.includes('/api/v1/inventory/reversal-reasons')) return Promise.resolve({ data: [] });
+      if (url.includes('/api/v1/inventory/reversal-warehouses')) return Promise.resolve({ data: [] });
       return Promise.resolve({
         data: { items: [], totalRecords: 0, pageIndex: 1, pageSize: 20, totalPages: 1 },
       });
@@ -253,8 +253,8 @@ describe('Wave-5 Frontend Remediation (W5-12, W5-13, W5-22, W5-23, W5-24, W5-30)
     };
 
     vi.spyOn(apiClient, 'get').mockImplementation((url: string) => {
-      if (url === '/api/packing-sessions') return Promise.resolve({ data: [sessionDto] });
-      if (url === '/api/packing-sessions/7') return Promise.resolve({ data: sessionDto });
+      if (url === '/api/v1/packing-sessions') return Promise.resolve({ data: [sessionDto] });
+      if (url === '/api/v1/packing-sessions/7') return Promise.resolve({ data: sessionDto });
       return Promise.resolve({ data: [] });
     });
 
@@ -304,22 +304,22 @@ describe('Wave-5 Frontend Remediation (W5-12, W5-13, W5-22, W5-23, W5-24, W5-30)
     };
 
     vi.spyOn(apiClient, 'get').mockImplementation((url: string) => {
-      if (url === '/api/putaway-tasks') return Promise.resolve({ data: [taskDto] });
-      if (url === '/api/putaway-tasks/1') return Promise.resolve({ data: taskDto });
+      if (url === '/api/v1/putaway-tasks') return Promise.resolve({ data: [taskDto] });
+      if (url === '/api/v1/putaway-tasks/1') return Promise.resolve({ data: taskDto });
       if (url.includes('/destinations')) {
         return Promise.resolve({
           data: [{ id: 2, code: 'STG-01', name: 'Kệ 01', locationType: 'Bin', isPickable: true }],
         });
       }
-      if (url.startsWith('/api/business-partners')) {
+      if (url.startsWith('/api/v1/business-partners')) {
         return Promise.resolve({ data: { items: [], totalPages: 1 } });
       }
-      if (url === '/api/permissions') {
+      if (url === '/api/v1/permissions') {
         return Promise.resolve({
           data: [{ code: 'product.read', name: 'Xem sản phẩm', module: 'MasterData' }],
         });
       }
-      if (url === '/api/permissions/roles') {
+      if (url === '/api/v1/permissions/roles') {
         return Promise.resolve({
           data: [{ id: 1, roleName: 'Admin', rowVersion: 'v1', permissions: ['product.read'] }],
         });
@@ -391,8 +391,8 @@ describe('Wave-5 Frontend Remediation (W5-12, W5-13, W5-22, W5-23, W5-24, W5-30)
         });
       };
 
-      const p1 = apiClient.post('/api/packing-sessions/1/items', { productId: 10, quantity: 1 });
-      const p2 = apiClient.post('/api/packing-sessions/1/items', { productId: 10, quantity: 1 });
+      const p1 = apiClient.post('/api/v1/packing-sessions/1/items', { productId: 10, quantity: 1 });
+      const p2 = apiClient.post('/api/v1/packing-sessions/1/items', { productId: 10, quantity: 1 });
       await waitFor(() => {
         expect(capturedKeys).toHaveLength(2);
       });
@@ -421,7 +421,7 @@ describe('Wave-5 Frontend Remediation (W5-12, W5-13, W5-22, W5-23, W5-24, W5-30)
         };
       };
 
-      await apiClient.post('/api/packing-sessions/1/items', { productId: 10, quantity: 1 });
+      await apiClient.post('/api/v1/packing-sessions/1/items', { productId: 10, quantity: 1 });
       expect(capturedKeys).toHaveLength(3);
       expect(capturedKeys[2]).not.toBe(capturedKeys[0]);
 
@@ -433,7 +433,7 @@ describe('Wave-5 Frontend Remediation (W5-12, W5-13, W5-22, W5-23, W5-24, W5-30)
         headers: {},
         config,
       });
-      const replayRes = await apiClient.post('/api/import-receipts/77/post', {});
+      const replayRes = await apiClient.post('/api/v1/import-receipts/77/post', {});
       expect(replayRes.data.id).toBe(77);
       expect(replayRes.data.code).toBe('IMP-77');
       expect(replayRes.data.status).toBe('Completed');

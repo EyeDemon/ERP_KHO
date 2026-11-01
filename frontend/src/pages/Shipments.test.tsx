@@ -21,8 +21,8 @@ const detail={...summary,rowVersion:'AQ==',handlingUnits:[hu]};
 const appointment={id:1043,code:'APT-2026-1043',warehouseId:1,direction:1,status:5,dockId:102,dockCode:'D-02',vehiclePlate:'50H-220.18'};
 const grant=(...permissions:string[])=>{permissionState.granted.clear();permissions.forEach(p=>permissionState.granted.add(p));};
 const reads=(shipment:Record<string,unknown>=detail)=>vi.mocked(apiClient.get).mockImplementation(async (url)=>{
-  if(url==='/api/shipments') return {data:[summary]} as never;
-  if(String(url).startsWith('/api/dock-yard/appointments')) return {data:[appointment]} as never;
+  if(url==='/api/v1/shipments') return {data:[summary]} as never;
+  if(String(url).startsWith('/api/v1/dock-yard/appointments')) return {data:[appointment]} as never;
   return {data:shipment} as never;
 });
 
@@ -33,24 +33,37 @@ describe('Shipment staging & loading workbench',()=>{
   it('shows read-only shipment evidence without mutation permissions',async()=>{
     const view=render(<Shipments/>);
     await view.findByText('SHIP-2026-7701');
+    expect(view.getByLabelText('Lọc kho xuất chuyến giao')).toBeTruthy();
+    expect(view.getByLabelText('Lọc trạng thái chuyến giao')).toBeTruthy();
+    expect(view.getByLabelText('Tìm mã chuyến hoặc biển số xe')).toBeTruthy();
+    expect(view.getByText('CỬA XUẤT & BIỂN SỐ XE')).toBeTruthy();
     fireEvent.click(view.getByText('SHIP-2026-7701'));
     expect(await view.findByText(/Quản lý vận đơn xuyên suốt từ sẵn sàng/)).toBeTruthy();
     expect(view.queryByText('Đưa vào Khu vực Tập kết')).toBeNull();
     expect(view.queryByText('Bắt đầu Loading')).toBeNull();
   });
 
-  it('stages shipment once with idempotency',async()=>{
+  it('stages shipment once with idempotency and supports staging quick-pick buttons without prefilling STAGING',async()=>{
     grant('shipment.read','shipment.stage');
+    reads({...detail,stagingLocationCode:'STAGING',vehiclePlate:'51C-889.99'});
+    vi.mocked(apiClient.get).mockImplementation(async (url)=>{
+      if(url==='/api/v1/shipments') return {data:[{...summary,vehiclePlate:'51C-889.99'}]} as never;
+      return {data:{...detail,stagingLocationCode:'STAGING',vehiclePlate:'51C-889.99'}} as never;
+    });
     vi.mocked(apiClient.post).mockResolvedValue({data:{...detail,status:'Staging',handlingUnits:[{...hu,status:'Staged'}]}} as never);
     const view=render(<Shipments/>);
     await view.findByText('SHIP-2026-7701');
+    expect(view.getByText('Chưa gán cửa • Xe: 51C-889.99')).toBeTruthy();
     fireEvent.click(view.getByText('SHIP-2026-7701'));
-    const input=await view.findByLabelText('Shipment staging location');
-    fireEvent.change(input,{target:{value:'STG-OUT-01'}});
+    const input=(await view.findByLabelText('Shipment staging location')) as HTMLInputElement;
+    expect(input.value).toBe('');
+    expect(input.placeholder).toBe('Ví dụ: STG-OUT-01');
+    fireEvent.click(view.getByRole('button',{name:'STG-OUT-01'}));
+    expect(input.value).toBe('STG-OUT-01');
     const button=view.getByText('Xác nhận Tập kết');
     fireEvent.click(button);fireEvent.click(button);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
-    expect(apiClient.post).toHaveBeenCalledWith('/api/shipments/7701/stage',{stagingLocationCode:'STG-OUT-01',rowVersion:'AQ=='},{headers:{'Idempotency-Key':'key:shipment-stage-7701'}});
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/shipments/7701/stage',{stagingLocationCode:'STG-OUT-01',rowVersion:'AQ=='},{headers:{'Idempotency-Key':'key:shipment-stage-7701'}});
     expect(completeIdempotentAction).toHaveBeenCalledWith('shipment-stage-7701');
   });
 
@@ -93,7 +106,7 @@ describe('Shipment staging & loading workbench',()=>{
     fireEvent.click(button);fireEvent.click(button);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
     expect(apiClient.post).toHaveBeenCalledWith(
-      '/api/shipments/7701/dispatch',
+      '/api/v1/shipments/7701/dispatch',
       {rowVersion:'AQ=='},
       {headers:{'Idempotency-Key':'key:shipment-dispatch-7701'}}
     );
@@ -113,7 +126,7 @@ describe('Shipment staging & loading workbench',()=>{
     fireEvent.click(button);fireEvent.click(button);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
     expect(apiClient.post).toHaveBeenCalledWith(
-      '/api/shipments/7701/mark-in-transit',
+      '/api/v1/shipments/7701/mark-in-transit',
       {rowVersion:'AQ=='},
       {headers:{'Idempotency-Key':'key:shipment-in-transit-7701'}}
     );
@@ -137,7 +150,7 @@ describe('Shipment staging & loading workbench',()=>{
     fireEvent.click(button);fireEvent.click(button);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
     expect(apiClient.post).toHaveBeenCalledWith(
-      '/api/shipments/7701/delivery-confirm',
+      '/api/v1/shipments/7701/delivery-confirm',
       {
         receiverName:'Nguyễn Văn A',
         evidenceReference:'pod://proof-1',
@@ -162,7 +175,7 @@ describe('Shipment staging & loading workbench',()=>{
     fireEvent.click(retry);fireEvent.click(retry);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
     expect(apiClient.post).toHaveBeenCalledWith(
-      '/api/shipments/7701/retry-delivery',
+      '/api/v1/shipments/7701/retry-delivery',
       {note:undefined,rowVersion:'AQ=='},
       {headers:{'Idempotency-Key':'key:shipment-retry-delivery-7701'}}
     );

@@ -51,9 +51,28 @@ namespace ERP.Application.Services
             return Map(p);
         }
 
+        public static int ResolveMaxSkusForPlan(string? planCode)
+        {
+            var normalized = (planCode ?? string.Empty).Trim().ToUpperInvariant();
+            return normalized switch
+            {
+                "FREE_TRIAL" or "TRIAL" => 500,
+                "STARTER" => 2000,
+                "GROWTH" or "PRO" => 20000,
+                "ENTERPRISE" or "ENTERPRISE_SAAS" => 100000,
+                _ => 2000
+            };
+        }
+
         public async Task<ProductDto> CreateProductAsync(CreateProductDto dto, string username, CancellationToken cancellationToken = default)
         {
             dto.Code = dto.Code.Trim();
+            if (await _productRepository.IsMaxSkusExceededAsync(cancellationToken))
+            {
+                throw new ForbiddenException(
+                    "Đã đạt giới hạn số lượng danh mục SKU tối đa của gói thuê bao hiện tại. Vui lòng nâng cấp gói để tạo thêm sản phẩm.",
+                    "SUBSCRIPTION_MAX_SKUS_EXCEEDED");
+            }
             var exists = await _productRepository.ExistsByCodeAsync(dto.Code, null, cancellationToken);
             if (exists) throw new BusinessRuleException($"Mã sản phẩm {dto.Code} đã tồn tại");
             var storageClass = NormalizeStorageClass(dto.StorageClass);

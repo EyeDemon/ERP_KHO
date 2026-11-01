@@ -17,8 +17,8 @@ namespace ERP.Api.Controllers;
 [Authorize]
 public sealed class UserWarehouseAccessController(
     IUserWarehouseAccessService service,
-    IWmsGovernanceOperationsService govOps = null!,
-    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
+    IWmsGovernanceOperationsService govOps,
+    IWarehouseAuthorizationService warehouseAccess) : ControllerBase
 {
     [HttpGet, PermissionAuthorize(AppPermissions.UserWarehouseRead)]
     public async Task<IActionResult> Get(int userId, CancellationToken cancellationToken)
@@ -61,15 +61,13 @@ public sealed class UserWarehouseAccessController(
 
     private async Task EnsureTenantUserOwnershipAsync(int userId, int? warehouseId, CancellationToken cancellationToken)
     {
-        if (govOps is null)
-            return;
-
         await govOps.EnsureTenantUserOwnershipAsync(userId, warehouseId, cancellationToken);
     }
 
     [HttpPost("verify-sod-isolation")]
+    [HttpPost("/api/v1/user-warehouse-access/verify-sod-isolation")]
     [HttpPost("/api/user-warehouse-access/verify-sod-isolation")]
-    [PermissionAuthorize(AppPermissions.UserWarehouseRead)]
+    [PermissionAuthorize(AppPermissions.UserWarehouseManage)]
     public async Task<IActionResult> VerifySodIsolation(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifySodIsolationRequest? request = null,
         CancellationToken cancellationToken = default)
@@ -84,24 +82,8 @@ public sealed class UserWarehouseAccessController(
                 accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
         }
 
-        if (govOps is not null)
-        {
-            var outcome = await govOps.VerifySodIsolationAsync(warehouseId, accessibleIds, cancellationToken);
-            return outcome.ToActionResult(this);
-        }
-
-        return Ok(new
-        {
-            auditId = $"SOD-ISO-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            warehouseId,
-            activeMemberships = 0,
-            sodConflictCount = 0,
-            multiWarehouseIsolationEnforced = true,
-            status = "ZERO_PRIVILEGE_ESCALATION_VERIFIED",
-            crossSiteLeakageDetected = false,
-            sodPolicyStatus = "STRICT_ISOLATION_VERIFIED",
-            auditedAtUtc = DateTime.UtcNow
-        });
+        var outcome = await govOps.VerifySodIsolationAsync(warehouseId, accessibleIds, cancellationToken);
+        return outcome.ToActionResult(this);
     }
 }
 

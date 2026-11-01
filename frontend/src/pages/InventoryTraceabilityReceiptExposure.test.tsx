@@ -35,7 +35,7 @@ describe('Receipt evidence in inventory traceability',()=>{
     expect(view.getByText('PN-21')).toBeTruthy();
     expect(view.getByText(/không chứng minh QC riêng từng lô/)).toBeTruthy();
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
-      '/api/inventory/traceability?productId=10&lotNumber=LOT-A&limit=200'));
+      '/api/v1/inventory/traceability?productId=10&lotNumber=LOT-A&limit=200'));
   });
 
   it('warns on capped results and hides receipt view for explicit references',async()=>{

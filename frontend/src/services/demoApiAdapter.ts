@@ -56,7 +56,18 @@ const fail = (config: InternalAxiosRequestConfig, status: number, message: strin
 const normalizePath = (url?: string) => {
   const raw = url ?? '';
   const withoutOrigin = raw.replace(/^https?:\/\/[^/]+/i, '');
-  return withoutOrigin.split('?')[0].replace(/\/+$/, '').toLowerCase();
+  const base = withoutOrigin
+    .split('?')[0]
+    .replace(/\/+$/, '')
+    .toLowerCase()
+    .replace(/^\/api\/v1\//, '/api/');
+  return base
+    .replace(/^\/api\/import-receipts(\/|$)/, '/api/importreceipts$1')
+    .replace(/^\/api\/export-receipts(\/|$)/, '/api/exportreceipts$1')
+    .replace(/^\/api\/inventory-stocks(\/|$)/, '/api/inventorystocks$1')
+    .replace(/^\/api\/inventory-transactions(\/|$)/, '/api/inventorytransactions$1')
+    .replace(/^\/api\/inventory-reconciliation(\/|$)/, '/api/inventoryreconciliation$1')
+    .replace(/^\/api\/product-categories(\/|$)/, '/api/productcategories$1');
 };
 
 const urlParams = (config: InternalAxiosRequestConfig) => {
@@ -159,6 +170,7 @@ export const createReadOnlyDemoApiAdapter = (request: InternalAxiosRequestConfig
       if (path === '/api/importreceipts/initiate-rma-inspection' || path === '/api/importreceipts/rma-intake-check') {
         return ok(config, { rmaInspectionCode: 'RMA-QC-DEMO', rmaCode: 'RMA-QC-DEMO', status: 'INBOUND_QC_INSPECTION' });
       }
+      if (/^\/api\/importreceipts\/\d+\/express-post$/.test(path)) { return ok(config, { receiptId: findNumericId(path), status: 'Posted', expressPosted: true }); }
       if (path === '/api/importreceipts/execute-rtv-refurbish') {
         return ok(config, { dispositionCode: 'RTV-REF-DEMO', executionId: 'RTV-REF-DEMO', status: 'REFURBISH_AND_RTV_SPLIT' });
       }
@@ -293,6 +305,9 @@ export const createReadOnlyDemoApiAdapter = (request: InternalAxiosRequestConfig
       }
       if (path === '/api/approvals/escalate-overdue') {
         return ok(config, { escalationBatchId: 'ESC-SLA-DEMO', escalatedStatus: 'ESCALATED_TO_SUPERVISOR' });
+      }
+      if (path === '/api/v1/auth/register-tenant' || path === '/api/auth/register-tenant' || path === '/api/v1/permissions/saas-tenants/provision' || path === '/api/v1/permissions/saas/tenants/provision') {
+        return ok(config, { tenantCode: 'TENANT-SME-2026', completedSteps: 3, totalSteps: 5, status: 'Đã cấp phát thuê bao & Sơ đồ kho mẫu' });
       }
       if (path === '/api/user-warehouse-access/verify-sod-isolation') {
         return ok(config, {
@@ -1099,6 +1114,73 @@ export const createReadOnlyDemoApiAdapter = (request: InternalAxiosRequestConfig
       );
     }
 
+    if (path === '/api/v1/customer-returns') {
+      const items = [
+        {
+          id: 901,
+          returnCode: 'RMA-2026-0901',
+          trackingNumber: 'SPXVN06889911',
+          exportReceiptCode: 'EX-2026-5108',
+          salesOrderCode: 'SO-2026-101',
+          warehouseId: 1,
+          warehouseName: 'DC Hồ Chí Minh',
+          quarantineLocationCode: 'QUARANTINE-01',
+          productCode: 'SKU-1001',
+          productName: 'Cà phê Arabica 500g',
+          quantity: 2,
+          unitCost: 85000,
+          returnReason: 'BUYER_REJECTED_DELIVERY',
+          condition: 'GOOD',
+          disposition: 'PENDING',
+          status: 'QUARANTINED',
+          rowVersion: 'AAAAAAAARMA1',
+        },
+      ];
+      return ok(config, {
+        items,
+        totalCount: 1,
+        costHiddenByRbac: false,
+        summary: { quarantinedCount: 1, inspectedCount: 0, restockedCount: 0, refurbishRtvScrapCount: 0 },
+      });
+    }
+    if (path === '/api/v1/reports/stock-card') {
+      return ok(config, {
+        templateCode: 'Mẫu số S12-DN',
+        circularReference: 'Thông tư 200/2014/TT-BTC',
+        warehouseId: 1,
+        warehouseName: 'DC Hồ Chí Minh',
+        productId: 1,
+        productCode: 'SKU-1001',
+        productName: 'Cà phê Arabica 500g',
+        unitName: 'GOI',
+        openingBalance: 100,
+        totalInboundQuantity: 50,
+        totalOutboundQuantity: 20,
+        closingBalance: 130,
+        lines: [
+          {
+            transactionId: 1,
+            transactionDate: '2026-10-05T08:00:00Z',
+            inboundDocumentCode: 'GR-2026-1048',
+            outboundDocumentCode: null,
+            description: 'Nhập kho từ PO-2026-4521',
+            inboundQuantity: 50,
+            outboundQuantity: 0,
+            runningBalance: 150,
+          },
+          {
+            transactionId: 2,
+            transactionDate: '2026-10-06T09:00:00Z',
+            inboundDocumentCode: null,
+            outboundDocumentCode: 'EX-2026-5108',
+            description: 'Xuất bán đơn hàng',
+            inboundQuantity: 0,
+            outboundQuantity: 20,
+            runningBalance: 130,
+          },
+        ],
+      });
+    }
     if (path === '/api/stock-transfers/in-transit') {
       const items = demoTransfers
         .filter(t => t.status === 'InTransit')

@@ -17,7 +17,23 @@ public record ExecuteReplenishmentInput(
     int? SourceLocationId = null,
     string? SourceLocationCode = null,
     int? TargetLocationId = null,
-    string? TargetLocationCode = null);
+    string? TargetLocationCode = null,
+    int? LotId = null);
+
+public record UpsertLocationReplenishmentRuleInput(
+    int? WarehouseId = null,
+    int? LocationId = null,
+    string? LocationCode = null,
+    decimal? MinBaseQty = null,
+    decimal? MaxBaseQty = null,
+    int? ReplenishFromLocationId = null,
+    string? ReplenishFromLocationCode = null);
+
+public record GenerateMinMaxReplenishmentInput(
+    int? WarehouseId = null,
+    int? ProductId = null,
+    int? TargetLocationId = null,
+    bool AutoExecute = true);
 
 public record WhatIfSimulationInput(
     int? WarehouseId = null,
@@ -115,4 +131,18 @@ public interface IInventoryControlOperationsService
         int? actorUserId = null,
         IWarehouseAuthorizationService? warehouseAuth = null,
         CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> UpsertLocationReplenishmentRuleAsync(
+        UpsertLocationReplenishmentRuleInput? request = null,
+        int? actorUserId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(WmsEndpointOutcome.Ok(new { updated = false }));
+
+    Task<WmsEndpointOutcome> GenerateAndExecuteMinMaxReplenishmentAsync(
+        GenerateMinMaxReplenishmentInput? request = null,
+        int? actorUserId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(WmsEndpointOutcome.Ok(new { executedCount = 0 }));
 }

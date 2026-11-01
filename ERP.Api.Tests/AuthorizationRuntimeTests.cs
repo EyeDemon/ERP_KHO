@@ -107,6 +107,13 @@ namespace ERP.Api.Tests
                     permissionCodes.Add(AppPermissions.ExportReceiptRead);
                     permissionCodes.Add(AppPermissions.InventoryRead);
                 }
+                else if (role == AppRoles.Accountant)
+                {
+                    permissionCodes.Add(AppPermissions.ExportReceiptRead);
+                    permissionCodes.Add(AppPermissions.InventoryRead);
+                    permissionCodes.Add(AppPermissions.InventoryCostRead);
+                    permissionCodes.Add(AppPermissions.InventoryLedgerRead);
+                }
 
                 foreach (var code in permissionCodes)
                 {

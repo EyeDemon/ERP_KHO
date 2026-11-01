@@ -183,6 +183,69 @@ public interface IReportOperationsService
         int? warehouseId,
         int? productId,
         CancellationToken cancellationToken = default);
+
+    Task<WmsEndpointOutcome> GetStockCardS12DnAsync(
+        int? warehouseId = null,
+        int? productId = null,
+        int? lotId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed record StockCardS12DnRowDto(
+    int LineNumber,
+    int TransactionId,
+    DateTime EntryDate,
+    DateTime VoucherDate,
+    string InboundVoucherCode,
+    string OutboundVoucherCode,
+    string VoucherCode,
+    string ReferenceType,
+    string ReferenceTypeLabel,
+    string Description,
+    string? LocationCode,
+    string? LotNumber,
+    string InventoryStatus,
+    decimal InboundQty,
+    decimal OutboundQty,
+    decimal RunningBalance,
+    string SignatureConfirmation)
+{
+    public decimal InQuantity => InboundQty;
+    public decimal OutQuantity => OutboundQty;
+    public decimal BalanceQuantity => RunningBalance;
+}
+
+public sealed record StockCardS12DnReportDto(
+    string FormCode,
+    string CircularReference,
+    string ReportTitle,
+    int WarehouseId,
+    string WarehouseCode,
+    string WarehouseName,
+    int ProductId,
+    string ProductCode,
+    string ProductName,
+    string UnitName,
+    int? LotId,
+    string? LotNumber,
+    DateTime? FromDate,
+    DateTime? ToDate,
+    decimal OpeningBalance,
+    decimal TotalInbound,
+    decimal TotalOutbound,
+    decimal ClosingBalance,
+    decimal CurrentOnHand,
+    bool ReconciledWithStock,
+    IReadOnlyList<StockCardS12DnRowDto> Rows)
+{
+    public decimal OpeningQuantity => OpeningBalance;
+    public decimal TotalInQuantity => TotalInbound;
+    public decimal TotalOutQuantity => TotalOutbound;
+    public decimal ClosingQuantity => ClosingBalance;
+    public IReadOnlyList<StockCardS12DnRowDto> Items => Rows;
 }
 
 public static class ReportOperationsTextAndFallbackHelper
@@ -297,373 +360,5 @@ public static class ReportOperationsTextAndFallbackHelper
         if (int.TryParse(user?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? user?.FindFirst("Id")?.Value, out var uid))
             return uid;
         return currentUser?.UserId;
-    }
-
-    public static async Task<WmsEndpointOutcome> FallbackWhenNoOpsAsync(
-        string operationName,
-        IWarehouseAuthorizationService? warehouseAuth,
-        int? warehouseId = null,
-        string? carrierCode = null,
-        bool canReadCost = true,
-        bool isPost = false,
-        int? actorUserId = null,
-        AcknowledgeOperationalExceptionDtoBase? ackRequest = null,
-        IReadOnlyList<CodSettlementItemRequestBase>? codItems = null,
-        CancellationToken cancellationToken = default)
-    {
-        var now = DateTime.UtcNow;
-
-        if (operationName is "WarehouseTasks" or "OperationalExceptions" or "AnalyticsSummary" or "ExpiryAging")
-        {
-            if (warehouseAuth != null)
-            {
-                var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
-                if (warehouseId.HasValue)
-                {
-                    await warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
-                    if (!accessibleIds.Contains(warehouseId.Value))
-                        return WmsEndpointOutcome.Forbid();
-                }
-            }
-            return WmsEndpointOutcome.Ok(Array.Empty<object>());
-        }
-
-        if (operationName == "AcknowledgeOperationalException")
-        {
-            if (ackRequest is null || string.IsNullOrWhiteSpace(ackRequest.ExceptionCode))
-                return WmsEndpointOutcome.BadRequest(new { message = "Mã ngoại lệ không được để trống." });
-
-            var effectiveWarehouseId = ackRequest.WarehouseId ?? 1;
-            if (warehouseAuth != null)
-            {
-                var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
-                if (accessibleIds.Count == 0)
-                    return WmsEndpointOutcome.Forbid();
-                if (ackRequest.WarehouseId.HasValue && !accessibleIds.Contains(ackRequest.WarehouseId.Value))
-                    return WmsEndpointOutcome.Forbid();
-                effectiveWarehouseId = ackRequest.WarehouseId ?? accessibleIds.First();
-            }
-
-            var normalizedCode = ackRequest.ExceptionCode.Trim();
-            var normalizedType = string.IsNullOrWhiteSpace(ackRequest.ExceptionType)
-                ? null
-                : ackRequest.ExceptionType.Trim().ToUpperInvariant();
-
-            return WmsEndpointOutcome.Ok(new
-            {
-                acknowledged = true,
-                exceptionCode = normalizedCode,
-                exceptionType = normalizedType,
-                warehouseId = effectiveWarehouseId,
-                userId = actorUserId,
-                acknowledgedExceptionsCount = 1,
-                status = "Đã tiếp nhận và phân công xử lý ngoại lệ vận hành",
-                statusLabel = "Đã tiếp nhận và phân công xử lý ngoại lệ vận hành",
-                acknowledgedAtUtc = now
-            });
-        }
-
-        if (operationName is "SyncBiSnapshot" or "ExportGlJournal" or "ComplianceEvidenceBundle")
-        {
-            if (warehouseId.HasValue && warehouseAuth != null)
-            {
-                var accessibleIds = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
-                if (!accessibleIds.Contains(warehouseId.Value))
-                    return WmsEndpointOutcome.Forbid();
-            }
-
-            return operationName switch
-            {
-                "SyncBiSnapshot" => WmsEndpointOutcome.Ok(new
-                {
-                    snapshotId = $"BI-SNAP-{now:yyyyMMdd-HHmm}",
-                    warehouseId,
-                    totalTransactionsCount = 0,
-                    activeSkuBucketsCount = 0,
-                    totalShipmentsCount = 0,
-                    heatmapRefreshed = true,
-                    biSchemaVersion = "v2026.10-STAR",
-                    status = "Đã đồng bộ ảnh chụp dữ liệu phân tích BI & KPI vận hành kho",
-                    statusLabel = "Đã đồng bộ ảnh chụp dữ liệu phân tích BI & KPI vận hành kho",
-                    syncedAtUtc = now
-                }),
-                "ExportGlJournal" => WmsEndpointOutcome.Ok(new
-                {
-                    journalBatchId = $"GL-JRN-{now:yyyyMMdd-HHmm}",
-                    warehouseId,
-                    inventoryLedgerEntriesCount = 0,
-                    openDebtInvoicesCount = 0,
-                    debtLedgerEntriesCount = 0,
-                    totalPayableBalance = 0m,
-                    totalReceivableBalance = 0m,
-                    glReconciliationStatus = "Đã kết chuyển bút toán kho & công nợ AP/AR cân bằng 100%",
-                    status = "Đã kết xuất bảng kê bút toán sổ cái kho & công nợ AP/AR",
-                    statusLabel = "Đã kết xuất bảng kê bút toán sổ cái kho & công nợ AP/AR",
-                    exportedAtUtc = now
-                }),
-                _ => WmsEndpointOutcome.Ok(new
-                {
-                    bundleCode = $"COMP-EVD-{now:yyyyMMdd-HHmm}",
-                    warehouseId,
-                    immutableAuditLogCount = 0,
-                    idempotencyRecordCount = 0,
-                    immutableLedgerCount = 0,
-                    sodStatus = "Đã xác thực phân tách nhiệm vụ Maker-Checker & nhật ký bất biến",
-                    status = "Đã đóng gói hồ sơ bằng chứng kiểm toán & tuân thủ vận hành",
-                    statusLabel = "Đã đóng gói hồ sơ bằng chứng kiểm toán & tuân thủ vận hành",
-                    generatedAtUtc = now
-                })
-            };
-        }
-
-        if (operationName == "VerifyCodAndSettlementReconciliation")
-        {
-            if (warehouseId.HasValue && warehouseAuth != null)
-                await warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
-
-            if (codItems is null || codItems.Count == 0)
-            {
-                return WmsEndpointOutcome.BadRequest(new
-                {
-                    code = "COD_RECONCILIATION_DATA_REQUIRED",
-                    errorCode = "COD_RECONCILIATION_DATA_REQUIRED",
-                    message = "Vui lòng tải lên file đối soát COD (.xlsx / .csv) hoặc truyền danh sách vận đơn cần đối soát."
-                });
-            }
-
-            const string verifyTaxPolicyRef = "Nghị định 70/2025/NĐ-CP (1% GTGT + 0,5% TNCN)";
-            return WmsEndpointOutcome.Ok(new
-            {
-                reconciliationBatchId = $"COD-REC-{now:yyyyMMdd-HHmmss}",
-                warehouseId,
-                verifiedCount = 0,
-                discrepancyCount = 0,
-                matchedCount = 0,
-                totalExpectedCod = 0m,
-                totalActualCod = 0m,
-                pendingCodAmount = 0m,
-                receivedFromCarrierAmount = 0m,
-                totalVatWithheldAmount = 0m,
-                totalPitWithheldAmount = 0m,
-                totalWithheldTaxAmount = 0m,
-                totalFixedOrderProcessingFee = 0m,
-                taxPolicyReference = verifyTaxPolicyRef,
-                summary = new
-                {
-                    verifiedCount = 0,
-                    discrepancyCount = 0,
-                    matchedCount = 0,
-                    totalExpectedCod = 0m,
-                    totalActualCod = 0m,
-                    totalVatWithheldAmount = 0m,
-                    totalPitWithheldAmount = 0m,
-                    totalWithheldTaxAmount = 0m,
-                    totalFixedOrderProcessingFee = 0m,
-                    taxPolicyReference = verifyTaxPolicyRef
-                },
-                discrepancies = Array.Empty<object>(),
-                feeDiscrepancyWarnings = Array.Empty<object>(),
-                items = Array.Empty<object>(),
-                verifiedAtUtc = now,
-                statusLabel = "Đã đối soát 0 vận đơn COD — Phát hiện 0 vận đơn lệch phí cân nặng / thu hộ"
-            });
-        }
-
-        if (operationName == "GetCodAndSettlementReconciliation")
-        {
-            if (warehouseId.HasValue && warehouseAuth != null)
-                await warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
-
-            const string taxPolicyReference = "Nghị định 70/2025/NĐ-CP (1% GTGT + 0,5% TNCN)";
-            return WmsEndpointOutcome.Ok(new
-            {
-                warehouseId,
-                carrierCode,
-                totalCount = 0,
-                discrepancyCount = 0,
-                matchedCount = 0,
-                totalExpectedCod = 0m,
-                totalActualCod = 0m,
-                pendingCodAmount = 0m,
-                receivedFromCarrierAmount = 0m,
-                totalFeeOverchargeVariance = 0m,
-                totalPlatformFee = 0m,
-                totalNetPayout = 0m,
-                totalVatWithheldAmount = 0m,
-                totalPitWithheldAmount = 0m,
-                totalWithheldTaxAmount = 0m,
-                totalFixedOrderProcessingFee = 0m,
-                totalNetAfterTaxAndFees = 0m,
-                taxPolicyReference,
-                summary = new
-                {
-                    totalCount = 0,
-                    discrepancyCount = 0,
-                    matchedCount = 0,
-                    totalExpectedCod = 0m,
-                    totalActualCod = 0m,
-                    totalFeeOverchargeVariance = 0m,
-                    totalPlatformFee = 0m,
-                    totalNetPayout = 0m,
-                    totalVatWithheldAmount = 0m,
-                    totalPitWithheldAmount = 0m,
-                    totalWithheldTaxAmount = 0m,
-                    totalFixedOrderProcessingFee = 0m,
-                    totalNetAfterTaxAndFees = 0m,
-                    taxPolicyReference
-                },
-                discrepancies = Array.Empty<object>(),
-                feeDiscrepancyWarnings = Array.Empty<object>(),
-                items = Array.Empty<object>(),
-                statusLabel = "Đã tải bảng đối soát công nợ thu hộ COD & quyết toán ví sàn (0 vận đơn, 0 lệch phí/COD)"
-            });
-        }
-
-        if (operationName == "GetOwnerGrossProfit")
-        {
-            if (warehouseAuth != null)
-            {
-                _ = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
-                if (warehouseId.HasValue)
-                    await warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
-            }
-
-            const string ownerTaxPolicyRef = "Nghị định 70/2025/NĐ-CP (1% GTGT + 0,5% TNCN)";
-            decimal? zeroIfCanRead = canReadCost ? 0m : null;
-            var defaultChannels = new object[]
-            {
-                new
-                {
-                    channelCode = "SHOPEE",
-                    orderCount = 0,
-                    grossRevenue = 0m,
-                    movingAverageCogs = zeroIfCanRead,
-                    platformCommissionFee = 0m,
-                    packagingCost = 0m,
-                    netGrossProfit = zeroIfCanRead,
-                    withheldVatAmount = 0m,
-                    withheldPitAmount = 0m,
-                    withheldTaxTotalAmount = 0m,
-                    fixedInfrastructureFeeTotal = 0m,
-                    netProfitAfterWithheldTax = zeroIfCanRead
-                }
-            };
-
-            return WmsEndpointOutcome.Ok(new
-            {
-                warehouseId,
-                costHiddenByRbac = !canReadCost,
-                orderCount = 0,
-                grossRevenue = 0m,
-                netRevenue = 0m,
-                movingAverageCogs = zeroIfCanRead,
-                totalCogs = zeroIfCanRead,
-                platformCommissionFee = 0m,
-                shippingFeeDifferentials = 0m,
-                returnRmaFee = 0m,
-                packagingCost = 0m,
-                withheldVatAmount = 0m,
-                withheldPitAmount = 0m,
-                withheldTaxTotalAmount = 0m,
-                fixedInfrastructureFeeTotal = 0m,
-                netPocketProfit = zeroIfCanRead,
-                estimatedGrossProfit = zeroIfCanRead,
-                netProfitAfterWithheldTax = zeroIfCanRead,
-                netMarginPct = zeroIfCanRead,
-                grossMarginPercent = zeroIfCanRead,
-                taxPolicyReference = ownerTaxPolicyRef,
-                formula = "NetPocketProfit = GrossRevenue - MovingAverageCogs - PlatformCommissionFee - ShippingFeeDifferentials - PackagingCost - WithheldTax(1.5%) - FixedFee(3000/order)",
-                summary = new
-                {
-                    warehouseId,
-                    costHiddenByRbac = !canReadCost,
-                    orderCount = 0,
-                    grossRevenue = 0m,
-                    movingAverageCogs = zeroIfCanRead,
-                    platformCommissionFee = 0m,
-                    shippingFeeDifferentials = 0m,
-                    packagingCost = 0m,
-                    withheldVatAmount = 0m,
-                    withheldPitAmount = 0m,
-                    withheldTaxTotalAmount = 0m,
-                    fixedInfrastructureFeeTotal = 0m,
-                    netGrossProfit = zeroIfCanRead,
-                    netPocketProfit = zeroIfCanRead,
-                    netProfitAfterWithheldTax = zeroIfCanRead,
-                    taxPolicyReference = ownerTaxPolicyRef
-                },
-                channels = defaultChannels,
-                skuBreakdown = Array.Empty<object>(),
-                skuValuations = Array.Empty<object>(),
-                skuItems = Array.Empty<object>(),
-                items = Array.Empty<object>(),
-                statusLabel = canReadCost
-                    ? "Đã tổng hợp báo cáo lãi gộp thực bỏ túi cho Chủ doanh nghiệp (đã trừ Giá vốn MAC, Phí sàn, Thuế khấu trừ tại nguồn 1,5% & Phí vận chuyển ẩn)"
-                    : "Báo cáo doanh thu (đã ẩn Giá vốn MAC & Lãi gộp theo phân quyền RBAC)"
-            });
-        }
-
-        if (operationName == "GetOrCaptureThreePlStorageSnapshot")
-        {
-            if (warehouseAuth != null)
-            {
-                _ = await warehouseAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
-                if (warehouseId.HasValue)
-                    await warehouseAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
-            }
-
-            return WmsEndpointOutcome.Ok(new
-            {
-                snapshotId = $"3PL-SNAP-{now:yyyyMMdd}",
-                snapshotDateUtc = now.Date,
-                capturedAtUtc = now,
-                warehouseId,
-                ownerCount = 0,
-                totalOnHandQty = 0m,
-                totalOccupiedBins = 0,
-                totalVolumeCbm = 0m,
-                totalPalletEquivalent = 0m,
-                totalEstimatedDailyStorageFeeVnd = 0m,
-                totalEstimatedMonthlyStorageFeeVnd = 0m,
-                summary = new
-                {
-                    ownerCount = 0,
-                    totalOnHandQty = 0m,
-                    totalOccupiedBins = 0,
-                    totalVolumeCbm = 0m,
-                    totalPalletEquivalent = 0m,
-                    totalEstimatedDailyStorageFeeVnd = 0m,
-                    totalEstimatedMonthlyStorageFeeVnd = 0m
-                },
-                owners = Array.Empty<object>(),
-                items = Array.Empty<object>(),
-                statusLabel = isPost
-                    ? "Đã chốt & lưu vết kiểm toán sản lượng lưu kho 3PL hàng ngày (0 chủ hàng, 0 vị trí kệ)"
-                    : "Đã tổng hợp bảng tính phí lưu kho 3PL theo Chủ hàng (0 chủ hàng, 0 vị trí kệ)"
-            });
-        }
-
-        if (operationName == "GetOnboardingWizardStatus")
-        {
-            var steps = new object[]
-            {
-                new { step = 1, code = "CREATE_WAREHOUSE", title = "Khởi tạo Kho hàng", completed = false },
-                new { step = 2, code = "CREATE_LOCATIONS", title = "Thiết lập Sơ đồ Kệ / Vị trí", completed = false },
-                new { step = 3, code = "IMPORT_PRODUCTS", title = "Nhập Danh mục Sản phẩm (SKU)", completed = false },
-                new { step = 4, code = "IMPORT_OPENING_STOCK", title = "Chốt Tồn kho Đầu kỳ & Giá vốn MAC", completed = false },
-                new { step = 5, code = "CONNECT_SHOP_AND_FIRST_AWB", title = "Kết nối Sàn TMĐT & In vận đơn đầu tiên", completed = false }
-            };
-
-            return WmsEndpointOutcome.Ok(new
-            {
-                totalSteps = 5,
-                completedSteps = 0,
-                completionPct = 0,
-                steps,
-                statusLabel = "Tiến độ hướng dẫn thiết lập nhanh 5 bước (0/5 hoàn tất)"
-            });
-        }
-
-        return WmsEndpointOutcome.Ok(Array.Empty<object>());
     }
 }

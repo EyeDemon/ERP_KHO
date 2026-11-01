@@ -15,7 +15,7 @@ namespace ERP.Api.Controllers;
 [Route("api/v1/product-barcode-lookup")]
 public sealed class ProductBarcodeLookupController(
     IProductCatalogService service,
-    IWmsGovernanceOperationsService? govOps = null) : ControllerBase
+    IWmsGovernanceOperationsService govOps) : ControllerBase
 {
     [HttpGet("lookup")]
     public async Task<IActionResult> Lookup([FromQuery] string value, CancellationToken ct) =>

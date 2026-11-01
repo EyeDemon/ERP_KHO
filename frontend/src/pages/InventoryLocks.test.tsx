@@ -19,9 +19,9 @@ const lock={
   lotId:100,lotNumber:'LOT-A',reason:'Quality evidence',createdAt:'2026-10-07T10:00:00Z',createdBy:7,rowVersion:'AQ=='
 };
 const reads=()=>vi.mocked(apiClient.get).mockImplementation(async url=>{
-  if(url==='/api/inventory/locks')return {data:[lock]} as never;
-  if(url==='/api/Warehouses')return {data:[{id:1,name:'DC Hồ Chí Minh',isActive:true}]} as never;
-  if(url==='/api/inventory/statuses')return {data:[{code:'AVAILABLE',name:'Available'}]} as never;
+  if(url==='/api/v1/inventory/locks')return {data:[lock]} as never;
+  if(url==='/api/v1/warehouses')return {data:[{id:1,name:'DC Hồ Chí Minh',isActive:true}]} as never;
+  if(url==='/api/v1/inventory/statuses')return {data:[{code:'AVAILABLE',name:'Available'}]} as never;
   return {data:[]} as never;
 });
 
@@ -42,13 +42,25 @@ describe('InventoryLocks',()=>{
     vi.mocked(apiClient.post).mockResolvedValue({data:lock} as never);
     const view=render(<InventoryLocks/>);
     await view.findByText('Giữ kiểm định chất lượng');
-    fireEvent.click(view.getByRole('button',{name:'+ Tạo khóa tồn kho'}));fireEvent.change(view.getByLabelText('Kho'),{target:{value:'1'}});
+    expect(view.getByText(/07\/10\/2026 \d{2}:\d{2}/)).toBeTruthy();
+    expect(view.getByText('Kích hoạt Thu hồi Lô hàng (Bấm để mở biểu mẫu phong tỏa khẩn cấp)')).toBeTruthy();
+    expect((view.getByRole('columnheader',{name:'Lý do'}) as HTMLElement).style.minWidth).toBe('220px');
+    fireEvent.click(view.getByRole('button',{name:'+ Tạo khóa tồn kho'}));
+    expect((view.getByLabelText('ID vị trí (tùy chọn)') as HTMLSelectElement).disabled).toBe(true);
+    expect((view.getByLabelText('ID lô (tùy chọn)') as HTMLSelectElement).disabled).toBe(true);
+    expect((view.getByLabelText('ID sê-ri (tùy chọn)') as HTMLSelectElement).disabled).toBe(true);
+    fireEvent.change(view.getByLabelText('Kho'),{target:{value:'1'}});
+    expect((view.getByLabelText('ID vị trí (tùy chọn)') as HTMLSelectElement).disabled).toBe(false);
+    expect((view.getByLabelText('ID lô (tùy chọn)') as HTMLSelectElement).disabled).toBe(false);
+    expect((view.getByLabelText('ID sê-ri (tùy chọn)') as HTMLSelectElement).disabled).toBe(false);
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/warehouses/1/locations');
+    expect(view.getByText('Lý do *')).toBeTruthy();
     fireEvent.change(view.getByLabelText('ID sản phẩm (tùy chọn)'),{target:{value:'10'}});
     fireEvent.change(view.getByLabelText('Lý do'),{target:{value:'Đóng băng phục vụ kiểm kê'}});
     const button=view.getByText('Tạo khóa');
     fireEvent.click(button);fireEvent.click(button);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
-    expect(apiClient.post).toHaveBeenCalledWith('/api/inventory/locks',expect.objectContaining({
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/inventory/locks',expect.objectContaining({
       lockType:'ManualOperationalLock',warehouseId:1,productId:10,reason:'Đóng băng phục vụ kiểm kê'
     }),{headers:{'Idempotency-Key':'key:inventory-lock-create'}});
     expect(completeIdempotentAction).toHaveBeenCalledWith('inventory-lock-create');
@@ -62,7 +74,7 @@ describe('InventoryLocks',()=>{
     fireEvent.click(view.getByText('Mở khóa'));
     fireEvent.change(view.getByLabelText('Lý do mở khóa'),{target:{value:'Đã hoàn tất điều tra'}});
     fireEvent.click(view.getByText('Xác nhận mở khóa'));
-    await waitFor(()=>expect(apiClient.post).toHaveBeenCalledWith('/api/inventory/locks/9/release',{
+    await waitFor(()=>expect(apiClient.post).toHaveBeenCalledWith('/api/v1/inventory/locks/9/release',{
       reason:'Đã hoàn tất điều tra',rowVersion:'AQ=='
     },{headers:{'Idempotency-Key':'key:inventory-lock-release-9'}}));
   });

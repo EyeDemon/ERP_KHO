@@ -519,6 +519,7 @@ public sealed class PackingSessionOperationsService(
                 var consumeQty = Math.Round(kitQty * ratio, 4);
 
                 var compStockQuery = _db.InventoryStocks
+                    .Include(s => s.Lot)
                     .Where(s => s.WarehouseId == targetWarehouseId &&
                                 s.Status == InventoryStatus.Available &&
                                 s.Quantity - s.ReservedQuantity >= consumeQty);
@@ -531,7 +532,9 @@ public sealed class PackingSessionOperationsService(
                     compStockQuery = compStockQuery.Where(s => s.LocationId == resolvedLocId.Value);
 
                 var compStock = await compStockQuery
-                    .OrderByDescending(s => s.Quantity - s.ReservedQuantity)
+                    .OrderBy(s => s.Lot != null && s.Lot.ExpiryDate.HasValue ? 0 : 1)
+                    .ThenBy(s => s.Lot != null ? s.Lot.ExpiryDate : null)
+                    .ThenByDescending(s => s.Quantity - s.ReservedQuantity)
                     .ThenBy(s => s.Id)
                     .FirstOrDefaultAsync(cancellationToken);
 
@@ -548,6 +551,11 @@ public sealed class PackingSessionOperationsService(
                         targetWarehouseId,
                         new[] { compStock.ProductId, targetKitProductId }.Distinct(),
                         cancellationToken);
+
+                    var compUnitCost = compStock.MovingAverageCost;
+                    var rolledUpUnitCost = kitQty > 0m
+                        ? Math.Round((consumeQty * compUnitCost) / kitQty, 4)
+                        : compUnitCost;
 
                     compStock.Quantity -= consumeQty;
                     compStock.LastUpdated = now;
@@ -569,6 +577,7 @@ public sealed class PackingSessionOperationsService(
                     if (kitStock != null)
                     {
                         kitStock.Quantity += kitQty;
+                        if (rolledUpUnitCost > 0m) kitStock.MovingAverageCost = rolledUpUnitCost;
                         kitStock.LastUpdated = now;
                         kitStock.RefreshGrainHash();
                         kitResultingQuantity = kitStock.Quantity;
@@ -583,12 +592,46 @@ public sealed class PackingSessionOperationsService(
                             Status = InventoryStatus.Available,
                             Quantity = kitQty,
                             ReservedQuantity = 0m,
+                            MovingAverageCost = rolledUpUnitCost,
                             LastUpdated = now
                         };
                         kitStock.RefreshGrainHash();
                         _db.InventoryStocks.Add(kitStock);
                         kitResultingQuantity = kitStock.Quantity;
                     }
+
+                    var kwo = new KitWorkOrder
+                    {
+                        WarehouseId = targetWarehouseId,
+                        WorkOrderCode = $"{workOrderId}-{Guid.NewGuid().ToString("N")[..4].ToUpperInvariant()}",
+                        KitProductId = targetKitProductId,
+                        WorkOrderType = KitWorkOrderType.Assemble,
+                        Status = "Completed",
+                        PlannedKitQty = kitQty,
+                        CompletedKitQty = kitQty,
+                        BaseUomCode = "PCS",
+                        ConversionRateSnapshot = 1m,
+                        TargetLocationId = targetLocationId,
+                        RolledUpUnitCost = rolledUpUnitCost,
+                        EarliestComponentExpiryDate = compStock.Lot?.ExpiryDate,
+                        CreatedByUserId = resolvedActorId,
+                        CompletedByUserId = resolvedActorId,
+                        CreatedAtUtc = now,
+                        CompletedAtUtc = now
+                    };
+                    kwo.ComponentLines.Add(new KitWorkOrderComponentLine
+                    {
+                        ComponentProductId = compStock.ProductId,
+                        ComponentRatioQty = ratio,
+                        RequiredBaseQty = consumeQty,
+                        ConsumedBaseQty = consumeQty,
+                        BaseUomCode = "PCS",
+                        ConversionRateSnapshot = 1m,
+                        SourceLocationId = compStock.LocationId,
+                        SourceLotId = compStock.LotId,
+                        ComponentUnitCost = compUnitCost
+                    });
+                    _db.KitWorkOrders.Add(kwo);
 
                     var compTx = new InventoryTransaction
                     {

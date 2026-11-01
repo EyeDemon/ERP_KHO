@@ -28,8 +28,8 @@ describe('WarehouseMap production UI', () => {
     localStorage.setItem('role', 'Admin');
     localStorage.setItem('permissions', '["location.read","location.manage"]');
     get.mockImplementation(async (url) => {
-      if (url === '/api/putaway-tasks/location-warehouses') return { data: warehouses } as never;
-      if (url === '/api/putaway-tasks/location-map') return { data: snapshot } as never;
+      if (url === '/api/v1/putaway-tasks/location-warehouses') return { data: warehouses } as never;
+      if (url === '/api/v1/putaway-tasks/location-map') return { data: snapshot } as never;
       return { data: [] } as never;
     });
     put.mockResolvedValue({ data: {} } as never);
@@ -42,7 +42,7 @@ describe('WarehouseMap production UI', () => {
     expect(view.getAllByText('A01-R02-L03-B04').length).toBeGreaterThan(0);
     expect(view.getAllByText('A01-R02-L03-B05').length).toBeGreaterThan(0);
     expect(view.getByRole('table', { name: 'Location chưa bố trí bản đồ' })).toBeTruthy();
-    expect(get).toHaveBeenCalledWith('/api/putaway-tasks/location-map', { params: { warehouseId: 1 } });
+    expect(get).toHaveBeenCalledWith('/api/v1/putaway-tasks/location-map', { params: { warehouseId: 1 } });
   });
 
   it('updates an explicit layout with rowVersion', async () => {
@@ -55,7 +55,7 @@ describe('WarehouseMap production UI', () => {
     fireEvent.change(view.getByLabelText('Map Height'), { target: { value: '30' } });
     fireEvent.click(view.getByText('Lưu bố trí'));
 
-    await waitFor(() => expect(put).toHaveBeenCalledWith('/api/putaway-tasks/locations/101/layout', {
+    await waitFor(() => expect(put).toHaveBeenCalledWith('/api/v1/putaway-tasks/locations/101/layout', {
       mapX: 12.5,
       mapY: 20,
       mapWidth: 25,

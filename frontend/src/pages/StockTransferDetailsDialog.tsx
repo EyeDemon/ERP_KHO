@@ -128,7 +128,7 @@ export default function StockTransferDetailsDialog({
     setReturnReasonError('');
     if (!canWrite || !canReturn || !['InTransit', 'Received', 'Completed'].includes(status) || !!selected.reverseTransferId) return;
     let active = true;
-    void apiClient.get('/api/stock-transfers/return-reasons').then(response => {
+    void apiClient.get('/api/v1/stock-transfers/return-reasons').then(response => {
       if (active) setReturnReasons(Array.isArray(response.data) ? response.data : []);
     }).catch(() => {
       if (active) setReturnReasonError('Không thể tải mã lý do; chức năng hoàn trả đã bị khóa an toàn.');

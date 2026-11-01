@@ -53,9 +53,9 @@ describe('Approvals page',{timeout:20000},()=>{
     fireEvent.change(view.getByLabelText('Mức SLA'),{target:{value:'Overdue'}});
     fireEvent.change(view.getByLabelText('Từ ngày'),{target:{value:'2026-09-05T00:00'}});
     fireEvent.change(view.getByLabelText('Đến ngày'),{target:{value:'2026-09-05T23:59'}});
-    await waitFor(()=>expect(apiClient.get).toHaveBeenLastCalledWith('/api/approvals/queue',{params:expect.objectContaining({documentType:'StockTransfer',warehouseId:'2',creatorId:'3',keyword:'TRF',slaStatus:'Overdue',fromUtc:new Date('2026-09-05T00:00').toISOString(),toUtc:new Date('2026-09-05T23:59').toISOString(),pageIndex:1})}));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenLastCalledWith('/api/v1/approvals/queue',{params:expect.objectContaining({documentType:'StockTransfer',warehouseId:'2',creatorId:'3',keyword:'TRF',slaStatus:'Overdue',fromUtc:new Date('2026-09-05T00:00').toISOString(),toUtc:new Date('2026-09-05T23:59').toISOString(),pageIndex:1})}));
     await waitFor(()=>expect((view.getByText('Sau') as HTMLButtonElement).disabled).toBe(false));fireEvent.click(view.getByText('Sau'));
-    await waitFor(()=>expect(apiClient.get).toHaveBeenLastCalledWith('/api/approvals/queue',{params:expect.objectContaining({pageIndex:2})}));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenLastCalledWith('/api/v1/approvals/queue',{params:expect.objectContaining({pageIndex:2})}));
   });
   it('renders waiting time, textual SLA badge, and the UTC request instant tooltip',async()=>{
     const view=render(<Approvals/>);await view.findByText('TRF-7');
@@ -77,7 +77,7 @@ describe('Approvals page',{timeout:20000},()=>{
     fireEvent.click(view.getByText('Xác nhận duyệt'));fireEvent.click(view.getByText('Xác nhận duyệt'));fireEvent.keyDown(document,{key:'Escape'});
     expect(view.getByRole('dialog')).toBeTruthy();expect(apiClient.post).toHaveBeenCalledTimes(1);
     finish();await waitFor(()=>expect(view.queryByRole('dialog')).toBeNull());
-    expect(apiClient.post).toHaveBeenCalledWith('/api/stock-transfers/7/approve',null,{headers:expect.objectContaining({'Idempotency-Key':expect.any(String)})});
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/stock-transfers/7/approve',null,{headers:expect.objectContaining({'Idempotency-Key':expect.any(String)})});
   });
   it('refreshes on conflict, preserves correlation and dialog, and retains key on retry',async()=>{
     vi.mocked(apiClient.post).mockRejectedValue({response:{status:409,data:{correlationId:'conflict-id'}}});

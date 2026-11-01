@@ -19,6 +19,9 @@ public class WarehouseLocation : ITenantEntity
     public decimal? MapY { get; set; }
     public decimal? MapWidth { get; set; }
     public decimal? MapHeight { get; set; }
+    public decimal? MinBaseQty { get; set; }
+    public decimal? MaxBaseQty { get; set; }
+    public int? ReplenishFromLocationId { get; set; }
     public WarehouseLocationType LocationType { get; set; }
     public bool IsActive { get; set; } = true;
     public bool IsBlocked { get; set; }

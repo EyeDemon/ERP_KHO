@@ -70,7 +70,7 @@ describe('Wave-4 Sector D (REM-16): Frontend Precision, Scanner Hygiene & Idempo
       />,
     );
 
-    await waitFor(() => expect(getSpy).toHaveBeenCalledWith('/api/importreceipts/55/inventory-identities'));
+    await waitFor(() => expect(getSpy).toHaveBeenCalledWith('/api/v1/import-receipts/55/inventory-identities'));
     expect(screen.getByText('Khả dụng: 0.2/0.3 KG')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Thêm lot' }));
@@ -103,21 +103,21 @@ describe('Wave-4 Sector D (REM-16): Frontend Precision, Scanner Hygiene & Idempo
 
     const postConfig = requestInterceptor({
       method: 'post',
-      url: '/api/products',
+      url: '/api/v1/products',
       headers: {},
     }) as { headers: Record<string, string> };
     expect(postConfig.headers['Idempotency-Key']).toMatch(/^auto-post-/);
 
     const existingKeyConfig = requestInterceptor({
       method: 'put',
-      url: '/api/products/1',
+      url: '/api/v1/products/1',
       headers: { 'Idempotency-Key': 'custom-key-123' },
     }) as { headers: Record<string, string> };
     expect(existingKeyConfig.headers['Idempotency-Key']).toBe('custom-key-123');
 
     const getConfig = requestInterceptor({
       method: 'get',
-      url: '/api/products',
+      url: '/api/v1/products',
       headers: {},
     }) as { headers: Record<string, string> };
     expect(getConfig.headers['Idempotency-Key']).toBeUndefined();

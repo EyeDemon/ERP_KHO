@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CostValuation from './CostValuation';
 import apiClient from '../services/apiClient';
@@ -112,7 +113,7 @@ describe('CostValuation Page', () => {
     expect(await screen.findByText(/EINV-ND70-2026-009/i)).toBeTruthy();
   });
 
-  it('falls back to /api/v1/inventory when owner-gross-profit returns empty valuation items', async () => {
+  it('falls back to /api/v1/inventory-reconciliation/valuation when owner-gross-profit returns empty valuation items', async () => {
     vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
       if (url === '/api/v1/reports/owner-gross-profit') {
         return {
@@ -124,7 +125,7 @@ describe('CostValuation Page', () => {
           },
         } as never;
       }
-      if (url === '/api/v1/inventory') {
+      if (url === '/api/v1/inventory-reconciliation/valuation') {
         return {
           data: {
             items: [
@@ -218,5 +219,34 @@ describe('CostValuation Page', () => {
     expect(screen.getByText('30.000 đ')).toBeTruthy();
     expect(screen.getByText('3.000 đ')).toBeTruthy();
     expect(screen.getByText('1.015.000 đ')).toBeTruthy();
+  });
+
+  it('auto-activates MISA AMIS mode banner when routed via /misa-exports and supports switching tabs (UI-FND-011)', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: {
+        grossRevenue: 1500000,
+        movingAverageCogs: 900000,
+        netPocketProfit: 600000,
+        netMarginPct: 40,
+        costHiddenByRbac: false,
+        skuValuations: [],
+      },
+    } as never);
+
+    render(
+      <MemoryRouter initialEntries={['/misa-exports']}>
+        <CostValuation />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId('cost-valuation-mode-tabs')).toBeTruthy();
+    expect(screen.getByTestId('misa-export-active-banner').textContent).toContain(
+      'Đang mở phân hệ Kết xuất MISA AMIS (/misa-exports)',
+    );
+    expect(screen.getByTestId('tab-cost-valuation-misa').getAttribute('aria-selected')).toBe('true');
+
+    fireEvent.click(screen.getByTestId('tab-cost-valuation-all'));
+    expect(screen.getByTestId('tab-cost-valuation-all').getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByTestId('misa-export-active-banner')).toBeNull();
   });
 });

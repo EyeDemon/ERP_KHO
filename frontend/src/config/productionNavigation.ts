@@ -18,6 +18,7 @@ export const productionNavigation: ProductionNavItem[] = [
   { path: '/asns', label: 'ASN dự kiến', section: 'Nhập kho', description: 'Lô hàng dự kiến, vận chuyển, thời điểm đến và bàn giao sang tiếp nhận.', permission: 'asn.read', expressMode: false },
   { path: '/import-receipts', label: 'Phiếu nhập kho', section: 'Nhập kho', description: 'Nhận hàng, kiểm tra chất lượng, chênh lệch và ghi sổ nhập kho.', permission: 'receipt.read', expressMode: true },
   { path: '/putaway-tasks', label: 'Cất hàng', section: 'Nhập kho', description: 'Nhiệm vụ cất hàng từ khu nhận hàng tới vị trí đích.', permission: 'putaway.read', expressMode: false },
+  { path: '/customer-returns', label: 'Hàng hoàn & Đổi trả (RMA)', section: 'Nhập kho', description: 'Tiếp nhận kiện hoàn TMĐT vào biệt trữ, kiểm định chất lượng và định đoạt 4 luồng về sổ cái tồn kho.', permission: 'receipt.read', expressMode: true },
 
   // 3. Xuất kho
   { path: '/export-receipts', label: 'Phiếu xuất kho', section: 'Xuất kho', description: 'Chứng từ xuất, giữ hàng và xác nhận hàng rời kho.', permission: 'export_receipt.read', expressMode: true },

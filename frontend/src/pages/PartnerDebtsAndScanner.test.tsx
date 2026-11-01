@@ -108,13 +108,13 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
     localStorage.setItem('permissions', JSON.stringify(['partner.read', 'partner.update']));
 
     get.mockImplementation((url: string) => {
-      if (url === '/api/partner-debts/summary') {
+      if (url === '/api/v1/partner-debts/summary') {
         return Promise.resolve({ data: mockSummary } as never);
       }
-      if (url === '/api/partner-debts/invoices') {
+      if (url === '/api/v1/partner-debts/invoices') {
         return Promise.resolve({ data: [mockApInvoice, mockArInvoice] } as never);
       }
-      if (url === '/api/partner-debts/ledger') {
+      if (url === '/api/v1/partner-debts/ledger') {
         return Promise.resolve({ data: mockLedger } as never);
       }
       return Promise.resolve({ data: {} } as never);
@@ -193,7 +193,7 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
 
     expect(post).toHaveBeenCalledTimes(1);
     expect(post).toHaveBeenCalledWith(
-      '/api/partner-debts/invoices/101/pay',
+      '/api/v1/partner-debts/invoices/101/pay',
       expect.objectContaining({
         amount: 400000,
         paymentMethod: 'BANK_TRANSFER',
@@ -236,7 +236,7 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
 
     await waitFor(() => {
-      expect(get).toHaveBeenCalledWith('/api/barcode-lookup/resolve', {
+      expect(get).toHaveBeenCalledWith('/api/v1/barcode-lookup/resolve', {
         params: { code: 'BIN-STAGE-01', warehouseId: 5 },
       });
     });
@@ -431,13 +431,13 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
     ];
 
     get.mockImplementation((url: string) => {
-      if (url === '/api/partner-debts/summary') {
+      if (url === '/api/v1/partner-debts/summary') {
         return Promise.resolve({ data: mockSummary } as never);
       }
-      if (url === '/api/partner-debts/invoices') {
+      if (url === '/api/v1/partner-debts/invoices') {
         return Promise.resolve({ data: [qaApInvoice, qaArInvoice] } as never);
       }
-      if (url === '/api/partner-debts/ledger') {
+      if (url === '/api/v1/partner-debts/ledger') {
         return Promise.resolve({ data: qaMixedLedger } as never);
       }
       return Promise.resolve({ data: {} } as never);

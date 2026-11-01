@@ -18,29 +18,24 @@ namespace ERP.Api.Controllers;
 public class ProductsController : ControllerBase
 {
     private readonly IProductService _productService;
-    private readonly IProductCatalogService? _catalogService;
-    private readonly IProductOperationsService? _productOps;
+    private readonly IProductCatalogService _catalogService;
+    private readonly IProductOperationsService _productOps;
+    private readonly ICurrentUser _currentUser;
 
-    [ActivatorUtilitiesConstructor]
     public ProductsController(
         IProductService productService,
-        IProductCatalogService catalogService = null!,
-        IProductOperationsService productOps = null!,
-        ICurrentUser currentUser = null!,
-        IWarehouseAuthorizationService warehouseAccess = null!)
+        IProductCatalogService catalogService,
+        IProductOperationsService productOps,
+        ICurrentUser currentUser)
     {
+        ArgumentNullException.ThrowIfNull(productService);
+        ArgumentNullException.ThrowIfNull(catalogService);
+        ArgumentNullException.ThrowIfNull(productOps);
+        ArgumentNullException.ThrowIfNull(currentUser);
         _productService = productService;
         _catalogService = catalogService;
         _productOps = productOps;
-    }
-
-    public ProductsController(
-        IProductService productService,
-        IProductOperationsService productOps,
-        ICurrentUser currentUser = null!,
-        IWarehouseAuthorizationService warehouseAccess = null!)
-        : this(productService, null!, productOps, currentUser, warehouseAccess)
-    {
+        _currentUser = currentUser;
     }
 
     [HttpGet]
@@ -80,35 +75,13 @@ public class ProductsController : ControllerBase
     }
 
     [HttpPost("auto-audit-governance")]
-    [PermissionAuthorize(AppPermissions.ProductRead)]
+    [PermissionAuthorize(AppPermissions.ProductUpdate)]
     public async Task<IActionResult> AutoAuditGovernance(CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(_currentUser, AppPermissions.ProductUpdate))
             return Forbid();
 
-        if (_productOps != null)
-            return (await _productOps.AutoAuditGovernanceAsync(ResolveActorUserId(), cancellationToken)).ToActionResult(this);
-
-        var products = (await _productService.GetAllProductsAsync(cancellationToken)).ToList();
-        var active = products.Where(p => p.IsActive).ToList();
-        var now = DateTime.UtcNow;
-        return Ok(new
-        {
-            auditId = $"SKU-AUD-{now:yyyyMMdd-HHmm}",
-            auditedSkuCount = active.Count > 0 ? active.Count : products.Count,
-            totalSkuCount = products.Count,
-            activeSkuCount = active.Count,
-            barcodeConfiguredCount = active.Count(p => p.Barcodes is { Count: > 0 }),
-            uomConfiguredCount = active.Count(p => p.UnitId > 0),
-            dimensionConfiguredCount = active.Count(p => p.UnitWeightKg.HasValue || p.UnitVolumeM3.HasValue || p.UnitPalletEquivalent.HasValue),
-            expiryControlledCount = active.Count(p => p.ExpiryControl),
-            qcAndTolerancePolicyCount = 0,
-            fefoPolicyStatus = "Đã xác thực chính sách hạn dùng FEFO & vòng đời lô",
-            packagingHierarchyStatus = "Đã chuẩn hóa quy đổi ĐVT, mã vạch & kích thước đóng gói",
-            status = "Đã hoàn tất kiểm toán tự động chuẩn dữ liệu nền SKU",
-            statusLabel = "Đã hoàn tất kiểm toán tự động chuẩn dữ liệu nền SKU",
-            auditedAtUtc = now
-        });
+        return (await _productOps.AutoAuditGovernanceAsync(ResolveActorUserId(), cancellationToken)).ToActionResult(this);
     }
 
     [HttpGet("paged")]
@@ -173,32 +146,28 @@ public class ProductsController : ControllerBase
     [HttpGet("{id:int}/uoms")]
     [PermissionAuthorize(AppPermissions.ProductRead)]
     public async Task<IActionResult> GetProductUoms(int id, CancellationToken cancellationToken = default)
-        => _productOps == null ? Ok(Array.Empty<object>()) : (await _productOps.GetProductUomsAsync(id, cancellationToken)).ToActionResult(this);
+        => (await _productOps.GetProductUomsAsync(id, cancellationToken)).ToActionResult(this);
 
     [HttpPost("{id:int}/uoms")]
     [IdempotentCommand("Product.UpsertUom")]
-    [PermissionAuthorize(AppPermissions.ProductRead)]
+    [PermissionAuthorize(AppPermissions.ProductUpdate, AppPermissions.ProductCreate, AppPermissions.UomManage)]
     public async Task<IActionResult> UpsertProductUom(
         int id,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] UpsertProductUomRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.ProductUpdate, AppPermissions.ProductCreate, AppPermissions.UomManage))
             return Forbid();
-        if (_productOps == null)
-            return BadRequest(new { message = "Không thể kết nối cơ sở dữ liệu để cấu hình quy đổi đơn vị tính." });
         return (await _productOps.UpsertProductUomAsync(id, request, ResolveActorUserId(), cancellationToken)).ToActionResult(this);
     }
 
     [HttpDelete("{id:int}/uoms/{uomId:int}")]
     [IdempotentCommand("Product.DeleteUom")]
-    [PermissionAuthorize(AppPermissions.ProductRead)]
+    [PermissionAuthorize(AppPermissions.ProductUpdate, AppPermissions.ProductCreate, AppPermissions.UomManage)]
     public async Task<IActionResult> DeleteProductUom(int id, int uomId, CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.ProductUpdate, AppPermissions.ProductCreate, AppPermissions.UomManage))
             return Forbid();
-        if (_productOps == null)
-            return BadRequest(new { message = "Không thể kết nối cơ sở dữ liệu." });
         return (await _productOps.DeleteProductUomAsync(id, uomId, ResolveActorUserId(), cancellationToken)).ToActionResult(this);
     }
 
@@ -208,19 +177,17 @@ public class ProductsController : ControllerBase
     [HttpGet("qc-policies")]
     [PermissionAuthorize(AppPermissions.ProductRead)]
     public async Task<IActionResult> GetQcPolicies([FromQuery] int? productId = null, [FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
-        => _productOps == null ? Ok(Array.Empty<object>()) : (await _productOps.GetQcPoliciesAsync(productId, warehouseId, cancellationToken)).ToActionResult(this);
+        => (await _productOps.GetQcPoliciesAsync(productId, warehouseId, cancellationToken)).ToActionResult(this);
 
     [HttpPost("qc-policies")]
     [IdempotentCommand("Product.UpsertQcPolicy")]
-    [PermissionAuthorize(AppPermissions.ProductRead)]
+    [PermissionAuthorize(AppPermissions.ProductUpdate, AppPermissions.ProductCreate)]
     public async Task<IActionResult> UpsertQcPolicy(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] UpsertQcPolicyRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.ProductUpdate, AppPermissions.ProductCreate))
             return Forbid();
-        if (_productOps == null)
-            return BadRequest(new { message = "Không thể kết nối cơ sở dữ liệu để lưu chính sách kiểm định QC." });
         return (await _productOps.UpsertQcPolicyAsync(request, ResolveActorUserId(), cancellationToken)).ToActionResult(this);
     }
 
@@ -233,19 +200,17 @@ public class ProductsController : ControllerBase
     [HttpGet("tolerance-policies")]
     [PermissionAuthorize(AppPermissions.ProductRead)]
     public async Task<IActionResult> GetTolerancePolicies([FromQuery] int? productId = null, [FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
-        => _productOps == null ? Ok(Array.Empty<object>()) : (await _productOps.GetTolerancePoliciesAsync(productId, warehouseId, cancellationToken)).ToActionResult(this);
+        => (await _productOps.GetTolerancePoliciesAsync(productId, warehouseId, cancellationToken)).ToActionResult(this);
 
     [HttpPost("tolerance-policies")]
     [IdempotentCommand("Product.UpsertTolerancePolicy")]
-    [PermissionAuthorize(AppPermissions.ProductRead)]
+    [PermissionAuthorize(AppPermissions.ProductUpdate, AppPermissions.ProductCreate)]
     public async Task<IActionResult> UpsertTolerancePolicy(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] UpsertTolerancePolicyRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.ProductUpdate, AppPermissions.ProductCreate))
             return Forbid();
-        if (_productOps == null)
-            return BadRequest(new { message = "Không thể kết nối cơ sở dữ liệu để lưu chính sách dung sai nhận hàng." });
         return (await _productOps.UpsertTolerancePolicyAsync(request, ResolveActorUserId(), cancellationToken)).ToActionResult(this);
     }
 
@@ -260,9 +225,7 @@ public class ProductsController : ControllerBase
     [HttpGet("{id:int}/bundle-components")]
     [PermissionAuthorize(AppPermissions.ProductRead)]
     public async Task<IActionResult> GetBundleComponents(int id, [FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
-        => _productOps == null
-            ? Ok(new { parentProductId = id, availableBundleQty = 0m, items = Array.Empty<object>(), components = Array.Empty<object>() })
-            : (await _productOps.GetBundleComponentsAsync(id, warehouseId, cancellationToken)).ToActionResult(this);
+        => (await _productOps.GetBundleComponentsAsync(id, warehouseId, cancellationToken)).ToActionResult(this);
 
     [HttpPost("{id:int}/bundle-components")]
     [PermissionAuthorize(AppPermissions.ProductUpdate)]
@@ -272,10 +235,8 @@ public class ProductsController : ControllerBase
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] UpsertBundleComponentRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.ProductUpdate))
             return Forbid();
-        if (_productOps == null)
-            return StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." });
 
         var input = request == null
             ? null
@@ -297,9 +258,7 @@ public class ProductsController : ControllerBase
     public async Task<IActionResult> GetChannelSkuMappings(
         [FromQuery] int? productId = null, [FromQuery] int? shopId = null, [FromQuery] string? channelCode = null,
         CancellationToken cancellationToken = default)
-        => _productOps == null
-            ? Ok(new { totalCount = 0, items = Array.Empty<object>(), mappings = Array.Empty<object>(), stores = Array.Empty<object>() })
-            : (await _productOps.GetChannelSkuMappingsAsync(productId, shopId, channelCode, cancellationToken)).ToActionResult(this);
+        => (await _productOps.GetChannelSkuMappingsAsync(productId, shopId, channelCode, cancellationToken)).ToActionResult(this);
 
     [HttpPost("channel-sku-mappings")]
     [PermissionAuthorize(AppPermissions.ProductUpdate)]
@@ -308,10 +267,8 @@ public class ProductsController : ControllerBase
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] UpsertChannelSkuMappingRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.ProductUpdate))
             return Forbid();
-        if (_productOps == null)
-            return StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." });
         return (await _productOps.UpsertChannelSkuMappingAsync(request, ResolveActorUserId(), cancellationToken)).ToActionResult(this);
     }
 
@@ -327,48 +284,50 @@ public class ProductsController : ControllerBase
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ProductDekitRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.ProductUpdate))
             return Forbid();
-        if (_productOps == null)
-            return StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." });
         return (await _productOps.DekitAsync(id, request, ResolveActorUserId(), cancellationToken)).ToActionResult(this);
     }
 
     [HttpGet("kit-work-orders")]
-    [PermissionAuthorize(AppPermissions.ProductRead)]
+    [HttpGet("/api/v1/kit-work-orders")]
+    [PermissionAuthorize(AppPermissions.ProductRead, AppPermissions.InventoryRead)]
     public async Task<IActionResult> GetKitWorkOrders(
         [FromQuery] int? warehouseId = null, [FromQuery] int? kitProductId = null, [FromQuery] string? status = null,
         CancellationToken cancellationToken = default)
-        => _productOps == null ? Ok(Array.Empty<object>()) : (await _productOps.GetKitWorkOrdersAsync(warehouseId, kitProductId, status, cancellationToken)).ToActionResult(this);
+        => (await _productOps.GetKitWorkOrdersAsync(warehouseId, kitProductId, status, cancellationToken)).ToActionResult(this);
 
     [HttpPost("kit-work-orders")]
+    [HttpPost("/api/v1/kit-work-orders")]
     [IdempotentCommand("Product.CreateKitWorkOrder")]
-    [PermissionAuthorize(AppPermissions.ProductUpdate)]
+    [PermissionAuthorize(AppPermissions.ProductUpdate, AppPermissions.InventoryMovementCreate)]
     public async Task<IActionResult> CreateKitWorkOrder(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CreateKitWorkOrderInput? request = null,
         CancellationToken cancellationToken = default)
-        => User?.IsInRole(AppRoles.Viewer) == true ? Forbid() : _productOps == null
-            ? StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." })
+        => !this.HasActionPermission(_currentUser, AppPermissions.ProductUpdate, AppPermissions.InventoryMovementCreate)
+            ? Forbid()
             : (await _productOps.CreateKitWorkOrderAsync(request, ResolveActorUserId(), cancellationToken)).ToActionResult(this);
 
     [HttpPost("kit-work-orders/{id:int}/complete")]
+    [HttpPost("/api/v1/kit-work-orders/{id:int}/complete")]
     [IdempotentCommand("Product.CompleteKitWorkOrder")]
-    [PermissionAuthorize(AppPermissions.ProductUpdate)]
+    [PermissionAuthorize(AppPermissions.ProductUpdate, AppPermissions.InventoryMovementCreate)]
     public async Task<IActionResult> CompleteKitWorkOrder(
         int id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CompleteKitWorkOrderInput? request = null,
         CancellationToken cancellationToken = default)
-        => User?.IsInRole(AppRoles.Viewer) == true ? Forbid() : _productOps == null
-            ? StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." })
+        => !this.HasActionPermission(_currentUser, AppPermissions.ProductUpdate, AppPermissions.InventoryMovementCreate)
+            ? Forbid()
             : (await _productOps.CompleteKitWorkOrderAsync(id, request, ResolveActorUserId(), cancellationToken)).ToActionResult(this);
 
     [HttpPost("kit-work-orders/{id:int}/cancel")]
+    [HttpPost("/api/v1/kit-work-orders/{id:int}/cancel")]
     [IdempotentCommand("Product.CancelKitWorkOrder")]
-    [PermissionAuthorize(AppPermissions.ProductUpdate)]
+    [PermissionAuthorize(AppPermissions.ProductUpdate, AppPermissions.InventoryMovementCreate)]
     public async Task<IActionResult> CancelKitWorkOrder(
         int id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CancelKitWorkOrderInput? request = null,
         CancellationToken cancellationToken = default)
-        => User?.IsInRole(AppRoles.Viewer) == true ? Forbid() : _productOps == null
-            ? StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." })
+        => !this.HasActionPermission(_currentUser, AppPermissions.ProductUpdate, AppPermissions.InventoryMovementCreate)
+            ? Forbid()
             : (await _productOps.CancelKitWorkOrderAsync(id, request, ResolveActorUserId(), cancellationToken)).ToActionResult(this);
 
     private int? ResolveActorUserId()

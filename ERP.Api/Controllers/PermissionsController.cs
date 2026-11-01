@@ -12,25 +12,20 @@ namespace ERP.Api.Controllers;
 public sealed class PermissionsController : ControllerBase
 {
     private readonly IPermissionOperationsService _permissionOps;
-    private readonly IWarehouseAuthorizationService? _warehouseAuth;
-    private readonly ICurrentUser? _currentUser;
+    private readonly IWarehouseAuthorizationService _warehouseAuth;
+    private readonly ICurrentUser _currentUser;
 
-    [ActivatorUtilitiesConstructor]
     public PermissionsController(
         IPermissionOperationsService permissionOps,
-        IWarehouseAuthorizationService? warehouseAuth = null,
-        ICurrentUser? currentUser = null)
+        IWarehouseAuthorizationService warehouseAuth,
+        ICurrentUser currentUser)
     {
+        ArgumentNullException.ThrowIfNull(permissionOps);
+        ArgumentNullException.ThrowIfNull(warehouseAuth);
+        ArgumentNullException.ThrowIfNull(currentUser);
         _permissionOps = permissionOps;
         _warehouseAuth = warehouseAuth;
         _currentUser = currentUser;
-    }
-
-    public PermissionsController(
-        IPermissionOperationsService permissionOps,
-        ICurrentUser currentUser)
-        : this(permissionOps, null, currentUser)
-    {
     }
 
     [HttpGet, PermissionAuthorize(AppPermissions.PermissionRead)]
@@ -68,12 +63,12 @@ public sealed class PermissionsController : ControllerBase
 
     [HttpPost("tenants/verify-quotas")]
     [IdempotentCommand("Permissions.VerifyTenantQuotas")]
-    [PermissionAuthorize(AppPermissions.PermissionRead)]
+    [PermissionAuthorize(AppPermissions.UserManage)]
     public async Task<IActionResult> VerifyTenantQuotas(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyTenantQuotasRequest? request = null,
         CancellationToken ct = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.UserManage))
             return Forbid();
 
         return this.ToActionResult(await _permissionOps.VerifyTenantQuotasAsync(request, GetActorUserId(), ct));
@@ -85,13 +80,17 @@ public sealed class PermissionsController : ControllerBase
         string? OwnerEmail = null,
         string? IndustryTemplate = null,
         string? PlanCode = null,
-        bool AllocateNewTenant = false) : ProvisionTenantInput(
+        bool AllocateNewTenant = false,
+        string? OwnerUsername = null,
+        string? OwnerPassword = null) : ProvisionTenantInput(
             CompanyName,
             TaxCode,
             OwnerEmail,
             IndustryTemplate,
             PlanCode,
-            AllocateNewTenant);
+            AllocateNewTenant,
+            OwnerUsername,
+            OwnerPassword);
 
     public sealed record SeedDemoDataRequest(
         string? IndustryTemplate = null,
@@ -126,14 +125,13 @@ public sealed class PermissionsController : ControllerBase
     [HttpPost("saas/tenants/provision")]
     [HttpPost("saas-tenants/provision")]
     [HttpPost("~/api/v1/saas/onboarding/provision-tenant")]
-    [AllowAnonymous]
-    [PermissionAuthorize(AppPermissions.PermissionRead)]
+    [PermissionAuthorize(AppPermissions.UserManage)]
     [IdempotentCommand("SaaS.ProvisionTenant")]
     public async Task<IActionResult> ProvisionSaaSTenant(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ProvisionTenantRequest? request = null,
         CancellationToken ct = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.UserManage))
             return Forbid();
 
         return this.ToActionResult(await _permissionOps.ProvisionSaaSTenantAsync(request, ct));
@@ -154,13 +152,13 @@ public sealed class PermissionsController : ControllerBase
     [HttpPost("saas-demo-seed")]
     [HttpPost("~/api/v1/saas/onboarding/seed-industry-template")]
     [HttpPost("~/api/v1/saas/onboarding/purge-demo-data")]
-    [PermissionAuthorize(AppPermissions.PermissionRead)]
+    [PermissionAuthorize(AppPermissions.UserManage)]
     [IdempotentCommand("SaaS.SeedDemoData")]
     public async Task<IActionResult> SeedSaaSDemoData(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SeedDemoDataRequest? request = null,
         CancellationToken ct = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.UserManage))
             return Forbid();
 
         return this.ToActionResult(await _permissionOps.SeedSaaSDemoDataAsync(request, ct));
@@ -183,13 +181,13 @@ public sealed class PermissionsController : ControllerBase
     [HttpPost("saas-subscription-billing/enforce-quota-check")]
     [HttpPost("~/api/v1/saas/subscriptions/enforce-quota")]
     [HttpPost("~/api/v1/saas/subscriptions/enforce-quota-check")]
-    [PermissionAuthorize(AppPermissions.PermissionRead)]
+    [PermissionAuthorize(AppPermissions.UserManage)]
     [IdempotentCommand("SaaS.EnforceQuotaCheck")]
     public async Task<IActionResult> EnforceSubscriptionQuota(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EnforceSubscriptionQuotaRequest? request = null,
         CancellationToken ct = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.UserManage))
             return Forbid();
 
         return this.ToActionResult(await _permissionOps.EnforceSubscriptionQuotaAsync(request, ct));
@@ -200,31 +198,24 @@ public sealed class PermissionsController : ControllerBase
     [HttpPost("saas/subscription-billing/create-vietqr-invoice")]
     [HttpPost("saas-subscription-billing/create-vietqr-invoice")]
     [HttpPost("~/api/v1/saas/subscriptions/create-vietqr-invoice")]
-    [PermissionAuthorize(AppPermissions.PermissionRead)]
+    [PermissionAuthorize(AppPermissions.UserManage)]
     [IdempotentCommand("SaaS.CreateVietQrInvoice")]
     public async Task<IActionResult> CreateVietQrInvoice(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CreateVietQrInvoiceRequest? request = null,
         CancellationToken ct = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.UserManage))
             return Forbid();
 
         return this.ToActionResult(await _permissionOps.CreateVietQrInvoiceAsync(request, ct));
     }
 
-    [HttpPost("saas/subscription-billing/webhook-vietqr")]
-    [HttpPost("saas-subscription-billing/webhook-vietqr")]
-    [HttpPost("~/api/v1/saas/subscriptions/webhook-vietqr")]
-    [HttpPost("~/api/v1/webhooks/billing/vietqr")]
-    [HttpPost("webhooks/billing/vietqr")]
-    [AllowAnonymous]
-    [PermissionAuthorize(AppPermissions.PermissionRead)]
-    [IdempotentCommand("SaaS.VietQrBillingWebhook")]
+    [NonAction]
     public async Task<IActionResult> HandleVietQrBillingWebhook(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VietQrWebhookRequest? request = null,
         CancellationToken ct = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.UserManage))
             return Forbid();
 
         string? providedSig = null;
@@ -235,7 +226,13 @@ public sealed class PermissionsController : ControllerBase
         }
 
         return this.ToActionResult(await _permissionOps.HandleVietQrBillingWebhookAsync(
-            request,
+            request is null
+                ? null
+                : new VietQrWebhookInput(
+                    request.InvoiceCode,
+                    request.PlanCode,
+                    request.PaidAmountVnd,
+                    request.BankTransactionRef),
             providedSig,
             GetActorUserId(),
             ct));
@@ -260,7 +257,7 @@ public sealed class PermissionsController : ControllerBase
     private int? GetActorUserId() =>
         int.TryParse(
             User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? User?.FindFirstValue("Id"),
-            out var uid) ? uid : (_currentUser is { UserId: > 0 } ? _currentUser.UserId : null);
+            out var uid) ? uid : (_currentUser is { IsAuthenticated: true, UserId: > 0 } ? _currentUser.UserId : null);
 }
 
 public sealed record PermissionGrantDto(string PermissionCode, byte[] RowVersion);

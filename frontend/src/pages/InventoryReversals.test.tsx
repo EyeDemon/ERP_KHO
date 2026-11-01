@@ -47,7 +47,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     expect(await view.findByText('Đổi trạng thái')).toBeTruthy();
     expect(view.getByText('Di chuyển vị trí')).toBeTruthy();
     expect(view.queryByText('Xác nhận đảo giao dịch')).toBeNull();
-    expect(apiClient.get).toHaveBeenCalledWith('/api/inventory/reversal-candidates?page=1&pageSize=20');
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/inventory/reversal-candidates?page=1&pageSize=20');
   });
 
   it('requires a valid reason code and offers only codes for the selected transaction type',async()=>{
@@ -101,7 +101,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     const submit=view.getByText('Xác nhận đảo giao dịch');
     fireEvent.click(submit);fireEvent.click(submit);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
-    expect(apiClient.post).toHaveBeenCalledWith('/api/inventory/reversals',{
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/inventory/reversals',{
       originalTransactionId:42,reasonCode:'OPERATION_CORRECTION',reason:'Đã kiểm tra theo chứng từ'
     },{headers:{'Idempotency-Key':'key:inventory-reversal-42:OPERATION_CORRECTION:Đã kiểm tra theo chứng từ'}});
     expect(completeIdempotentAction).toHaveBeenCalledWith('inventory-reversal-42:OPERATION_CORRECTION:Đã kiểm tra theo chứng từ');
@@ -212,7 +212,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     const filter=await view.findByLabelText('Lọc theo kho');
     fireEvent.change(filter,{target:{value:'2'}});
     await waitFor(()=>expect(apiClient.get)
-      .toHaveBeenCalledWith('/api/inventory/reversal-candidates?page=1&pageSize=20&warehouseId=2'));
+      .toHaveBeenCalledWith('/api/v1/inventory/reversal-candidates?page=1&pageSize=20&warehouseId=2'));
   });
 
   it('filters persisted reversal state in SQL before paging',async()=>{
@@ -221,11 +221,11 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     const select=view.getByLabelText('Lọc theo trạng thái đảo');
     fireEvent.change(select,{target:{value:'pending'}});
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
-      '/api/inventory/reversal-candidates?page=1&pageSize=20&isReversed=false'
+      '/api/v1/inventory/reversal-candidates?page=1&pageSize=20&isReversed=false'
     ));
     fireEvent.change(select,{target:{value:'reversed'}});
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
-      '/api/inventory/reversal-candidates?page=1&pageSize=20&isReversed=true'
+      '/api/v1/inventory/reversal-candidates?page=1&pageSize=20&isReversed=true'
     ));
   });
 
@@ -261,7 +261,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     fireEvent.change(view.getByLabelText('Tìm theo ID giao dịch'),{target:{value:'41'}});
     fireEvent.click(view.getByText('Tìm giao dịch'));
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
-      '/api/inventory/reversal-candidates?page=1&pageSize=20&transactionId=41'
+      '/api/v1/inventory/reversal-candidates?page=1&pageSize=20&transactionId=41'
     ));
   });
 
@@ -317,7 +317,7 @@ describe('InventoryReversals — backend-authoritative list',()=>{
     const view=render(<MemoryRouter><InventoryReversals/></MemoryRouter>);
     await view.findByText(/Trang 1 \/ 7/);
     fireEvent.click(view.getByText('Trang sau'));
-    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith('/api/inventory/reversal-candidates?page=2&pageSize=20'));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith('/api/v1/inventory/reversal-candidates?page=2&pageSize=20'));
     expect(await view.findByText(/Trang 2 \/ 7/)).toBeTruthy();
   });
 });

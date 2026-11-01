@@ -59,7 +59,7 @@ const Units = () => {
     setLoading(true);
     setError('');
     try {
-      const response = await apiClient.get('/api/units');
+      const response = await apiClient.get('/api/v1/units');
       setUnits(response.data);
     } catch (failure) {
       setError(messageOf(failure, 'Không thể tải danh sách đơn vị tính.'));
@@ -139,13 +139,13 @@ const Units = () => {
     setSaving(true);
     try {
       if (editing && form.id !== undefined) {
-        await apiClient.put(`/api/units/${form.id}`, {
+        await apiClient.put(`/api/v1/units/${form.id}`, {
           name,
           isActive: form.isActive,
         });
         setSuccess('Cập nhật đơn vị tính thành công.');
       } else {
-        await apiClient.post('/api/units', {
+        await apiClient.post('/api/v1/units', {
           code,
           name,
         });
@@ -166,7 +166,7 @@ const Units = () => {
     setError('');
     setSuccess('');
     try {
-      await apiClient.delete(`/api/units/${unit.id}`);
+      await apiClient.delete(`/api/v1/units/${unit.id}`);
       setSuccess('Xóa đơn vị tính thành công.');
       setCurrentPage(1);
       await load();
@@ -184,7 +184,7 @@ const Units = () => {
     setGovernanceBusy(true);
     setError('');
     try {
-      const res = await apiClient.post('/api/Units/verify-uom-integrity', {});
+      const res = await apiClient.post('/api/v1/units/verify-uom-integrity', {});
       if (res?.data?.verificationId && res?.data?.status) {
         setUomIntegrity({
           verificationId: String(res.data.verificationId),
@@ -207,7 +207,7 @@ const Units = () => {
     setGovernanceBusy(true);
     setError('');
     try {
-      const res = await apiClient.post('/api/Units/verify-catch-weight-coldchain', {});
+      const res = await apiClient.post('/api/v1/units/verify-catch-weight-coldchain', {});
       const data = res?.data as { verificationId?: string; status?: string } | undefined;
       if (data?.verificationId && data?.status) {
         setCatchWeightColdChainResult(`${data.verificationId} • ${({ CATCH_WEIGHT_COLDCHAIN_VALIDATED: 'Đã chuẩn hóa tồn kho hai ĐVT, chuỗi lạnh & hàng nguy hiểm', DUAL_UOM_COLDCHAIN_READY: 'Sẵn sàng tồn kho hai ĐVT & chuỗi lạnh' } as Record<string, string>)[data.status] || data.status}`);

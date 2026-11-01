@@ -12,11 +12,11 @@ describe('receipt print loading and errors', () => {
   afterEach(cleanup);
   beforeEach(() => { vi.resetAllMocks(); localStorage.clear(); localStorage.setItem('role', 'Admin'); localStorage.setItem('userId', '1'); localStorage.setItem('permissions', '["receipt.read"]'); });
   it('loads a fresh detail and clears preview data before a failed reload', async () => {
-    get.mockImplementation(async url => ({ data: url === '/api/importreceipts' ? [receipt] : url === '/api/importreceipts/3' ? receipt : url === '/api/business-partners' ? { items: [] } : [] }) as never);
+    get.mockImplementation(async url => ({ data: url === '/api/v1/import-receipts' ? [receipt] : url === '/api/v1/import-receipts/3' ? receipt : url === '/api/v1/business-partners' ? { items: [] } : [] }) as never);
     const view = render(<ImportReceipts />); await view.findByText('I3');
     fireEvent.click(view.getByText('Xem bản in')); expect(view.getByText('Đang tải bản in...')).toBeTruthy();
     expect(await view.findByRole('dialog')).toBeTruthy(); fireEvent.click(view.getByText('Đóng'));
-    get.mockImplementation(async url => { if (url === '/api/importreceipts/3') throw { response: { data: { message: 'Bị từ chối' } } }; return ({ data: url === '/api/importreceipts' ? [receipt] : url === '/api/business-partners' ? { items: [] } : [] }) as never; });
+    get.mockImplementation(async url => { if (url === '/api/v1/import-receipts/3') throw { response: { data: { message: 'Bị từ chối' } } }; return ({ data: url === '/api/v1/import-receipts' ? [receipt] : url === '/api/v1/business-partners' ? { items: [] } : [] }) as never; });
     fireEvent.click(view.getByText('Xem bản in')); await waitFor(() => expect(view.getByText('Không tải được dữ liệu bản in.')).toBeTruthy());
     expect(view.queryByRole('dialog')).toBeNull(); expect((view.getByText('Xem bản in') as HTMLButtonElement).disabled).toBe(false);
   });

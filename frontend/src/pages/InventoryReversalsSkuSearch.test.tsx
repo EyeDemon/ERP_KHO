@@ -36,11 +36,11 @@ it('sends trimmed SKU prefix with server-side reversal filter after prior load c
   fireEvent.change(view.getByLabelText('Tìm theo mã sản phẩm'),{target:{value:' SKU-10 '}});
   fireEvent.change(view.getByLabelText('Lọc theo trạng thái đảo'),{target:{value:'pending'}});
   await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
-    '/api/inventory/reversal-candidates?page=1&pageSize=20&isReversed=false'
+    '/api/v1/inventory/reversal-candidates?page=1&pageSize=20&isReversed=false'
   ));
   await waitFor(()=>expect((view.getByText('Tìm giao dịch') as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(view.getByText('Tìm giao dịch'));
   await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
-    '/api/inventory/reversal-candidates?page=1&pageSize=20&isReversed=false&productCode=SKU-10'
+    '/api/v1/inventory/reversal-candidates?page=1&pageSize=20&isReversed=false&productCode=SKU-10'
   ));
 });

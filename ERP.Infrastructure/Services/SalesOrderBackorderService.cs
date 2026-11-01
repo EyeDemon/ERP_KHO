@@ -1140,8 +1140,8 @@ public sealed class SalesOrderBackorderService(
 
     private static bool IsSqlDeadlock(Exception ex) =>
         ex is DeadlockException ||
-        ex is SqlException { Number: 1205 } ||
-        ex is DbUpdateException { InnerException: SqlException { Number: 1205 } };
+        ex is SqlException { Number: 1205 or 51033 } ||
+        ex is DbUpdateException { InnerException: SqlException { Number: 1205 or 51033 } };
 
     private void AddAudit(string action, SalesOrder order, string values) =>
         context.AuditLogs.Add(new AuditLog

@@ -29,13 +29,13 @@ describe('StockTransfer return-to-source UI', () => {
     localStorage.setItem('permissions', '["inventory_reversal.create"]');
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     get.mockImplementation(async url => {
-      if (url === '/api/stock-transfers') return { data: { items: [transfer], totalPages: 1 } } as never;
-      if (url === '/api/stock-transfers/81') return { data: transfer } as never;
-      if (url === '/api/stock-transfers/return-reasons') return {
+      if (url === '/api/v1/stock-transfers') return { data: { items: [transfer], totalPages: 1 } } as never;
+      if (url === '/api/v1/stock-transfers/81') return { data: transfer } as never;
+      if (url === '/api/v1/stock-transfers/return-reasons') return {
         data: [{ code: 'TRANSFER_DISPATCH_ERROR', name: 'Xuất điều chuyển sai' }],
       } as never;
-      if (url === '/api/warehouses') return { data: [{ id: 1, name: 'Kho nguồn' }, { id: 2, name: 'Kho đích' }] } as never;
-      if (url === '/api/products') return { data: [{ id: 9, code: 'SKU-9', name: 'Sản phẩm' }] } as never;
+      if (url === '/api/v1/warehouses') return { data: [{ id: 1, name: 'Kho nguồn' }, { id: 2, name: 'Kho đích' }] } as never;
+      if (url === '/api/v1/products') return { data: [{ id: 9, code: 'SKU-9', name: 'Sản phẩm' }] } as never;
       return { data: [] } as never;
     });
     post.mockResolvedValue({ data: {} } as never);
@@ -53,7 +53,7 @@ describe('StockTransfer return-to-source UI', () => {
     fireEvent.change(view.getByLabelText('Diễn giải hoàn trả'), { target: { value: 'Kho đích chưa tiếp nhận' } });
     fireEvent.click(button);
     await waitFor(() => expect(post).toHaveBeenCalledWith(
-      '/api/stock-transfers/81/return',
+      '/api/v1/stock-transfers/81/return',
       { reasonCode: 'TRANSFER_DISPATCH_ERROR', reason: 'Kho đích chưa tiếp nhận' },
       { headers: expect.objectContaining({ 'Idempotency-Key': expect.any(String) }) }
     ));
@@ -61,9 +61,9 @@ describe('StockTransfer return-to-source UI', () => {
 
   it('fails closed when authoritative reason catalog cannot be loaded', async () => {
     get.mockImplementation(async url => {
-      if (url === '/api/stock-transfers/return-reasons') throw new Error('offline');
-      if (url === '/api/stock-transfers') return { data: { items: [transfer], totalPages: 1 } } as never;
-      if (url === '/api/stock-transfers/81') return { data: transfer } as never;
+      if (url === '/api/v1/stock-transfers/return-reasons') throw new Error('offline');
+      if (url === '/api/v1/stock-transfers') return { data: { items: [transfer], totalPages: 1 } } as never;
+      if (url === '/api/v1/stock-transfers/81') return { data: transfer } as never;
       return { data: [] } as never;
     });
     const view = render(<StockTransfers />);

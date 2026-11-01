@@ -1,0 +1,128 @@
+/* ==========================================================================
+   ERP_KHO — 3-Layer Design Token Architecture (FND-020)
+   Layer 1: Primitive Tokens -> Layer 2: Semantic Tokens -> Layer 3: Component Tokens
+   ========================================================================== */
+
+:root {
+  /* ------------------------------------------------------------------------
+     LAYER 1: PRIMITIVE TOKENS (Color Palette, Spacing, Radius, Typography)
+     ------------------------------------------------------------------------ */
+  --erp-color-slate-50: #f8fafc;
+  --erp-color-slate-100: #f1f5f9;
+  --erp-color-slate-200: #e2e8f0;
+  --erp-color-slate-300: #cbd5e1;
+  --erp-color-slate-400: #94a3b8;
+  --erp-color-slate-500: #64748b;
+  --erp-color-slate-600: #475569;
+  --erp-color-slate-700: #334155;
+  --erp-color-slate-800: #1e293b;
+  --erp-color-slate-900: #0f172a;
+
+  --erp-color-blue-50: #eff6ff;
+  --erp-color-blue-100: #dbeafe;
+  --erp-color-blue-200: #bfdbfe;
+  --erp-color-blue-500: #3b82f6;
+  --erp-color-blue-600: #2563eb;
+  --erp-color-blue-700: #1d4ed8;
+  --erp-color-blue-800: #1e40af;
+
+  --erp-color-emerald-50: #ecfdf5;
+  --erp-color-emerald-100: #d1fae5;
+  --erp-color-emerald-200: #a7f3d0;
+  --erp-color-emerald-600: #059669;
+  --erp-color-emerald-700: #047857;
+  --erp-color-emerald-800: #065f46;
+
+  --erp-color-amber-50: #fffbeb;
+  --erp-color-amber-100: #fef3c7;
+  --erp-color-amber-200: #fde68a;
+  --erp-color-amber-600: #d97706;
+  --erp-color-amber-700: #b45309;
+  --erp-color-amber-800: #92400e;
+
+  --erp-color-rose-50: #fff1f2;
+  --erp-color-rose-100: #ffe4e6;
+  --erp-color-rose-200: #fecdd3;
+  --erp-color-rose-600: #e11d48;
+  --erp-color-rose-700: #be123c;
+  --erp-color-rose-800: #9f1239;
+
+  --erp-space-1: 4px;
+  --erp-space-2: 8px;
+  --erp-space-3: 12px;
+  --erp-space-4: 16px;
+  --erp-space-5: 20px;
+  --erp-space-6: 24px;
+  --erp-space-8: 32px;
+  --erp-space-10: 40px;
+  --erp-space-12: 48px;
+
+  --erp-radius-sm: 6px;
+  --erp-radius-md: 8px;
+  --erp-radius-lg: 10px;
+  --erp-radius-xl: 12px;
+
+  --erp-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --erp-font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Consolas, monospace;
+
+  /* ------------------------------------------------------------------------
+     LAYER 2: SEMANTIC TOKENS (Surfaces, Text, Borders, Operational Statuses)
+     ------------------------------------------------------------------------ */
+  --surface-canvas: var(--erp-color-slate-50);
+  --surface-card: #ffffff;
+  --surface-elevated: var(--erp-color-slate-100);
+
+  --text-primary: var(--erp-color-slate-900);
+  --text-secondary: var(--erp-color-slate-700);
+  --text-muted: var(--erp-color-slate-500);
+
+  --border-subtle: var(--erp-color-slate-200);
+  --border-focus: var(--erp-color-blue-600);
+
+  --status-available-bg: var(--erp-color-emerald-50);
+  --status-available-fg: var(--erp-color-emerald-800);
+  --status-available-border: var(--erp-color-emerald-200);
+
+  --status-quarantine-bg: var(--erp-color-amber-50);
+  --status-quarantine-fg: var(--erp-color-amber-800);
+  --status-quarantine-border: var(--erp-color-amber-200);
+
+  --status-damaged-bg: var(--erp-color-rose-50);
+  --status-damaged-fg: var(--erp-color-rose-800);
+  --status-damaged-border: var(--erp-color-rose-200);
+
+  --status-critical-bg: var(--erp-color-rose-100);
+  --status-critical-fg: var(--erp-color-rose-800);
+  --status-critical-border: var(--erp-color-rose-200);
+
+  /* ------------------------------------------------------------------------
+     LAYER 3: COMPONENT TOKENS (Table, KPI Card, Badge, Barcode Scanner Bar)
+     ------------------------------------------------------------------------ */
+  --table-cell-padding-y: 10px;
+  --table-cell-padding-x: 12px;
+  --kpi-card-radius: var(--erp-radius-lg);
+  --kpi-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --badge-font-size: 12px;
+  --scanner-bar-bg: var(--erp-color-slate-900);
+}
+
+/* --------------------------------------------------------------------------
+   NUMERICAL PRECISION & TABULAR-NUMS DISCIPLINE (Warehouse Qty & Currency)
+   -------------------------------------------------------------------------- */
+.tabular-nums,
+td[data-numeric="true"],
+th[data-numeric="true"],
+.erp-num,
+.kpi-value,
+.stat-value,
+.ui-stat-value,
+.ui-badge {
+  font-variant-numeric: tabular-nums;
+}
+
+td[data-numeric="true"],
+th[data-numeric="true"],
+.erp-num-right {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

@@ -370,7 +370,8 @@ public sealed class Wave4SectorBRemediationTests
         var controller = new AccountSecurityController(
             new Mock<IAccountAdminService>().Object,
             sessionService.Object,
-            new WmsGovernanceOperationsService(db));
+            new WmsGovernanceOperationsService(db),
+            Mock.Of<IPasswordHasherService>());
 
         await controller.Lock(77, new AccountSecurityCommandDto(rowVersionBase64));
         var afterLock = await db.Users.SingleAsync(u => u.Id == 77);

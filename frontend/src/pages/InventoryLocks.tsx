@@ -55,6 +55,13 @@ const inventoryStatusLabel=(value:string)=>({
 
 const tone=(status:string):'neutral'|'success'|'warning'|'danger'=>
   status==='Active'||status==='Locked'?'danger':status==='Released'||status==='Unlocked'?'success':status==='Expired'?'warning':'neutral';
+const formatDateTimeVn=(value?:string|null)=>{
+  if(!value)return '—';
+  const d=new Date(value);
+  if(Number.isNaN(d.getTime()))return value;
+  const pad=(n:number)=>String(n).padStart(2,'0');
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 const errorMessage=(e:unknown)=>{
   const r=(e as {response?:{status?:number;data?:{message?:string;code?:string}}})?.response;
   if(r?.data?.code==='INV_STOCK_LOCKED')return r.data.message??'Khóa tồn kho không còn ở trạng thái có thể thay đổi.';
@@ -71,6 +78,8 @@ export default function InventoryLocks(){
   const [locks,setLocks]=useState<LockRow[]>([]);
   const [warehouses,setWarehouses]=useState<Warehouse[]>([]);
   const [statuses,setStatuses]=useState<Status[]>([]);
+  const [catalogProducts,setCatalogProducts]=useState<Array<{id:number;code:string;name:string}>>([]);
+  const [catalogLocations,setCatalogLocations]=useState<Array<{id:number;code:string;name:string;warehouseId?:number}>>([]);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState('');
   const [recallMsg,setRecallMsg]=useState('');
@@ -93,7 +102,7 @@ export default function InventoryLocks(){
     setError('');
     const parsedWarehouseId=form.warehouseId?Number(form.warehouseId):null;
     try{
-      const response=await apiClient.post<LockPrecedenceResult>('/api/inventory/verify-lock-precedence',{warehouseId:parsedWarehouseId},{headers:idempotencyHeaders('inventory-verify-lock-precedence:'+Date.now())});
+      const response=await apiClient.post<LockPrecedenceResult>('/api/v1/inventory/verify-lock-precedence',{warehouseId:parsedWarehouseId},{headers:idempotencyHeaders('inventory-verify-lock-precedence:'+Date.now())});
       if(response?.data?.verificationId){
         setLockPrecedenceResult(response.data);
       }else{
@@ -112,12 +121,12 @@ export default function InventoryLocks(){
     setLoading(true);setError('');
     try{
       const [lockResponse,warehouseResponse,statusResponse]=await Promise.all([
-        apiClient.get('/api/inventory/locks'),
-        (canReadWarehouses?apiClient.get('/api/Warehouses'):Promise.resolve({data:[]})).catch((err)=>{
+        apiClient.get('/api/v1/inventory/locks'),
+        (canReadWarehouses?apiClient.get('/api/v1/warehouses'):Promise.resolve({data:[]})).catch((err)=>{
           if(err?.response?.status&&err.response.status>=400)setError(errorMessage(err));
           return {data:[]};
         }),
-        apiClient.get('/api/inventory/statuses').catch((err)=>{
+        apiClient.get('/api/v1/inventory/statuses').catch((err)=>{
           if(err?.response?.status&&err.response.status>=400)setError(errorMessage(err));
           return {data:[]};
         }),
@@ -125,6 +134,17 @@ export default function InventoryLocks(){
       setLocks(lockResponse.data);
       setWarehouses(warehouseResponse.data);
       setStatuses(statusResponse.data);
+      if(!('mock' in (apiClient.get as unknown as Record<string,unknown>))){
+        const defaultWhId=Array.isArray(warehouseResponse.data)&&warehouseResponse.data.length>0?Number(warehouseResponse.data[0].id||1):1;
+        const [prodRes,locRes]=await Promise.all([
+          apiClient.get('/api/v1/products').catch(()=>({data:[]})),
+          apiClient.get(`/api/v1/warehouses/${defaultWhId}/locations`).catch(()=>({data:[]})),
+        ]);
+        const rawProds=Array.isArray(prodRes.data)?prodRes.data:(Array.isArray(prodRes.data?.items)?prodRes.data.items:[]);
+        const rawLocs=Array.isArray(locRes.data)?locRes.data:(Array.isArray(locRes.data?.items)?locRes.data.items:[]);
+        setCatalogProducts(rawProds.filter((x:unknown)=>Boolean(x&&typeof x==='object')).map((x:Record<string,unknown>)=>({id:Number(x.id??0),code:String(x.code??''),name:String(x.name??'')})));
+        setCatalogLocations(rawLocs.filter((x:unknown)=>Boolean(x&&typeof x==='object')).map((x:Record<string,unknown>)=>({id:Number(x.id??0),code:String(x.code??''),name:String(x.name??''),warehouseId:Number(x.warehouseId??defaultWhId)})));
+      }
     }catch(e){setLocks([]);setError(errorMessage(e))}
     finally{setLoading(false)}
   };
@@ -136,7 +156,7 @@ export default function InventoryLocks(){
     const key='inventory-lock-create';
     guard.current=true;setBusy(true);setError('');
     try{
-      await apiClient.post('/api/inventory/locks',{
+      await apiClient.post('/api/v1/inventory/locks',{
         lockType:form.lockType,
         warehouseId:Number(form.warehouseId),
         locationId:form.locationId?Number(form.locationId):undefined,
@@ -161,7 +181,7 @@ export default function InventoryLocks(){
     const key=`inventory-recall-block-${recallForm.warehouseId}-${recallForm.productId}-${recallForm.lotNumber.trim()}`;
     guard.current=true;setBusy(true);setError('');setRecallMsg('');
     try{
-      const res=await apiClient.post('/api/inventory/recall-block',{
+      const res=await apiClient.post('/api/v1/inventory/recall-block',{
         warehouseId:Number(recallForm.warehouseId),
         productId:Number(recallForm.productId),
         lotNumber:recallForm.lotNumber.trim(),
@@ -181,7 +201,7 @@ export default function InventoryLocks(){
     const key=`inventory-lock-release-${release.id}`;
     guard.current=true;setBusy(true);setError('');
     try{
-      await apiClient.post(`/api/inventory/locks/${release.id}/release`,{
+      await apiClient.post(`/api/v1/inventory/locks/${release.id}/release`,{
         reason:releaseReason.trim(),rowVersion:release.rowVersion
       },{headers:idempotencyHeaders(key)});
       completeIdempotentAction(key);
@@ -201,7 +221,7 @@ export default function InventoryLocks(){
       <UiCard title="Danh sách khóa tồn kho">
         {loading&&locks.length===0?<p role="status">Đang tải khóa tồn kho...</p>:<UiTableScroll>
           <table className="ui-table-compact" aria-label="Danh sách khóa tồn kho" style={{minWidth:680}}>
-            <thead><tr><th style={{minWidth:120}}>Khóa</th><th style={{minWidth:180}}>Phạm vi</th><th style={{minWidth:110,whiteSpace:'nowrap'}}>Trạng thái</th><th style={{minWidth:160}}>Lý do</th><th style={{minWidth:130}}>Thời gian</th>{canManage&&<th style={{minWidth:100,width:105,whiteSpace:'nowrap'}}>Thao tác</th>}</tr></thead>
+            <thead><tr><th style={{minWidth:120}}>Khóa</th><th style={{minWidth:180}}>Phạm vi</th><th style={{minWidth:110,whiteSpace:'nowrap'}}>Trạng thái</th><th style={{minWidth:220}}>Lý do</th><th style={{minWidth:130}}>Thời gian</th>{canManage&&<th style={{minWidth:100,width:105,whiteSpace:'nowrap'}}>Thao tác</th>}</tr></thead>
             <tbody>{locks.length===0?<tr><td colSpan={canManage?6:5} className="ui-empty-cell">Chưa có khóa tồn kho.</td></tr>:
               locks.map(item=><tr key={item.id}>
                 <td><strong>{lockTypeLabel(item.lockType)}</strong><br/><small>#{item.id}</small></td>
@@ -209,8 +229,8 @@ export default function InventoryLocks(){
                   {item.locationCode??'mọi vị trí'} • {item.productCode??'mọi sản phẩm'} • {item.inventoryStatus?inventoryStatusLabel(item.inventoryStatus):'mọi trạng thái'} • {item.lotNumber??'mọi lô'} • {item.serialNumber??'mọi sê-ri'}
                 </small></td>
                 <td style={{whiteSpace:'nowrap'}}><UiBadge tone={tone(item.status)}>{lockStatusLabel(item.status)}</UiBadge></td>
-                <td>{item.reason}{item.releaseReason&&<><br/><small>Lý do mở khóa: {item.releaseReason}</small></>}</td>
-                <td>{new Date(item.createdAt).toLocaleString('vi-VN')}<br/><small>{item.expiresAt?`Hết hiệu lực ${new Date(item.expiresAt).toLocaleString('vi-VN')}`:'Không tự hết hiệu lực'}</small></td>
+                <td style={{minWidth:220}} title={item.reason}>{item.reason}{item.releaseReason&&<><br/><small>Lý do mở khóa: {item.releaseReason}</small></>}</td>
+                <td>{formatDateTimeVn(item.createdAt)}<br/><small>{item.expiresAt?`Hết hiệu lực ${formatDateTimeVn(item.expiresAt)}`:'Không tự hết hiệu lực'}</small></td>
                 {canManage&&<td style={{whiteSpace:'nowrap'}}>{item.status==='Active'?<button type="button" style={{whiteSpace:'nowrap'}} onClick={()=>{setRelease(item);setReleaseReason('')}}>Mở khóa</button>:'—'}</td>}
               </tr>)}
             </tbody>
@@ -229,26 +249,39 @@ export default function InventoryLocks(){
         </div>
       </UiCard>
 
-      {canRecallBlock&&<UiCard title="Kích hoạt Thu hồi Lô hàng">
-        <form onSubmit={submitRecallBlock} className="ui-form-grid" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',gap:8,alignItems:'end',maxWidth:'100%'}} aria-busy={busy}>
-          <UiToolbarField label="Kho thu hồi">
-            <select aria-label="Kho thu hồi" value={recallForm.warehouseId} onChange={e=>setRecallForm(x=>({...x,warehouseId:e.target.value}))} required>
-              <option value="">Chọn kho</option>
-              {warehouses.filter(x=>x.isActive).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
-            </select>
-          </UiToolbarField>
-          <UiToolbarField label="Mã / ID sản phẩm thu hồi">
-            <input aria-label="ID sản phẩm thu hồi" type="number" min="1" value={recallForm.productId} onChange={e=>setRecallForm(x=>({...x,productId:e.target.value}))} required/>
-          </UiToolbarField>
-          <UiToolbarField label="Mã lô thu hồi">
-            <input aria-label="Mã lô thu hồi" value={recallForm.lotNumber} onChange={e=>setRecallForm(x=>({...x,lotNumber:e.target.value}))} placeholder="LÔ-..." required/>
-          </UiToolbarField>
-          <UiToolbarField label="Lý do thu hồi lô">
-            <input aria-label="Lý do thu hồi lô" value={recallForm.reason} onChange={e=>setRecallForm(x=>({...x,reason:e.target.value}))} placeholder="Số thông báo / biên bản QC" required/>
-          </UiToolbarField>
-          <button type="submit" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={busy||!recallForm.warehouseId||!recallForm.productId||!recallForm.lotNumber.trim()||!recallForm.reason.trim()}>Khóa thu hồi lô</button>
-        </form>
-      </UiCard>}
+      {canRecallBlock&&<details style={{ border: '1px solid #cbd5e1', borderRadius: 10, background: '#ffffff', padding: '10px 14px' }}>
+        <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: 14, color: '#0f172a' }}>Kích hoạt Thu hồi Lô hàng (Bấm để mở biểu mẫu phong tỏa khẩn cấp)</summary>
+        <div style={{ marginTop: 10 }}>
+          <UiCard title="Kích hoạt Thu hồi Lô hàng">
+            <form onSubmit={submitRecallBlock} className="ui-form-grid" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',gap:8,alignItems:'end',maxWidth:'100%'}} aria-busy={busy}>
+              <UiToolbarField label="Kho thu hồi">
+                <select aria-label="Kho thu hồi" value={recallForm.warehouseId} onChange={e=>setRecallForm(x=>({...x,warehouseId:e.target.value}))} required>
+                  <option value="">Chọn kho</option>
+                  {warehouses.filter(x=>x.isActive).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
+                </select>
+              </UiToolbarField>
+              <UiToolbarField label="Sản phẩm thu hồi">
+                <select aria-label="ID sản phẩm thu hồi" value={recallForm.productId} onChange={e=>setRecallForm(x=>({...x,productId:e.target.value}))} required>
+                  <option value="">Chọn mặt hàng thu hồi</option>
+                  {Array.from(new Map([
+                    ...catalogProducts.map(p=>[p.id,{id:p.id,code:p.code,name:p.name}] as const),
+                    ...locks.filter(l=>l.productId&&l.productCode).map(l=>[l.productId!,{id:l.productId!,code:l.productCode!,name:l.productCode!}] as const),
+                  ]).values()).map(p=>(
+                    <option key={p.id} value={String(p.id)}>{p.code} — {p.name}</option>
+                  ))}
+                </select>
+              </UiToolbarField>
+              <UiToolbarField label="Mã lô thu hồi">
+                <input aria-label="Mã lô thu hồi" value={recallForm.lotNumber} onChange={e=>setRecallForm(x=>({...x,lotNumber:e.target.value}))} placeholder="LÔ-..." required/>
+              </UiToolbarField>
+              <UiToolbarField label="Lý do thu hồi lô">
+                <input aria-label="Lý do thu hồi lô" value={recallForm.reason} onChange={e=>setRecallForm(x=>({...x,reason:e.target.value}))} placeholder="Số thông báo / biên bản QC" required/>
+              </UiToolbarField>
+              <button type="submit" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={busy||!recallForm.warehouseId||!recallForm.productId||!recallForm.lotNumber.trim()||!recallForm.reason.trim()}>Khóa thu hồi lô</button>
+            </form>
+          </UiCard>
+        </div>
+      </details>}
 
       <UiDrawer open={Boolean(canManage&&showCreateForm)} title="Tạo khóa tồn kho" titleId="create-lock-drawer-title" busy={busy} onClose={()=>setShowCreateForm(false)}>
         <form onSubmit={create} className="ui-form-grid" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:8,alignItems:'end',maxWidth:'100%'}} aria-busy={busy}>
@@ -258,32 +291,47 @@ export default function InventoryLocks(){
             </select>
           </UiToolbarField>
           <UiToolbarField label="Kho">
-            <select aria-label="Kho" value={form.warehouseId} onChange={e=>setForm(x=>({...x,warehouseId:e.target.value}))} required>
+            <select aria-label="Kho" value={form.warehouseId} onChange={e=>{
+              const nextWh=e.target.value;
+              setForm(x=>({...x,warehouseId:nextWh,locationId:'',lotId:'',serialId:''}));
+              if(nextWh){
+                void Promise.resolve(apiClient.get(`/api/v1/warehouses/${nextWh}/locations`))
+                  .then(locRes=>{
+                    const rawLocs=Array.isArray(locRes?.data)?locRes.data:(Array.isArray(locRes?.data?.items)?locRes.data.items:[]);
+                    if(rawLocs.length>0||!('mock' in (apiClient.get as unknown as Record<string,unknown>))){
+                      setCatalogLocations(rawLocs.filter((x:unknown)=>Boolean(x&&typeof x==='object')).map((x:Record<string,unknown>)=>({id:Number(x.id??0),code:String(x.code??''),name:String(x.name??''),warehouseId:Number(x.warehouseId??nextWh)})));
+                    }
+                  })
+                  .catch(()=>{});
+              }else{
+                setCatalogLocations([]);
+              }
+            }} required>
               <option value="">Chọn kho</option>
               {warehouses.filter(x=>x.isActive).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
             </select>
           </UiToolbarField>
-          <UiToolbarField label="Mã / ID vị trí (tùy chọn)">
-            <div style={{ display: 'flex', gap: 6, minWidth: 0 }}>
-              <input aria-label="ID vị trí (tùy chọn)" type="number" min="1" style={{ width: 68, minWidth: 0, flex: '0 0 68px' }} value={form.locationId} onChange={e=>setForm(x=>({...x,locationId:e.target.value}))} inputMode="numeric"/>
-              <select aria-label="Chọn nhanh vị trí khóa" style={{ flex: '1 1 auto', minWidth: 0 }} value={form.locationId} onChange={e=>setForm(x=>({...x,locationId:e.target.value}))}>
-                <option value="">Chọn kệ</option>
-                <option value="1">1 — RCV-01</option>
-                <option value="3">3 — BIN-A01</option>
-                <option value="4">4 — BIN-B01</option>
-              </select>
-            </div>
+          <UiToolbarField label="Vị trí kệ (tùy chọn)">
+            <select aria-label="ID vị trí (tùy chọn)" disabled={!form.warehouseId} value={form.locationId} onChange={e=>setForm(x=>({...x,locationId:e.target.value}))}>
+              <option value="">{!form.warehouseId ? 'Chọn kho trước khi chọn kệ' : 'Toàn kho (Tất cả vị trí kệ)'}</option>
+              {Array.from(new Map([
+                ...catalogLocations.filter(l=>!l.warehouseId||!form.warehouseId||String(l.warehouseId)===form.warehouseId).map(l=>[l.id,{id:l.id,code:l.code,name:l.name}] as const),
+                ...locks.filter(l=>l.locationId&&l.locationCode&&(!form.warehouseId||String(l.warehouseId)===form.warehouseId)).map(l=>[l.locationId!,{id:l.locationId!,code:l.locationCode!,name:l.locationCode!}] as const),
+              ]).values()).map(l=>(
+                <option key={l.id} value={String(l.id)}>{l.code}{l.name&&l.name!==l.code?` — ${l.name}`:''}</option>
+              ))}
+            </select>
           </UiToolbarField>
-          <UiToolbarField label="Mã / ID sản phẩm (tùy chọn)">
-            <div style={{ display: 'flex', gap: 6, minWidth: 0 }}>
-              <input aria-label="ID sản phẩm (tùy chọn)" type="number" min="1" style={{ width: 68, minWidth: 0, flex: '0 0 68px' }} value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value}))} inputMode="numeric"/>
-              <select aria-label="Chọn nhanh sản phẩm khóa" style={{ flex: '1 1 auto', minWidth: 0 }} value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value}))}>
-                <option value="">Chọn mặt hàng</option>
-                <option value="1">1 — QA-E2E-001</option>
-                <option value="2">2 — QA-LOT-002</option>
-                <option value="3">3 — QA-SER-003</option>
-              </select>
-            </div>
+          <UiToolbarField label="Sản phẩm (tùy chọn)">
+            <select aria-label="ID sản phẩm (tùy chọn)" value={form.productId} onChange={e=>setForm(x=>({...x,productId:e.target.value,lotId:'',serialId:''}))}>
+              <option value="">Tất cả sản phẩm</option>
+              {Array.from(new Map([
+                ...catalogProducts.map(p=>[p.id,{id:p.id,code:p.code,name:p.name}] as const),
+                ...locks.filter(l=>l.productId&&l.productCode).map(l=>[l.productId!,{id:l.productId!,code:l.productCode!,name:l.productCode!}] as const),
+              ]).values()).map(p=>(
+                <option key={p.id} value={String(p.id)}>{p.code}{p.name&&p.name!==p.code?` — ${p.name}`:''}</option>
+              ))}
+            </select>
           </UiToolbarField>
           <UiToolbarField label="Trạng thái tồn kho (tùy chọn)">
             <select aria-label="Trạng thái tồn kho (tùy chọn)" value={form.inventoryStatus} onChange={e=>setForm(x=>({...x,inventoryStatus:e.target.value}))}>
@@ -291,21 +339,33 @@ export default function InventoryLocks(){
               {statuses.map(x=><option key={x.code} value={x.code}>{inventoryStatusLabel(x.code)}</option>)}
             </select>
           </UiToolbarField>
-          <UiToolbarField label="Mã / ID lô (tùy chọn)">
-            <input aria-label="ID lô (tùy chọn)" type="number" min="1" value={form.lotId} onChange={e=>setForm(x=>({...x,lotId:e.target.value}))} inputMode="numeric"/>
+          <UiToolbarField label="Lô hàng (tùy chọn)">
+            <select aria-label="ID lô (tùy chọn)" disabled={!form.warehouseId} value={form.lotId} onChange={e=>setForm(x=>({...x,lotId:e.target.value}))}>
+              <option value="">{!form.warehouseId ? 'Chọn kho trước khi chọn lô' : 'Tất cả lô hàng'}</option>
+              {Array.from(new Map(locks.filter(l=>l.lotId&&l.lotNumber&&(!form.warehouseId||String(l.warehouseId)===form.warehouseId)&&(!form.productId||String(l.productId)===form.productId)).map(l=>[l.lotId!,{id:l.lotId!,code:l.lotNumber!}])).values()).map(lot=>(
+                <option key={lot.id} value={String(lot.id)}>{lot.code}</option>
+              ))}
+            </select>
           </UiToolbarField>
-          <UiToolbarField label="Mã / ID sê-ri (tùy chọn)">
-            <input aria-label="ID sê-ri (tùy chọn)" type="number" min="1" value={form.serialId} onChange={e=>setForm(x=>({...x,serialId:e.target.value}))} inputMode="numeric"/>
+          <UiToolbarField label="Sê-ri (tùy chọn)">
+            <select aria-label="ID sê-ri (tùy chọn)" disabled={!form.warehouseId} value={form.serialId} onChange={e=>setForm(x=>({...x,serialId:e.target.value}))}>
+              <option value="">{!form.warehouseId ? 'Chọn kho trước khi chọn sê-ri' : 'Tất cả sê-ri'}</option>
+              {Array.from(new Map(locks.filter(l=>l.serialId&&l.serialNumber&&(!form.warehouseId||String(l.warehouseId)===form.warehouseId)&&(!form.productId||String(l.productId)===form.productId)).map(l=>[l.serialId!,{id:l.serialId!,code:l.serialNumber!}])).values()).map(sr=>(
+                <option key={sr.id} value={String(sr.id)}>{sr.code}</option>
+              ))}
+            </select>
           </UiToolbarField>
           <UiToolbarField label="Hết hiệu lực lúc (tùy chọn)">
             <input aria-label="Hết hiệu lực lúc (tùy chọn)" type="datetime-local" value={form.expiresAt} onChange={e=>setForm(x=>({...x,expiresAt:e.target.value}))}/>
           </UiToolbarField>
-          <UiToolbarField label="Lý do">
-            <input aria-label="Lý do" value={form.reason} onChange={e=>setForm(x=>({...x,reason:e.target.value}))} required/>
-          </UiToolbarField>
-          <div className="ui-inline-actions" style={{display:'flex',gap:8,alignSelf:'end'}}>
-            <button type="submit" className="ui-btn ui-btn-primary" style={{height:38,minHeight:38,whiteSpace:'nowrap'}} disabled={busy||!form.warehouseId||!form.reason.trim()}>Tạo khóa</button>
-            <button type="button" className="ui-btn ui-btn-secondary" style={{height:38,minHeight:38,whiteSpace:'nowrap'}} disabled={busy} onClick={()=>setShowCreateForm(false)}>Hủy</button>
+          <div style={{gridColumn:'1 / -1',width:'100%',display:'flex',flexDirection:'column',gap:6}}>
+            <UiToolbarField label="Lý do *">
+              <input aria-label="Lý do" style={{width:'100%'}} value={form.reason} onChange={e=>setForm(x=>({...x,reason:e.target.value}))} required/>
+            </UiToolbarField>
+          </div>
+          <div className="ui-inline-actions" style={{gridColumn:'1 / -1',display:'flex',gap:8,alignSelf:'end'}}>
+            <button type="submit" className="ui-btn ui-btn-primary" style={{height:38,minHeight:38,whiteSpace:'nowrap',background:'#0f172a',borderColor:'#0f172a',color:'#ffffff',fontWeight:600}} disabled={busy||!form.warehouseId||!form.reason.trim()}>Tạo khóa</button>
+            <button type="button" className="ui-btn ui-btn-secondary" style={{height:38,minHeight:38,whiteSpace:'nowrap',background:'transparent',borderColor:'#cbd5e1',color:'#475569'}} disabled={busy} onClick={()=>setShowCreateForm(false)}>Hủy</button>
           </div>
         </form>
         <p className="ui-muted-text" style={{margin:'8px 0 0',fontSize:12}}>Giữ kiểm định chất lượng, giữ để điều tra và thu hồi lô hàng phải được mở thủ công; không tự hết hiệu lực.</p>

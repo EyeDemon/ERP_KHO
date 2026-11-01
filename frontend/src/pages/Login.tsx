@@ -64,7 +64,7 @@ const Login = () => {
         ? { username: parsed.username, password, tenantCode: parsed.tenantCode }
         : { username: parsed.username, password };
 
-      const response = await apiClient.post('/api/auth/login', payload);
+      const response = await apiClient.post('/api/v1/auth/login', payload);
       const resolvedTenantId = String(response.data.tenantId ?? 1);
       const resolvedTenantCode = String(
         response.data.tenantCode || parsed.tenantCode || `TENANT-${resolvedTenantId}`,
@@ -82,7 +82,7 @@ const Login = () => {
       localStorage.setItem('tenantId', resolvedTenantId);
       localStorage.setItem('tenantCode', resolvedTenantCode);
 
-      const identity = await apiClient.get('/api/auth/me');
+      const identity = await apiClient.get('/api/v1/auth/me');
       setCurrentPermissions(identity.data.permissions || []);
       navigate('/');
     } catch (err: any) {
@@ -169,6 +169,18 @@ const Login = () => {
           <button type="submit" className="ui-primary-button" disabled={submitting}>
             {submitting ? 'Đang đăng nhập...' : 'Đăng nhập'}
           </button>
+
+          <div style={{ marginTop: 12, textAlign: 'center', fontSize: 13 }}>
+            <button
+              type="button"
+              className="ui-btn-secondary"
+              data-testid="link-register-saas-tenant"
+              onClick={() => navigate('/register')}
+              style={{ width: '100%' }}
+            >
+              Chưa có tài khoản? Đăng ký dùng thử SaaS &amp; Khởi tạo kho mới
+            </button>
+          </div>
         </form>
       </section>
     </main>

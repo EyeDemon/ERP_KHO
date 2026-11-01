@@ -13,29 +13,21 @@ namespace ERP.Api.Controllers;
 [Route("api/data-imports")]
 public sealed class DataImportsController : ControllerBase
 {
-    private readonly IWarehouseAuthorizationService? _warehouseAccess;
-    private readonly ICurrentUser? _currentUser;
+    private readonly IWarehouseAuthorizationService _warehouseAccess;
+    private readonly ICurrentUser _currentUser;
     private readonly IDataImportService _dataImportService;
 
-    [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
     public DataImportsController(
         IDataImportService dataImportService,
-        IWarehouseAuthorizationService? warehouseAccess = null,
-        ICurrentUser? currentUser = null)
+        IWarehouseAuthorizationService warehouseAccess,
+        ICurrentUser currentUser)
     {
+        ArgumentNullException.ThrowIfNull(dataImportService);
+        ArgumentNullException.ThrowIfNull(warehouseAccess);
+        ArgumentNullException.ThrowIfNull(currentUser);
         _dataImportService = dataImportService;
         _warehouseAccess = warehouseAccess;
         _currentUser = currentUser;
-    }
-
-    public DataImportsController(
-        IExportReceiptService? exportReceiptService,
-        IWarehouseAuthorizationService? warehouseAccess = null,
-        ICurrentUser? currentUser = null,
-        IDataImportService? dataImportService = null)
-        : this(dataImportService!, warehouseAccess, currentUser)
-    {
-        _ = exportReceiptService;
     }
 
     [HttpGet("templates")]
@@ -46,14 +38,14 @@ public sealed class DataImportsController : ControllerBase
     [HttpPost("opening-balance")]
     [HttpPost("opening-balances")]
     [HttpPost("opening-balances/excel")]
-    [PermissionAuthorize(AppPermissions.InventoryOpeningBalanceImport, AppPermissions.InventoryWrite)]
+    [PermissionAuthorize(AppPermissions.InventoryOpeningBalanceImport)]
     [IdempotentCommand("Inventory.ImportOpeningBalance")]
     public async Task<IActionResult> ImportOpeningBalance(
         [ModelBinder(BinderType = typeof(FlexibleBodyOrFormModelBinder))] DataImportOpeningBalanceRequest? request = null,
         CancellationToken cancellationToken = default,
         [ModelBinder(BinderType = typeof(FlexibleFormFileModelBinder))] Microsoft.AspNetCore.Http.IFormFile? file = null)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(_currentUser, AppPermissions.InventoryOpeningBalanceImport))
             return Forbid();
 
         if (_dataImportService == null && request == null && file == null)

@@ -1438,6 +1438,8 @@ public sealed class Wave7FullChaosLifecycleSqlTests
             await db.StockTransferDetails.Where(x => whIds.Contains(x.StockTransfer.SourceWarehouseId) || whIds.Contains(x.StockTransfer.DestinationWarehouseId)).ExecuteDeleteAsync();
             await db.StockTransfers.Where(x => whIds.Contains(x.SourceWarehouseId) || whIds.Contains(x.DestinationWarehouseId)).ExecuteDeleteAsync();
 
+            await db.CustomerReturnLines.Where(x => whIds.Contains(x.CustomerReturn!.WarehouseId)).ExecuteDeleteAsync();
+            await db.CustomerReturns.Where(x => whIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
             await db.ShipmentProofOfDeliveries.Where(x => whIds.Contains(x.Shipment.WarehouseId)).ExecuteDeleteAsync();
             await db.ShipmentTrackingEvents.Where(x => whIds.Contains(x.Shipment.WarehouseId)).ExecuteDeleteAsync();
             await db.ShipmentHandlingUnits.Where(x => whIds.Contains(x.Shipment.WarehouseId)).ExecuteDeleteAsync();

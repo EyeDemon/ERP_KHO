@@ -73,7 +73,7 @@ const Warehouses = () => {
     setGovernanceBusy(true);
     setError('');
     try {
-      const res = await apiClient.post('/api/Warehouses/evaluate-network-mhe', {
+      const res = await apiClient.post('/api/v1/warehouses/evaluate-network-mhe', {
         warehouseId: warehouses[0]?.id ?? null,
       });
       if (res?.data?.evaluationId && res?.data?.networkTopologyMode) {
@@ -99,7 +99,7 @@ const Warehouses = () => {
     setLoading(true);
     setError('');
     try {
-      const response = await apiClient.get('/api/warehouses');
+      const response = await apiClient.get('/api/v1/warehouses');
       setWarehouses(response.data);
     } catch (failure) {
       setError(messageOf(failure, 'Không thể tải danh sách kho.'));
@@ -183,14 +183,14 @@ const Warehouses = () => {
     setSaving(true);
     try {
       if (editing && form.id !== undefined) {
-        await apiClient.put(`/api/warehouses/${form.id}`, {
+        await apiClient.put(`/api/v1/warehouses/${form.id}`, {
           name,
           address: form.address.trim(),
           isActive: form.isActive,
         });
         setSuccess('Cập nhật kho thành công.');
       } else {
-        await apiClient.post('/api/warehouses', {
+        await apiClient.post('/api/v1/warehouses', {
           code,
           name,
           address: form.address.trim(),
@@ -212,7 +212,7 @@ const Warehouses = () => {
     setError('');
     setSuccess('');
     try {
-      await apiClient.delete(`/api/warehouses/${warehouse.id}`);
+      await apiClient.delete(`/api/v1/warehouses/${warehouse.id}`);
       setSuccess('Xóa kho thành công.');
       setCurrentPage(1);
       await load();

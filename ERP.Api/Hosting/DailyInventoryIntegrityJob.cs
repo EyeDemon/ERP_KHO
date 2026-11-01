@@ -50,22 +50,73 @@ public sealed class DailyInventoryIntegrityJob(
             return 0;
         }
 
-        db.UseTenant(1);
-        var page = await reconciliationQuery.GetReconciliationsAsync(null, null, null, 1, 100);
-        var mismatchedCount = page.Items.Count(x => (x.Difference ?? 0m) != 0m || (x.AllStatusDifference ?? 0m) != 0m);
+        var activeTenantIds = await db.Warehouses
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(w => w.IsActive && w.TenantId > 0)
+            .Select(w => w.TenantId)
+            .Distinct()
+            .OrderBy(t => t)
+            .ToListAsync(cancellationToken);
 
-        db.AuditLogs.Add(new AuditLog
+        if (activeTenantIds.Count == 0)
         {
-            TenantId = 1,
-            Action = "DAILY_INVENTORY_INTEGRITY_CHECK",
-            EntityName = "InventoryStock",
-            NewValues = $"DriftCount={mismatchedCount};CheckedBuckets={page.TotalRecords}",
-            Reason = "Kiểm tra tự động tính toàn vẹn sổ cái 9 chiều hàng ngày",
-            Result = mismatchedCount == 0 ? "Success" : "Warning",
-            Timestamp = DateTime.UtcNow
-        });
+            activeTenantIds.Add(1);
+        }
 
-        await db.SaveChangesAsync(cancellationToken);
-        return mismatchedCount;
+        var originalTenantId = db.CurrentTenantId > 0 ? db.CurrentTenantId : 1;
+        var totalMismatchedCount = 0;
+
+        try
+        {
+            const int pageSize = 100;
+            foreach (var tenantId in activeTenantIds)
+            {
+                db.UseTenant(tenantId);
+                var tenantMismatchedCount = 0;
+                var totalRecords = 0;
+                var pageIndex = 1;
+
+                while (true)
+                {
+                    var page = await reconciliationQuery.GetReconciliationsAsync(null, null, null, pageIndex, pageSize);
+                    if (pageIndex == 1)
+                    {
+                        totalRecords = page.TotalRecords;
+                    }
+
+                    tenantMismatchedCount += page.Items.Count(x => (x.Difference ?? 0m) != 0m || (x.AllStatusDifference ?? 0m) != 0m);
+
+                    var totalPages = totalRecords > 0 ? (int)Math.Ceiling((double)totalRecords / pageSize) : 1;
+                    if (pageIndex >= totalPages || page.Items.Count == 0)
+                    {
+                        break;
+                    }
+
+                    pageIndex++;
+                }
+
+                db.AuditLogs.Add(new AuditLog
+                {
+                    TenantId = tenantId,
+                    Action = "DAILY_INVENTORY_INTEGRITY_CHECK",
+                    EntityName = "InventoryStock",
+                    NewValues = $"DriftCount={tenantMismatchedCount};CheckedBuckets={totalRecords}",
+                    Reason = "Kiểm tra tự động tính toàn vẹn sổ cái 9 chiều hàng ngày",
+                    Result = tenantMismatchedCount == 0 ? "Success" : "Warning",
+                    Timestamp = DateTime.UtcNow
+                });
+
+                totalMismatchedCount += tenantMismatchedCount;
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        finally
+        {
+            db.UseTenant(originalTenantId);
+        }
+
+        return totalMismatchedCount;
     }
 }

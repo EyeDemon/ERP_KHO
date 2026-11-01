@@ -207,8 +207,17 @@ public sealed class StocktakeOperationsService(
                 lockQuery = lockQuery.Where(l => accessibleIds.Contains(l.WarehouseId));
             }
 
-            openStocktakesCount = await stQuery.CountAsync(s => s.Status == StocktakeStatus.Draft, cancellationToken);
-            approvedStocktakesCount = await stQuery.CountAsync(s => s.Status == StocktakeStatus.Approved || s.Status == StocktakeStatus.Posted, cancellationToken);
+            openStocktakesCount = await stQuery.CountAsync(
+                s => s.Status != StocktakeStatus.Approved &&
+                     s.Status != StocktakeStatus.Posted &&
+                     s.Status != StocktakeStatus.Completed &&
+                     s.Status != StocktakeStatus.Cancelled,
+                cancellationToken);
+            approvedStocktakesCount = await stQuery.CountAsync(
+                s => s.Status == StocktakeStatus.Approved ||
+                     s.Status == StocktakeStatus.Posted ||
+                     s.Status == StocktakeStatus.Completed,
+                cancellationToken);
             activeCountFreezeLocksCount = await lockQuery.CountAsync(cancellationToken);
         }
 

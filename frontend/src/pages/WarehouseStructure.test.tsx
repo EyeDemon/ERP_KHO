@@ -74,9 +74,9 @@ describe('Cấu trúc vị trí kho định tuyến về WarehouseLocations API 
     localStorage.setItem('role', 'Admin');
     localStorage.setItem('permissions', '["location.read","location.manage"]');
     get.mockImplementation(async (url) => {
-      if (url === '/api/putaway-tasks/location-warehouses') return { data: warehouses } as never;
-      if (url === '/api/putaway-tasks/locations') return { data: locations } as never;
-      if (url === '/api/putaway-tasks/location-capacity') return { data: capacities } as never;
+      if (url === '/api/v1/putaway-tasks/location-warehouses') return { data: warehouses } as never;
+      if (url === '/api/v1/putaway-tasks/locations') return { data: locations } as never;
+      if (url === '/api/v1/putaway-tasks/location-capacity') return { data: capacities } as never;
       return { data: [] } as never;
     });
   });
@@ -88,6 +88,6 @@ describe('Cấu trúc vị trí kho định tuyến về WarehouseLocations API 
 
     fireEvent.click(view.getByTestId('tab-view-system'));
     expect(view.getAllByText('RECEIVING').length).toBeGreaterThan(0);
-    expect(get).toHaveBeenCalledWith('/api/putaway-tasks/locations', { params: { warehouseId: 1 } });
+    expect(get).toHaveBeenCalledWith('/api/v1/putaway-tasks/locations', { params: { warehouseId: 1 } });
   });
 });

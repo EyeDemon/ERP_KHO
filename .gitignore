@@ -46,3 +46,6 @@
 *.bacpac
 *.mdf
 *.ldf
+
+# Live Browser Audit Screenshots (kept on local disk)
+artifacts/live-browser-audit/

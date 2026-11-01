@@ -20,7 +20,7 @@ const hu={id:91,huCode:'HU-001',barcode:'HU-001',warehouseId:1,packingSessionId:
 const summary={id:77,sessionCode:'PACK-2026-0077',pickingTaskId:88,pickingTaskCode:'PICK-2026-0088',sourceType:'ExportReceipt',sourceId:5108,sourceCode:'EX-2026-5108',warehouseId:1,warehouseName:'DC Hồ Chí Minh',status:'InProgress',requiredQuantity:10,packedQuantity:2,remainingQuantity:8,handlingUnitCount:1,createdAt:'2026-10-06T02:00:00Z'};
 const detail={...summary,rowVersion:'AQ==',lines:[line],handlingUnits:[hu]};
 const grant=(...permissions:string[])=>{permissionState.granted.clear();permissions.forEach(p=>permissionState.granted.add(p));};
-const reads=(task:Record<string,unknown>=detail)=>vi.mocked(apiClient.get).mockImplementation(async url=>({data:url==='/api/packing-sessions'?[summary]:task}) as never);
+const reads=(task:Record<string,unknown>=detail)=>vi.mocked(apiClient.get).mockImplementation(async url=>({data:url==='/api/v1/packing-sessions'?[summary]:task}) as never);
 
 describe('Packing workbench',()=>{
   afterEach(cleanup);
@@ -48,7 +48,7 @@ describe('Packing workbench',()=>{
     const button=view.getByText('Xác nhận đóng gói');
     fireEvent.click(button);fireEvent.click(button);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
-    expect(apiClient.post).toHaveBeenCalledWith('/api/packing-sessions/77/pack',{
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/packing-sessions/77/pack',{
       handlingUnitId:91,pickingTaskLineId:41,productBarcode:'SKU-1001',quantity:2,rowVersion:'AQ=='
     },{headers:{'Idempotency-Key':'key:packing-pack-77-41'}});
     expect(completeIdempotentAction).toHaveBeenCalledWith('packing-pack-77-41');
@@ -159,7 +159,7 @@ describe('Packing workbench',()=>{
           }
         } as never;
       }
-      if(url==='/api/packing-sessions/execute-kitting-vas'){
+      if(url==='/api/v1/packing-sessions/execute-kitting-vas'){
         return {
           data:{
             vasExecutionCode:'VAS-DEKIT-2026-001',
@@ -190,7 +190,7 @@ describe('Packing workbench',()=>{
 
     await waitFor(()=>{
       expect(apiClient.post).toHaveBeenCalledWith(
-        '/api/packing-sessions/execute-kitting-vas',
+        '/api/v1/packing-sessions/execute-kitting-vas',
         expect.objectContaining({
           vasMode:'DEKIT_DISASSEMBLE',
           vasServiceType:'DEKIT_DISASSEMBLE',

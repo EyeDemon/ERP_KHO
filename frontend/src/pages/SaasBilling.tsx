@@ -1,109 +1,122 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import apiClient from '../services/apiClient';
-import { BarcodeSvg } from '../components/BarcodeSvg';
-import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader } from '../ui/ProductionUi';
+import { UiCard, UiPage, UiPageHeader } from '../ui/ProductionUi';
+import {
+  buildClientVietQrPayload,
+  buildPlanDowngradeWarning,
+  extractErrorText,
+  formatDateVi,
+  formatVietQrTransferContent,
+  normalizeTransferReference,
+  parseBillingSubscriptionResponse,
+  resolveInvoiceStatusBadge,
+  resolveNextBillingCycle,
+  resolveQuotaTierLabel,
+  resolveSubscriptionStatusLabel,
+  SAAS_PLAN_CATALOG,
+  type BillingState,
+  type InvoiceRecord,
+} from '../modules/governance/SaasBillingHelpers';
+import { SaasBillingSummaryAndQuotas } from '../modules/governance/SaasBillingSummaryAndQuotas';
+import { SaasBillingVietQrPanel } from '../modules/governance/SaasBillingVietQrPanel';
+import {
+  SaasBillingInvoiceHistoryCard,
+  SaasBillingPlanCardsGrid,
+} from '../modules/governance/SaasBillingPlanCardsAndHistory';
 
-type BillingState = {
-  planCode: string;
-  planName: string;
-  subscriptionStatus: string;
-  activeWarehouses: number;
-  maxWarehouses: number;
-  activeUsers: number;
-  maxUsers: number;
-  activeProducts: number;
-  maxProducts: number;
-  currentMonthOrderCount: number;
-  monthlyOrderQuota: number;
-};
-
-const extractErrorText = (err: any, fallback: string) => {
-  const data = err?.response?.data;
-  const code = data?.errorCode || data?.code || err?.response?.status || '';
-  const corr = err?.response?.headers?.['x-correlation-id'] || data?.correlationId || '';
-  const msg = data?.message || data?.title || fallback;
-  return `${msg}${code ? ` [${code}]` : ''}${corr ? ` (CorrelationId: ${corr})` : ''}`;
-};
-
-const resolveSubscriptionStatusLabel = (status: string): string => {
-  const upper = (status || 'ACTIVE').trim().toUpperCase();
-  if (upper.includes('ACTIVE')) return 'Đang hoạt động';
-  if (upper.includes('TRIAL')) return 'Đang dùng thử';
-  if (upper.includes('PAST_DUE') || upper.includes('OVERDUE')) return 'Quá hạn thanh toán';
-  if (upper.includes('READ_ONLY') || upper.includes('LOCKED')) return 'Khóa chỉ đọc (>115%)';
-  if (upper.includes('SUSPENDED') || upper.includes('CANCEL')) return 'Tạm ngưng';
-  if (/^[A-Z0-9_]{3,}$/.test(upper)) return 'Đang hoạt động';
-  return status;
-};
-
-const resolveQuotaTierLabel = (used: number, max: number) => {
-  if (max <= 0) return { label: 'Bình thường', tone: 'success' as const, pct: 0 };
-  const pct = Math.round((used * 100) / max);
-  if (pct > 115) return { label: 'Khóa chỉ đọc (>115%)', tone: 'danger' as const, pct };
-  if (pct > 100) return { label: 'Cho phép vượt 115%', tone: 'warning' as const, pct };
-  if (pct >= 90) return { label: 'Cảnh báo 90%', tone: 'warning' as const, pct };
-  return { label: 'Bình thường', tone: 'success' as const, pct };
+export {
+  normalizeTransferReference,
+  formatVietQrTransferContent,
+  resolveQuotaTierLabel,
+  SAAS_PLAN_CATALOG,
+  buildPlanDowngradeWarning,
 };
 
 const SaasBilling = () => {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [checkingPayment, setCheckingPayment] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [selectedPlanCode, setSelectedPlanCode] = useState<'STARTER' | 'GROWTH' | 'ENTERPRISE'>('ENTERPRISE');
+  const [copiedField, setCopiedField] = useState<'account' | 'amount' | 'content' | null>(null);
+  const [editingTaxCode, setEditingTaxCode] = useState(false);
+  const [taxCodeDraft, setTaxCodeDraft] = useState('0318889999');
+  const [selectedPlanCode, setSelectedPlanCode] = useState<'STARTER' | 'GROWTH' | 'ENTERPRISE'>('GROWTH');
   const [billing, setBilling] = useState<BillingState>({
-    planCode: 'ENTERPRISE',
-    planName: 'Gói Doanh nghiệp',
+    planCode: 'GROWTH',
+    planName: 'Gói Tăng trưởng',
+    monthlyPriceVnd: 1490000,
     subscriptionStatus: 'ACTIVE',
     activeWarehouses: 0,
-    maxWarehouses: 20,
+    maxWarehouses: 3,
     activeUsers: 0,
-    maxUsers: 100,
+    maxUsers: 20,
     activeProducts: 0,
-    maxProducts: 100000,
+    maxProducts: 20000,
     currentMonthOrderCount: 0,
-    monthlyOrderQuota: 100000,
-  });
-  const [vietQrInvoice, setVietQrInvoice] = useState({
-    qrPayload: '',
-    transferReference: '',
-    gatewayStatus: 'Sẵn sàng khởi tạo mã thanh toán VietQR tự động',
+    monthlyOrderQuota: 10000,
+    currentPeriodStartUtc: new Date(Date.now() - 10 * 86400000).toISOString(),
+    currentPeriodEndUtc: new Date(Date.now() + 20 * 86400000).toISOString(),
+    nextRenewalDateUtc: new Date(Date.now() + 20 * 86400000).toISOString(),
+    taxCode: '0318889999',
+    bankName: 'TPBank',
+    bankBin: '970423',
+    accountNo: '98418102005',
+    accountName: 'HUYNH PHI VAN',
+    recentInvoices: [],
   });
 
+  const [vietQrInvoice, setVietQrInvoice] = useState({
+    invoiceCode: 'INV-SAAS-202611-002',
+    planCode: 'GROWTH',
+    amountVnd: 1490000,
+    status: 'UNPAID',
+    qrPayload: buildClientVietQrPayload(1490000, 'INV-SAAS-202611-002'),
+    transferContent: 'ERPKHOINVSAAS202611002',
+    expiresAtUtc: new Date(Date.now() + 30 * 60000).toISOString(),
+    gatewayStatus: 'Đang chờ thanh toán hóa đơn INV-SAAS-202611-002 • Hệ thống tự động kích hoạt gói ngay khi nhận chuyển khoản.',
+  });
+
+  const [remainingSeconds, setRemainingSeconds] = useState<number>(1800);
+  const [autoRefreshQr, setAutoRefreshQr] = useState<boolean>(false);
+
+  useEffect(() => {
+    const computeRemaining = () => {
+      if (vietQrInvoice.status.toUpperCase() !== 'UNPAID') return 0;
+      const expMs = new Date(vietQrInvoice.expiresAtUtc).getTime();
+      if (Number.isNaN(expMs)) return 1800;
+      return Math.max(0, Math.floor((expMs - Date.now()) / 1000));
+    };
+
+    const initial = computeRemaining();
+    setRemainingSeconds(initial);
+    if (vietQrInvoice.status.toUpperCase() !== 'UNPAID') return undefined;
+
+    const timer = window.setInterval(() => {
+      const next = computeRemaining();
+      setRemainingSeconds(next);
+      if (next <= 0) {
+        setVietQrInvoice((prev) =>
+          prev.status.toUpperCase() === 'UNPAID'
+            ? {
+                ...prev,
+                status: 'EXPIRED',
+                gatewayStatus: `Hóa đơn ${prev.invoiceCode} đã hết thời hạn 30 phút (00:00) • Vui lòng bấm Tạo mã VietQR mới.`,
+              }
+            : prev,
+        );
+      }
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [vietQrInvoice.expiresAtUtc, vietQrInvoice.status]);
+
   const applyBillingData = (bd: Record<string, unknown>) => {
-    const rawPlanName = typeof bd.planName === 'string' ? bd.planName.trim() : '';
-    const rawPlan = String(bd.planCode ?? rawPlanName ?? 'ENTERPRISE').toUpperCase();
-    const isStarter = rawPlan.includes('STARTER');
-    const isEnterprise = rawPlan.includes('ENTERPRISE') || rawPlanName.includes('Doanh nghiệp');
-    const canonicalCode: 'STARTER' | 'GROWTH' | 'ENTERPRISE' = isStarter
-      ? 'STARTER'
-      : isEnterprise
-        ? 'ENTERPRISE'
-        : 'GROWTH';
-    const planName = isStarter
-      ? 'Gói Khởi đầu'
-      : isEnterprise
-        ? 'Gói Doanh nghiệp'
-        : 'Gói Tăng trưởng';
-    const canonicalWarehouses = isStarter ? 1 : isEnterprise ? 20 : 3;
-    const canonicalUsers = isStarter ? 5 : isEnterprise ? 100 : 20;
-    const canonicalProducts = isStarter ? 2000 : isEnterprise ? 100000 : 20000;
-    const canonicalOrderQuota = isStarter ? 1500 : isEnterprise ? 100000 : 10000;
-    setSelectedPlanCode(canonicalCode);
-    setBilling({
-      planCode: canonicalCode,
-      planName,
-      subscriptionStatus: String(bd.subscriptionStatus ?? bd.status ?? 'ACTIVE'),
-      activeWarehouses: Number(bd.activeWarehouses ?? bd.currentWarehouseCount ?? bd.usedWarehouses ?? 0),
-      maxWarehouses: isEnterprise ? Math.max(Number(bd.maxWarehouses ?? 20), 20) : (Number(bd.maxWarehouses ?? canonicalWarehouses) || canonicalWarehouses),
-      activeUsers: Number(bd.activeUsers ?? bd.currentUserCount ?? bd.usedUsers ?? 0),
-      maxUsers: isEnterprise ? Math.max(Number(bd.maxUsers ?? 100), 100) : (Number(bd.maxUsers ?? canonicalUsers) || canonicalUsers),
-      activeProducts: Number(bd.activeProducts ?? bd.currentSkuCount ?? bd.usedProducts ?? 0),
-      maxProducts: isEnterprise ? Math.max(Number(bd.maxProducts ?? 100000), 100000) : (Number(bd.maxProducts ?? canonicalProducts) || canonicalProducts),
-      currentMonthOrderCount: Number(bd.currentMonthOrderCount ?? bd.usedMonthlyOrders ?? 0),
-      monthlyOrderQuota: isEnterprise ? Math.max(Number(bd.monthlyOrderQuota ?? 100000), 100000) : (Number(bd.monthlyOrderQuota ?? canonicalOrderQuota) || canonicalOrderQuota),
-    });
+    const parsed = parseBillingSubscriptionResponse(bd);
+    setSelectedPlanCode(parsed.activeTargetPlan);
+    setTaxCodeDraft(parsed.resolvedTaxCode);
+    setBilling(parsed.billingState);
+    setVietQrInvoice(parsed.vietQrState);
   };
 
   const loadSubscription = useCallback(async () => {
@@ -113,11 +126,9 @@ const SaasBilling = () => {
       const res = await apiClient
         .get<Record<string, unknown>>('/api/v1/permissions/saas/subscription-billing')
         .catch(() => apiClient.get<Record<string, unknown>>('/api/v1/saas-billing/subscription'));
-      if (res?.data) {
-        applyBillingData(res.data);
-      }
+      if (res?.data) applyBillingData(res.data);
     } catch (err) {
-      setError(extractErrorText(err, 'Không thể tải thông tin gói cước thuê bao SaaS.'));
+      setError(extractErrorText(err, 'Không thể tải thông tin gói dịch vụ SaaS.'));
     } finally {
       setLoading(false);
     }
@@ -127,40 +138,139 @@ const SaasBilling = () => {
     void loadSubscription();
   }, [loadSubscription]);
 
-  const selectedPlanLabel =
-    selectedPlanCode === 'STARTER'
-      ? 'Gói Khởi đầu'
-      : selectedPlanCode === 'ENTERPRISE'
-        ? 'Gói Doanh nghiệp'
-        : 'Gói Tăng trưởng';
+  const selectedPlanSpec = SAAS_PLAN_CATALOG.find((p) => p.code === selectedPlanCode) ?? SAAS_PLAN_CATALOG[2];
+  const selectedPlanLabel = selectedPlanSpec.title;
+  const nextCycle = resolveNextBillingCycle(billing.currentPeriodEndUtc);
+  const currentCycleText = `${formatDateVi(billing.currentPeriodStartUtc)} – ${formatDateVi(billing.currentPeriodEndUtc)}`;
 
-  const createVietQrInvoice = async () => {
+  const handleSelectPlan = (targetPlan: 'STARTER' | 'GROWTH' | 'ENTERPRISE') => {
+    const targetSpec = SAAS_PLAN_CATALOG.find((p) => p.code === targetPlan);
+    const warning = targetSpec ? buildPlanDowngradeWarning(targetSpec, billing) : null;
+    if (warning) {
+      setError(warning);
+      return;
+    }
+    setError('');
+    setSelectedPlanCode(targetPlan);
+    const matchingUnpaid = billing.recentInvoices.find(
+      (inv) => inv.status.toUpperCase() === 'UNPAID' && inv.planCode.toUpperCase() === targetPlan,
+    );
+    const planPrice = targetSpec?.priceVnd ?? 1490000;
+    if (matchingUnpaid) {
+      setVietQrInvoice({
+        invoiceCode: matchingUnpaid.invoiceCode,
+        planCode: matchingUnpaid.planCode,
+        amountVnd: matchingUnpaid.amountVnd,
+        status: 'UNPAID',
+        qrPayload: matchingUnpaid.qrPayload || buildClientVietQrPayload(matchingUnpaid.amountVnd, matchingUnpaid.invoiceCode, billing.bankBin, billing.accountNo),
+        transferContent: matchingUnpaid.transferContent,
+        expiresAtUtc: matchingUnpaid.expiresAtUtc || new Date(Date.now() + 30 * 60000).toISOString(),
+        gatewayStatus: `Đang chờ thanh toán hóa đơn ${matchingUnpaid.invoiceCode} • Hệ thống tự động kích hoạt gói ngay khi nhận chuyển khoản.`,
+      });
+    } else {
+      setVietQrInvoice({
+        invoiceCode: '',
+        planCode: targetPlan,
+        amountVnd: planPrice,
+        status: 'IDLE',
+        qrPayload: '',
+        transferContent: 'Chưa tạo lệnh thanh toán',
+        expiresAtUtc: new Date(Date.now() + 30 * 60000).toISOString(),
+        gatewayStatus: 'Chưa có hóa đơn chờ thanh toán cho gói này • Bấm nút tạo mã VietQR để khởi tạo hóa đơn mới.',
+      });
+    }
+  };
+
+  const saveTaxCode = () => {
+    const cleanTax = taxCodeDraft.trim();
+    if (!cleanTax) {
+      setError('Vui lòng nhập mã số thuế doanh nghiệp hợp lệ.');
+      return;
+    }
+    setError('');
+    setBilling((prev) => ({ ...prev, taxCode: cleanTax }));
+    setEditingTaxCode(false);
+    setNotice(`Đã cập nhật mã số thuế xuất hóa đơn GTGT: ${cleanTax}.`);
+  };
+
+  const copyToClipboard = async (field: 'account' | 'amount' | 'content', text: string) => {
+    try {
+      if (navigator?.clipboard?.writeText) await navigator.clipboard.writeText(text);
+    } catch {
+      // Clipboard API may be unavailable in headless test runner
+    }
+    setCopiedField(field);
+    setNotice(`Đã sao chép: ${text}`);
+  };
+
+  const createVietQrInvoice = async (overridePlanCode?: 'STARTER' | 'GROWTH' | 'ENTERPRISE') => {
     if (busy) return;
+    const targetPlan = overridePlanCode ?? selectedPlanCode;
+    const targetSpec = SAAS_PLAN_CATALOG.find((p) => p.code === targetPlan);
+    const warning = targetSpec ? buildPlanDowngradeWarning(targetSpec, billing) : null;
+    if (warning) {
+      setError(warning);
+      return;
+    }
+    if (overridePlanCode) setSelectedPlanCode(overridePlanCode);
     setBusy(true);
     setError('');
     setNotice('');
-    const planPriceMap: Record<'STARTER' | 'GROWTH' | 'ENTERPRISE', number> = {
-      STARTER: 490000,
-      GROWTH: 1490000,
-      ENTERPRISE: 3490000,
-    };
+    const planPriceMap: Record<'STARTER' | 'GROWTH' | 'ENTERPRISE', number> = { STARTER: 490000, GROWTH: 1490000, ENTERPRISE: 3490000 };
+    const targetLabel = targetPlan === 'STARTER' ? 'Gói Khởi đầu' : targetPlan === 'ENTERPRISE' ? 'Gói Doanh nghiệp' : 'Gói Tăng trưởng';
     try {
-      const res = await apiClient.post<Record<string, unknown>>(
-        '/api/v1/permissions/saas/subscription-billing/create-vietqr-invoice',
-        {
-          planCode: selectedPlanCode,
-          amountVnd: planPriceMap[selectedPlanCode],
-        },
-      );
-      const d = (res?.data ?? {}) as Record<string, unknown>;
-      const qrPayload = String(d.qrPayload ?? d.vietQrPayload ?? `VIETQR-PAYOS-${selectedPlanCode}`);
-      const transferContent = String(d.transferContent ?? d.transferReference ?? `ERPKHO2026 ${selectedPlanCode}`);
-      setVietQrInvoice({
-        qrPayload,
-        transferReference: `Nội dung CK: ${transferContent}`,
-        gatewayStatus: 'Đối soát tự động PayOS / SePay: Đã tạo lệnh thanh toán & sẵn sàng kích hoạt tự động',
+      const res = await apiClient.post<Record<string, unknown>>('/api/v1/permissions/saas/subscription-billing/create-vietqr-invoice', {
+        planCode: targetPlan,
+        amountVnd: planPriceMap[targetPlan],
       });
-      setNotice(`Đã khởi tạo mã thanh toán VietQR tự động cho ${selectedPlanLabel} (${transferContent}).`);
+      const d = (res?.data ?? {}) as Record<string, unknown>;
+      const invoiceCode = String(d.invoiceCode ?? `INV-VQR-${targetPlan}`);
+      const amountVnd = Number(d.amountVnd ?? planPriceMap[targetPlan]);
+      const qrPayload = String(d.qrPayload ?? d.vietQrPayload ?? buildClientVietQrPayload(amountVnd, invoiceCode, billing.bankBin, billing.accountNo));
+      const rawTransfer = String(d.transferContent ?? d.transferReference ?? invoiceCode);
+      const cleanTransferContent = formatVietQrTransferContent(rawTransfer, invoiceCode);
+      const status = String(d.status ?? 'UNPAID').toUpperCase();
+      const createdAtUtc = String(d.createdAtUtc ?? new Date().toISOString());
+      const rawExpires = typeof d.expiresAtUtc === 'string' ? d.expiresAtUtc : null;
+      const expMs = rawExpires ? new Date(rawExpires).getTime() : NaN;
+      const expiresAtUtc =
+        Number.isNaN(expMs) || expMs <= Date.now()
+          ? new Date(Date.now() + 30 * 60000).toISOString()
+          : rawExpires!;
+
+      setVietQrInvoice({
+        invoiceCode,
+        planCode: targetPlan,
+        amountVnd,
+        status,
+        qrPayload,
+        transferContent: cleanTransferContent,
+        expiresAtUtc,
+        gatewayStatus: `Đang chờ thanh toán hóa đơn ${invoiceCode} • Hệ thống tự động kích hoạt gói ngay khi nhận chuyển khoản.`,
+      });
+
+      setBilling((prev) => {
+        const exists = prev.recentInvoices.some((inv) => inv.invoiceCode === invoiceCode);
+        const nextInvoice: InvoiceRecord = {
+          invoiceCode,
+          planCode: targetPlan,
+          planName: targetLabel,
+          amountVnd,
+          paymentProvider: 'VIETQR',
+          status,
+          qrPayload,
+          transferContent: cleanTransferContent,
+          createdAtUtc,
+          paidAtUtc: null,
+          expiresAtUtc,
+        };
+        return {
+          ...prev,
+          recentInvoices: exists ? prev.recentInvoices.map((inv) => (inv.invoiceCode === invoiceCode ? nextInvoice : inv)) : [nextInvoice, ...prev.recentInvoices],
+        };
+      });
+
+      setNotice(`Đã khởi tạo mã thanh toán VietQR tự động cho ${targetLabel} (Nội dung CK: ${cleanTransferContent}).`);
     } catch (err) {
       setError(extractErrorText(err, 'Không thể khởi tạo hóa đơn thanh toán VietQR.'));
     } finally {
@@ -169,10 +279,12 @@ const SaasBilling = () => {
   };
 
   const checkPaymentStatus = async () => {
-    if (busy) return;
+    if (busy || checkingPayment) return;
     setBusy(true);
+    setCheckingPayment(true);
     setError('');
     setNotice('');
+    const checkedInvoiceCode = vietQrInvoice.invoiceCode || 'hiện tại';
     try {
       const res = await apiClient
         .get<Record<string, unknown>>('/api/v1/permissions/saas/subscription-billing')
@@ -181,16 +293,30 @@ const SaasBilling = () => {
         applyBillingData(res.data);
         const rawStatus = String(res.data.subscriptionStatus ?? res.data.status ?? 'ACTIVE');
         const statusLabel = resolveSubscriptionStatusLabel(rawStatus);
-        setVietQrInvoice((prev) => ({
-          ...prev,
-          gatewayStatus: `Trạng thái gói cước từ máy chủ: ${statusLabel} (Tự động đối soát qua Webhook ngân hàng)`,
-        }));
-        setNotice(`Đã kiểm tra trạng thái giao dịch từ máy chủ • Gói hiện tại: ${selectedPlanLabel} (${statusLabel}).`);
+        const rawInvoices = Array.isArray(res.data.recentInvoices) ? (res.data.recentInvoices as Array<Record<string, unknown>>) : [];
+        const matchedPaid = rawInvoices.some(
+          (inv) =>
+            String(inv.invoiceCode ?? '') === checkedInvoiceCode &&
+            String(inv.status ?? '').toUpperCase() === 'PAID',
+        );
+        if (matchedPaid) {
+          setVietQrInvoice((prev) => ({
+            ...prev,
+            status: 'PAID',
+            gatewayStatus: `Trạng thái gói dịch vụ: ${statusLabel} (Đã kích hoạt tự động & mở khóa 100% hạn mức)`,
+          }));
+          setNotice(`Đã ghi nhận thanh toán thành công cho hóa đơn ${checkedInvoiceCode} • Gói hiện tại: ${selectedPlanLabel} (${statusLabel}).`);
+        } else {
+          setNotice(
+            `Chưa ghi nhận giao dịch chuyển khoản cho hóa đơn ${checkedInvoiceCode}. Nếu bạn vừa chuyển khoản, vui lòng thử lại sau 30 giây. (Đã kiểm tra trạng thái giao dịch từ máy chủ • Gói hiện tại: ${selectedPlanLabel} - ${statusLabel}).`,
+          );
+        }
       }
     } catch (err) {
       setError(extractErrorText(err, 'Không thể kiểm tra trạng thái giao dịch từ máy chủ.'));
     } finally {
       setBusy(false);
+      setCheckingPayment(false);
     }
   };
 
@@ -200,27 +326,22 @@ const SaasBilling = () => {
     setError('');
     setNotice('');
     try {
-      const res = await apiClient.post<Record<string, unknown>>(
-        '/api/v1/permissions/saas/subscription-billing/webhook-vietqr',
-        {
-          planCode: selectedPlanCode,
-          paidAmountVnd: selectedPlanCode === 'STARTER' ? 490000 : selectedPlanCode === 'ENTERPRISE' ? 3490000 : 1490000,
-          bankTransactionRef: `FT-${Date.now()}`,
-        },
-      );
+      const res = await apiClient.post<Record<string, unknown>>('/api/v1/permissions/saas/subscription-billing/webhook-vietqr', {
+        invoiceCode: vietQrInvoice.invoiceCode || undefined,
+        planCode: selectedPlanCode,
+        paidAmountVnd: selectedPlanCode === 'STARTER' ? 490000 : selectedPlanCode === 'ENTERPRISE' ? 3490000 : 1490000,
+        bankTransactionRef: `FT${Date.now()}`,
+      });
       const d = (res?.data ?? {}) as Record<string, unknown>;
-      const rawStatus = String(d.subscriptionStatus ?? 'ACTIVE');
-      const statusLabel = resolveSubscriptionStatusLabel(rawStatus);
+      const statusLabel = resolveSubscriptionStatusLabel(String(d.subscriptionStatus ?? 'ACTIVE'));
       setVietQrInvoice((prev) => ({
         ...prev,
-        gatewayStatus: `Trạng thái gói cước: ${statusLabel} (Đã kích hoạt tự động & mở khóa 100% hạn mức)`,
+        status: 'PAID',
+        gatewayStatus: `Trạng thái gói dịch vụ: ${statusLabel} (Đã kích hoạt tự động & mở khóa 100% hạn mức)`,
       }));
-      setNotice(
-        typeof d.message === 'string' && d.message
-          ? d.message
-          : `Đã xác nhận thanh toán tự động Webhook PayOS / SePay cho ${selectedPlanLabel} • Trạng thái: ${statusLabel}.`,
-      );
+      setNotice(typeof d.message === 'string' && d.message ? d.message : `Đã xác nhận thanh toán tự động VietQR cho ${selectedPlanLabel} • Trạng thái: ${statusLabel}.`);
       await loadSubscription();
+      setVietQrInvoice((prev) => ({ ...prev, status: 'PAID' }));
     } catch (err) {
       setError(extractErrorText(err, 'Không thể xác nhận thanh toán tự động qua Webhook.'));
     } finally {
@@ -228,161 +349,100 @@ const SaasBilling = () => {
     }
   };
 
+  const orderTier = resolveQuotaTierLabel(billing.currentMonthOrderCount, billing.monthlyOrderQuota);
   const whTier = resolveQuotaTierLabel(billing.activeWarehouses, billing.maxWarehouses);
   const userTier = resolveQuotaTierLabel(billing.activeUsers, billing.maxUsers);
   const skuTier = resolveQuotaTierLabel(billing.activeProducts, billing.maxProducts);
-  const orderTier = resolveQuotaTierLabel(billing.currentMonthOrderCount, billing.monthlyOrderQuota);
+  const visiblePlans = SAAS_PLAN_CATALOG.filter((plan) => plan.code !== 'FREE_TRIAL' || billing.planCode === 'FREE_TRIAL');
+  const isUnpaidExpired = vietQrInvoice.status.toUpperCase() === 'UNPAID' && remainingSeconds <= 0;
+  const isInvoiceExpired = vietQrInvoice.status.toUpperCase() === 'EXPIRED' || isUnpaidExpired;
+  const isInvoicePaid = vietQrInvoice.status.toUpperCase() === 'PAID';
+
+  useEffect(() => {
+    if (autoRefreshQr && isInvoiceExpired && !busy && !isInvoicePaid) {
+      void createVietQrInvoice();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRefreshQr, isInvoiceExpired, busy, isInvoicePaid]);
+  const activeInvoiceBadge = resolveInvoiceStatusBadge(vietQrInvoice.status, isUnpaidExpired);
+  const displayAmountVnd = vietQrInvoice.invoiceCode ? vietQrInvoice.amountVnd : selectedPlanSpec.priceVnd;
+  const showQaWebhookSimulator = Boolean(import.meta.env.DEV) && import.meta.env.VITE_QA_WEBHOOK_SIMULATOR === 'true';
+  const hasActiveMatchingInvoice =
+    vietQrInvoice.status.toUpperCase() === 'UNPAID' &&
+    !isInvoiceExpired &&
+    Boolean(vietQrInvoice.invoiceCode) &&
+    vietQrInvoice.planCode.toUpperCase() === selectedPlanCode;
+
+  const quotaGaugeItems = [
+    { key: 'orders', title: 'Sản lượng đơn hàng tháng', unit: 'đơn', used: billing.currentMonthOrderCount, max: billing.monthlyOrderQuota, tier: orderTier },
+    { key: 'warehouses', title: 'Kho đang hoạt động', unit: 'kho', used: billing.activeWarehouses, max: billing.maxWarehouses, tier: whTier },
+    { key: 'users', title: 'Tài khoản người dùng', unit: 'người dùng', used: billing.activeUsers, max: billing.maxUsers, tier: userTier },
+    { key: 'products', title: 'Danh mục mặt hàng', unit: 'mặt hàng', used: billing.activeProducts, max: billing.maxProducts, tier: skuTier },
+  ];
 
   return (
     <UiPage>
       <UiPageHeader
-        eyebrow="Quản trị & Thuê bao SaaS"
-        title="Gói cước Thuê bao SaaS, Hạn mức 3 Nấc & Thanh toán Tự động VietQR"
-        description="Theo dõi hạn mức kho, tài khoản, danh mục mặt hàng, sản lượng đơn hàng tháng và thanh toán gia hạn tự động qua VietQR (PayOS / SePay)."
-        actions={
-          <Link to="/permissions" className="ui-btn-secondary" style={{ textDecoration: 'none', padding: '6px 12px', borderRadius: 6, border: '1px solid #cbd5e1' }}>
-            ← Quay lại Quản trị Quyền RBAC
-          </Link>
-        }
+        eyebrow="Quản trị & Gói dịch vụ SaaS"
+        title="Quản trị gói dịch vụ SaaS, hạn mức 3 mức & thanh toán tự động VietQR"
+        description="Theo dõi chu kỳ cước, hạn mức vận hành theo thời gian thực và thanh toán nâng cấp tự động qua chuyển khoản Napas247 VietQR."
+      />
+      {error && <div role="alert">{error}</div>}
+      {loading && <p role="status">Đang tải thông tin gói dịch vụ SaaS...</p>}
+
+      <SaasBillingSummaryAndQuotas
+        billing={billing}
+        busy={busy}
+        editingTaxCode={editingTaxCode}
+        setEditingTaxCode={setEditingTaxCode}
+        taxCodeDraft={taxCodeDraft}
+        setTaxCodeDraft={setTaxCodeDraft}
+        saveTaxCode={saveTaxCode}
+        loadSubscription={loadSubscription}
+        quotaGaugeItems={quotaGaugeItems}
+        createVietQrInvoice={createVietQrInvoice}
       />
 
-      {error && <div role="alert">{error}</div>}
-      {notice && <p role="status" className="ui-success-text">{notice}</p>}
-      {loading && <p role="status">Đang tải thông tin gói cước thuê bao SaaS...</p>}
-
-      <UiMetricGrid>
-        <UiMetric value={billing.planName} label={`Trạng thái: ${resolveSubscriptionStatusLabel(billing.subscriptionStatus)}`} />
-        <UiMetric value={`${billing.activeWarehouses} / ${billing.maxWarehouses} kho`} label={`Hạn mức kho: ${whTier.label} (${whTier.pct}%)`} />
-        <UiMetric value={`${billing.activeUsers} / ${billing.maxUsers} người dùng`} label={`Hạn mức tài khoản: ${userTier.label} (${userTier.pct}%)`} />
-        <UiMetric value={`${billing.activeProducts} / ${billing.maxProducts.toLocaleString('vi-VN')} mặt hàng`} label={`Hạn mức mặt hàng: ${skuTier.label} (${skuTier.pct}%)`} />
-      </UiMetricGrid>
-
       <UiCard
-        title="Thanh đo Hạn mức Thuê bao 3 Nấc (Bình thường / Cảnh báo 90% / Cho phép vượt 115% / Khóa chỉ đọc >115%)"
-        subtitle="Bảo vệ liên tục vận hành kho giờ cao điểm: cho phép vượt 115% hạn mức trước khi chuyển sang chế độ chỉ đọc (vẫn bảo toàn 100% tra cứu & xuất Excel)"
+        title="Bảng gói cước thuê bao SaaS & thanh toán gia hạn VietQR"
+        subtitle="Chọn gói dịch vụ phù hợp quy mô doanh nghiệp và quét mã VietQR để hệ thống tự động đối soát, mở khóa hạn mức tức thì"
       >
-        <div className="ui-stack" style={{ gap: 12 }}>
-          <div className="ui-inline-wrap" style={{ gap: 8 }}>
-            <UiBadge tone="success">Bình thường (&lt;90%)</UiBadge>
-            <UiBadge tone="warning">Cảnh báo 90% (90–100%)</UiBadge>
-            <UiBadge tone="warning">Cho phép vượt 115% (100–115%)</UiBadge>
-            <UiBadge tone="danger">Khóa chỉ đọc (&gt;115%)</UiBadge>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }} data-testid="saas-quota-gauge-grid">
-            {[
-              { title: 'Kho đang hoạt động', used: billing.activeWarehouses, max: billing.maxWarehouses, tier: whTier },
-              { title: 'Tài khoản người dùng', used: billing.activeUsers, max: billing.maxUsers, tier: userTier },
-              { title: 'Danh mục mặt hàng', used: billing.activeProducts, max: billing.maxProducts, tier: skuTier },
-              { title: 'Sản lượng đơn hàng tháng', used: billing.currentMonthOrderCount, max: billing.monthlyOrderQuota, tier: orderTier },
-            ].map((item) => (
-              <div key={item.title} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>{item.title}</span>
-                  <UiBadge tone={item.tier.tone}>{item.tier.label}</UiBadge>
-                </div>
-                <strong style={{ display: 'block', fontSize: 16, color: '#0f172a', marginTop: 4, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                  {item.used.toLocaleString('vi-VN')} / {item.max.toLocaleString('vi-VN')}
-                </strong>
-                <div style={{ marginTop: 6, height: 8, borderRadius: 4, background: '#e2e8f0', overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      width: `${Math.min(100, item.tier.pct)}%`,
-                      height: '100%',
-                      background: item.tier.pct > 115 ? '#dc2626' : item.tier.pct >= 90 ? '#d97706' : '#059669',
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+        <div className="ui-stack" style={{ gap: 16 }}>
+          <SaasBillingPlanCardsGrid
+            visiblePlans={visiblePlans}
+            billing={billing}
+            selectedPlanCode={selectedPlanCode}
+            whTierPct={whTier.pct}
+            busy={busy}
+            handleSelectPlan={handleSelectPlan}
+          />
+          <SaasBillingVietQrPanel
+            billing={billing}
+            busy={busy}
+            checkingPayment={checkingPayment}
+            selectedPlanLabel={selectedPlanLabel}
+            nextCycle={nextCycle}
+            activeInvoiceBadge={activeInvoiceBadge}
+            isInvoicePaid={isInvoicePaid}
+            isInvoiceExpired={isInvoiceExpired}
+            remainingSeconds={remainingSeconds}
+            displayAmountVnd={displayAmountVnd}
+            copiedField={copiedField}
+            copyToClipboard={copyToClipboard}
+            vietQrInvoice={vietQrInvoice}
+            hasActiveMatchingInvoice={hasActiveMatchingInvoice}
+            autoRefreshQr={autoRefreshQr}
+            setAutoRefreshQr={setAutoRefreshQr}
+            showQaWebhookSimulator={showQaWebhookSimulator}
+            notice={notice}
+            checkPaymentStatus={checkPaymentStatus}
+            createVietQrInvoice={createVietQrInvoice}
+            confirmVietQrWebhook={confirmVietQrWebhook}
+          />
         </div>
       </UiCard>
 
-      <UiCard
-        title="Bảng Gói cước Thuê bao SaaS & Thanh toán Gia hạn VietQR"
-        subtitle="Chọn gói cước phù hợp quy mô doanh nghiệp và quét mã VietQR để tự động mở khóa hạn mức tức thì"
-      >
-        <div className="ui-stack" style={{ gap: 14 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
-            {[
-              { code: 'STARTER' as const, title: 'Gói Khởi đầu', price: '490.000 đ/tháng', specs: '1 kho • 5 tài khoản • 1.500 đơn/tháng' },
-              { code: 'GROWTH' as const, title: 'Gói Tăng trưởng', price: '1.490.000 đ/tháng', specs: '3 kho • 20 tài khoản • 10.000 đơn/tháng' },
-              { code: 'ENTERPRISE' as const, title: 'Gói Doanh nghiệp', price: '3.490.000 đ/tháng', specs: '20 kho • 100 tài khoản • 100.000 đơn/tháng' },
-            ].map((plan) => {
-              const active = selectedPlanCode === plan.code;
-              return (
-                <div
-                  key={plan.code}
-                  onClick={() => setSelectedPlanCode(plan.code)}
-                  style={{
-                    cursor: 'pointer',
-                    padding: '12px 14px',
-                    borderRadius: 8,
-                    border: active ? '2px solid #0284c7' : '1px solid #cbd5e1',
-                    background: active ? '#f0f9ff' : '#ffffff',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong style={{ fontSize: 14, color: '#0f172a' }}>{plan.title}</strong>
-                    {active && <UiBadge tone="info">Đang chọn</UiBadge>}
-                  </div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#0369a1', marginTop: 4, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{plan.price}</div>
-                  <div style={{ fontSize: 12, color: '#475569', marginTop: 4 }}>{plan.specs}</div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 14, padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc' }}>
-            <div className="ui-stack" style={{ gap: 8, flex: '1 1 320px' }}>
-              <div className="ui-inline-wrap" style={{ gap: 8 }}>
-                <button
-                  type="button"
-                  data-testid="btn-create-vietqr-invoice"
-                  disabled={busy}
-                  onClick={() => void createVietQrInvoice()}
-                >
-                  Tạo Hóa đơn Thanh toán VietQR
-                </button>
-                <button
-                  type="button"
-                  className="ui-btn-secondary"
-                  data-testid="btn-check-vietqr-payment-status"
-                  disabled={busy}
-                  onClick={() => void checkPaymentStatus()}
-                >
-                  Tôi đã chuyển khoản — Kiểm tra trạng thái giao dịch
-                </button>
-                {import.meta.env.VITE_QA_WEBHOOK_SIMULATOR === 'true' && (
-                  <button
-                    type="button"
-                    className="ui-btn-secondary"
-                    data-testid="btn-confirm-vietqr-webhook"
-                    disabled={busy}
-                    onClick={() => void confirmVietQrWebhook()}
-                  >
-                    Xác nhận Thanh toán Tự động (Webhook PayOS / SePay)
-                  </button>
-                )}
-                <button type="button" className="ui-btn-secondary" disabled={busy} onClick={() => void loadSubscription()}>
-                  Làm mới Hạn mức
-                </button>
-              </div>
-              <div style={{ fontSize: 13, color: '#0f172a' }}>
-                <strong>{vietQrInvoice.transferReference || 'Chưa tạo mã chuyển khoản'}</strong> • <span>{vietQrInvoice.gatewayStatus}</span>
-              </div>
-            </div>
-            <div>
-              <BarcodeSvg
-                value={vietQrInvoice.qrPayload || `VIETQR-${selectedPlanCode}`}
-                format="QR"
-                captionLabel="Mã VietQR Tự động"
-              />
-            </div>
-          </div>
-        </div>
-      </UiCard>
+      <SaasBillingInvoiceHistoryCard billing={billing} currentCycleText={currentCycleText} nextCycle={nextCycle} />
     </UiPage>
   );
 };

@@ -17,7 +17,11 @@ namespace ERP.Api.Tests
         public ImportReceiptsControllerTests()
         {
             _mockService = new Mock<IImportReceiptService>();
-            _controller = new ImportReceiptsController(_mockService.Object);
+            _controller = new ImportReceiptsController(
+                _mockService.Object,
+                Mock.Of<IReceivingDiscrepancyService>(),
+                Mock.Of<IImportReceiptOperationsService>(),
+                Mock.Of<IWarehouseAuthorizationService>());
         }
 
         private void SetUserClaims(params Claim[] claims)

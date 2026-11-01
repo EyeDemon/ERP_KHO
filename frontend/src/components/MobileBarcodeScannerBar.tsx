@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
+import { useHardwareScannerWedge } from '../hooks/useHardwareScannerWedge';
 import { sanitizeScannerCode } from '../pages/productCatalog';
 import { UiBadge } from '../ui/ProductionUi';
 import {
@@ -8,7 +9,7 @@ import {
   isRetailProductBarcode,
 } from '../utils/cameraBarcodeDecoder';
 
-function playScannerBeep(): void {
+export function playScannerBeep(): void {
   try {
     const AudioCtxCtor =
       (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext })
@@ -29,6 +30,36 @@ function playScannerBeep(): void {
     window.setTimeout(() => {
       void ctx.close().catch(() => {});
     }, 150);
+  } catch {
+    // Bỏ qua nếu trình duyệt chặn phát âm thanh tự động
+  }
+}
+
+export function playScannerErrorBuzz(): void {
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      navigator.vibrate([200, 100, 200]);
+    }
+    const AudioCtxCtor =
+      (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext })
+        .AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtxCtor) return;
+    const ctx = new AudioCtxCtor();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(220, ctx.currentTime);
+    osc.frequency.setValueAtTime(180, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.22, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.26);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.26);
+    window.setTimeout(() => {
+      void ctx.close().catch(() => {});
+    }, 320);
   } catch {
     // Bỏ qua nếu trình duyệt chặn phát âm thanh tự động
   }
@@ -61,35 +92,100 @@ export interface ParsedGs1Data {
 }
 
 export function parseGs1BarcodeClient(rawInput: string): ParsedGs1Data | null {
-  const text = rawInput.trim();
+  const text = rawInput.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '');
   if (!text) return null;
-  const hasGs1Markers = /\((00|01|10|17|21)\)/.test(text) || /^01\d{14}10/.test(text);
-  if (!hasGs1Markers) return null;
+  const hasParens = /\((00|01|10|17|21)\)/.test(text);
+  const hasRawStream =
+    text.includes('\x1d') ||
+    text.includes('\u001d') ||
+    /^(?:\]C1)?(00\d{18}|01\d{14})(10|17|21)/.test(text);
+  if (!hasParens && !hasRawStream) return null;
 
-  const gtinMatch = text.match(/\(01\)(\d{13,14})/) || text.match(/^01(\d{14})/);
-  const ssccMatch = text.match(/\(00\)(\d{18})/);
-  const lotMatch = text.match(/\(10\)([^(]+)/);
-  const expMatch = text.match(/\(17\)(\d{6})/);
-  const serMatch = text.match(/\(21\)([^(]+)/);
+  let gtin = text.match(/\(01\)(\d{13,14})/)?.[1];
+  let sscc = text.match(/\(00\)(\d{18})/)?.[1];
+  let lotNumber = text.match(/\(10\)([^(^\x1d\u001d]+)/)?.[1]?.trim();
+  let expRaw = text.match(/\(17\)(\d{6})/)?.[1];
+  let serialNumber = text.match(/\(21\)([^(^\x1d\u001d]+)/)?.[1]?.trim();
+
+  if (!hasParens && hasRawStream) {
+    let idx = text.startsWith(']C1') ? 3 : 0;
+    while (idx < text.length) {
+      while (idx < text.length && (text[idx] === '\x1d' || text[idx] === '\u001d')) {
+        idx += 1;
+      }
+      if (idx >= text.length) break;
+      const ai2 = text.slice(idx, idx + 2);
+      if (ai2 === '00' && /^\d{18}/.test(text.slice(idx + 2))) {
+        sscc = text.slice(idx + 2, idx + 20);
+        idx += 20;
+        continue;
+      }
+      if (ai2 === '01' && /^\d{14}/.test(text.slice(idx + 2))) {
+        gtin = text.slice(idx + 2, idx + 16);
+        idx += 16;
+        continue;
+      }
+      if (ai2 === '17' && /^\d{6}/.test(text.slice(idx + 2))) {
+        expRaw = text.slice(idx + 2, idx + 8);
+        idx += 8;
+        continue;
+      }
+      if (ai2 === '10') {
+        idx += 2;
+        const start = idx;
+        while (
+          idx < text.length &&
+          idx - start < 20 &&
+          text[idx] !== '\x1d' &&
+          text[idx] !== '\u001d' &&
+          text[idx] !== '('
+        ) {
+          idx += 1;
+        }
+        lotNumber = text.slice(start, idx).trim();
+        continue;
+      }
+      if (ai2 === '21') {
+        idx += 2;
+        const start = idx;
+        while (
+          idx < text.length &&
+          idx - start < 20 &&
+          text[idx] !== '\x1d' &&
+          text[idx] !== '\u001d' &&
+          text[idx] !== '('
+        ) {
+          idx += 1;
+        }
+        serialNumber = text.slice(start, idx).trim();
+        continue;
+      }
+      idx += 1;
+    }
+  }
 
   let expiryDate: string | undefined;
   let expiryDisplay: string | undefined;
-  if (expMatch?.[1]) {
-    const yy = expMatch[1].slice(0, 2);
-    const mm = expMatch[1].slice(2, 4);
-    const dd = expMatch[1].slice(4, 6);
+  if (expRaw) {
+    const yy = expRaw.slice(0, 2);
+    const mm = expRaw.slice(2, 4);
+    const dd = expRaw.slice(4, 6);
     expiryDate = `20${yy}-${mm}-${dd}`;
     expiryDisplay = `${dd}/${mm}/20${yy}`;
   }
 
+  if (!gtin && !sscc && !lotNumber && !expiryDate && !serialNumber) {
+    return null;
+  }
+
   return {
     raw: text,
-    gtin: gtinMatch?.[1],
-    sscc: ssccMatch?.[1],
-    lotNumber: lotMatch?.[1]?.trim(),
+    gtin,
+    sscc,
+    lotNumber,
     expiryDate,
     expiryDisplay,
-    serialNumber: serMatch?.[1]?.trim(),
+    serialNumber,
   };
 }
 
@@ -101,6 +197,7 @@ export interface MobileBarcodeScannerBarProps {
   disabled?: boolean;
   resolveViaApi?: boolean;
   onScan: (code: string, resolved?: ResolvedBarcodeResult | null) => void | Promise<void>;
+  onUndoLastScan?: (undoneCode: string) => void;
 }
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -135,6 +232,15 @@ function isScannerStationVisible(sectionEl: HTMLElement | null): boolean {
 }
 
 function extractScannerChar(e: KeyboardEvent): string {
+  if (
+    e.key === '\x1d' ||
+    e.key === '\u001d' ||
+    e.key === 'GroupSeparator' ||
+    e.keyCode === 29 ||
+    e.which === 29
+  ) {
+    return '\x1d';
+  }
   if (e.key && e.key.length === 1) {
     return e.key;
   }
@@ -153,9 +259,11 @@ export function MobileBarcodeScannerBar({
   disabled = false,
   resolveViaApi = true,
   onScan,
+  onUndoLastScan,
 }: MobileBarcodeScannerBarProps) {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [scanHistoryStack, setScanHistoryStack] = useState<string[]>([]);
   const [cameraActive, setCameraActive] = useState(false);
   const [isCameraLoading, setIsCameraLoading] = useState(false);
   const [hasActiveVideoStream, setHasActiveVideoStream] = useState(false);
@@ -237,12 +345,18 @@ export function MobileBarcodeScannerBar({
 
   const handleTrigger = async (rawCode: string) => {
     const clean = sanitizeScannerCode(rawCode);
-    if (!clean || disabled) return;
+    if (!clean || disabled) {
+      if (!clean && !disabled) {
+        playScannerErrorBuzz();
+      }
+      return;
+    }
 
     bufferRef.current = '';
     inputValueRef.current = '';
     setInput('');
     setCameraNotice('');
+    setScanHistoryStack(prev => [...prev, clean]);
 
     const gs1 = parseGs1BarcodeClient(rawCode);
     if (gs1) {
@@ -329,7 +443,7 @@ export function MobileBarcodeScannerBar({
         let resolved: ResolvedBarcodeResult | null = null;
         if (resolveViaApi) {
           try {
-            const res = await apiClient.get<ResolvedBarcodeResult>('/api/barcode-lookup/resolve', {
+            const res = await apiClient.get<ResolvedBarcodeResult>('/api/v1/barcode-lookup/resolve', {
               params: { code: clean, warehouseId: warehouseId || undefined },
             });
             resolved = res.data ?? null;
@@ -349,6 +463,25 @@ export function MobileBarcodeScannerBar({
   };
 
   triggerRef.current = handleTrigger;
+
+  const handleUndoLastScan = () => {
+    if (scanHistoryStack.length === 0) return;
+    const lastCode = scanHistoryStack[scanHistoryStack.length - 1];
+    setScanHistoryStack(prev => prev.slice(0, -1));
+    setLastScanFeedback({
+      step: wizardStepRef.current,
+      code: lastCode,
+      transitionText: 'Đã hoàn tác lần quét gần nhất',
+    });
+    onUndoLastScan?.(lastCode);
+  };
+
+  useHardwareScannerWedge({
+    enabled: !disabled,
+    onScan: barcode => {
+      void triggerRef.current(barcode);
+    },
+  });
 
   useEffect(() => {
     if (disabled) return;
@@ -388,14 +521,15 @@ export function MobileBarcodeScannerBar({
         if (!isKeypressFallback) {
           lastHandledKeydownTimeRef.current = now;
         }
-        const candidate = sanitizeScannerCode(bufferRef.current || inputValueRef.current);
+        const rawCandidate = bufferRef.current || inputValueRef.current;
+        const candidate = sanitizeScannerCode(rawCandidate);
         if (candidate) {
           e.preventDefault();
           e.stopPropagation();
           bufferRef.current = '';
           inputValueRef.current = '';
           setInput('');
-          void triggerRef.current(candidate);
+          void triggerRef.current(rawCandidate);
         }
         return;
       }
@@ -937,12 +1071,13 @@ export function MobileBarcodeScannerBar({
                 if (e.key === 'Enter' || e.keyCode === 13) {
                   e.preventDefault();
                   e.stopPropagation();
-                  const candidate = sanitizeScannerCode(input || bufferRef.current);
+                  const rawCandidate = bufferRef.current || input;
+                  const candidate = sanitizeScannerCode(rawCandidate);
                   bufferRef.current = '';
                   inputValueRef.current = '';
                   setInput('');
                   if (candidate) {
-                    void handleTrigger(candidate);
+                    void handleTrigger(rawCandidate);
                   }
                 }
               }}
@@ -952,9 +1087,19 @@ export function MobileBarcodeScannerBar({
               className="ui-btn ui-btn-primary ui-primary-button"
               style={{ height: 42, minHeight: 42, whiteSpace: 'nowrap' }}
               disabled={disabled || busy || !sanitizeScannerCode(input)}
-              onClick={() => void handleTrigger(input)}
+              onClick={() => void handleTrigger(bufferRef.current || input)}
             >
               {busy ? 'Đang xử lý...' : 'Xác nhận mã quét'}
+            </button>
+            <button
+              type="button"
+              data-testid="scanner-undo-last-btn"
+              className="ui-btn ui-btn-secondary"
+              style={{ height: 42, minHeight: 42, whiteSpace: 'nowrap' }}
+              disabled={disabled || busy || scanHistoryStack.length === 0}
+              onClick={handleUndoLastScan}
+            >
+              Hoàn tác lần quét gần nhất (Undo){scanHistoryStack.length > 0 ? ` (${scanHistoryStack.length})` : ''}
             </button>
             <button
               type="button"

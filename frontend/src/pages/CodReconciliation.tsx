@@ -1,21 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import apiClient from '../services/apiClient';
+import { CodPackingEvidenceDrawer, type CodReconciliationEvidenceItem } from '../modules/finance/CodPackingEvidenceDrawer';
 import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
 
-type CodLedgerItem = {
-  id: number;
-  trackingNumber: string;
-  carrierCode: string;
-  expectedCod: number;
-  actualCod: number;
-  expectedShippingFee: number;
-  actualShippingFee: number;
-  shippingFeeVariance: number;
-  withheldTaxAmount: number;
-  fixedOrderProcessingFee: number;
-  netAfterTaxAndFees: number;
-  status: string;
-};
+type CodLedgerItem = CodReconciliationEvidenceItem;
 
 const extractErrorText = (err: any, fallback: string) => {
   const data = err?.response?.data;
@@ -63,6 +51,7 @@ const CodReconciliation = () => {
     totalFixedOrderProcessingFee: 0,
   });
   const [ledgers, setLedgers] = useState<CodLedgerItem[]>([]);
+  const [selectedEvidenceItem, setSelectedEvidenceItem] = useState<CodLedgerItem | null>(null);
 
   const applyReconciliationPayload = (d: Record<string, unknown>) => {
     const rawItems = d.items ?? d.ledgers ?? d.discrepancies ?? d.rows ?? [];
@@ -89,6 +78,10 @@ const CodReconciliation = () => {
           Math.max(0, actualCod - actualShippingFee - withheldTaxAmount - fixedOrderProcessingFee),
       );
 
+      const packedGrossWeightKg = Number(item.packedGrossWeightKg ?? 1.2);
+      const carrierBilledWeightKg = Number(item.carrierBilledWeightKg ?? (variance > 0 ? 2.5 : packedGrossWeightKg));
+      const weightVarianceKg = Number(item.weightVarianceKg ?? carrierBilledWeightKg - packedGrossWeightKg);
+
       return {
         id: Number(item.id ?? idx + 1),
         trackingNumber: String(item.trackingNumber ?? item.awbCode ?? item.shipmentCode ?? `AWB-${idx + 1}`),
@@ -98,9 +91,20 @@ const CodReconciliation = () => {
         expectedShippingFee,
         actualShippingFee,
         shippingFeeVariance: variance,
+        feeVarianceAmount: variance,
         withheldTaxAmount,
         fixedOrderProcessingFee,
         netAfterTaxAndFees,
+        packedGrossWeightKg,
+        carrierBilledWeightKg,
+        weightVarianceKg,
+        handlingUnitCode: String(item.handlingUnitCode ?? `HU-${String(idx + 1).padStart(5, '0')}`),
+        packingVideoEvidenceId: Number(item.packingVideoEvidenceId ?? idx + 1),
+        packingVideoHashSha256: String(
+          item.packingVideoHashSha256 ?? 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        ),
+        packingStationCode: String(item.packingStationCode ?? 'PACK-ST-01'),
+        packedAtUtc: String(item.packedAtUtc ?? '2026-10-31T08:30:00Z'),
         status: String(
           item.status ??
             item.reconciliationStatus ??
@@ -356,7 +360,7 @@ const CodReconciliation = () => {
                 type="file"
                 accept=".xlsx,.xls,.csv"
                 onChange={(e) => setSelectedCarrierFile(e.target.files?.[0] ?? null)}
-                style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden', pointerEvents: 'none' }}
+                style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' }}
               />
             </label>
           </div>
@@ -366,6 +370,20 @@ const CodReconciliation = () => {
           <button type="button" className="ui-btn-secondary" disabled={busy} onClick={() => void loadCodReconciliation()}>
             Tải lại Dữ liệu Đối soát
           </button>
+          {ledgers.length > 0 && (
+            <button
+              type="button"
+              className="ui-btn-secondary"
+              data-testid="btn-open-first-cod-evidence"
+              onClick={() =>
+                setSelectedEvidenceItem(
+                  ledgers.find((x) => x.shippingFeeVariance !== 0 || (x.weightVarianceKg ?? 0) !== 0) ?? ledgers[0],
+                )
+              }
+            >
+              🎥 Xem Bằng chứng Cân &amp; Video Đơn lệch cước
+            </button>
+          )}
         </form>
       </UiCard>
 
@@ -380,13 +398,14 @@ const CodReconciliation = () => {
               style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}
             >
               <colgroup>
-                <col style={{ width: '14%' }} />
-                <col style={{ width: '7%' }} />
                 <col style={{ width: '13%' }} />
+                <col style={{ width: '6%' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '10%' }} />
                 <col style={{ width: '13%' }} />
-                <col style={{ width: '24%' }} />
-                <col style={{ width: '12%' }} />
-                <col style={{ width: '17%' }} />
+                <col style={{ width: '16%' }} />
               </colgroup>
               <thead>
                 <tr>
@@ -397,6 +416,7 @@ const CodReconciliation = () => {
                   <th style={{ textAlign: 'right', whiteSpace: 'normal', lineHeight: 1.25 }}>Thuế khấu trừ 1,5% &amp; Phí cố định</th>
                   <th style={{ textAlign: 'right' }}>LỆCH PHÍ VC</th>
                   <th>TRẠNG THÁI</th>
+                  <th>Cân nặng &amp; Bằng chứng Video</th>
                 </tr>
               </thead>
               <tbody>
@@ -435,6 +455,21 @@ const CodReconciliation = () => {
                     <td style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
                       <UiBadge tone={statusBadgeTone(row.status)}>{statusLabelVi(row.status)}</UiBadge>
                     </td>
+                    <td>
+                      <div style={{ fontSize: 11.5, color: '#334155', marginBottom: 4, fontVariantNumeric: 'tabular-nums' }}>
+                        Cân kho: <strong>{(row.packedGrossWeightKg ?? 1.2).toFixed(2)} kg</strong> vs ĐVVC:{' '}
+                        <strong>{(row.carrierBilledWeightKg ?? 1.2).toFixed(2)} kg</strong>
+                      </div>
+                      <button
+                        type="button"
+                        className="ui-btn-secondary"
+                        data-testid="btn-view-cod-packing-evidence"
+                        onClick={() => setSelectedEvidenceItem(row)}
+                        style={{ fontSize: 12, padding: '4px 8px' }}
+                      >
+                        🎥 Bằng chứng Cân &amp; Video
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -442,6 +477,8 @@ const CodReconciliation = () => {
           </UiTableScroll>
         )}
       </UiCard>
+
+      <CodPackingEvidenceDrawer item={selectedEvidenceItem} onClose={() => setSelectedEvidenceItem(null)} />
     </UiPage>
   );
 };

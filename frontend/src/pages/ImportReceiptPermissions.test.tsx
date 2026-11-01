@@ -12,7 +12,7 @@ describe('quyền độc lập trên phiếu nhập', () => {
   beforeEach(() => {
     vi.resetAllMocks(); localStorage.clear(); localStorage.setItem('userId', '1');
     setCurrentPermissions(['receipt.read']);
-    get.mockImplementation(async url => ({ data: url === '/api/importreceipts' ? [receipt] : receipt }) as never);
+    get.mockImplementation(async url => ({ data: url === '/api/v1/import-receipts' ? [receipt] : receipt }) as never);
   });
   afterEach(cleanup);
 
@@ -23,7 +23,7 @@ describe('quyền độc lập trên phiếu nhập', () => {
       qcState: 'QcPending', expectedQuantity: 5, receivedQuantity: 5, acceptedQuantity: 0,
       damagedQuantity: 0, rejectedQuantity: 0, conversionFactor: 1, operationUnitCode: 'EA', baseUnitCode: 'EA',
     })) };
-    get.mockImplementation(async url => ({ data: url === '/api/importreceipts' ? [qc] : qc }) as never);
+    get.mockImplementation(async url => ({ data: url === '/api/v1/import-receipts' ? [qc] : qc }) as never);
     vi.mocked(apiClient.post).mockResolvedValue({ data: {} });
     const view = render(<ImportReceipts />); await view.findByText('QA_RECEIPT');
     fireEvent.click(view.getByText('Chi tiết'));
@@ -40,7 +40,7 @@ describe('quyền độc lập trên phiếu nhập', () => {
 
   it('duyệt phiếu đã kiểm tra cần cả quyền hoàn tất phiếu và duyệt kết quả, không cần thực hiện', async () => {
     const qc = { ...receipt, status: 'QcCompleted' };
-    get.mockImplementation(async url => ({ data: url === '/api/importreceipts' ? [qc] : qc }) as never);
+    get.mockImplementation(async url => ({ data: url === '/api/v1/import-receipts' ? [qc] : qc }) as never);
     setCurrentPermissions(['receipt.read', 'receipt.complete']);
     const view = render(<ImportReceipts />); await view.findByText('QA_RECEIPT');
     expect(view.queryByText('Duyệt để ghi nhận tồn kho')).toBeNull();
@@ -52,7 +52,7 @@ describe('quyền độc lập trên phiếu nhập', () => {
 
   it('duyệt phiếu không kiểm tra không cần quyền kiểm tra chất lượng', async () => {
     const noQc = { ...receipt, status: 'Received' };
-    get.mockImplementation(async url => ({ data: url === '/api/importreceipts' ? [noQc] : noQc }) as never);
+    get.mockImplementation(async url => ({ data: url === '/api/v1/import-receipts' ? [noQc] : noQc }) as never);
     setCurrentPermissions(['receipt.read', 'receipt.complete']);
     const view = render(<ImportReceipts />); await view.findByText('QA_RECEIPT');
     expect(view.getByText('Duyệt để ghi nhận tồn kho')).toBeTruthy();
@@ -62,7 +62,7 @@ describe('quyền độc lập trên phiếu nhập', () => {
     const view = render(<ImportReceipts />); await view.findByText('QA_RECEIPT');
     fireEvent.click(view.getByText('Chi tiết'));
     expect(await view.findByText(/Chi Tiết Phiếu Nhập:/)).toBeTruthy();
-    expect(get.mock.calls.every(([url]) => url.startsWith('/api/importreceipts') && !url.includes('discrepanc'))).toBe(true);
+    expect(get.mock.calls.every(([url]) => url.startsWith('/api/v1/import-receipts') && !url.includes('discrepanc'))).toBe(true);
     expect(view.queryByText('Lưu Phiếu Nháp')).toBeNull();
     expect(view.queryByText('Ghi nhận tồn kho')).toBeNull();
   });
@@ -71,7 +71,7 @@ describe('quyền độc lập trên phiếu nhập', () => {
     setCurrentPermissions(['receipt.read', 'receiving_discrepancy.read', 'reason_code.read']);
     get.mockImplementation(async url => {
       if (url.includes('discrepanc')) throw { response: { status: 403 } };
-      return { data: url === '/api/importreceipts' ? [receipt] : receipt } as never;
+      return { data: url === '/api/v1/import-receipts' ? [receipt] : receipt } as never;
     });
     const view = render(<ImportReceipts />); await view.findByText('QA_RECEIPT');
     fireEvent.click(view.getByText('Chi tiết'));
@@ -89,7 +89,7 @@ describe('quyền độc lập trên phiếu nhập', () => {
 
   it('response chi tiết đến sau revoke không khôi phục dữ liệu đã xóa', async () => {
     let finish!: (value: unknown) => void;
-    get.mockImplementation(url => url === '/api/importreceipts' ? Promise.resolve({ data: [receipt] }) as never
+    get.mockImplementation(url => url === '/api/v1/import-receipts' ? Promise.resolve({ data: [receipt] }) as never
       : new Promise(resolve => { finish = resolve; }) as never);
     const view = render(<ImportReceipts />); await view.findByText('QA_RECEIPT');
     fireEvent.click(view.getByText('Chi tiết'));
@@ -103,7 +103,7 @@ describe('quyền độc lập trên phiếu nhập', () => {
     let finish!: (value: unknown) => void;
     get.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }) as never);
     const view = render(<ImportReceipts />);
-    await waitFor(() => expect(get).toHaveBeenCalledWith('/api/importreceipts'));
+    await waitFor(() => expect(get).toHaveBeenCalledWith('/api/v1/import-receipts'));
     act(() => setCurrentPermissions([]));
     act(() => setCurrentPermissions(['receipt.read']));
     await view.findByText('QA_RECEIPT');
@@ -114,7 +114,7 @@ describe('quyền độc lập trên phiếu nhập', () => {
 
   it('bản in đến muộn không mở lại sau revoke rồi regrant', async () => {
     let finish!: (value: unknown) => void;
-    get.mockImplementation(url => url === '/api/importreceipts' ? Promise.resolve({ data: [receipt] }) as never
+    get.mockImplementation(url => url === '/api/v1/import-receipts' ? Promise.resolve({ data: [receipt] }) as never
       : new Promise(resolve => { finish = resolve; }) as never);
     const view = render(<ImportReceipts />); await view.findByText('QA_RECEIPT');
     fireEvent.click(view.getByText('Xem bản in'));
@@ -165,7 +165,7 @@ describe('quyền độc lập trên phiếu nhập', () => {
         },
       ],
     };
-    get.mockImplementation(async url => ({ data: url === '/api/importreceipts' ? [maskedReceipt] : maskedReceipt }) as never);
+    get.mockImplementation(async url => ({ data: url === '/api/v1/import-receipts' ? [maskedReceipt] : maskedReceipt }) as never);
     vi.mocked(apiClient.post).mockResolvedValueOnce({ data: { rmaInspectionCode: 'RMA-INSP-20261021' } } as never);
     const view = render(<ImportReceipts />);
     await view.findByText('QA_RECEIPT');
@@ -173,7 +173,7 @@ describe('quyền độc lập trên phiếu nhập', () => {
     expect(await view.findByText('SP-MASK-01')).toBeTruthy();
     expect(view.getAllByText('Ẩn theo phân quyền').length).toBeGreaterThanOrEqual(2);
 
-    expect(view.getByText('Quét Mã Vận Đơn Hoàn Hàng Nhanh tại Cửa Kho')).toBeTruthy();
+    expect(view.getByText('Quét mã vận đơn hoàn hàng nhanh tại cửa kho')).toBeTruthy();
     expect(view.container.textContent).not.toContain('1-Scan RTS');
     fireEvent.change(view.getByLabelText('Quét mã vận đơn hoàn hàng nhanh'), {
       target: { value: 'GHN-RTS-889901' },
@@ -183,7 +183,7 @@ describe('quyền độc lập trên phiếu nhập', () => {
     expect(notice).toBeTruthy();
     expect(notice.textContent).not.toContain('RMA');
     expect(vi.mocked(apiClient.post)).toHaveBeenCalledWith(
-      '/api/ImportReceipts/initiate-rma-inspection',
+      '/api/v1/import-receipts/initiate-rma-inspection',
       expect.objectContaining({
         rmaReferenceCode: 'GHN-RTS-889901',
       }),

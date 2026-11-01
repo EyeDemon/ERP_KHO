@@ -89,6 +89,11 @@ public sealed record MisaExcelExportData(
 
 public interface IExportReceiptOperationsService
 {
+    Task<WmsEndpointOutcome> GetPipelineSummaryAsync(
+        int? warehouseId = null,
+        IWarehouseAuthorizationService? warehouseAccessOverride = null,
+        CancellationToken cancellationToken = default);
+
     Task<WmsEndpointOutcome> GetSlaQueueAsync(
         int? warehouseId,
         CancellationToken cancellationToken = default);
@@ -97,7 +102,9 @@ public interface IExportReceiptOperationsService
         CancellationToken cancellationToken = default);
 
     Task IncrementSubscriptionOrderCountAsync(
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        int? salesOrderId = null,
+        string? marketplaceOrderId = null);
 
     Task<WmsEndpointOutcome> VerifyDispatchCutoffAsync(
         VerifyDispatchCutoffInput? request,

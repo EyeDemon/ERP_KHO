@@ -437,6 +437,71 @@ public sealed class ShipmentOperationsService(
 
         shipment.Status = ShipmentStatus.Completed;
         shipment.CompletedAt = now;
+
+        var trackingNumber = !string.IsNullOrWhiteSpace(shipment.SealNumber)
+            ? shipment.SealNumber.Trim()
+            : shipment.ShipmentCode.Trim();
+        int? exportReceiptId = string.Equals(shipment.SourceType, "ExportReceipt", StringComparison.OrdinalIgnoreCase)
+            ? shipment.SourceId
+            : null;
+        int? salesOrderId = string.Equals(shipment.SourceType, "SalesOrder", StringComparison.OrdinalIgnoreCase)
+            ? shipment.SourceId
+            : null;
+
+        var linkedExport = await db.ExportReceipts
+            .AsNoTracking()
+            .Include(x => x.Details)
+            .FirstOrDefaultAsync(
+                x => x.ShipmentId == shipment.Id ||
+                     (exportReceiptId.HasValue && x.Id == exportReceiptId.Value),
+                cancellationToken);
+        if (linkedExport != null)
+        {
+            exportReceiptId ??= linkedExport.Id;
+            salesOrderId ??= linkedExport.SalesOrderId;
+        }
+
+        var existingReturn = await db.CustomerReturns
+            .FirstOrDefaultAsync(
+                r => r.ShipmentId == shipment.Id ||
+                     (!string.IsNullOrWhiteSpace(trackingNumber) && r.TrackingNumber == trackingNumber),
+                cancellationToken);
+        if (existingReturn == null)
+        {
+            var autoReturn = new ERP.Domain.Entities.CustomerReturn
+            {
+                ReturnCode = $"RMA-RTS-{shipment.Id}-{now:yyyyMMddHHmmss}",
+                WarehouseId = shipment.WarehouseId,
+                ShipmentId = shipment.Id,
+                ExportReceiptId = exportReceiptId,
+                SalesOrderId = salesOrderId,
+                QuarantineLocationId = targetLocationId,
+                TrackingNumber = trackingNumber,
+                OrderNumber = shipment.SourceCode?.Trim() ?? linkedExport?.Code?.Trim(),
+                ReturnReason = string.IsNullOrWhiteSpace(request?.Note) ? "DELIVERY_FAILED_RTS" : request.Note.Trim(),
+                Status = putToQuarantine ? "QUARANTINED" : "COMPLETED",
+                CreatedBy = effectiveActorId,
+                CreatedAtUtc = now,
+                CompletedAtUtc = putToQuarantine ? null : now
+            };
+            foreach (var item in rtsItems)
+            {
+                autoReturn.Lines.Add(new ERP.Domain.Entities.CustomerReturnLine
+                {
+                    ProductId = item.ProductId,
+                    LotId = item.LotId,
+                    SerialId = item.SerialId,
+                    QuarantineLocationId = targetLocationId,
+                    TargetLocationId = targetLocationId,
+                    RestockLocationId = putToQuarantine ? null : targetLocationId,
+                    Quantity = item.Quantity,
+                    Condition = "GOOD",
+                    Disposition = putToQuarantine ? "PENDING" : "RESTOCK_AVAILABLE"
+                });
+            }
+            db.CustomerReturns.Add(autoReturn);
+        }
+
         await db.SaveChangesAsync(cancellationToken);
 
         return WmsEndpointOutcome.Ok(new

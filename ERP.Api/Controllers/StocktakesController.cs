@@ -17,16 +17,16 @@ public class StocktakesController : ControllerBase
 {
     private readonly IStocktakeService _stocktakeService;
     private readonly IStocktakeQueryService _stocktakeQueryService;
-    private readonly IStocktakeOperationsService? _stocktakeOps;
-    private readonly IWarehouseAuthorizationService? _warehouseAccess;
-    private readonly ICurrentUser? _currentUser;
+    private readonly IStocktakeOperationsService _stocktakeOps;
+    private readonly IWarehouseAuthorizationService _warehouseAccess;
+    private readonly ICurrentUser _currentUser;
 
     public StocktakesController(
         IStocktakeService stocktakeService,
         IStocktakeQueryService stocktakeQueryService,
-        IStocktakeOperationsService stocktakeOps = null!,
-        IWarehouseAuthorizationService warehouseAccess = null!,
-        ICurrentUser? currentUser = null)
+        IStocktakeOperationsService stocktakeOps,
+        IWarehouseAuthorizationService warehouseAccess,
+        ICurrentUser currentUser)
     {
         _stocktakeService = stocktakeService;
         _stocktakeQueryService = stocktakeQueryService;
@@ -36,8 +36,7 @@ public class StocktakesController : ControllerBase
     }
 
     private bool CanReadCost() =>
-        _currentUser?.HasPermission(AppPermissions.InventoryCostRead)
-        ?? (User != null && !User.IsInRole(AppRoles.WarehouseStaff) && !User.IsInRole(AppRoles.Viewer));
+        this.HasActionPermission(_currentUser, AppPermissions.InventoryCostRead);
 
     private int? GetActorUserId() =>
         int.TryParse(User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? User?.FindFirstValue("Id"), out var uid)
@@ -51,42 +50,8 @@ public class StocktakesController : ControllerBase
     [HttpGet("reason-codes-and-adjustments")]
     public async Task<IActionResult> GetReasonCodesAndAdjustments(
         [FromQuery] int? warehouseId = null,
-        CancellationToken cancellationToken = default)
-    {
-        if (_stocktakeOps != null)
-            return this.ToActionResult(await _stocktakeOps.GetReasonCodesAndAdjustmentsAsync(warehouseId, CanReadCost(), _warehouseAccess, cancellationToken));
-
-        if (_warehouseAccess != null)
-        {
-            if (warehouseId.HasValue) await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
-            else await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
-        }
-
-        return Ok(new
-        {
-            reasonCodes = new object[]
-            {
-                new { code = "COUNT_VARIANCE", name = "Chênh lệch kiểm đếm định kỳ", category = "CycleCount", requiresApproval = true },
-                new { code = "DAMAGED_FOUND", name = "Phát hiện hàng hư hỏng vật lý", category = "Quality", requiresApproval = true },
-                new { code = "EXPIRY_WRITE_OFF", name = "Hủy hàng hết hạn sử dụng", category = "Expiry", requiresApproval = true },
-                new { code = "SUPPLIER_SHORTAGE", name = "Thiếu hụt nguồn giao từ NCC", category = "Inbound", requiresApproval = true },
-                new { code = "MISPLACED_STOCK", name = "Sai lệch vị trí lưu kho nội bộ", category = "Slotting", requiresApproval = false },
-                new { code = "RECALL_QUARANTINE", name = "Cô lập thu hồi lô hàng khẩn cấp", category = "Recall", requiresApproval = true }
-            },
-            adjustmentGovernance = new
-            {
-                sodRequired = true,
-                approvalThresholdPct = 1.0m,
-                approvalThresholdAmountVnd = 500_000m,
-                supportedTransactionTypes = new[] { "AdjustmentIncrease", "AdjustmentDecrease" }
-            },
-            openStocktakesCount = 0,
-            activeCountFreezeLocksCount = 0,
-            status = "Đã tải danh mục mã lý do & lịch sử đề xuất điều chỉnh kiểm kê",
-            statusLabel = "Đã tải danh mục mã lý do & lịch sử đề xuất điều chỉnh kiểm kê",
-            recentProposals = Array.Empty<object>()
-        });
-    }
+        CancellationToken cancellationToken = default) =>
+        this.ToActionResult(await _stocktakeOps.GetReasonCodesAndAdjustmentsAsync(warehouseId, CanReadCost(), _warehouseAccess, cancellationToken));
 
     public sealed record VerifyStocktakeFreezePolicyRequest(int? WarehouseId = null)
         : VerifyStocktakeFreezePolicyInput(WarehouseId);
@@ -96,29 +61,8 @@ public class StocktakesController : ControllerBase
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyStocktakeFreezePolicyRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (_stocktakeOps != null)
-            return this.ToActionResult(await _stocktakeOps.VerifyFreezePolicyAsync(request, GetActorUserId(), _warehouseAccess, cancellationToken));
-
-        if (_warehouseAccess != null)
-        {
-            if (request?.WarehouseId.HasValue == true) await _warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
-            else await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
-        }
-
-        var now = DateTime.UtcNow;
-        return Ok(new
-        {
-            verificationCode = $"ST-FRZ-{now:yyyyMMdd-HHmm}",
-            warehouseId = request?.WarehouseId,
-            openStocktakesCount = 0,
-            approvedStocktakesCount = 0,
-            activeCountFreezeLocksCount = 0,
-            freezePolicyStatus = "Đã kích hoạt khóa đóng băng kiểm kê (CountFreeze) chống xuất/di chuyển lệch kỳ",
-            status = "Đã xác thực chính sách đóng băng kiểm kê & mã lý do điều chỉnh",
-            statusLabel = "Đã xác thực chính sách đóng băng kiểm kê & mã lý do điều chỉnh",
-            verifiedAtUtc = now
-        });
+        if (!this.HasActionPermission(_currentUser, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryWrite)) return Forbid();
+        return this.ToActionResult(await _stocktakeOps.VerifyFreezePolicyAsync(request, GetActorUserId(), _warehouseAccess, cancellationToken));
     }
 
     public sealed record CreateAdjustmentProposalRequest(
@@ -137,53 +81,24 @@ public class StocktakesController : ControllerBase
 
     [HttpPost("adjustment-proposals")]
     [IdempotentCommand("Stocktake.CreateAdjustmentProposal")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Manager},{AppRoles.WarehouseStaff}")]
+    [PermissionAuthorize(AppPermissions.InventoryWrite, AppPermissions.InventoryMovementCreate)]
     public async Task<IActionResult> CreateAdjustmentProposal(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CreateAdjustmentProposalRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (_stocktakeOps != null)
-            return this.ToActionResult(await _stocktakeOps.CreateAdjustmentProposalAsync(request, GetActorUserId(), CanReadCost(), _warehouseAccess, cancellationToken));
-
-        var resolvedWarehouseId = request?.WarehouseId;
-        if (_warehouseAccess != null)
-        {
-            if (resolvedWarehouseId.HasValue)
-                await _warehouseAccess.EnsureWarehouseAccessAsync(resolvedWarehouseId.Value, cancellationToken);
-            else
-            {
-                var accessible = await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
-                if (accessible.Count == 0) return Forbid();
-                resolvedWarehouseId = accessible.First();
-            }
-        }
-
-        var now = DateTime.UtcNow;
-        var reasonCode = string.IsNullOrWhiteSpace(request?.ReasonCode) ? "COUNT_VARIANCE" : request.ReasonCode.Trim().ToUpperInvariant();
-        var productCode = (!string.IsNullOrWhiteSpace(request?.ProductCode) ? request.ProductCode : request?.Sku)?.Trim() ?? string.Empty;
-        var deltaQuantity = (request != null && request.DeltaQuantity != 0m) ? request.DeltaQuantity : (request?.QuantityDelta ?? 0m);
-        return Ok(new
-        {
-            id = 0L, proposalAuditId = 0L, proposalCode = $"ADJ-{now:yyyyMMdd}-000",
-            warehouseId = resolvedWarehouseId, productId = request?.ProductId, productCode,
-            deltaQuantity, isAutoApproved = false, reasonCode,
-            status = "PENDING_APPROVAL", statusLabel = "Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm", createdAtUtc = now
-        });
+        if (!this.HasActionPermission(_currentUser, AppPermissions.InventoryWrite, AppPermissions.InventoryMovementCreate)) return Forbid();
+        return this.ToActionResult(await _stocktakeOps.CreateAdjustmentProposalAsync(request, GetActorUserId(), CanReadCost(), _warehouseAccess, cancellationToken));
     }
 
     [HttpPost("adjustment-proposals/{proposalAuditId:long}/approve")]
     [IdempotentCommand("Stocktake.ApproveAdjustmentProposal")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Manager}")]
+    [PermissionAuthorize(AppPermissions.InventoryWrite, AppPermissions.InventoryMovementCreate)]
     public async Task<IActionResult> ApproveAdjustmentProposal(
         long proposalAuditId,
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ApproveAdjustmentProposalRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (_stocktakeOps == null)
-            return BadRequest(new { message = "Không thể kết nối cơ sở dữ liệu để phê duyệt đề xuất điều chỉnh." });
-
+        if (!this.HasActionPermission(_currentUser, AppPermissions.InventoryWrite, AppPermissions.InventoryMovementCreate)) return Forbid();
         return this.ToActionResult(await _stocktakeOps.ApproveAdjustmentProposalAsync(
             proposalAuditId, request, GetActorUserId(), _warehouseAccess, cancellationToken));
     }
@@ -212,6 +127,21 @@ public class StocktakesController : ControllerBase
 
         await _stocktakeService.ApproveStocktakeAsync(id, userId);
         return Ok(new { message = "Duyệt phiếu kiểm kê thành công" });
+    }
+
+    public sealed record CancelStocktakeRequest(string? Reason = null);
+
+    [HttpPost("{id}/cancel"), IdempotentCommand("Stocktake.Cancel"), Authorize(Policy = ApprovalPolicies.Checker)]
+    public async Task<IActionResult> Cancel(
+        int id,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CancelStocktakeRequest? request = null)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("Id");
+        if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out var userId))
+            return Unauthorized(new { message = "Không thể xác định người dùng" });
+
+        await _stocktakeService.CancelStocktakeAsync(id, userId, request?.Reason);
+        return Ok(new { message = "Hủy phiếu kiểm kê thành công" });
     }
 
     [HttpPut("{id}/details/{detailId}"), IdempotentCommand("Stocktake.UpdateDetail")]
@@ -254,9 +184,6 @@ public class StocktakesController : ControllerBase
         [FromQuery] decimal? thresholdValueVnd = null,
         CancellationToken cancellationToken = default)
     {
-        if (_stocktakeOps == null)
-            return StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." });
-
         var resolvedId = !string.IsNullOrWhiteSpace(id) ? id : stocktakeId;
         return this.ToActionResult(await _stocktakeOps.GetCountAttemptsAndAutoApprovalAsync(
             resolvedId,
@@ -272,9 +199,7 @@ public class StocktakesController : ControllerBase
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EvaluateAutoApprovalRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (_stocktakeOps == null)
-            return StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." });
+        if (!this.HasActionPermission(_currentUser, AppPermissions.InventoryWrite, AppPermissions.InventoryMovementCreate)) return Forbid();
 
         var counterLabel = User?.FindFirstValue(ClaimTypes.NameIdentifier) ?? User?.Identity?.Name ?? "system";
         return this.ToActionResult(await _stocktakeOps.EvaluateAutoApprovalAsync(

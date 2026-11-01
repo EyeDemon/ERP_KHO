@@ -91,7 +91,7 @@ export default function StockReservations() {
     setSweepBusy(true);
     setError('');
     try {
-      const res = await apiClient.post('/api/stock-reservations/sweep-expired-preview', {});
+      const res = await apiClient.post('/api/v1/stock-reservations/sweep-expired-preview', {});
       if (res?.data?.sweepId) {
         setSweepPreview({
           sweepId: String(res.data.sweepId),
@@ -113,7 +113,7 @@ export default function StockReservations() {
     setLoading(true);
     setError('');
     try {
-      const response = await apiClient.get('/api/stock-reservations', {
+      const response = await apiClient.get('/api/v1/stock-reservations', {
         params: { page, pageSize: 20, status: status || undefined },
       });
       setData(response.data);
@@ -133,7 +133,7 @@ export default function StockReservations() {
     setBusy(true);
     setError('');
     try {
-      await apiClient.post(`/api/stock-reservations/${item.id}/release`, {
+      await apiClient.post(`/api/v1/stock-reservations/${item.id}/release`, {
         reason: 'Released from reservation screen',
       });
       await load(data.pageIndex);
@@ -152,7 +152,7 @@ export default function StockReservations() {
     setBusy(true);
     setError('');
     try {
-      await apiClient.post('/api/stock-reservations/expire');
+      await apiClient.post('/api/v1/stock-reservations/expire');
       await load(1);
     } catch (failure) {
       setError(messageOf(failure, 'Không thể dọn bản ghi giữ hàng hết hạn.'));

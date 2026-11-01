@@ -14,9 +14,9 @@ namespace ERP.Api.Controllers
     public class UnitsController : ControllerBase
     {
         private readonly IUnitService _unitService;
-        private readonly IWmsGovernanceOperationsService? _govOps;
+        private readonly IWmsGovernanceOperationsService _govOps;
 
-        public UnitsController(IUnitService unitService, IWmsGovernanceOperationsService govOps = null!)
+        public UnitsController(IUnitService unitService, IWmsGovernanceOperationsService govOps)
         {
             _unitService = unitService;
             _govOps = govOps;
@@ -45,60 +45,17 @@ namespace ERP.Api.Controllers
         }
 
         [HttpPost("verify-uom-integrity")]
-        [PermissionAuthorize(AppPermissions.UomRead)]
-        public async Task<IActionResult> VerifyUomIntegrity(CancellationToken cancellationToken = default)
-        {
-            if (_govOps != null)
-            {
-                return this.ToActionResult(await _govOps.VerifyUomIntegrityAsync(cancellationToken));
-            }
-
-            var totalUnitsCount = (await _unitService.GetAllUnitsAsync()).Count();
-            var now = DateTime.UtcNow;
-            return Ok(new
-            {
-                verificationId = $"UOM-INT-{now:yyyyMMdd-HHmm}",
-                totalUnitsCount,
-                activeUnitsCount = totalUnitsCount,
-                productsCount = 0,
-                conversionCount = 0,
-                invalidConversionCount = 0,
-                baseUomImmutability = "Đã khóa bảo vệ đơn vị tính cơ sở khi phát sinh tồn kho",
-                conversionGraphCycles = 0,
-                status = "Đã xác thực toàn vẹn danh mục ĐVT & hệ số quy đổi",
-                statusLabel = "Đã xác thực toàn vẹn danh mục ĐVT & hệ số quy đổi",
-                verifiedAtUtc = now
-            });
-        }
+        [PermissionAuthorize(AppPermissions.UomManage)]
+        public async Task<IActionResult> VerifyUomIntegrity(CancellationToken cancellationToken = default) =>
+            this.ToActionResult(await _govOps.VerifyUomIntegrityAsync(cancellationToken));
 
         public sealed record VerifyCatchWeightColdChainRequest(int? ProductId = null);
 
-        [HttpPost("verify-catch-weight-coldchain"), PermissionAuthorize(AppPermissions.UomRead)]
+        [HttpPost("verify-catch-weight-coldchain"), PermissionAuthorize(AppPermissions.UomManage)]
         public async Task<IActionResult> VerifyCatchWeightColdChain(
             [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyCatchWeightColdChainRequest? request = null,
-            CancellationToken cancellationToken = default)
-        {
-            var productId = request?.ProductId;
-            if (_govOps != null)
-            {
-                return this.ToActionResult(await _govOps.VerifyCatchWeightColdChainAsync(productId, cancellationToken));
-            }
-
-            var now = DateTime.UtcNow;
-            return Ok(new
-            {
-                verificationId = $"CW-CC-HAZ-{now:yyyyMMdd-HHmm}",
-                productId,
-                checkedProductsCount = 0,
-                dualUomTolerancePct = 2.5m,
-                catchWeightLedgerTraceability = "Đồng bộ song song đơn vị cơ sở và trọng lượng thực tế",
-                coldChainExcursionStatus = "Không phát sinh vi phạm ngưỡng nhiệt độ kho lạnh",
-                hazmatSegregationStatus = "Tuân thủ phân tách khu vực lưu trữ hàng nguy hiểm",
-                status = "Đã xác thực quy tắc bảo quản chuyên biệt & chuỗi lạnh",
-                statusLabel = "Đã xác thực quy tắc bảo quản chuyên biệt & chuỗi lạnh",
-                verifiedAtUtc = now
-            });
-        }
+            CancellationToken cancellationToken = default) =>
+            this.ToActionResult(await _govOps.VerifyCatchWeightColdChainAsync(request?.ProductId, cancellationToken));
 
         [HttpGet("{id}")]
         [PermissionAuthorize(AppPermissions.UomRead)]

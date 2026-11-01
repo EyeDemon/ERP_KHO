@@ -52,5 +52,6 @@ public interface ISaasBillingService
     Task<(bool InvalidReason, string? ErrorMessage, object? Payload)> HandleVietQrWebhookAsync(
         SaasVietQrWebhookRequest? request,
         int? actorUserId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        string? providedSignature = null);
 }

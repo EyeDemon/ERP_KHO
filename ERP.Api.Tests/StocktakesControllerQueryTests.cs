@@ -38,7 +38,12 @@ namespace ERP.Api.Tests
 
             mockQueryService.Setup(s => s.GetStocktakesAsync()).ReturnsAsync(mockData);
 
-            var controller = new StocktakesController(mockService.Object, mockQueryService.Object);
+            var controller = new StocktakesController(
+                mockService.Object,
+                mockQueryService.Object,
+                Mock.Of<IStocktakeOperationsService>(),
+                Mock.Of<IWarehouseAuthorizationService>(),
+                Mock.Of<ICurrentUser>());
 
             var result = await controller.GetAll();
             
@@ -65,7 +70,12 @@ namespace ERP.Api.Tests
 
             mockQueryService.Setup(s => s.GetStocktakeByIdAsync(1)).ReturnsAsync(mockData);
 
-            var controller = new StocktakesController(mockService.Object, mockQueryService.Object);
+            var controller = new StocktakesController(
+                mockService.Object,
+                mockQueryService.Object,
+                Mock.Of<IStocktakeOperationsService>(),
+                Mock.Of<IWarehouseAuthorizationService>(),
+                Mock.Of<ICurrentUser>());
 
             var result = await controller.GetById(1);
             

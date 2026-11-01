@@ -37,7 +37,12 @@ namespace ERP.Api.Tests
                 new InventoryReconciliationWarehouseDto { Id = 7, Code = "W-7", Name = "Kho số 7" }
             ];
             mock.Setup(x => x.GetAccessibleWarehousesAsync()).ReturnsAsync(expected);
-            var result = await new InventoryReconciliationController(mock.Object).Warehouses();
+            var result = await new InventoryReconciliationController(
+                mock.Object,
+                Mock.Of<IWmsGovernanceOperationsService>(),
+                Mock.Of<IWarehouseAuthorizationService>(),
+                Mock.Of<IStockReservationService>(),
+                Mock.Of<ICurrentUser>()).Warehouses();
             var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
             ok.Value.Should().BeSameAs(expected);
             mock.Verify(x => x.GetAccessibleWarehousesAsync(), Times.Once);
@@ -98,7 +103,12 @@ namespace ERP.Api.Tests
             };
             mock.Setup(x => x.GetInvestigationAsync(7, 17, 32, 50, 20, 100, 20, "QcHold", "Quarantine", 120, new string('a', 64)))
                 .ReturnsAsync(result);
-            var response = await new InventoryReconciliationController(mock.Object)
+            var response = await new InventoryReconciliationController(
+                mock.Object,
+                Mock.Of<IWmsGovernanceOperationsService>(),
+                Mock.Of<IWarehouseAuthorizationService>(),
+                Mock.Of<IStockReservationService>(),
+                Mock.Of<ICurrentUser>())
                 .Investigation(7, 17, 32, 50, 20, 100, 20, "QcHold", "Quarantine", 120, new string('a', 64));
             var ok = response.Result.Should().BeOfType<OkObjectResult>().Subject;
             ok.Value.Should().BeSameAs(result);
@@ -182,7 +192,12 @@ namespace ERP.Api.Tests
                 {
                     Items = [dto], TotalRecords = 1, PageIndex = 1, PageSize = 20
                 });
-            var response = await new InventoryReconciliationController(mock.Object)
+            var response = await new InventoryReconciliationController(
+                mock.Object,
+                Mock.Of<IWmsGovernanceOperationsService>(),
+                Mock.Of<IWarehouseAuthorizationService>(),
+                Mock.Of<IStockReservationService>(),
+                Mock.Of<ICurrentUser>())
                 .GetReconciliations(7, 11, null);
             var ok = response.Should().BeOfType<OkObjectResult>().Subject;
             var page = ok.Value.Should().BeOfType<PagedResult<InventoryReconciliationDto>>().Subject;
@@ -217,7 +232,12 @@ namespace ERP.Api.Tests
             mockQueryService.Setup(s => s.GetReconciliationsAsync(It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>()))
                 .ReturnsAsync(expectedResult);
 
-            var controller = new InventoryReconciliationController(mockQueryService.Object);
+            var controller = new InventoryReconciliationController(
+                mockQueryService.Object,
+                Mock.Of<IWmsGovernanceOperationsService>(),
+                Mock.Of<IWarehouseAuthorizationService>(),
+                Mock.Of<IStockReservationService>(),
+                Mock.Of<ICurrentUser>());
 
             var result = await controller.GetReconciliations(null, null, null, 1, 20);
 

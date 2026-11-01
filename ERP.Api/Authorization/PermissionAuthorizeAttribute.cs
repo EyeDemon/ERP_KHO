@@ -58,20 +58,42 @@ public sealed class PermissionAuthorizationFilter : IAsyncAuthorizationFilter, I
     public int Order => int.MinValue;
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
+        if (context.ActionDescriptor.EndpointMetadata.OfType<Microsoft.AspNetCore.Authorization.IAllowAnonymous>().Any())
+        {
+            return;
+        }
         if (context.HttpContext.User.Identity?.IsAuthenticated != true || !int.TryParse(context.HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
         { context.Result=new UnauthorizedObjectResult(new { message="Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." }); return; }
         try
         {
+            if (context.HttpContext.Items.TryGetValue(HttpCurrentUser.CachedPermissionsKey, out var cachedObj) &&
+                cachedObj is IReadOnlySet<string> cachedPerms)
+            {
+                if (!_permissions.Any(cachedPerms.Contains))
+                {
+                    context.Result = new ObjectResult(new { message = "Bạn không có quyền thực hiện thao tác này." }) { StatusCode = StatusCodes.Status403Forbidden };
+                }
+                return;
+            }
+
             var user = await db.Users.AsNoTracking().Where(u => u.Id == userId)
-                .Select(u => new { u.IsActive, u.LockoutEnd, RoleName = u.Role.RoleName, Allowed = u.Role.Permissions.Any(rp => _permissions.Contains(rp.Permission.Code)) })
-                .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+                .Select(u => new
+                {
+                    u.IsActive,
+                    u.LockoutEnd,
+                    RoleName = u.Role.RoleName,
+                    PermissionCodes = u.Role.Permissions.Select(rp => rp.Permission.Code).ToList()
+                })
+                .SingleOrDefaultAsync(CancellationToken.None);
             if (user is null || !user.IsActive || user.LockoutEnd > DateTime.UtcNow)
             {
                 context.Result = new UnauthorizedObjectResult(new { message = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." });
                 return;
             }
-            var allowed = user.Allowed;
+            var permSet = new HashSet<string>(user.PermissionCodes.Where(c => !string.IsNullOrWhiteSpace(c)), StringComparer.OrdinalIgnoreCase);
             context.HttpContext.Items[HttpCurrentUser.EffectiveRoleKey] = user.RoleName;
+            context.HttpContext.Items[HttpCurrentUser.CachedPermissionsKey] = permSet;
+            var allowed = _permissions.Any(permSet.Contains);
             if(!allowed) context.Result=new ObjectResult(new { message="Bạn không có quyền thực hiện thao tác này." }){StatusCode=StatusCodes.Status403Forbidden};
         }
         catch

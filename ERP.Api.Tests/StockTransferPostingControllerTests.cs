@@ -33,7 +33,10 @@ public sealed class StockTransferPostingControllerTests
             .Returns(Task.CompletedTask);
         service.Setup(x => x.CancelAsync(18, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        var controller = new StockTransfersController(service.Object);
+        var controller = new StockTransfersController(
+            service.Object,
+            Mock.Of<IWmsGovernanceOperationsService>(),
+            Mock.Of<IWarehouseAuthorizationService>());
 
         var created = Assert.IsType<CreatedAtActionResult>(
             await controller.Create(request, CancellationToken.None));
@@ -69,7 +72,10 @@ public sealed class StockTransferPostingControllerTests
         service.Setup(x => x.ReceiveAsync(17, receipt, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var controller = new StockTransfersController(service.Object);
+        var controller = new StockTransfersController(
+            service.Object,
+            Mock.Of<IWmsGovernanceOperationsService>(),
+            Mock.Of<IWarehouseAuthorizationService>());
         Assert.IsType<NoContentResult>(await controller.Dispatch(17, CancellationToken.None));
         Assert.IsType<NoContentResult>(await controller.Receive(17, receipt, CancellationToken.None));
 

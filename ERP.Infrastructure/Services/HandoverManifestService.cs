@@ -663,19 +663,32 @@ public sealed class HandoverManifestService : IHandoverManifestService
 
         foreach (var receipt in receipts.Where(r => r.Status == ReceiptStatus.Approved))
         {
-            try
+            var alreadyDeductedBeforeCall = await _db.InventoryTransactions.AsNoTracking().AnyAsync(
+                t => t.WarehouseId == receipt.WarehouseId &&
+                     ((t.ReferenceType == "ExportReceipt" && t.ReferenceId == receipt.Id &&
+                       (t.TransactionType == TransactionType.Export || t.TransactionType == TransactionType.Ship)) ||
+                      (receipt.ShipmentId.HasValue &&
+                       t.ReferenceType == "Shipment" &&
+                       t.ReferenceId == receipt.ShipmentId.Value &&
+                       t.TransactionType == TransactionType.Ship)),
+                cancellationToken);
+
+            if (!alreadyDeductedBeforeCall && !receipt.ShipmentId.HasValue)
             {
-                await _exportReceiptService.DispatchAsync(receipt.Id, actorUserId);
-            }
-            catch (Exception ex) when (ex is BusinessRuleException or ConcurrencyException)
-            {
-                return HandoverManifestOperationResult.Fail(409, new
+                try
                 {
-                    code = "ORDER_CANCELLED_PUTBACK_REQUIRED",
-                    errorCode = "ORDER_CANCELLED_PUTBACK_REQUIRED",
-                    exportReceiptId = receipt.Id,
-                    message = ex.Message
-                });
+                    await _exportReceiptService.DispatchAsync(receipt.Id, actorUserId);
+                }
+                catch (Exception ex) when (ex is BusinessRuleException or ConcurrencyException)
+                {
+                    return HandoverManifestOperationResult.Fail(409, new
+                    {
+                        code = "ORDER_CANCELLED_PUTBACK_REQUIRED",
+                        errorCode = "ORDER_CANCELLED_PUTBACK_REQUIRED",
+                        exportReceiptId = receipt.Id,
+                        message = ex.Message
+                    });
+                }
             }
 
             var refreshed = await _db.ExportReceipts
@@ -695,68 +708,92 @@ public sealed class HandoverManifestService : IHandoverManifestService
                     await _db.AcquireInventoryAllocationLocksAsync(refreshed.WarehouseId, productIds, cancellationToken);
                 }
 
-                foreach (var detail in refreshed.Details)
+                var alreadyDeductedAfterLock = await _db.InventoryTransactions.AnyAsync(
+                    t => t.WarehouseId == refreshed.WarehouseId &&
+                         ((t.ReferenceType == "ExportReceipt" && t.ReferenceId == refreshed.Id &&
+                           (t.TransactionType == TransactionType.Export || t.TransactionType == TransactionType.Ship)) ||
+                          (refreshed.ShipmentId.HasValue &&
+                           t.ReferenceType == "Shipment" &&
+                           t.ReferenceId == refreshed.ShipmentId.Value &&
+                           t.TransactionType == TransactionType.Ship)),
+                    cancellationToken);
+
+                if (!alreadyDeductedAfterLock)
                 {
-                    var stocks = await _db.InventoryStocks
-                        .Where(s => s.WarehouseId == refreshed.WarehouseId &&
-                                    s.ProductId == detail.ProductId &&
-                                    s.Status == InventoryStatus.Available)
-                        .OrderByDescending(s => s.Quantity)
-                        .ToListAsync(cancellationToken);
-
-                    var remainingToDeduct = detail.Quantity;
-                    decimal unitCostSnapshot = 0m;
-                    foreach (var stock in stocks)
+                    foreach (var detail in refreshed.Details)
                     {
-                        if (remainingToDeduct <= 0m) break;
-                        unitCostSnapshot = stock.MovingAverageCost;
-                        var deduct = Math.Min(stock.Quantity, remainingToDeduct);
-                        if (deduct <= 0m) deduct = remainingToDeduct;
-                        stock.Quantity = Math.Max(0m, stock.Quantity - deduct);
-                        if (stock.ReservedQuantity > 0m)
+                        var stocks = await _db.InventoryStocks
+                            .Where(s => s.WarehouseId == refreshed.WarehouseId &&
+                                        s.ProductId == detail.ProductId &&
+                                        s.Status == InventoryStatus.Available)
+                            .OrderByDescending(s => s.Quantity)
+                            .ToListAsync(cancellationToken);
+
+                        var remainingToDeduct = detail.Quantity;
+                        decimal unitCostSnapshot = 0m;
+                        int? deductedLocationId = null;
+                        int? deductedLotId = null;
+                        int? deductedSerialId = null;
+                        foreach (var stock in stocks)
                         {
-                            stock.ReservedQuantity = Math.Max(0m, stock.ReservedQuantity - deduct);
+                            if (remainingToDeduct <= 0m) break;
+                            unitCostSnapshot = stock.MovingAverageCost;
+                            deductedLocationId ??= stock.LocationId;
+                            deductedLotId ??= stock.LotId;
+                            deductedSerialId ??= stock.SerialId;
+                            var deduct = Math.Min(stock.Quantity, remainingToDeduct);
+                            if (deduct <= 0m) deduct = remainingToDeduct;
+                            stock.Quantity = Math.Max(0m, stock.Quantity - deduct);
+                            if (stock.ReservedQuantity > 0m)
+                            {
+                                stock.ReservedQuantity = Math.Max(0m, stock.ReservedQuantity - deduct);
+                            }
+                            if (stock.AllocatedQuantity > 0m)
+                            {
+                                stock.AllocatedQuantity = Math.Max(0m, stock.AllocatedQuantity - deduct);
+                            }
+                            stock.LastUpdated = now;
+                            remainingToDeduct -= deduct;
                         }
-                        if (stock.AllocatedQuantity > 0m)
+
+                        var reservations = await _db.StockReservations
+                            .Include(r => r.Allocations)
+                            .Where(r => r.WarehouseId == refreshed.WarehouseId &&
+                                        r.ProductId == detail.ProductId &&
+                                        r.Status == StockReservationStatus.Active &&
+                                        ((r.SourceType == "ExportReceipt" && r.SourceId == refreshed.Id) ||
+                                         (refreshed.SalesOrderId.HasValue && r.SourceType == "SalesOrder" && r.SourceId == refreshed.SalesOrderId.Value)))
+                            .ToListAsync(cancellationToken);
+
+                        foreach (var res in reservations)
                         {
-                            stock.AllocatedQuantity = Math.Max(0m, stock.AllocatedQuantity - deduct);
+                            res.Status = StockReservationStatus.Consumed;
+                            res.ConsumedQuantity = res.Quantity;
+                            foreach (var alloc in res.Allocations)
+                            {
+                                alloc.Status = StockAllocationStatus.Picked;
+                            }
                         }
-                        stock.LastUpdated = now;
-                        remainingToDeduct -= deduct;
+
+                        _db.InventoryTransactions.Add(new InventoryTransaction
+                        {
+                            ProductId = detail.ProductId,
+                            WarehouseId = refreshed.WarehouseId,
+                            LocationId = deductedLocationId,
+                            LotId = deductedLotId,
+                            SerialId = deductedSerialId,
+                            InventoryStatus = InventoryStatus.Available,
+                            TransactionType = TransactionType.Export,
+                            Quantity = -detail.Quantity,
+                            UnitCost = unitCostSnapshot,
+                            SourceDocumentLineId = detail.Id,
+                            ReferenceId = refreshed.Id,
+                            ReferenceType = "ExportReceipt",
+                            CreatedBy = actorUserId,
+                            TransactionDate = now,
+                            Note = $"Xuất kho bàn giao vận chuyển phiếu {refreshed.Code}"
+                        });
                     }
-
-                    var reservations = await _db.StockReservations
-                        .Include(r => r.Allocations)
-                        .Where(r => r.WarehouseId == refreshed.WarehouseId &&
-                                    r.ProductId == detail.ProductId &&
-                                    r.Status == StockReservationStatus.Active &&
-                                    ((r.SourceType == "ExportReceipt" && r.SourceId == refreshed.Id) ||
-                                     (refreshed.SalesOrderId.HasValue && r.SourceType == "SalesOrder" && r.SourceId == refreshed.SalesOrderId.Value)))
-                        .ToListAsync(cancellationToken);
-
-                    foreach (var res in reservations)
-                    {
-                        res.Status = StockReservationStatus.Consumed;
-                        res.ConsumedQuantity = res.Quantity;
-                        foreach (var alloc in res.Allocations)
-                        {
-                            alloc.Status = StockAllocationStatus.Picked;
-                        }
-                    }
-
-                    _db.InventoryTransactions.Add(new InventoryTransaction
-                    {
-                        ProductId = detail.ProductId,
-                        WarehouseId = refreshed.WarehouseId,
-                        TransactionType = TransactionType.Export,
-                        Quantity = -detail.Quantity,
-                        UnitCost = unitCostSnapshot,
-                        ReferenceId = refreshed.Id,
-                        ReferenceType = "ExportReceipt",
-                        CreatedBy = actorUserId,
-                        TransactionDate = now,
-                        Note = $"Xuất kho bàn giao vận chuyển phiếu {refreshed.Code}"
-                    });
                 }
 
                 refreshed.Status = ReceiptStatus.Dispatched;

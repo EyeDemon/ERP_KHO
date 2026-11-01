@@ -14,8 +14,8 @@ namespace ERP.Api.Controllers;
 [Authorize]
 public sealed class StockAllocationsController(
     IStockAllocationService service,
-    IWmsGovernanceOperationsService govOps = null!,
-    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
+    IWmsGovernanceOperationsService govOps,
+    IWarehouseAuthorizationService warehouseAccess) : ControllerBase
 {
     [HttpGet]
     [PermissionAuthorize(AppPermissions.AllocationRead)]
@@ -66,33 +66,19 @@ public sealed class StockAllocationsController(
         var unallocatedReservationCount = reservations.Count(x => x.AllocatableQuantity > 0);
         var totalUnallocatedQuantity = reservations.Sum(x => x.AllocatableQuantity);
 
-        if (govOps != null)
-        {
-            var outcome = await govOps.GetStockAllocationSummaryAsync(
-                warehouseId,
-                accessibleIds,
-                unallocatedReservationCount,
-                totalUnallocatedQuantity,
-                cancellationToken);
-            return outcome.ToActionResult(this);
-        }
-
-        var page = await service.GetPageAsync(1, int.MaxValue, warehouseId, null, null, cancellationToken);
-        return Ok(new
-        {
-            totalAllocations = page.TotalRecords,
-            activeAllocations = page.Items.Count(x => x.Status == "Active" || x.Status == "Allocated" || x.Status == "Picking"),
-            pickedAllocations = page.Items.Count(x => x.Status == "Picked"),
-            totalAllocatedQuantity = page.Items.Where(x => x.Status == "Active" || x.Status == "Allocated" || x.Status == "Picking" || x.Status == "Picked").Sum(x => x.Quantity),
+        var outcome = await govOps.GetStockAllocationSummaryAsync(
+            warehouseId,
+            accessibleIds,
             unallocatedReservationCount,
-            totalUnallocatedQuantity
-        });
+            totalUnallocatedQuantity,
+            cancellationToken);
+        return outcome.ToActionResult(this);
     }
 
     public sealed record VerifyAllocationFefoRequest(int? WarehouseId = null);
 
     [HttpPost("verify-fefo-compliance")]
-    [PermissionAuthorize(AppPermissions.AllocationRead)]
+    [PermissionAuthorize(AppPermissions.AllocationCreate)]
     public async Task<IActionResult> VerifyFefoCompliance(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyAllocationFefoRequest? request = null,
         CancellationToken cancellationToken = default)
@@ -107,26 +93,8 @@ public sealed class StockAllocationsController(
                 accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
         }
 
-        if (govOps != null)
-        {
-            var outcome = await govOps.VerifyAllocationFefoComplianceAsync(warehouseId, accessibleIds, cancellationToken);
-            return outcome.ToActionResult(this);
-        }
-
-        const string complianceText = "Tuân thủ nghiêm ngặt chuẩn FEFO/FIFO (0 xung đột khóa kệ)";
-        return Ok(new
-        {
-            verificationId = $"ALC-FEFO-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            warehouseId,
-            activeAllocationsCount = 0,
-            binLockConflictCount = 0,
-            expiringLotsWithin30DaysCount = 0,
-            expiredLotsCount = 0,
-            fefoComplianceStatus = complianceText,
-            status = complianceText,
-            statusLabel = complianceText,
-            verifiedAtUtc = DateTime.UtcNow
-        });
+        var outcome = await govOps.VerifyAllocationFefoComplianceAsync(warehouseId, accessibleIds, cancellationToken);
+        return outcome.ToActionResult(this);
     }
 
     [HttpPost]

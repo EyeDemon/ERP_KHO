@@ -267,6 +267,7 @@ public sealed class CustomerReturnConfiguration : IEntityTypeConfiguration<Custo
         builder.Property(x => x.OrderNumber).HasMaxLength(64);
         builder.Property(x => x.ReturnReason).HasMaxLength(500).IsRequired();
         builder.Property(x => x.Status).HasMaxLength(32).IsRequired();
+        builder.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken();
         builder.HasIndex(x => new { x.TenantId, x.ReturnCode })
                .IsUnique()
                .HasDatabaseName("UX_CustomerReturns_TenantId_ReturnCode");
@@ -294,6 +295,10 @@ public sealed class CustomerReturnLineConfiguration : IEntityTypeConfiguration<C
         builder.Property(x => x.Quantity).HasPrecision(18, 4);
         builder.Property(x => x.UnitCost).HasPrecision(18, 4);
         builder.Property(x => x.PackagingQuantity).HasPrecision(18, 4);
+        builder.Property(x => x.ConversionRateSnapshot).HasPrecision(18, 4);
+        builder.Property(x => x.PackagingConsumedQty).HasPrecision(18, 4);
+        builder.Property(x => x.BaseUomCode).HasMaxLength(32).IsRequired();
+        builder.Property(x => x.TransactionUomCode).HasMaxLength(32).IsRequired();
         builder.Property(x => x.Condition).HasMaxLength(32).IsRequired();
         builder.Property(x => x.Disposition).HasMaxLength(32).IsRequired();
         builder.HasOne(x => x.CustomerReturn)

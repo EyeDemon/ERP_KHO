@@ -22,7 +22,11 @@ namespace ERP.Api.Tests
         public ReportsControllerTests()
         {
             _mockService = new Mock<IReportService>();
-            _controller = new ReportsController(_mockService.Object);
+            _controller = new ReportsController(
+                _mockService.Object,
+                Mock.Of<IReportOperationsService>(),
+                Mock.Of<IWarehouseAuthorizationService>(),
+                Mock.Of<ICurrentUser>());
         }
 
         [Fact]
@@ -251,7 +255,11 @@ namespace ERP.Api.Tests
             warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new int[] { 7 });
 
-            var viewerController = new ReportsController(_mockService.Object)
+            var viewerController = new ReportsController(
+                _mockService.Object,
+                new ERP.Infrastructure.Services.ReportOperationsService(db),
+                warehouseAuth.Object,
+                Mock.Of<ICurrentUser>())
             {
                 ControllerContext = new ControllerContext
                 {
@@ -275,7 +283,11 @@ namespace ERP.Api.Tests
                 warehouseAuth.Object);
             viewerRes.Should().BeOfType<ForbidResult>();
 
-            var staffController = new ReportsController(_mockService.Object)
+            var staffController = new ReportsController(
+                _mockService.Object,
+                new ERP.Infrastructure.Services.ReportOperationsService(db),
+                warehouseAuth.Object,
+                Mock.Of<ICurrentUser>())
             {
                 ControllerContext = new ControllerContext
                 {
@@ -357,7 +369,7 @@ namespace ERP.Api.Tests
             warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new int[] { 1 });
 
-            var controller = new PermissionsController(new ERP.Infrastructure.Services.PermissionOperationsService(db), warehouseAuth.Object)
+            var controller = new PermissionsController(new ERP.Infrastructure.Services.PermissionOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>())
             {
                 ControllerContext = new ControllerContext
                 {
@@ -399,7 +411,7 @@ namespace ERP.Api.Tests
                     Role = "WarehouseStaff"
                 });
 
-            var controller = new AuthController(authService.Object, sessionService.Object, env.Object, new ERP.Application.Common.SessionSecurityOptions())
+            var controller = new AuthController(authService.Object, sessionService.Object, env.Object, new ERP.Application.Common.SessionSecurityOptions(), Mock.Of<IPermissionOperationsService>())
             {
                 ControllerContext = new ControllerContext
                 {
@@ -422,15 +434,15 @@ namespace ERP.Api.Tests
                 .Options;
             await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
 
-            var exportController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, new ERP.Infrastructure.Services.ExportReceiptOperationsService(db));
+            var exportController = new ExportReceiptsController(new Mock<IExportReceiptService>().Object, new ERP.Infrastructure.Services.ExportReceiptOperationsService(db), Mock.Of<IWarehouseAuthorizationService>(), Mock.Of<ICurrentUser>(), Mock.Of<IHandoverManifestService>());
             var cutoffRes = await exportController.VerifyDispatchCutoff(null);
             cutoffRes.Should().BeOfType<OkObjectResult>();
 
-            var huController = new HandlingUnitsController(new Mock<IPackingService>().Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db));
+            var huController = new HandlingUnitsController(new Mock<IPackingService>().Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db), Mock.Of<IWarehouseAuthorizationService>());
             var sealRes = await huController.VerifyInTransitSeal(null);
             sealRes.Should().BeOfType<OkObjectResult>();
 
-            var importController = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, null, new ERP.Infrastructure.Services.ImportReceiptOperationsService(db));
+            var importController = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, Mock.Of<IReceivingDiscrepancyService>(), new ERP.Infrastructure.Services.ImportReceiptOperationsService(db), Mock.Of<IWarehouseAuthorizationService>());
             var rmaRes = await importController.RmaIntakeCheck(null);
             var rmaOk = rmaRes.Should().BeOfType<OkObjectResult>().Subject;
             System.Text.Json.JsonSerializer.Serialize(rmaOk.Value)
@@ -444,7 +456,7 @@ namespace ERP.Api.Tests
             var reconQuery = new Mock<IInventoryReconciliationQueryService>();
             reconQuery.Setup(x => x.GetReconciliationsAsync(It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>()))
                 .ReturnsAsync(new ERP.Application.Common.PagedResult<InventoryReconciliationDto> { Items = Array.Empty<InventoryReconciliationDto>(), TotalRecords = 0 });
-            var reconController = new InventoryReconciliationController(reconQuery.Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db));
+            var reconController = new InventoryReconciliationController(reconQuery.Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db), Mock.Of<IWarehouseAuthorizationService>(), Mock.Of<IStockReservationService>(), Mock.Of<ICurrentUser>());
             var glRes = await reconController.VerifySiteReadiness(null, null);
             var glOk = glRes.Should().BeOfType<OkObjectResult>().Subject;
             using (var glDoc = System.Text.Json.JsonSerializer.SerializeToDocument(glOk.Value))
@@ -457,7 +469,9 @@ namespace ERP.Api.Tests
             var stocktakeController = new StocktakesController(
                 new Mock<IStocktakeService>().Object,
                 new Mock<IStocktakeQueryService>().Object,
-                new ERP.Infrastructure.Services.StocktakeOperationsService(db))
+                new ERP.Infrastructure.Services.StocktakeOperationsService(db),
+                Mock.Of<IWarehouseAuthorizationService>(),
+                Mock.Of<ICurrentUser>())
             {
                 ControllerContext = new ControllerContext
                 {
@@ -531,7 +545,8 @@ namespace ERP.Api.Tests
             var secController = new AccountSecurityController(
                 new Mock<IAccountAdminService>().Object,
                 new Mock<IUserSessionService>().Object,
-                new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db));
+                new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db),
+                Mock.Of<IPasswordHasherService>());
             var lockRes = await secController.Lock(77, null);
             lockRes.Should().BeOfType<OkObjectResult>();
             var lockedUser = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.SingleAsync(db.Users, u => u.Id == 77);
@@ -569,7 +584,7 @@ namespace ERP.Api.Tests
                             "Test"))
                 }
             };
-            var importController = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, null, new ERP.Infrastructure.Services.ImportReceiptOperationsService(db), warehouseAuth.Object)
+            var importController = new ImportReceiptsController(new Mock<IImportReceiptService>().Object, Mock.Of<IReceivingDiscrepancyService>(), new ERP.Infrastructure.Services.ImportReceiptOperationsService(db), warehouseAuth.Object)
             {
                 ControllerContext = viewerContext
             };
@@ -747,7 +762,7 @@ namespace ERP.Api.Tests
             });
 
             // Step 3: Verify ReportsController.GetInventoryInOutStock & GetInventoryInOutReport report TotalIn = 10, TotalOut = 0, ClosingStock = 10
-            var controllerWithDb = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object);
+            var controllerWithDb = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
 
             var stockRes = await controllerWithDb.GetInventoryInOutStock(null, null, 1, 100);
             var stockOk = stockRes.Should().BeOfType<OkObjectResult>().Subject;
@@ -970,7 +985,7 @@ namespace ERP.Api.Tests
                     RowVersion = Convert.ToBase64String(taskEntity.RowVersion)
                 });
 
-            var controller = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object);
+            var controller = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
 
             // 1. JSON payload: GetInventoryInOutReport
             var jsonResult = await controller.GetInventoryInOutReport(null, null, 1, 100);
@@ -1056,7 +1071,7 @@ namespace ERP.Api.Tests
             var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
             warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
 
-            var controller = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object);
+            var controller = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
             var response = await controller.GetOperationalDashboard(new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object);
             var ok = response.Should().BeOfType<OkObjectResult>().Subject;
 
@@ -1113,7 +1128,7 @@ namespace ERP.Api.Tests
 
             var stocktakeService = new Mock<IStocktakeService>();
             var stocktakeQuery = new Mock<IStocktakeQueryService>();
-            var controller = new StocktakesController(stocktakeService.Object, stocktakeQuery.Object, new ERP.Infrastructure.Services.StocktakeOperationsService(db), warehouseAuth.Object);
+            var controller = new StocktakesController(stocktakeService.Object, stocktakeQuery.Object, new ERP.Infrastructure.Services.StocktakeOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
 
             var createRes = await controller.CreateAdjustmentProposal(new StocktakesController.CreateAdjustmentProposalRequest(
                 WarehouseId: 1,
@@ -1173,7 +1188,7 @@ namespace ERP.Api.Tests
             var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
             warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
             var importService = new Mock<IImportReceiptService>();
-            var controller = new ImportReceiptsController(importService.Object, null, new ERP.Infrastructure.Services.ImportReceiptOperationsService(db), warehouseAuth.Object);
+            var controller = new ImportReceiptsController(importService.Object, Mock.Of<IReceivingDiscrepancyService>(), new ERP.Infrastructure.Services.ImportReceiptOperationsService(db), warehouseAuth.Object);
 
             // 1. RTV write-off 3 units from Damaged bucket
             var rtvRes = await controller.ExecuteRtvRefurbish(new ImportReceiptsController.ExecuteRtvRefurbishRequest(
@@ -1233,7 +1248,7 @@ namespace ERP.Api.Tests
             var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
             warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
 
-            var controller = new DockYardController(dockService.Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db), warehouseAuth.Object);
+            var controller = new DockYardController(dockService.Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
 
             var candRes = await controller.GetCrossDockCandidates(1, default);
             var candOk = candRes.Should().BeOfType<OkObjectResult>().Subject;
@@ -1294,7 +1309,7 @@ namespace ERP.Api.Tests
             var warehouseAuth = new Mock<IWarehouseAuthorizationService>();
             warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
 
-            var controller = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object);
+            var controller = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
             var response = await controller.GetOperationalDashboard(new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object);
             var ok = response.Should().BeOfType<OkObjectResult>().Subject;
 
@@ -1403,7 +1418,7 @@ namespace ERP.Api.Tests
             }
 
             var calService = new Mock<IWarehouseCalendarService>();
-            var calController = new WarehouseCalendarsController(calService.Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db), warehouseAuth.Object);
+            var calController = new WarehouseCalendarsController(calService.Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
             var shiftRes = await calController.VerifyShiftCoverage(1, default);
             var shiftOk = shiftRes.Should().BeOfType<OkObjectResult>().Subject;
             using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(shiftOk.Value))
@@ -1518,7 +1533,7 @@ namespace ERP.Api.Tests
                 }
             });
 
-            var poController = new PurchaseOrdersController(inboundService.Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db), warehouseAuth.Object);
+            var poController = new PurchaseOrdersController(inboundService.Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
 
             var expRes = await poController.ExpediteOverdue(new PurchaseOrdersController.ExpediteOverduePurchaseOrdersRequest(WarehouseId: 1), default);
             var expOk = expRes.Should().BeOfType<OkObjectResult>().Subject;
@@ -1542,7 +1557,7 @@ namespace ERP.Api.Tests
                 doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã hoàn tất phân tích & đề xuất mua hàng bổ sung");
             }
 
-            var asnController = new AsnsController(inboundService.Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db), warehouseAuth.Object);
+            var asnController = new AsnsController(inboundService.Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
             var stgRes = await asnController.PreAllocateStaging(new AsnsController.PreAllocateAsnStagingRequest(WarehouseId: 1), default);
             var stgOk = stgRes.Should().BeOfType<OkObjectResult>().Subject;
             using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(stgOk.Value))
@@ -1740,7 +1755,7 @@ namespace ERP.Api.Tests
             warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
 
             var reportService = new Mock<IReportService>();
-            var controller = new ReportsController(reportService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object);
+            var controller = new ReportsController(reportService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
 
             var result = await controller.GetOperationalDashboard(new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object, default);
             var ok = result.Should().BeOfType<OkObjectResult>().Subject;
@@ -2174,7 +2189,7 @@ namespace ERP.Api.Tests
             await db.SaveChangesAsync();
 
             var productService = new Mock<IProductService>();
-            var productsController = new ProductsController(productService.Object, new ERP.Infrastructure.Services.ProductOperationsService(db));
+            var productsController = new ProductsController(productService.Object, Mock.Of<IProductCatalogService>(), new ERP.Infrastructure.Services.ProductOperationsService(db), Mock.Of<ICurrentUser>());
             var govRes = await productsController.AutoAuditGovernance(default);
             var govOk = govRes.Should().BeOfType<OkObjectResult>().Subject;
             using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(govOk.Value))
@@ -2194,7 +2209,7 @@ namespace ERP.Api.Tests
             warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
 
             var invStatusService = new Mock<IInventoryStatusService>();
-            var invStatusController = new InventoryStatusController(invStatusService.Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db), warehouseAuth.Object);
+            var invStatusController = new InventoryStatusController(invStatusService.Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
 
             var bckRes = await invStatusController.VerifyBucketInvariants(new InventoryStatusController.VerifyBucketInvariantsRequest(1), default);
             var bckOk = bckRes.Should().BeOfType<OkObjectResult>().Subject;
@@ -2328,7 +2343,7 @@ namespace ERP.Api.Tests
                     PageSize = 100
                 });
 
-            var reconController = new InventoryReconciliationController(reconQuery.Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db), warehouseAuth.Object);
+            var reconController = new InventoryReconciliationController(reconQuery.Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db), warehouseAuth.Object, Mock.Of<IStockReservationService>(), Mock.Of<ICurrentUser>());
             var siteRes = await reconController.VerifySiteReadiness(1, new InventoryReconciliationController.VerifySiteReadinessRequest(1), default);
             var siteOk = siteRes.Should().BeOfType<OkObjectResult>().Subject;
             using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(siteOk.Value))
@@ -2343,7 +2358,7 @@ namespace ERP.Api.Tests
                 doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã đối soát sổ cái bất biến & xác nhận sẵn sàng vận hành kho");
             }
 
-            var reportsController = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object);
+            var reportsController = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
 
             var biRes = await reportsController.SyncBiSnapshot(new ReportsController.SyncBiSnapshotRequest(1), warehouseAuth.Object, default);
             var biOk = biRes.Should().BeOfType<OkObjectResult>().Subject;
@@ -2642,7 +2657,8 @@ namespace ERP.Api.Tests
                 new Mock<IStocktakeService>().Object,
                 new Mock<IStocktakeQueryService>().Object,
                 new ERP.Infrastructure.Services.StocktakeOperationsService(db),
-                warehouseAuth.Object);
+                warehouseAuth.Object,
+                Mock.Of<ICurrentUser>());
 
             var stReasonRes = await stocktakeController.GetReasonCodesAndAdjustments(1, default);
             var stReasonOk = stReasonRes.Should().BeOfType<OkObjectResult>().Subject;
@@ -2664,7 +2680,7 @@ namespace ERP.Api.Tests
 
             var importController = new ImportReceiptsController(
                 new Mock<IImportReceiptService>().Object,
-                null,
+                Mock.Of<IReceivingDiscrepancyService>(),
                 new ERP.Infrastructure.Services.ImportReceiptOperationsService(db),
                 warehouseAuth.Object);
 
@@ -2696,7 +2712,8 @@ namespace ERP.Api.Tests
             var approvalsController = new ApprovalsController(
                 approvalService.Object,
                 new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db),
-                warehouseAuth.Object);
+                warehouseAuth.Object,
+                Mock.Of<ICurrentUser>());
 
             var escRes = await approvalsController.EscalateOverdue(
                 new EscalateOverdueApprovalsRequest(1),
@@ -2710,7 +2727,7 @@ namespace ERP.Api.Tests
                 doc.RootElement.GetProperty("statusLabel").GetString().Should().Be("Đã kích hoạt chuyển cấp phê duyệt các hồ sơ quá hạn SLA");
             }
 
-            var reportsController = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object);
+            var reportsController = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
             var ackRes = await reportsController.AcknowledgeOperationalException(
                 new ReportsController.AcknowledgeOperationalExceptionDto("EX-W33-01", 1, "Đã phân công xử lý", "SHORT_PICK"),
                 new ERP.Infrastructure.Services.ReportOperationsService(db),
@@ -2917,7 +2934,7 @@ namespace ERP.Api.Tests
             warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
 
             var exportService = new Mock<IExportReceiptService>();
-            var viewerExportController = new ExportReceiptsController(exportService.Object, new ERP.Infrastructure.Services.ExportReceiptOperationsService(db), warehouseAuth.Object)
+            var viewerExportController = new ExportReceiptsController(exportService.Object, new ERP.Infrastructure.Services.ExportReceiptOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>(), Mock.Of<IHandoverManifestService>())
             {
                 ControllerContext = new ControllerContext
                 {
@@ -2933,7 +2950,7 @@ namespace ERP.Api.Tests
             (await viewerExportController.VerifyDispatchCutoff(new ExportReceiptsController.VerifyDispatchCutoffRequest(1), default))
                 .Should().BeOfType<ForbidResult>();
 
-            var exportController = new ExportReceiptsController(exportService.Object, new ERP.Infrastructure.Services.ExportReceiptOperationsService(db), warehouseAuth.Object);
+            var exportController = new ExportReceiptsController(exportService.Object, new ERP.Infrastructure.Services.ExportReceiptOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>(), Mock.Of<IHandoverManifestService>());
             var cutoffRes = await exportController.VerifyDispatchCutoff(new ExportReceiptsController.VerifyDispatchCutoffRequest(1), default);
             var cutoffOk = cutoffRes.Should().BeOfType<OkObjectResult>().Subject;
             using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(cutoffOk.Value))
@@ -2949,7 +2966,8 @@ namespace ERP.Api.Tests
                 new Mock<IStocktakeService>().Object,
                 new Mock<IStocktakeQueryService>().Object,
                 new ERP.Infrastructure.Services.StocktakeOperationsService(db),
-                warehouseAuth.Object);
+                warehouseAuth.Object,
+                Mock.Of<ICurrentUser>());
             var propRes = await stocktakeController.CreateAdjustmentProposal(
                 new StocktakesController.CreateAdjustmentProposalRequest(WarehouseId: 1, ProductCode: "SKU-W34-01", DeltaQuantity: 3m),
                 default);
@@ -2961,12 +2979,23 @@ namespace ERP.Api.Tests
                     "Chờ phê duyệt độc lập theo nguyên tắc bất kiêm nhiệm");
             }
 
+            db.ImportReceipts.Add(new ERP.Domain.Entities.ImportReceipt
+            {
+                Id = 1,
+                Code = "IR-W34-01",
+                WarehouseId = 1,
+                Status = ERP.Domain.Enums.ReceiptStatus.Draft,
+                Note = "Hàng trả về RMA",
+                CreatedBy = 1
+            });
+            await db.SaveChangesAsync();
+
             var importService = new Mock<IImportReceiptService>();
             importService.Setup(x => x.GetAllAsync(null)).ReturnsAsync(new List<ERP.Application.DTOs.ImportReceiptDto>
             {
                 new() { Id = 1, Code = "IR-W34-01", Status = "Draft", Note = "Hàng trả về RMA" }
             });
-            var importController = new ImportReceiptsController(importService.Object, null, new ERP.Infrastructure.Services.ImportReceiptOperationsService(db), warehouseAuth.Object);
+            var importController = new ImportReceiptsController(importService.Object, Mock.Of<IReceivingDiscrepancyService>(), new ERP.Infrastructure.Services.ImportReceiptOperationsService(db), warehouseAuth.Object);
             var qcSummaryRes = await importController.GetQcAndRmaSummary();
             var qcSummaryOk = qcSummaryRes.Should().BeOfType<OkObjectResult>().Subject;
             using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(qcSummaryOk.Value))
@@ -3245,7 +3274,8 @@ namespace ERP.Api.Tests
                 new Mock<IStocktakeService>().Object,
                 new Mock<IStocktakeQueryService>().Object,
                 new ERP.Infrastructure.Services.StocktakeOperationsService(db),
-                warehouseAuth.Object);
+                warehouseAuth.Object,
+                Mock.Of<ICurrentUser>());
 
             var createRes = await controller.CreateAdjustmentProposal(
                 new StocktakesController.CreateAdjustmentProposalRequest(WarehouseId: 1, ProductCode: "SKU-W35-02", DeltaQuantity: -2m),
@@ -3382,7 +3412,7 @@ namespace ERP.Api.Tests
             buckets[0].ProductCode.Should().Be("SKU-W36-01");
             buckets[0].LotNumber.Should().Be("LOT-W36-01");
 
-            var reportsController = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object);
+            var reportsController = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
             var inOutRes = await reportsController.GetInventoryInOutReport(
                 DateTime.UtcNow.AddDays(-7),
                 DateTime.UtcNow.AddDays(1),
@@ -3440,7 +3470,7 @@ namespace ERP.Api.Tests
 
             var controller = new ImportReceiptsController(
                 new Mock<IImportReceiptService>().Object,
-                null,
+                Mock.Of<IReceivingDiscrepancyService>(),
                 new ERP.Infrastructure.Services.ImportReceiptOperationsService(db),
                 warehouseAuth.Object);
 
@@ -3539,7 +3569,8 @@ namespace ERP.Api.Tests
             var controller = new InventoryStatusController(
                 new Mock<IInventoryStatusService>().Object,
                 new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db),
-                warehouseAuth.Object);
+                warehouseAuth.Object,
+                Mock.Of<ICurrentUser>());
 
             var bckRes = await controller.VerifyBucketInvariants(
                 new InventoryStatusController.VerifyBucketInvariantsRequest(1),
@@ -3692,7 +3723,7 @@ namespace ERP.Api.Tests
             txSecond.ReferenceType.Should().Be("Di chuyển nội bộ");
             txSecond.InventoryStatus.Should().Be("Khả dụng");
 
-            var reportsController = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object);
+            var reportsController = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
             var expiryRes = await reportsController.GetExpiryAgingReport(
                 new ERP.Infrastructure.Services.ReportOperationsService(db),
                 warehouseAuth.Object,
@@ -3850,7 +3881,7 @@ namespace ERP.Api.Tests
             warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
             warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
 
-            var controller = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object);
+            var controller = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
             var res = await controller.GetExpiryAgingReport(
                 new ERP.Infrastructure.Services.ReportOperationsService(db),
                 warehouseAuth.Object,
@@ -4011,7 +4042,7 @@ namespace ERP.Api.Tests
             warehouseAuth.Setup(x => x.GetAccessibleWarehouseIdsAsync(default)).ReturnsAsync(new[] { 1 });
             warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(1, default)).Returns(Task.CompletedTask);
 
-            var controller = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object);
+            var controller = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
             var res = await controller.GetAnalyticsSummary(new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object, warehouseId: 1, days: 30, cancellationToken: default);
             var ok = res.Should().BeOfType<OkObjectResult>().Subject;
 
@@ -4295,7 +4326,7 @@ namespace ERP.Api.Tests
                 formula.Should().Be("Tồn khả dụng (211 Thùng) + Đang nhập PO (50 Thùng) - Cầu kịch bản (150 Thùng) = Dự kiến cuối kỳ (111 Thùng)");
             }
 
-            var reportsController = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object);
+            var reportsController = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
             var analyticsRes = await reportsController.GetAnalyticsSummary(new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object, 1, 30, default);
             var analyticsOk = analyticsRes.Should().BeOfType<OkObjectResult>().Subject;
             using (var analyticsDoc = System.Text.Json.JsonSerializer.SerializeToDocument(analyticsOk.Value))
@@ -4393,7 +4424,7 @@ namespace ERP.Api.Tests
             ReportsController.NormalizeTransactionNote(" Lô hàng nhập chờ QC (100% Match) ")
                 .Should().Be("Lô hàng nhập chờ kiểm định chất lượng (Khớp 100%)");
 
-            var reportsController = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object);
+            var reportsController = new ReportsController(_mockService.Object, new ERP.Infrastructure.Services.ReportOperationsService(db), warehouseAuth.Object, Mock.Of<ICurrentUser>());
             var inOutRes = await reportsController.GetInventoryInOutReport(
                 DateTime.UtcNow.AddDays(-7),
                 DateTime.UtcNow.AddDays(1),
@@ -4485,7 +4516,7 @@ namespace ERP.Api.Tests
             await db.SaveChangesAsync();
 
             var productService = new Mock<IProductService>();
-            var controller = new ProductsController(productService.Object, new ERP.Infrastructure.Services.ProductOperationsService(db));
+            var controller = new ProductsController(productService.Object, Mock.Of<IProductCatalogService>(), new ERP.Infrastructure.Services.ProductOperationsService(db), Mock.Of<ICurrentUser>());
 
             var createUomRes = await controller.UpsertProductUom(
                 4001,
@@ -4631,7 +4662,8 @@ namespace ERP.Api.Tests
                 new Mock<IStocktakeService>().Object,
                 new Mock<IStocktakeQueryService>().Object,
                 new ERP.Infrastructure.Services.StocktakeOperationsService(db),
-                warehouseAuth.Object);
+                warehouseAuth.Object,
+                Mock.Of<ICurrentUser>());
 
             var propRes = await stocktakesController.CreateAdjustmentProposal(
                 new StocktakesController.CreateAdjustmentProposalRequest(
@@ -4667,7 +4699,7 @@ namespace ERP.Api.Tests
 
             var importController = new ImportReceiptsController(
                 new Mock<IImportReceiptService>().Object,
-                null,
+                Mock.Of<IReceivingDiscrepancyService>(),
                 new ERP.Infrastructure.Services.ImportReceiptOperationsService(db),
                 warehouseAuth.Object);
 
@@ -5036,7 +5068,8 @@ namespace ERP.Api.Tests
             var dockController = new DockYardController(
                 dockService.Object,
                 new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db),
-                warehouseAuth.Object);
+                warehouseAuth.Object,
+                Mock.Of<ICurrentUser>());
 
             var xdRes = await dockController.DispatchCrossdock(
                 new DispatchCrossdockRequest(
@@ -5094,6 +5127,7 @@ namespace ERP.Api.Tests
                     WarehouseId = 1,
                     ProductId = 1,
                     LocationId = 1,
+                    OwnerId = 4201,
                     Status = ERP.Domain.Enums.InventoryStatus.Available,
                     Quantity = 100m,
                     ReservedQuantity = 0m,
@@ -5105,6 +5139,7 @@ namespace ERP.Api.Tests
                     WarehouseId = 1,
                     ProductId = 2,
                     LocationId = 1,
+                    OwnerId = 4201,
                     Status = ERP.Domain.Enums.InventoryStatus.Available,
                     Quantity = 50m,
                     ReservedQuantity = 0m,
@@ -5116,6 +5151,7 @@ namespace ERP.Api.Tests
                     Id = 4221,
                     WarehouseId = 1,
                     ProductId = 1,
+                    OwnerId = 4201,
                     TransactionType = ERP.Domain.Enums.TransactionType.Import,
                     InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
                     Quantity = 80m,
@@ -5127,6 +5163,7 @@ namespace ERP.Api.Tests
                     Id = 4222,
                     WarehouseId = 1,
                     ProductId = 1,
+                    OwnerId = 4201,
                     TransactionType = ERP.Domain.Enums.TransactionType.TransferIn,
                     InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
                     Quantity = 20m,
@@ -5138,6 +5175,7 @@ namespace ERP.Api.Tests
                     Id = 4223,
                     WarehouseId = 1,
                     ProductId = 1,
+                    OwnerId = 4201,
                     TransactionType = ERP.Domain.Enums.TransactionType.Export,
                     InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
                     Quantity = 40m,
@@ -5149,6 +5187,7 @@ namespace ERP.Api.Tests
                     Id = 4224,
                     WarehouseId = 1,
                     ProductId = 1,
+                    OwnerId = 4201,
                     TransactionType = ERP.Domain.Enums.TransactionType.Ship,
                     InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
                     Quantity = 10m,
@@ -5158,7 +5197,7 @@ namespace ERP.Api.Tests
             await db.SaveChangesAsync();
 
             var partnerService = new Mock<IBusinessPartnerService>();
-            var controller = new BusinessPartnersController(partnerService.Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db));
+            var controller = new BusinessPartnersController(partnerService.Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db), Mock.Of<ICurrentUser>());
 
             var summaryRes = await controller.Get3PlBillingSummary(
                 partnerId: 4201,
@@ -5234,7 +5273,7 @@ namespace ERP.Api.Tests
             });
             await db.SaveChangesAsync();
 
-            var permissionsController = new PermissionsController(new ERP.Infrastructure.Services.PermissionOperationsService(db));
+            var permissionsController = new PermissionsController(new ERP.Infrastructure.Services.PermissionOperationsService(db), Mock.Of<IWarehouseAuthorizationService>(), Mock.Of<ICurrentUser>());
             var tenantsSummaryRes = await permissionsController.GetTenantsSummary(default);
             var tenantsSummaryOk = tenantsSummaryRes.Should().BeOfType<OkObjectResult>().Subject;
             using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(tenantsSummaryOk.Value))
@@ -5256,33 +5295,37 @@ namespace ERP.Api.Tests
             var securityController = new AccountSecurityController(
                 new Mock<IAccountAdminService>().Object,
                 new Mock<IUserSessionService>().Object,
-                new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db));
+                new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db),
+                Mock.Of<IPasswordHasherService>());
 
             var setupRes = await securityController.SetupTotp(4201, default);
             var setupOk = setupRes.Should().BeOfType<OkObjectResult>().Subject;
+            var revealRes4201 = (await securityController.RevealTotpSecret(4201)).Should().BeOfType<OkObjectResult>().Subject;
+            using var revealDoc4201 = System.Text.Json.JsonSerializer.SerializeToDocument(revealRes4201.Value);
+            string base32Secret = revealDoc4201.RootElement.GetProperty("base32Secret").GetString()!;
             string currentTotpCode;
-            string base32Secret;
             using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(setupOk.Value))
             {
                 var root = doc.RootElement;
-                base32Secret = root.GetProperty("base32Secret").GetString()!;
-                currentTotpCode = root.GetProperty("currentTotpCode").GetString()!;
+                currentTotpCode = AccountSecurityController.ComputeTotpCode(
+                    AccountSecurityController.DecodeBase32(base32Secret),
+                    DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30);
                 base32Secret.Should().HaveLength(32);
                 currentTotpCode.Should().HaveLength(6);
                 root.GetProperty("otpauthUri").GetString().Should().StartWith("otpauth://totp/ERP_WMS:admin_w42?secret=");
-                root.GetProperty("statusLabel").GetString().Should().Be("Đã khởi tạo khóa xác thực 2 lớp TOTP MFA chuẩn RFC 6238");
+                root.GetProperty("statusLabel").GetString().Should().Be("Đã khởi tạo khóa xác thực 2 lớp TOTP MFA chuẩn RFC 6238 (Chờ xác minh mã 6 chữ số)");
             }
 
             var verifyRes = await securityController.VerifyTotp(
                 4201,
-                new AccountSecurityController.VerifyTotpRequest(Code: currentTotpCode, Base32Secret: base32Secret),
+                new AccountSecurityController.VerifyTotpRequest(Code: currentTotpCode),
                 default);
             var verifyOk = verifyRes.Should().BeOfType<OkObjectResult>().Subject;
             using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(verifyOk.Value))
             {
                 var root = doc.RootElement;
                 root.GetProperty("verified").GetBoolean().Should().BeTrue();
-                root.GetProperty("statusLabel").GetString().Should().Be($"Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số ({currentTotpCode}) theo chuẩn RFC 6238");
+                root.GetProperty("statusLabel").GetString().Should().Be($"Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số ({currentTotpCode}) và cấp 8 mã khôi phục dự phòng");
             }
 
             db.AuditLogs.Should().OnlyContain(a => a.Result == "Success" && a.Result.Length <= 32);
@@ -5397,7 +5440,9 @@ namespace ERP.Api.Tests
             var controller = new InventoryReconciliationController(
                 new Mock<IInventoryReconciliationQueryService>().Object,
                 new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db),
-                warehouseAuth.Object);
+                warehouseAuth.Object,
+                Mock.Of<IStockReservationService>(),
+                Mock.Of<ICurrentUser>());
 
             var listRes = await controller.GetOutboxMessages(warehouseId: 1, cancellationToken: default);
             var listOk = listRes.Should().BeOfType<OkObjectResult>().Subject;
@@ -5548,7 +5593,9 @@ namespace ERP.Api.Tests
             var controller = new InventoryReconciliationController(
                 new Mock<IInventoryReconciliationQueryService>().Object,
                 new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db),
-                warehouseAuth.Object);
+                warehouseAuth.Object,
+                Mock.Of<IStockReservationService>(),
+                Mock.Of<ICurrentUser>());
 
             var listRes = await controller.GetOutboxMessages(warehouseId: 1, cancellationToken: default);
             var listOk = listRes.Should().BeOfType<OkObjectResult>().Subject;
@@ -5593,6 +5640,7 @@ namespace ERP.Api.Tests
                 WarehouseId = 1,
                 ProductId = 1,
                 LocationId = 1,
+                OwnerId = 4301,
                 Status = ERP.Domain.Enums.InventoryStatus.Available,
                 Quantity = 100m,
                 ReservedQuantity = 0m,
@@ -5604,6 +5652,7 @@ namespace ERP.Api.Tests
                     Id = 4321,
                     WarehouseId = 1,
                     ProductId = 1,
+                    OwnerId = 4301,
                     TransactionType = ERP.Domain.Enums.TransactionType.Import,
                     InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
                     Quantity = 50m,
@@ -5615,6 +5664,7 @@ namespace ERP.Api.Tests
                     Id = 4322,
                     WarehouseId = 1,
                     ProductId = 1,
+                    OwnerId = 4301,
                     TransactionType = ERP.Domain.Enums.TransactionType.Export,
                     InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
                     Quantity = 20m,
@@ -5623,7 +5673,7 @@ namespace ERP.Api.Tests
                 });
             await db.SaveChangesAsync();
 
-            var controller = new BusinessPartnersController(new Mock<IBusinessPartnerService>().Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db));
+            var controller = new BusinessPartnersController(new Mock<IBusinessPartnerService>().Object, new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db), Mock.Of<ICurrentUser>());
             var req = new BusinessPartnersController.Generate3PlStatementRequest(
                 PartnerId: 4301,
                 WarehouseId: 1,
@@ -5632,7 +5682,7 @@ namespace ERP.Api.Tests
 
             var firstRes = await controller.Generate3PlStatement(req, default);
             var firstOk = firstRes.Should().BeOfType<OkObjectResult>().Subject;
-            var expectedInvoiceCode = $"AR-3PL-{DateTime.UtcNow:yyyyMMdd}";
+            var expectedInvoiceCode = $"AR-3PL-4301-{DateTime.UtcNow:yyyyMMdd}";
             using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(firstOk.Value))
             {
                 var root = doc.RootElement;
@@ -5685,14 +5735,19 @@ namespace ERP.Api.Tests
             var securityController = new AccountSecurityController(
                 new Mock<IAccountAdminService>().Object,
                 new Mock<IUserSessionService>().Object,
-                new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db));
+                new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db),
+                Mock.Of<IPasswordHasherService>());
 
             var setupRes = await securityController.SetupTotp(4301, default);
-            var setupOk = setupRes.Should().BeOfType<OkObjectResult>().Subject;
+            setupRes.Should().BeOfType<OkObjectResult>();
+            var revealRes4301 = (await securityController.RevealTotpSecret(4301)).Should().BeOfType<OkObjectResult>().Subject;
             string currentTotpCode;
-            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(setupOk.Value))
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(revealRes4301.Value))
             {
-                currentTotpCode = doc.RootElement.GetProperty("currentTotpCode").GetString()!;
+                var enrolledBase32 = doc.RootElement.GetProperty("base32Secret").GetString()!;
+                currentTotpCode = AccountSecurityController.ComputeTotpCode(
+                    AccountSecurityController.DecodeBase32(enrolledBase32),
+                    DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30);
             }
 
             var verifyRes = await securityController.VerifyTotp(
@@ -5704,8 +5759,423 @@ namespace ERP.Api.Tests
             {
                 var root = doc.RootElement;
                 root.GetProperty("verified").GetBoolean().Should().BeTrue();
-                root.GetProperty("statusLabel").GetString().Should().Be($"Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số ({currentTotpCode}) theo chuẩn RFC 6238");
+                root.GetProperty("statusLabel").GetString().Should().Be($"Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số ({currentTotpCode}) và cấp 8 mã khôi phục dự phòng");
             }
+        }
+
+        [Fact]
+        public async Task Wave63_1_Compute3PlBilling_WhenNoConsignmentStockOrInvalidPartner_ReturnsZeroWithoutLeakingOwnStock()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.BusinessPartners.Add(new ERP.Domain.Entities.BusinessPartner
+            {
+                Id = 6301,
+                Code = "BP-OWN-SUPPLIER",
+                Name = "Nhà cung cấp Nội bộ Không Ký gửi",
+                IsSupplier = true,
+                IsCustomer = true,
+                IsActive = true,
+                PaymentTermDays = 30
+            });
+            // Own stock only (OwnerId == null)
+            db.InventoryStocks.Add(new ERP.Domain.Entities.InventoryStock
+            {
+                Id = 6302,
+                WarehouseId = 1,
+                ProductId = 1,
+                LocationId = 1,
+                OwnerId = null,
+                Status = ERP.Domain.Enums.InventoryStatus.Available,
+                Quantity = 500m,
+                ReservedQuantity = 0m,
+                LastUpdated = DateTime.UtcNow
+            });
+            db.InventoryTransactions.Add(new ERP.Domain.Entities.InventoryTransaction
+            {
+                Id = 6303,
+                WarehouseId = 1,
+                ProductId = 1,
+                OwnerId = null,
+                TransactionType = ERP.Domain.Enums.TransactionType.Import,
+                InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                Quantity = 500m,
+                TransactionDate = DateTime.UtcNow,
+                CreatedBy = 1
+            });
+            await db.SaveChangesAsync();
+
+            var govOps = new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db);
+
+            // 1) No partnerId provided and warehouse has no consignment stock (OwnerId != null) -> Fail-closed 0
+            var noPartnerOutcome = await govOps.Get3PlBillingSummaryAsync(
+                partnerId: null,
+                warehouseId: 1,
+                billingPeriod: "2026-10",
+                storageRatePerUnit: 15000m,
+                inboundRatePerUnit: 8000m,
+                outboundRatePerUnit: 9000m);
+
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(noPartnerOutcome.Payload))
+            {
+                var root = doc.RootElement;
+                root.GetProperty("partnerId").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
+                root.GetProperty("totalOnHandUnits").GetDecimal().Should().Be(0m);
+                root.GetProperty("inboundUnits").GetDecimal().Should().Be(0m);
+                root.GetProperty("outboundUnits").GetDecimal().Should().Be(0m);
+                root.GetProperty("totalBillingAmount").GetDecimal().Should().Be(0m);
+            }
+
+            // 2) Non-existent partnerId passed -> Fail-closed 0 without leaking own stock
+            var invalidPartnerOutcome = await govOps.Get3PlBillingSummaryAsync(
+                partnerId: 999999,
+                warehouseId: 1,
+                billingPeriod: "2026-10",
+                storageRatePerUnit: 15000m,
+                inboundRatePerUnit: 8000m,
+                outboundRatePerUnit: 9000m);
+
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(invalidPartnerOutcome.Payload))
+            {
+                var root = doc.RootElement;
+                root.GetProperty("partnerId").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null);
+                root.GetProperty("totalOnHandUnits").GetDecimal().Should().Be(0m);
+                root.GetProperty("inboundUnits").GetDecimal().Should().Be(0m);
+                root.GetProperty("outboundUnits").GetDecimal().Should().Be(0m);
+                root.GetProperty("totalBillingAmount").GetDecimal().Should().Be(0m);
+            }
+        }
+
+        [Fact]
+        public async Task Wave63_1_Compute3PlBilling_FiltersInventoryTransactionsByPeriodFromAndPeriodToUtc()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.BusinessPartners.Add(new ERP.Domain.Entities.BusinessPartner
+            {
+                Id = 6311,
+                Code = "BP-3PL-W631",
+                Name = "Chủ hàng Ký gửi Wave 63.1",
+                IsCustomer = true,
+                IsActive = true,
+                PaymentTermDays = 30,
+                ReceivableBalance = 0m
+            });
+            db.InventoryStocks.Add(new ERP.Domain.Entities.InventoryStock
+            {
+                Id = 6312,
+                WarehouseId = 1,
+                ProductId = 1,
+                LocationId = 1,
+                OwnerId = 6311,
+                Status = ERP.Domain.Enums.InventoryStatus.Available,
+                Quantity = 80m,
+                ReservedQuantity = 0m,
+                LastUpdated = DateTime.UtcNow
+            });
+
+            var periodFrom = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+            var periodTo = new DateTime(2026, 10, 31, 23, 59, 59, DateTimeKind.Utc);
+
+            db.InventoryTransactions.AddRange(
+                // Out-of-period before PeriodFromUtc (must be ignored)
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 6313,
+                    WarehouseId = 1,
+                    ProductId = 1,
+                    OwnerId = 6311,
+                    TransactionType = ERP.Domain.Enums.TransactionType.Import,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 200m,
+                    TransactionDate = new DateTime(2026, 8, 15, 10, 0, 0, DateTimeKind.Utc),
+                    CreatedBy = 1
+                },
+                // In-period Import (40m)
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 6314,
+                    WarehouseId = 1,
+                    ProductId = 1,
+                    OwnerId = 6311,
+                    TransactionType = ERP.Domain.Enums.TransactionType.Import,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 40m,
+                    TransactionDate = new DateTime(2026, 10, 12, 9, 30, 0, DateTimeKind.Utc),
+                    CreatedBy = 1
+                },
+                // In-period Export (15m)
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 6315,
+                    WarehouseId = 1,
+                    ProductId = 1,
+                    OwnerId = 6311,
+                    TransactionType = ERP.Domain.Enums.TransactionType.Export,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 15m,
+                    TransactionDate = new DateTime(2026, 10, 20, 14, 0, 0, DateTimeKind.Utc),
+                    CreatedBy = 1
+                },
+                // Out-of-period after PeriodToUtc (must be ignored)
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 6316,
+                    WarehouseId = 1,
+                    ProductId = 1,
+                    OwnerId = 6311,
+                    TransactionType = ERP.Domain.Enums.TransactionType.Export,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 90m,
+                    TransactionDate = new DateTime(2026, 11, 15, 10, 0, 0, DateTimeKind.Utc),
+                    CreatedBy = 1
+                });
+            await db.SaveChangesAsync();
+
+            var govOps = new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db);
+            var statementOutcome = await govOps.Generate3PlStatementAsync(
+                partnerId: 6311,
+                warehouseId: 1,
+                billingPeriod: "2026-10",
+                storageRatePerUnit: 15000m,
+                inboundRatePerUnit: 8000m,
+                outboundRatePerUnit: 9000m,
+                createReceivableInvoice: true,
+                actorUserId: 1,
+                ct: default,
+                periodFromUtc: periodFrom,
+                periodToUtc: periodTo);
+
+            // Expected: Storage = 80 * 15000 = 1,200,000; Inbound = 40 * 8000 = 320,000; Outbound = 15 * 9000 = 135,000
+            // SubTotal = 1,655,000; VAT (10%) = 165,500; Total = 1,820,500
+            using (var doc = System.Text.Json.JsonSerializer.SerializeToDocument(statementOutcome.Payload))
+            {
+                var root = doc.RootElement;
+                root.GetProperty("partnerId").GetInt32().Should().Be(6311);
+                root.GetProperty("totalOnHandUnits").GetDecimal().Should().Be(80m);
+                root.GetProperty("inboundUnits").GetDecimal().Should().Be(40m);
+                root.GetProperty("outboundUnits").GetDecimal().Should().Be(15m);
+                root.GetProperty("totalBillingAmount").GetDecimal().Should().Be(1820500m);
+                root.GetProperty("receivableInvoiceCreated").GetBoolean().Should().BeTrue();
+            }
+
+            var savedStatement = await db.ThreePlBillingStatements.SingleAsync(x => x.PartnerId == 6311);
+            savedStatement.PeriodFromUtc.Should().Be(periodFrom);
+            savedStatement.PeriodToUtc.Should().Be(periodTo);
+            savedStatement.TotalInboundQty.Should().Be(40m);
+            savedStatement.TotalOutboundQty.Should().Be(15m);
+            savedStatement.TotalBillingAmount.Should().Be(1820500m);
+
+            var savedInvoice = await db.PartnerDebtInvoices.SingleAsync(x => x.PartnerId == 6311);
+            savedInvoice.TotalAmount.Should().Be(1820500m);
+
+            var savedLedger = await db.PartnerDebtLedgers.SingleAsync(x => x.PartnerId == 6311);
+            savedLedger.InvoiceId.Should().Be(savedInvoice.Id);
+            savedLedger.AmountDelta.Should().Be(1820500m);
+        }
+
+        [Fact]
+        public async Task Wave63_1_ProvisionSaaSTenant_ConcurrentCalls_EnforceGateAndTransactionSafety()
+        {
+            var dbName = Guid.NewGuid().ToString();
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(dbName)
+                .Options;
+
+            await using (var seedDb = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options))
+            {
+                seedDb.Roles.Add(new ERP.Domain.Entities.Role
+                {
+                    Id = 1,
+                    RoleName = ERP.Api.Authorization.AppRoles.Admin
+                });
+                await seedDb.SaveChangesAsync();
+            }
+
+            // Prove that an aborted/disposed DbContext mid-call inside try block still releases TenantProvisioningGate in finally
+            var brokenDb = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+            await brokenDb.DisposeAsync();
+            var brokenSvc = new ERP.Infrastructure.Services.PermissionOperationsService(brokenDb);
+            Func<Task> brokenAct = async () => await brokenSvc.ProvisionSaaSTenantAsync(
+                new ProvisionTenantInput(
+                    CompanyName: "Broken Context Co",
+                    PlanCode: "PRO",
+                    AllocateNewTenant: true));
+            await brokenAct.Should().ThrowAsync<ObjectDisposedException>();
+
+            var tasks = Enumerable.Range(1, 5).Select(async idx =>
+            {
+                await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+                var svc = new ERP.Infrastructure.Services.PermissionOperationsService(db);
+                var outcome = await svc.ProvisionSaaSTenantAsync(
+                    new ProvisionTenantInput(
+                        CompanyName: $"Công ty Logistics Wave 63.1 #{idx}",
+                        OwnerEmail: $"admin{idx}@wave631.vn",
+                        PlanCode: "PRO",
+                        AllocateNewTenant: true,
+                        OwnerUsername: $"wave631_owner_{idx}",
+                        OwnerPassword: "StrongPass!2026"));
+                outcome.Kind.Should().Be(ERP.Application.Common.WmsEndpointOutcomeKind.Ok);
+                using var doc = System.Text.Json.JsonSerializer.SerializeToDocument(outcome.Payload);
+                return doc.RootElement.GetProperty("tenantId").GetInt32();
+            });
+
+            var assignedTenantIds = await Task.WhenAll(tasks);
+            assignedTenantIds.Should().HaveCount(5);
+            assignedTenantIds.Distinct().Should().HaveCount(5);
+            assignedTenantIds.OrderBy(x => x).Should().Equal(2, 3, 4, 5, 6);
+        }
+
+        [Fact]
+        public async Task Wave63_2_Generate3PlStatement_WhenReissuedWithModifiedRates_AppendsAdjustmentLedgerAndPreservesStatementSourceId()
+        {
+            var options = new DbContextOptionsBuilder<ERP.Infrastructure.Persistence.ErpKhoDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options;
+            await using var db = new ERP.Infrastructure.Persistence.ErpKhoDbContext(options);
+
+            db.Warehouses.Add(new ERP.Domain.Entities.Warehouse
+            {
+                Id = 1,
+                Code = "WH-3PL-W632",
+                Name = "Kho 3PL Wave 63.2",
+                Address = "KCN Sóng Thần"
+            });
+            db.BusinessPartners.Add(new ERP.Domain.Entities.BusinessPartner
+            {
+                Id = 6321,
+                Code = "3PL-CUST-6321",
+                Name = "Công ty Chủ hàng 3PL Wave 63.2",
+                IsCustomer = true,
+                IsActive = true,
+                PaymentTermDays = 30,
+                ReceivableBalance = 0m,
+                CreatedAt = DateTime.UtcNow
+            });
+
+            var periodFrom = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+            var periodTo = new DateTime(2026, 10, 31, 23, 59, 59, DateTimeKind.Utc);
+
+            db.InventoryStocks.Add(new ERP.Domain.Entities.InventoryStock
+            {
+                Id = 63201,
+                WarehouseId = 1,
+                ProductId = 1,
+                LocationId = 1,
+                OwnerId = 6321,
+                Status = ERP.Domain.Enums.InventoryStatus.Available,
+                Quantity = 100m,
+                ReservedQuantity = 0m,
+                LastUpdated = DateTime.UtcNow
+            });
+            db.InventoryTransactions.AddRange(
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 63202,
+                    WarehouseId = 1,
+                    ProductId = 1,
+                    OwnerId = 6321,
+                    TransactionType = ERP.Domain.Enums.TransactionType.Import,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 50m,
+                    TransactionDate = new DateTime(2026, 10, 10, 8, 0, 0, DateTimeKind.Utc),
+                    CreatedBy = 1
+                },
+                new ERP.Domain.Entities.InventoryTransaction
+                {
+                    Id = 63203,
+                    WarehouseId = 1,
+                    ProductId = 1,
+                    OwnerId = 6321,
+                    TransactionType = ERP.Domain.Enums.TransactionType.Export,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                    Quantity = 20m,
+                    TransactionDate = new DateTime(2026, 10, 22, 15, 0, 0, DateTimeKind.Utc),
+                    CreatedBy = 1
+                });
+            await db.SaveChangesAsync();
+
+            var govOps = new ERP.Infrastructure.Services.WmsGovernanceOperationsService(db);
+
+            // Call #1: Storage = 100 * 10,000 = 1,000,000; Inbound = 50 * 5,000 = 250,000; Outbound = 20 * 5,000 = 100,000
+            // SubTotal = 1,350,000; VAT (10%) = 135,000; Total1 = 1,485,000
+            var firstOutcome = await govOps.Generate3PlStatementAsync(
+                partnerId: 6321,
+                warehouseId: 1,
+                billingPeriod: "2026-10",
+                storageRatePerUnit: 10000m,
+                inboundRatePerUnit: 5000m,
+                outboundRatePerUnit: 5000m,
+                createReceivableInvoice: true,
+                actorUserId: 1,
+                ct: default,
+                periodFromUtc: periodFrom,
+                periodToUtc: periodTo);
+            firstOutcome.Kind.Should().Be(ERP.Application.Common.WmsEndpointOutcomeKind.Ok);
+
+            var savedStatement = await db.ThreePlBillingStatements.SingleAsync(x => x.PartnerId == 6321);
+            savedStatement.Id.Should().BeGreaterThan(0);
+            savedStatement.TotalBillingAmount.Should().Be(1485000m);
+
+            var savedInvoiceAfterFirst = await db.PartnerDebtInvoices.SingleAsync(x => x.PartnerId == 6321);
+            savedInvoiceAfterFirst.SourceId.Should().Be(savedStatement.Id);
+            savedInvoiceAfterFirst.TotalAmount.Should().Be(1485000m);
+
+            var firstLedger = await db.PartnerDebtLedgers.SingleAsync(x => x.PartnerId == 6321);
+            firstLedger.ReferenceId.Should().Be(savedStatement.Id);
+            firstLedger.AmountDelta.Should().Be(1485000m);
+            firstLedger.BalanceAfter.Should().Be(1485000m);
+
+            var partnerAfterFirst = await db.BusinessPartners.SingleAsync(x => x.Id == 6321);
+            partnerAfterFirst.ReceivableBalance.Should().Be(1485000m);
+
+            // Call #2 (re-issue same partner + same billingPeriod with increased storageRatePerUnit = 15,000m and inboundRatePerUnit = 8,000m)
+            // Storage = 100 * 15,000 = 1,500,000; Inbound = 50 * 8,000 = 400,000; Outbound = 20 * 5,000 = 100,000
+            // SubTotal = 2,000,000; VAT (10%) = 200,000; Total2 = 2,200,000 (Delta = +715,000)
+            var secondOutcome = await govOps.Generate3PlStatementAsync(
+                partnerId: 6321,
+                warehouseId: 1,
+                billingPeriod: "2026-10",
+                storageRatePerUnit: 15000m,
+                inboundRatePerUnit: 8000m,
+                outboundRatePerUnit: 5000m,
+                createReceivableInvoice: true,
+                actorUserId: 1,
+                ct: default,
+                periodFromUtc: periodFrom,
+                periodToUtc: periodTo);
+            secondOutcome.Kind.Should().Be(ERP.Application.Common.WmsEndpointOutcomeKind.Ok);
+
+            var invoices = await db.PartnerDebtInvoices.Where(x => x.PartnerId == 6321).ToListAsync();
+            invoices.Should().ContainSingle();
+            var updatedInvoice = invoices[0];
+            updatedInvoice.SourceId.Should().Be(savedStatement.Id);
+            updatedInvoice.TotalAmount.Should().Be(2200000m);
+
+            var ledgerEntries = await db.PartnerDebtLedgers
+                .Where(x => x.PartnerId == 6321)
+                .OrderBy(x => x.Id)
+                .ToListAsync();
+            ledgerEntries.Should().HaveCount(2);
+            ledgerEntries[0].ReferenceId.Should().Be(savedStatement.Id);
+            ledgerEntries[0].AmountDelta.Should().Be(1485000m);
+            ledgerEntries[1].ReferenceId.Should().Be(savedStatement.Id);
+            ledgerEntries[1].InvoiceId.Should().Be(updatedInvoice.Id);
+            ledgerEntries[1].AmountDelta.Should().Be(715000m);
+
+            var partnerAfterSecond = await db.BusinessPartners.SingleAsync(x => x.Id == 6321);
+            partnerAfterSecond.ReceivableBalance.Should().Be(2200000m);
+
+            var ledgerSum = ledgerEntries.Sum(x => x.AmountDelta);
+            ledgerSum.Should().Be(partnerAfterSecond.ReceivableBalance);
+            ledgerSum.Should().Be(updatedInvoice.TotalAmount);
+            ledgerEntries.Last().BalanceAfter.Should().Be(partnerAfterSecond.ReceivableBalance);
         }
 
         private static void KeepUnusedMarkerAssertion(ERP.Domain.Entities.PickingTask updatedTask, ERP.Infrastructure.Persistence.ErpKhoDbContext db)

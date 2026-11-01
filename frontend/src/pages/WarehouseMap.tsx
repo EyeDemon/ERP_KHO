@@ -121,7 +121,7 @@ const WarehouseMap = () => {
     setBiSyncBusy(true);
     setError('');
     try {
-      const res = await apiClient.post('/api/Reports/sync-bi-snapshot', { warehouseId });
+      const res = await apiClient.post('/api/v1/reports/sync-bi-snapshot', { warehouseId });
       if (res?.data?.snapshotId && res?.data?.status) {
         setBiSyncResult({
           snapshotId: String(res.data.snapshotId),
@@ -140,7 +140,7 @@ const WarehouseMap = () => {
   };
 
   const loadWarehouses = useCallback(async () => {
-    const response = await apiClient.get('/api/putaway-tasks/location-warehouses');
+    const response = await apiClient.get('/api/v1/putaway-tasks/location-warehouses');
     const rows = response.data as Warehouse[];
     setWarehouses(rows);
     setWarehouseId(current => current || rows[0]?.id || 0);
@@ -154,8 +154,8 @@ const WarehouseMap = () => {
     }
     let biLoadError = '';
     const [response, biRes] = await Promise.all([
-      apiClient.get('/api/putaway-tasks/location-map', { params: { warehouseId: targetWarehouseId } }),
-      apiClient.get<ProductivityAndBiSnapshot>('/api/Reports/productivity-and-bi-snapshot', { params: { warehouseId: targetWarehouseId } }).catch((err: any) => {
+      apiClient.get('/api/v1/putaway-tasks/location-map', { params: { warehouseId: targetWarehouseId } }),
+      apiClient.get<ProductivityAndBiSnapshot>('/api/v1/reports/productivity-and-bi-snapshot', { params: { warehouseId: targetWarehouseId } }).catch((err: any) => {
         if (err?.response?.status && err.response.status >= 400) {
           biLoadError = errorMessage(err, 'Không thể tải ảnh chụp năng suất BI.');
         }
@@ -247,7 +247,7 @@ const WarehouseMap = () => {
         setError('X, Y, Rộng và Cao phải là số hợp lệ.');
         return;
       }
-      await apiClient.put('/api/putaway-tasks/locations/' + layout.locationId + '/layout', payload);
+      await apiClient.put('/api/v1/putaway-tasks/locations/' + layout.locationId + '/layout', payload);
       setLayout(null);
       setSuccess(clear ? 'Đã xóa bố trí bản đồ.' : 'Đã cập nhật bố trí bản đồ.');
       await loadMap(warehouseId);

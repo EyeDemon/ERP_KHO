@@ -50,11 +50,11 @@ describe('DockYard production UI', () => {
     vi.resetAllMocks();
     localStorage.clear();
     get.mockImplementation(async (url) => {
-      if (url === '/api/dock-yard/warehouses') return { data: [warehouse] } as never;
-      if (url === '/api/dock-yard/appointments') return { data: [draftAppointment] } as never;
-      if (url === '/api/dock-yard/docks') return { data: [{ id: 102, warehouseId: 1, code: 'D-02', name: 'Dock 02', supportsInbound: true, supportsOutbound: true, isTemperatureControlled: false, hazardAllowed: false, isActive: true, rowVersion: null }] } as never;
-      if (url === '/api/dock-yard/yard-slots') return { data: [{ id: 152, warehouseId: 1, code: 'Y-02', name: 'Yard 02', isActive: true, occupied: false, rowVersion: null }] } as never;
-      if (url === '/api/dock-yard/appointments/1040') return { data: draftAppointment } as never;
+      if (url === '/api/v1/dock-yard/warehouses') return { data: [warehouse] } as never;
+      if (url === '/api/v1/dock-yard/appointments') return { data: [draftAppointment] } as never;
+      if (url === '/api/v1/dock-yard/docks') return { data: [{ id: 102, warehouseId: 1, code: 'D-02', name: 'Dock 02', supportsInbound: true, supportsOutbound: true, isTemperatureControlled: false, hazardAllowed: false, isActive: true, rowVersion: null }] } as never;
+      if (url === '/api/v1/dock-yard/yard-slots') return { data: [{ id: 152, warehouseId: 1, code: 'Y-02', name: 'Yard 02', isActive: true, occupied: false, rowVersion: null }] } as never;
+      if (url === '/api/v1/dock-yard/appointments/1040') return { data: draftAppointment } as never;
       return { data: [] } as never;
     });
   });
@@ -88,7 +88,7 @@ describe('DockYard production UI', () => {
 
     expect(post).toHaveBeenCalledTimes(1);
     expect(post).toHaveBeenCalledWith(
-      '/api/dock-yard/appointments/1040/confirm',
+      '/api/v1/dock-yard/appointments/1040/confirm',
       { rowVersion: 'AQEBAQEBAQE=' },
       { headers: expect.objectContaining({ 'Idempotency-Key': expect.any(String) }) },
     );

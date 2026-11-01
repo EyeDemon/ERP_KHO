@@ -8,9 +8,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Infrastructure.Services;
 
-public sealed class ProductOperationsService(ErpKhoDbContext db) : IProductOperationsService
+public sealed class ProductOperationsService(
+    ErpKhoDbContext db,
+    ICurrentUser? currentUser = null) : IProductOperationsService
 {
     private readonly ErpKhoDbContext _db = db;
+    private readonly ICurrentUser? _currentUser = currentUser;
+
+    private bool CanReadInventoryCost() =>
+        _currentUser == null || _currentUser.HasPermission(ERP.Domain.Security.AppPermissions.InventoryCostRead);
 
     public async Task<WmsEndpointOutcome> AutoAuditGovernanceAsync(
         int? actorUserId,
@@ -1395,6 +1401,7 @@ public sealed class ProductOperationsService(ErpKhoDbContext db) : IProductOpera
                 .ToDictionaryAsync(p => p.Id, p => new { p.Code, p.Name }, cancellationToken)
             : new();
 
+        var canReadCost = CanReadInventoryCost();
         var items = orders.Select(w =>
         {
             productMap.TryGetValue(w.KitProductId, out var kitProd);
@@ -1411,10 +1418,13 @@ public sealed class ProductOperationsService(ErpKhoDbContext db) : IProductOpera
                 status = w.Status,
                 plannedKitQty = w.PlannedKitQty,
                 completedKitQty = w.CompletedKitQty,
+                baseUomCode = string.IsNullOrWhiteSpace(w.BaseUomCode) ? "PCS" : w.BaseUomCode,
+                conversionRateSnapshot = w.ConversionRateSnapshot > 0m ? w.ConversionRateSnapshot : 1m,
                 targetLocationId = w.TargetLocationId,
                 targetLotId = w.TargetLotId,
                 targetHandlingUnitId = w.TargetHandlingUnitId,
-                rolledUpUnitCost = w.RolledUpUnitCost,
+                rolledUpUnitCost = canReadCost ? (decimal?)w.RolledUpUnitCost : null,
+                costHiddenByRbac = !canReadCost,
                 earliestComponentExpiryDate = w.EarliestComponentExpiryDate,
                 createdAtUtc = w.CreatedAtUtc,
                 completedAtUtc = w.CompletedAtUtc,
@@ -1430,9 +1440,11 @@ public sealed class ProductOperationsService(ErpKhoDbContext db) : IProductOpera
                         componentRatioQty = l.ComponentRatioQty,
                         requiredBaseQty = l.RequiredBaseQty,
                         consumedBaseQty = l.ConsumedBaseQty,
+                        baseUomCode = string.IsNullOrWhiteSpace(l.BaseUomCode) ? "PCS" : l.BaseUomCode,
+                        conversionRateSnapshot = l.ConversionRateSnapshot > 0m ? l.ConversionRateSnapshot : 1m,
                         sourceLocationId = l.SourceLocationId,
                         sourceLotId = l.SourceLotId,
-                        componentUnitCost = l.ComponentUnitCost
+                        componentUnitCost = canReadCost ? (decimal?)l.ComponentUnitCost : null
                     };
                 }).ToList()
             };
@@ -1441,6 +1453,7 @@ public sealed class ProductOperationsService(ErpKhoDbContext db) : IProductOpera
         return WmsEndpointOutcome.Ok(new
         {
             totalCount = items.Count,
+            costHiddenByRbac = !canReadCost,
             items,
             workOrders = items
         });
@@ -1525,6 +1538,12 @@ public sealed class ProductOperationsService(ErpKhoDbContext db) : IProductOpera
             }
         }
 
+        var kitBaseUomCode = await _db.Units.AsNoTracking()
+            .Where(u => u.Id == kitProduct.UnitId)
+            .Select(u => u.Code)
+            .FirstOrDefaultAsync(cancellationToken) ?? "PCS";
+        if (string.IsNullOrWhiteSpace(kitBaseUomCode)) kitBaseUomCode = "PCS";
+
         var workOrder = new KitWorkOrder
         {
             WarehouseId = warehouseId,
@@ -1534,6 +1553,8 @@ public sealed class ProductOperationsService(ErpKhoDbContext db) : IProductOpera
             Status = "Released",
             PlannedKitQty = plannedQty,
             CompletedKitQty = 0m,
+            BaseUomCode = kitBaseUomCode.Trim(),
+            ConversionRateSnapshot = 1m,
             TargetLocationId = request?.TargetLocationId,
             TargetLotId = request?.TargetLotId,
             TargetHandlingUnitId = request?.TargetHandlingUnitId,
@@ -1546,12 +1567,20 @@ public sealed class ProductOperationsService(ErpKhoDbContext db) : IProductOpera
         {
             var ratio = li.ComponentRatioQty > 0m ? Math.Round(li.ComponentRatioQty, 4) : 1m;
             var reqBase = Math.Round(plannedQty * ratio, 4);
+            var compBaseUomCode = await _db.Products.AsNoTracking()
+                .Where(p => p.Id == li.ComponentProductId)
+                .Select(p => p.Unit != null && p.Unit.Code != null ? p.Unit.Code : "PCS")
+                .FirstOrDefaultAsync(cancellationToken) ?? "PCS";
+            if (string.IsNullOrWhiteSpace(compBaseUomCode)) compBaseUomCode = "PCS";
+
             workOrder.ComponentLines.Add(new KitWorkOrderComponentLine
             {
                 ComponentProductId = li.ComponentProductId,
                 ComponentRatioQty = ratio,
                 RequiredBaseQty = reqBase,
                 ConsumedBaseQty = 0m,
+                BaseUomCode = compBaseUomCode.Trim(),
+                ConversionRateSnapshot = 1m,
                 SourceLocationId = li.SourceLocationId,
                 SourceLotId = li.SourceLotId,
                 ComponentUnitCost = li.ComponentUnitCost is > 0m ? Math.Round(li.ComponentUnitCost.Value, 4) : 0m
@@ -1586,6 +1615,7 @@ public sealed class ProductOperationsService(ErpKhoDbContext db) : IProductOpera
                 cancellationToken);
         }
 
+        var canReadCostCreate = CanReadInventoryCost();
         return WmsEndpointOutcome.Ok(new
         {
             id = workOrder.Id,
@@ -1599,10 +1629,13 @@ public sealed class ProductOperationsService(ErpKhoDbContext db) : IProductOpera
             status = workOrder.Status,
             plannedKitQty = workOrder.PlannedKitQty,
             completedKitQty = workOrder.CompletedKitQty,
+            baseUomCode = workOrder.BaseUomCode,
+            conversionRateSnapshot = workOrder.ConversionRateSnapshot,
             targetLocationId = workOrder.TargetLocationId,
             targetLotId = workOrder.TargetLotId,
             targetHandlingUnitId = workOrder.TargetHandlingUnitId,
-            rolledUpUnitCost = workOrder.RolledUpUnitCost,
+            rolledUpUnitCost = canReadCostCreate ? (decimal?)workOrder.RolledUpUnitCost : null,
+            costHiddenByRbac = !canReadCostCreate,
             earliestComponentExpiryDate = workOrder.EarliestComponentExpiryDate,
             componentLines = workOrder.ComponentLines.Select(l => new
             {
@@ -1611,9 +1644,11 @@ public sealed class ProductOperationsService(ErpKhoDbContext db) : IProductOpera
                 componentRatioQty = l.ComponentRatioQty,
                 requiredBaseQty = l.RequiredBaseQty,
                 consumedBaseQty = l.ConsumedBaseQty,
+                baseUomCode = l.BaseUomCode,
+                conversionRateSnapshot = l.ConversionRateSnapshot,
                 sourceLocationId = l.SourceLocationId,
                 sourceLotId = l.SourceLotId,
-                componentUnitCost = l.ComponentUnitCost
+                componentUnitCost = canReadCostCreate ? (decimal?)l.ComponentUnitCost : null
             }).ToList(),
             statusLabel = $"Đã phát hành lệnh gia công bộ KIT {workOrder.WorkOrderCode} ({workOrder.WorkOrderType})"
         });
@@ -2163,6 +2198,7 @@ public sealed class ProductOperationsService(ErpKhoDbContext db) : IProductOpera
         await _db.SaveChangesAsync(cancellationToken);
         if (tx != null) await tx.CommitAsync(cancellationToken);
 
+        var canReadCostComplete = CanReadInventoryCost();
         return WmsEndpointOutcome.Ok(new
         {
             id = workOrder.Id,
@@ -2176,10 +2212,13 @@ public sealed class ProductOperationsService(ErpKhoDbContext db) : IProductOpera
             status = workOrder.Status,
             plannedKitQty = workOrder.PlannedKitQty,
             completedKitQty = workOrder.CompletedKitQty,
+            baseUomCode = string.IsNullOrWhiteSpace(workOrder.BaseUomCode) ? "PCS" : workOrder.BaseUomCode,
+            conversionRateSnapshot = workOrder.ConversionRateSnapshot > 0m ? workOrder.ConversionRateSnapshot : 1m,
             targetLocationId = workOrder.TargetLocationId,
             targetLotId = workOrder.TargetLotId,
             targetHandlingUnitId = workOrder.TargetHandlingUnitId,
-            rolledUpUnitCost = workOrder.RolledUpUnitCost,
+            rolledUpUnitCost = canReadCostComplete ? (decimal?)workOrder.RolledUpUnitCost : null,
+            costHiddenByRbac = !canReadCostComplete,
             earliestComponentExpiryDate = workOrder.EarliestComponentExpiryDate,
             completedAtUtc = workOrder.CompletedAtUtc,
             componentLines = workOrder.ComponentLines.Select(l => new
@@ -2189,11 +2228,15 @@ public sealed class ProductOperationsService(ErpKhoDbContext db) : IProductOpera
                 componentRatioQty = l.ComponentRatioQty,
                 requiredBaseQty = l.RequiredBaseQty,
                 consumedBaseQty = l.ConsumedBaseQty,
+                baseUomCode = string.IsNullOrWhiteSpace(l.BaseUomCode) ? "PCS" : l.BaseUomCode,
+                conversionRateSnapshot = l.ConversionRateSnapshot > 0m ? l.ConversionRateSnapshot : 1m,
                 sourceLocationId = l.SourceLocationId,
                 sourceLotId = l.SourceLotId,
-                componentUnitCost = l.ComponentUnitCost
+                componentUnitCost = canReadCostComplete ? (decimal?)l.ComponentUnitCost : null
             }).ToList(),
-            statusLabel = $"Đã hoàn tất lệnh {workOrder.WorkOrderType} bộ KIT {workOrder.WorkOrderCode} (MAC: {workOrder.RolledUpUnitCost:0.##})"
+            statusLabel = canReadCostComplete
+                ? $"Đã hoàn tất lệnh {workOrder.WorkOrderType} bộ KIT {workOrder.WorkOrderCode} (MAC: {workOrder.RolledUpUnitCost:0.##})"
+                : $"Đã hoàn tất lệnh {workOrder.WorkOrderType} bộ KIT {workOrder.WorkOrderCode}"
         });
     }
 

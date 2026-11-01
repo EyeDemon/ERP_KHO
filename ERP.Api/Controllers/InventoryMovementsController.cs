@@ -13,7 +13,8 @@ namespace ERP.Api.Controllers;
 [Route("api/v1/inventory-movements")]
 [Route("api/inventory-movements")]
 public sealed class InventoryMovementsController(
-    IInventoryMovementService movementService) : ControllerBase
+    IInventoryMovementService movementService,
+    ICurrentUser currentUser) : ControllerBase
 {
     public sealed record FlexibleMoveHandlingUnitRequest(
         JsonElement? HandlingUnitId = null,
@@ -56,13 +57,13 @@ public sealed class InventoryMovementsController(
     [HttpPost("move-handling-unit")]
     [HttpPost("~/api/v1/inventory/move-handling-unit")]
     [HttpPost("~/api/inventory/move-handling-unit")]
-    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    [PermissionAuthorize(AppPermissions.InventoryMovementCreate)]
     [IdempotentCommand("InventoryMovement.MoveHandlingUnitLpn")]
     public async Task<IActionResult> MoveHandlingUnit(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] FlexibleMoveHandlingUnitRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(currentUser, AppPermissions.InventoryMovementCreate))
             return Forbid();
 
         var huId = ParseOptionalInt(request?.HandlingUnitId, out var huCodeFallback);
@@ -104,10 +105,10 @@ public sealed class InventoryMovementsController(
         });
     }
 
-    [HttpGet("auto-break-bulk-replenish")]
     [HttpPost("auto-break-bulk-replenish")]
     [HttpPost("~/api/v1/inventory/auto-break-bulk-replenish")]
-    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    [PermissionAuthorize(AppPermissions.InventoryMovementCreate)]
+    [IdempotentCommand("InventoryMovement.AutoBreakBulkReplenish")]
     public async Task<IActionResult> AutoBreakBulkReplenish(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] AutoBreakBulkReplenishRequestDto? request = null,
         [FromQuery] int? warehouseId = null,
@@ -116,7 +117,7 @@ public sealed class InventoryMovementsController(
         CancellationToken cancellationToken = default)
     {
         var effectiveExecute = executeImmediately ?? request?.ExecuteImmediately ?? false;
-        if (effectiveExecute && User?.IsInRole(AppRoles.Viewer) == true)
+        if (effectiveExecute && !this.HasActionPermission(currentUser, AppPermissions.InventoryMovementCreate))
             return Forbid();
 
         var effectiveRequest = new AutoBreakBulkReplenishRequestDto(

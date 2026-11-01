@@ -16,8 +16,8 @@ namespace ERP.Api.Controllers;
 public sealed class InventoryReversalTraceabilityController(
     IInventoryReversalService reversalService,
     IInventoryTraceabilityQueryService traceabilityService,
-    IWmsGovernanceOperationsService govOps = null!,
-    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
+    IWmsGovernanceOperationsService govOps,
+    IWarehouseAuthorizationService warehouseAccess) : ControllerBase
 {
     [HttpGet("reversal-reasons")]
     [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
@@ -63,22 +63,12 @@ public sealed class InventoryReversalTraceabilityController(
         }
 
         const int pageSize = 100;
-        var pageIndex = 1;
-        var firstPage = await reversalService.GetCandidatesAsync(warehouseId, pageIndex, pageSize, null, null, null, cancellationToken)
-            ?? await reversalService.GetCandidatesAsync(warehouseId, 1, int.MaxValue, null, null, null, cancellationToken);
-        var items = firstPage.Items.ToList();
-        while (items.Count < firstPage.TotalRecords)
-        {
-            pageIndex++;
-            var nextPage = await reversalService.GetCandidatesAsync(warehouseId, pageIndex, pageSize, null, null, null, cancellationToken);
-            if (nextPage == null || nextPage.Items.Count == 0)
-                break;
-            items.AddRange(nextPage.Items);
-        }
+        var firstPage = await reversalService.GetCandidatesAsync(warehouseId, 1, pageSize, null, null, null, cancellationToken);
+        var items = firstPage?.Items ?? [];
 
         return Ok(new
         {
-            totalCandidatesInWindow = firstPage.TotalRecords,
+            totalCandidatesInWindow = firstPage?.TotalRecords ?? 0,
             reversibleCount = items.Count(x => !x.IsReversed),
             alreadyReversedCount = items.Count(x => x.IsReversed),
             moveTransactionCount = items.Count(x => x.TransactionType == "Move"),
@@ -159,73 +149,39 @@ public sealed class InventoryReversalTraceabilityController(
 
     [HttpPost("reversals/verify-chain-integrity")]
     [HttpPost("verify-chain-integrity")]
-    [PermissionAuthorize(AppPermissions.InventoryLedgerRead)]
+    [PermissionAuthorize(AppPermissions.InventoryReversalCreate)]
     public async Task<IActionResult> VerifyReversalChainIntegrity(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyReversalChainRequest? request = null,
         CancellationToken cancellationToken = default)
     {
         var warehouseId = request?.WarehouseId;
         IReadOnlyCollection<int>? accessibleIds = null;
-        if (warehouseAccess != null)
-        {
-            if (warehouseId.HasValue)
-                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
-            else
-                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
-        }
+        if (warehouseId.HasValue)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        else
+            accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
 
-        if (govOps != null)
-        {
-            var outcome = await govOps.VerifyReversalChainIntegrityAsync(warehouseId, accessibleIds, cancellationToken);
-            return outcome.ToActionResult(this);
-        }
-
-        return Ok(new
-        {
-            verificationId = $"REV-INT-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            warehouseId,
-            ledgerEventsCount = 0,
-            duplicateReversalBlocked = true,
-            appendOnlyLedgerStatus = "IMMUTABLE_VERIFIED",
-            verifiedAtUtc = DateTime.UtcNow
-        });
+        var outcome = await govOps.VerifyReversalChainIntegrityAsync(warehouseId, accessibleIds, cancellationToken);
+        return outcome.ToActionResult(this);
     }
 
     public sealed record SimulateRecallTreeRequest(string? BatchOrSerialQuery = null, int? WarehouseId = null);
 
     [HttpPost("traceability/simulate-recall-tree")]
     [HttpPost("simulate-recall-tree")]
-    [PermissionAuthorize(AppPermissions.InventoryTraceabilityRead)]
+    [PermissionAuthorize(AppPermissions.InventoryReversalCreate)]
     public async Task<IActionResult> SimulateRecallTree(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SimulateRecallTreeRequest? request = null,
         CancellationToken cancellationToken = default)
     {
         var warehouseId = request?.WarehouseId;
         IReadOnlyCollection<int>? accessibleIds = null;
-        if (warehouseAccess != null)
-        {
-            if (warehouseId.HasValue)
-                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
-            else
-                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
-        }
+        if (warehouseId.HasValue)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        else
+            accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
 
-        if (govOps != null)
-        {
-            var outcome = await govOps.SimulateRecallTreeAsync(request?.BatchOrSerialQuery, warehouseId, accessibleIds, cancellationToken);
-            return outcome.ToActionResult(this);
-        }
-
-        var queryText = string.IsNullOrWhiteSpace(request?.BatchOrSerialQuery) ? "BATCH-FEFO-2026" : request.BatchOrSerialQuery.Trim();
-        return Ok(new
-        {
-            simulationId = $"TRC-RCL-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            query = queryText,
-            matchedLotCount = 0,
-            upstreamPoLinked = true,
-            downstreamShipmentLinked = true,
-            recallContainmentReady = true,
-            simulatedAtUtc = DateTime.UtcNow
-        });
+        var outcome = await govOps.SimulateRecallTreeAsync(request?.BatchOrSerialQuery, warehouseId, accessibleIds, cancellationToken);
+        return outcome.ToActionResult(this);
     }
 }

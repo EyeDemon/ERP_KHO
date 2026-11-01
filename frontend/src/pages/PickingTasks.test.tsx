@@ -20,7 +20,7 @@ const line={id:31,allocationId:7711,allocationCode:'ALC-7711',productId:1,produc
 const summary={id:88,taskCode:'PICK-2026-0088',sourceType:'ExportReceipt',sourceId:5108,sourceCode:'EX-2026-5108',warehouseId:1,warehouseName:'DC Hồ Chí Minh',pickingType:'STANDARD',status:'InProgress',priority:0,assignedUserId:7,assignedUserName:'Picker',requestedQuantity:10,pickedQuantity:0,remainingQuantity:10,createdAt:'2026-10-06T01:00:00Z'};
 const detail={...summary,rowVersion:'AQ==',lines:[line],shortPicks:[] as Array<Record<string, unknown>>};
 const grant=(...permissions:string[])=>{permissionState.granted.clear();permissions.forEach(p=>permissionState.granted.add(p));};
-const reads=(task=detail)=>vi.mocked(apiClient.get).mockImplementation(async url=>({data:url==='/api/picking-tasks'?[summary]:task}) as never);
+const reads=(task=detail)=>vi.mocked(apiClient.get).mockImplementation(async url=>({data:url==='/api/v1/picking-tasks'?[summary]:task}) as never);
 
 describe('Picking workbench',()=>{
   afterEach(cleanup);
@@ -48,7 +48,7 @@ describe('Picking workbench',()=>{
     const button=view.getByText('Xác nhận Pick');
     fireEvent.click(button);fireEvent.click(button);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
-    expect(apiClient.post).toHaveBeenCalledWith('/api/picking-tasks/88/pick',{
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/picking-tasks/88/pick',{
       taskLineId:31,locationBarcode:'A01-R02-L03-B04',productBarcode:'SKU-1001',quantity:2,rowVersion:'AQ=='
     },{headers:{'Idempotency-Key':'key:picking-pick-88-31'}});
     expect(completeIdempotentAction).toHaveBeenCalledWith('picking-pick-88-31');
@@ -82,8 +82,8 @@ describe('Picking workbench',()=>{
   it('renders mobile 2-line nowrap route cells with →, right padding >= 8px, vertical label stacking, ui-subcard, and 4-col wave table',async()=>{
     grant('picking.read','picking.execute');
     vi.mocked(apiClient.get).mockImplementation(async url=>{
-      if(url==='/api/picking-tasks') return {data:[summary]} as never;
-      if(url==='/api/picking-tasks/wave-summary') return {data:[{waveCode:'WAVE-W1-P0-STANDARD',warehouseId:1,warehouseName:'DC Hồ Chí Minh',pickingType:'STANDARD',priority:0,taskCount:1,openTaskCount:1,totalRequestedQuantity:10,totalPickedQuantity:0,totalRemainingQuantity:10,taskCodes:['PICK-2026-0088']}]} as never;
+      if(url==='/api/v1/picking-tasks') return {data:[summary]} as never;
+      if(url==='/api/v1/picking-tasks/wave-summary') return {data:[{waveCode:'WAVE-W1-P0-STANDARD',warehouseId:1,warehouseName:'DC Hồ Chí Minh',pickingType:'STANDARD',priority:0,taskCount:1,openTaskCount:1,totalRequestedQuantity:10,totalPickedQuantity:0,totalRemainingQuantity:10,taskCodes:['PICK-2026-0088']}]} as never;
       return {data:detail} as never;
     });
     const view=render(<PickingTasks/>);
@@ -106,12 +106,17 @@ describe('Picking workbench',()=>{
     expect(locInput.closest('.ui-subcard')).toBeTruthy();
     expect(view.getByRole('button',{name:'Tối ưu Lộ trình Đi bộ Nhặt hàng Chữ S (Dãy → Kệ → Tầng → Ô)'})).toBeTruthy();
     expect(view.queryByText(/WCS\/WES|RFID\/IoT|Voice\/Pick-to-Light/)).toBeNull();
+    const advToggle=view.getByTestId('toggle-advanced-automation');
+    expect(advToggle.textContent).toContain('Tùy chọn thiết bị tự động hóa nâng cao (WCS / RFID / Voice Pick)');
+    expect(view.queryByTestId('advanced-automation-options-panel')).toBeNull();
+    fireEvent.click(advToggle);
+    expect(view.getByTestId('advanced-automation-options-panel')).toBeTruthy();
   });
 
   it('loads 8 Put-to-Wall sortation slots (SLOT-01..SLOT-08) and validates barcode scan into slot',async()=>{
     grant('picking.read','picking.execute');
     vi.mocked(apiClient.get).mockImplementation(async url=>{
-      if(url==='/api/picking-tasks') return {data:[summary]} as never;
+      if(url==='/api/v1/picking-tasks') return {data:[summary]} as never;
       if(url==='/api/v1/picking-tasks/88/put-to-wall-slots'){
         return {
           data:{

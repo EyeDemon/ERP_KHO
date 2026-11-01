@@ -5,32 +5,108 @@ using ERP.Domain.Entities;
 using ERP.Domain.Exceptions;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ERP.Infrastructure.Services;
 
 public sealed class PermissionOperationsService : IPermissionOperationsService
 {
+    private static readonly SemaphoreSlim TenantProvisioningGate = new(1, 1);
     private readonly ErpKhoDbContext _db;
     private readonly IWarehouseAuthorizationService? _warehouseAuth;
     private readonly ICurrentUser? _currentUser;
+    private readonly IPasswordHasherService? _passwordHasher;
+    private readonly IConfiguration? _configuration;
+
+    public static string EncodeBase32(ReadOnlySpan<byte> data)
+    {
+        const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+        var output = new System.Text.StringBuilder((data.Length * 8 + 4) / 5);
+        int buffer = 0;
+        int bitsLeft = 0;
+        foreach (var b in data)
+        {
+            buffer = (buffer << 8) | b;
+            bitsLeft += 8;
+            while (bitsLeft >= 5)
+            {
+                output.Append(alphabet[(buffer >> (bitsLeft - 5)) & 0x1F]);
+                bitsLeft -= 5;
+            }
+        }
+        if (bitsLeft > 0)
+        {
+            output.Append(alphabet[(buffer << (5 - bitsLeft)) & 0x1F]);
+        }
+        return output.ToString();
+    }
+
+    public static byte[] DecodeBase32(string base32)
+    {
+        const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+        var clean = base32.Trim().Replace(" ", "").Replace("-", "").TrimEnd('=').ToUpperInvariant();
+        if (clean.Length == 0)
+        {
+            return Array.Empty<byte>();
+        }
+
+        var bytes = new List<byte>((clean.Length * 5) / 8);
+        int buffer = 0;
+        int bitsLeft = 0;
+        foreach (var ch in clean)
+        {
+            var val = alphabet.IndexOf(ch);
+            if (val < 0)
+            {
+                return Array.Empty<byte>();
+            }
+            buffer = (buffer << 5) | val;
+            bitsLeft += 5;
+            if (bitsLeft >= 8)
+            {
+                bytes.Add((byte)((buffer >> (bitsLeft - 8)) & 0xFF));
+                bitsLeft -= 8;
+            }
+        }
+        return bytes.ToArray();
+    }
+
+    public static string ComputeTotpCode(byte[] secretBytes, long timeStep)
+    {
+        Span<byte> counterBytes = stackalloc byte[8];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt64BigEndian(counterBytes, timeStep);
+        var hmac = System.Security.Cryptography.HMACSHA1.HashData(secretBytes, counterBytes);
+        var offset = hmac[^1] & 0x0F;
+        var binaryCode =
+            ((hmac[offset] & 0x7F) << 24) |
+            ((hmac[offset + 1] & 0xFF) << 16) |
+            ((hmac[offset + 2] & 0xFF) << 8) |
+            (hmac[offset + 3] & 0xFF);
+        var otp = binaryCode % 1_000_000;
+        return otp.ToString("D6");
+    }
 
     [ActivatorUtilitiesConstructor]
     public PermissionOperationsService(
         ErpKhoDbContext db = null!,
         IWarehouseAuthorizationService? warehouseAuth = null,
-        ICurrentUser? currentUser = null)
+        ICurrentUser? currentUser = null,
+        IPasswordHasherService? passwordHasher = null,
+        IConfiguration? configuration = null)
     {
         _db = db;
         _warehouseAuth = warehouseAuth;
         _currentUser = currentUser;
+        _passwordHasher = passwordHasher;
+        _configuration = configuration;
     }
 
     public PermissionOperationsService(
         ErpKhoDbContext db,
         ICurrentUser currentUser,
         IWarehouseAuthorizationService? warehouseAuth = null)
-        : this(db, warehouseAuth, currentUser)
+        : this(db, warehouseAuth, currentUser, null, null)
     {
     }
 
@@ -193,7 +269,7 @@ public sealed class PermissionOperationsService : IPermissionOperationsService
         var withinQuotas = activeWarehousesCount <= maxWarehouses && activeUsersCount <= maxUsers && activeSkusCount <= maxSkus;
 
         var now = DateTime.UtcNow;
-        var effectiveActorId = actorUserId ?? (_currentUser is { UserId: > 0 } ? _currentUser.UserId : null);
+        var effectiveActorId = actorUserId ?? (_currentUser is { IsAuthenticated: true, UserId: > 0 } ? _currentUser.UserId : null);
 
         _db.AuditLogs.Add(new AuditLog
         {
@@ -240,33 +316,73 @@ public sealed class PermissionOperationsService : IPermissionOperationsService
         var now = DateTime.UtcNow;
         var originalTenantId = _db?.CurrentTenantId > 0 ? _db.CurrentTenantId : 1;
         var tenantId = originalTenantId;
-        var planCode = string.IsNullOrWhiteSpace(request?.PlanCode) ? "STARTER" : request.PlanCode.Trim().ToUpperInvariant();
+        var rawPlanCode = string.IsNullOrWhiteSpace(request?.PlanCode) ? "STARTER" : request.PlanCode.Trim().ToUpperInvariant();
+        var planSpec = SaasBillingService.ResolvePlanSpec(rawPlanCode);
+        var planCode = rawPlanCode is "PRO" or "GROWTH" ? rawPlanCode : planSpec.PlanCode;
         var companyName = string.IsNullOrWhiteSpace(request?.CompanyName) ? "Cửa hàng Thương mại Điện tử SME" : request.CompanyName.Trim();
+
+        var effectiveOrderQuota = planSpec.MonthlyOrderQuota;
+        var effectiveMaxWarehouses = planSpec.MaxWarehouses;
+        var effectiveMaxUsers = planSpec.MaxUsers;
+        var effectiveMonthlyPrice = planSpec.MonthlyPriceVnd;
+        var effectiveMaxSkus = planSpec.MaxSkus;
 
         if (_db != null)
         {
-            if (request?.AllocateNewTenant == true)
-            {
-                var maxSubTenant = await _db.TenantSubscriptions.IgnoreQueryFilters()
-                    .MaxAsync(s => (int?)s.TenantId, ct) ?? 1;
-                var maxWhTenant = await _db.Warehouses.IgnoreQueryFilters()
-                    .MaxAsync(w => (int?)w.TenantId, ct) ?? 1;
-                tenantId = Math.Max(2, Math.Max(maxSubTenant, maxWhTenant) + 1);
-            }
-
+            await TenantProvisioningGate.WaitAsync(ct);
             try
             {
+                await using var tx = _db.Database.CurrentTransaction is null && _db.Database.IsRelational()
+                    ? await _db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct)
+                    : null;
+
+                if (_db.Database.IsSqlServer() && _db.Database.CurrentTransaction != null)
+                {
+                    await _db.Database.ExecuteSqlRawAsync("""
+                        DECLARE @result int;
+                        EXEC @result = sys.sp_getapplock 
+                            @Resource = N'ERP_KHO_ProvisionSaaSTenant_GlobalLock', 
+                            @LockMode = N'Exclusive', 
+                            @LockOwner = N'Transaction', 
+                            @LockTimeout = 10000;
+                        IF @result < 0
+                            THROW 50001, 'Could not acquire global tenant provisioning lock (sp_getapplock failed or timed out).', 1;
+                        """, ct);
+                }
+
+                if (request?.AllocateNewTenant == true)
+                {
+                    var maxSubTenant = await _db.TenantSubscriptions.IgnoreQueryFilters()
+                        .MaxAsync(s => (int?)s.TenantId, ct) ?? 1;
+                    var maxWhTenant = await _db.Warehouses.IgnoreQueryFilters()
+                        .MaxAsync(w => (int?)w.TenantId, ct) ?? 1;
+                    var maxUserTenant = await _db.Users.IgnoreQueryFilters()
+                        .MaxAsync(u => (int?)u.TenantId, ct) ?? 1;
+                    tenantId = Math.Max(2, Math.Max(Math.Max(maxSubTenant, maxWhTenant), maxUserTenant) + 1);
+                }
+
                 _db.UseTenant(tenantId);
 
                 if (!await _db.SaasPlans.AsNoTracking().AnyAsync(ct))
                 {
                     _db.SaasPlans.AddRange(
-                        new SaasPlan { PlanCode = "FREE_TRIAL", PlanName = "Gói Dùng Thử 14 Ngày", MonthlyOrderQuota = 300, MaxWarehouses = 1, MaxUsers = 3, MonthlyPriceVnd = 0m, IsActive = true },
-                        new SaasPlan { PlanCode = "STARTER", PlanName = "Gói Khởi Đầu (SME Starter)", MonthlyOrderQuota = 1500, MaxWarehouses = 2, MaxUsers = 10, MonthlyPriceVnd = 499000m, IsActive = true },
-                        new SaasPlan { PlanCode = "PRO", PlanName = "Gói Chuyên Nghiệp Đa Sàn (Omnichannel Pro)", MonthlyOrderQuota = 10000, MaxWarehouses = 5, MaxUsers = 30, MonthlyPriceVnd = 1490000m, IsActive = true },
-                        new SaasPlan { PlanCode = "ENTERPRISE", PlanName = "Gói Doanh Nghiệp Không Giới Hạn", MonthlyOrderQuota = 100000, MaxWarehouses = 20, MaxUsers = 200, MonthlyPriceVnd = 4990000m, IsActive = true }
+                        new SaasPlan { PlanCode = "FREE_TRIAL", PlanName = "Gói Dùng thử 14 Ngày — 0 đ/tháng", MonthlyOrderQuota = 300, MaxWarehouses = 1, MaxUsers = 3, MonthlyPriceVnd = 0m, IsActive = true },
+                        new SaasPlan { PlanCode = "STARTER", PlanName = "Gói Khởi đầu — 490.000 đ/tháng", MonthlyOrderQuota = 1500, MaxWarehouses = 1, MaxUsers = 5, MonthlyPriceVnd = 490000m, IsActive = true },
+                        new SaasPlan { PlanCode = "GROWTH", PlanName = "Gói Tăng trưởng — 1.490.000 đ/tháng", MonthlyOrderQuota = 10000, MaxWarehouses = 3, MaxUsers = 20, MonthlyPriceVnd = 1490000m, IsActive = true },
+                        new SaasPlan { PlanCode = "PRO", PlanName = "Gói Tăng trưởng — 1.490.000 đ/tháng", MonthlyOrderQuota = 10000, MaxWarehouses = 3, MaxUsers = 20, MonthlyPriceVnd = 1490000m, IsActive = true },
+                        new SaasPlan { PlanCode = "ENTERPRISE", PlanName = "Gói Doanh nghiệp — 3.490.000 đ/tháng", MonthlyOrderQuota = 100000, MaxWarehouses = 20, MaxUsers = 100, MonthlyPriceVnd = 3490000m, IsActive = true }
                     );
                     await _db.SaveChangesAsync(ct);
+                }
+
+                var matchedDbPlan = await _db.SaasPlans.AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.IsActive && p.PlanCode == planCode, ct);
+                if (matchedDbPlan != null)
+                {
+                    effectiveOrderQuota = matchedDbPlan.MonthlyOrderQuota > 0 ? matchedDbPlan.MonthlyOrderQuota : planSpec.MonthlyOrderQuota;
+                    effectiveMaxWarehouses = matchedDbPlan.MaxWarehouses > 0 ? matchedDbPlan.MaxWarehouses : planSpec.MaxWarehouses;
+                    effectiveMaxUsers = matchedDbPlan.MaxUsers > 0 ? matchedDbPlan.MaxUsers : planSpec.MaxUsers;
+                    effectiveMonthlyPrice = matchedDbPlan.MonthlyPriceVnd >= 0m ? matchedDbPlan.MonthlyPriceVnd : planSpec.MonthlyPriceVnd;
                 }
 
                 var sub = await _db.TenantSubscriptions.IgnoreQueryFilters().FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
@@ -277,16 +393,26 @@ public sealed class PermissionOperationsService : IPermissionOperationsService
                         TenantId = tenantId,
                         PlanCode = planCode,
                         Status = "ACTIVE",
-                        MonthlyOrderQuota = planCode == "PRO" ? 10000 : 1500,
+                        MonthlyOrderQuota = effectiveOrderQuota,
                         CurrentMonthOrderCount = 0,
-                        MaxWarehouses = planCode == "PRO" ? 5 : 2,
-                        MaxUsers = planCode == "PRO" ? 30 : 10,
+                        MaxWarehouses = effectiveMaxWarehouses,
+                        MaxUsers = effectiveMaxUsers,
                         TrialEndsAtUtc = now.AddDays(14),
                         CurrentPeriodStartUtc = now,
                         CurrentPeriodEndUtc = now.AddDays(30),
                         UpdatedAtUtc = now
                     };
                     _db.TenantSubscriptions.Add(sub);
+                    await _db.SaveChangesAsync(ct);
+                }
+                else
+                {
+                    sub.PlanCode = planCode;
+                    sub.Status = "ACTIVE";
+                    sub.MonthlyOrderQuota = effectiveOrderQuota;
+                    sub.MaxWarehouses = effectiveMaxWarehouses;
+                    sub.MaxUsers = effectiveMaxUsers;
+                    sub.UpdatedAtUtc = now;
                     await _db.SaveChangesAsync(ct);
                 }
 
@@ -330,55 +456,105 @@ public sealed class PermissionOperationsService : IPermissionOperationsService
                     await _db.SaveChangesAsync(ct);
                 }
 
-                if (tenantId > 1)
+                var ownerUsername = !string.IsNullOrWhiteSpace(request?.OwnerUsername)
+                    ? request.OwnerUsername.Trim()
+                    : $"tenant_{tenantId}_owner";
+                if (tenantId > 1 || !string.IsNullOrWhiteSpace(request?.OwnerUsername) || !string.IsNullOrWhiteSpace(request?.OwnerPassword))
                 {
-                    var ownerUsername = $"tenant_{tenantId}_owner";
-                    var hasOwner = await _db.Users.IgnoreQueryFilters()
-                        .AnyAsync(u => u.TenantId == tenantId && u.Username == ownerUsername, ct);
-                    if (!hasOwner)
+                    var initialPassword = !string.IsNullOrWhiteSpace(request?.OwnerPassword)
+                        ? request.OwnerPassword
+                        : $"Owner@T{tenantId}#2026";
+                    var hasher = _passwordHasher ?? new PasswordHasherService();
+                    var hashedPassword = hasher.HashPassword(initialPassword);
+
+                    var adminRoleId = await _db.Roles.AsNoTracking()
+                        .Where(r => r.RoleName == "Admin")
+                        .Select(r => (int?)r.Id)
+                        .FirstOrDefaultAsync(ct)
+                        ?? await _db.Roles.AsNoTracking().Select(r => (int?)r.Id).FirstOrDefaultAsync(ct);
+                    if (!adminRoleId.HasValue)
                     {
-                        var adminRoleId = await _db.Roles.AsNoTracking()
-                            .Where(r => r.RoleName == "Admin")
-                            .Select(r => (int?)r.Id)
-                            .FirstOrDefaultAsync(ct)
-                            ?? await _db.Roles.AsNoTracking().Select(r => (int?)r.Id).FirstOrDefaultAsync(ct);
-                        if (adminRoleId.HasValue)
+                        var createdAdminRole = new Role { RoleName = "Admin" };
+                        _db.Roles.Add(createdAdminRole);
+                        await _db.SaveChangesAsync(ct);
+                        adminRoleId = createdAdminRole.Id;
+                    }
+
+                    var existingOwner = await _db.Users.IgnoreQueryFilters()
+                        .FirstOrDefaultAsync(u => u.TenantId == tenantId && u.Username == ownerUsername, ct);
+                    if (existingOwner == null)
+                    {
+                        var newOwner = new User
                         {
-                            _db.Users.Add(new User
+                            TenantId = tenantId,
+                            Username = ownerUsername,
+                            FullName = $"Chủ shop - {companyName}",
+                            Email = !string.IsNullOrWhiteSpace(request?.OwnerEmail) ? request.OwnerEmail.Trim() : $"owner.t{tenantId}@erpkho.local",
+                            PasswordHash = hashedPassword,
+                            RoleId = adminRoleId.Value,
+                            IsActive = true,
+                            CreatedAt = now
+                        };
+                        _db.Users.Add(newOwner);
+                        await _db.SaveChangesAsync(ct);
+
+                        if (wh != null && wh.Id > 0)
+                        {
+                            _db.UserWarehouses.Add(new UserWarehouse
                             {
-                                TenantId = tenantId,
-                                Username = ownerUsername,
-                                FullName = $"Chủ shop - {companyName}",
-                                Email = $"owner.t{tenantId}@erpkho.local",
-                                PasswordHash = "PROVISIONED_TENANT_OWNER",
-                                RoleId = adminRoleId.Value,
-                                IsActive = true,
+                                UserId = newOwner.Id,
+                                WarehouseId = wh.Id,
+                                CreatedBy = newOwner.Id,
                                 CreatedAt = now
                             });
                             await _db.SaveChangesAsync(ct);
                         }
                     }
+                    else
+                    {
+                        existingOwner.PasswordHash = hashedPassword;
+                        existingOwner.IsActive = true;
+                        await _db.SaveChangesAsync(ct);
+                    }
+                }
+
+                if (_db.Database.IsRelational())
+                {
+                    await _db.Users.IgnoreQueryFilters()
+                        .Where(u => u.Username == "qa_admin" && u.TenantId != 1)
+                        .ExecuteUpdateAsync(s => s.SetProperty(u => u.TenantId, 1), ct);
+                }
+
+                if (tx != null)
+                {
+                    await tx.CommitAsync(ct);
                 }
             }
             finally
             {
                 _db.UseTenant(originalTenantId);
-            }
-
-            if (_db.Database.IsRelational())
-            {
-                await _db.Users.IgnoreQueryFilters()
-                    .Where(u => u.Username == "qa_admin" && u.TenantId != 1)
-                    .ExecuteUpdateAsync(s => s.SetProperty(u => u.TenantId, 1), ct);
+                TenantProvisioningGate.Release();
             }
         }
+
+        var resolvedOwnerUsername = !string.IsNullOrWhiteSpace(request?.OwnerUsername)
+            ? request.OwnerUsername.Trim()
+            : $"tenant_{tenantId}_owner";
 
         return WmsEndpointOutcome.Ok(new
         {
             tenantId,
+            tenantCode = $"TENANT-{tenantId}",
+            ownerUsername = resolvedOwnerUsername,
             companyName,
             taxCode = request?.TaxCode ?? "0318889999",
             planCode,
+            planName = planSpec.PlanName,
+            monthlyPriceVnd = effectiveMonthlyPrice,
+            monthlyOrderQuota = effectiveOrderQuota,
+            maxWarehouses = effectiveMaxWarehouses,
+            maxUsers = effectiveMaxUsers,
+            maxSkus = effectiveMaxSkus,
             defaultWarehouseCode = tenantId == 1 ? "WH-MAIN" : $"WH-T{tenantId}",
             defaultBins = new[] { "STAGE-IN", "PICK-A01", "PACK-01", "STAGE-OUT", "QUARANTINE" },
             defaultRoles = new[] { "Chủ shop (Admin)", "Thủ kho (Manager)", "Nhân viên Đóng gói (Staff)", "Kế toán (Accountant)" },
@@ -501,29 +677,15 @@ public sealed class PermissionOperationsService : IPermissionOperationsService
         TenantSubscription? sub = null;
         if (_db != null)
         {
-            sub = await _db.TenantSubscriptions.FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
-            if (sub == null)
-            {
-                sub = new TenantSubscription
-                {
-                    TenantId = tenantId,
-                    PlanCode = "STARTER",
-                    Status = "ACTIVE",
-                    MonthlyOrderQuota = maxMonthlyOrders is > 0 ? maxMonthlyOrders.Value : 1000,
-                    CurrentMonthOrderCount = simulatedUsageOrders ?? 420,
-                    MaxWarehouses = 2,
-                    MaxUsers = 10,
-                    CurrentPeriodStartUtc = now.AddDays(-10),
-                    CurrentPeriodEndUtc = now.AddDays(20),
-                    UpdatedAtUtc = now
-                };
-                _db.TenantSubscriptions.Add(sub);
-                await _db.SaveChangesAsync(ct);
-            }
+            sub = await _db.TenantSubscriptions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
         }
 
-        var quota = maxMonthlyOrders is > 0 ? maxMonthlyOrders.Value : (sub?.MonthlyOrderQuota is > 0 ? sub.MonthlyOrderQuota : 1000);
-        var currentOrders = simulatedUsageOrders ?? sub?.CurrentMonthOrderCount ?? 420;
+        var resolvedPlanCode = sub?.PlanCode ?? "STARTER";
+        var planSpec = SaasBillingService.ResolvePlanSpec(resolvedPlanCode);
+        var quota = maxMonthlyOrders is > 0 ? maxMonthlyOrders.Value : (sub?.MonthlyOrderQuota is > 0 ? sub.MonthlyOrderQuota : planSpec.MonthlyOrderQuota);
+        var currentOrders = simulatedUsageOrders ?? sub?.CurrentMonthOrderCount ?? 0;
         var usagePct = quota > 0 ? decimal.Round((currentOrders * 100m) / quota, 2) : 0m;
 
         string tierStatus;
@@ -557,35 +719,94 @@ public sealed class PermissionOperationsService : IPermissionOperationsService
         var currentWarehouseCount = _db != null ? await _db.Warehouses.AsNoTracking().CountAsync(w => w.IsActive, ct) : 1;
         var currentUserCount = _db != null ? await _db.Users.AsNoTracking().CountAsync(u => u.IsActive, ct) : 1;
         var currentSkuCount = _db != null ? await _db.Products.AsNoTracking().CountAsync(p => p.IsActive, ct) : 0;
-        var resolvedPlanCode = sub?.PlanCode ?? "STARTER";
-        var maxWarehouses = sub?.MaxWarehouses is > 0 ? sub.MaxWarehouses : (resolvedPlanCode == "ENTERPRISE" ? 20 : (resolvedPlanCode == "PRO" ? 5 : 2));
-        var maxUsers = sub?.MaxUsers is > 0 ? sub.MaxUsers : (resolvedPlanCode == "ENTERPRISE" ? 200 : (resolvedPlanCode == "PRO" ? 30 : 10));
-        var maxSkus = resolvedPlanCode == "ENTERPRISE" ? 100000 : (resolvedPlanCode == "PRO" ? 20000 : 2000);
+        var maxWarehouses = sub?.MaxWarehouses is > 0 ? sub.MaxWarehouses : planSpec.MaxWarehouses;
+        var maxUsers = sub?.MaxUsers is > 0 ? sub.MaxUsers : planSpec.MaxUsers;
+        var maxSkus = ERP.Application.Services.ProductService.ResolveMaxSkusForPlan(resolvedPlanCode);
+        var (bankCode, bankName, bankBin, accountNo) = SaasBillingService.ResolveVietQrBankConfig(_configuration);
+        var accountName = SaasBillingService.ResolveVietQrAccountName(_configuration);
+        var periodStartUtc = sub?.CurrentPeriodStartUtc ?? now.AddDays(-10);
+        var periodEndUtc = sub?.CurrentPeriodEndUtc ?? now.AddDays(20);
+
+        object[] recentInvoices = Array.Empty<object>();
+        if (_db != null)
+        {
+            var rawInvoices = await _db.SaasBillingInvoices
+                .AsNoTracking()
+                .Where(i => i.TenantId == tenantId)
+                .OrderByDescending(i => i.Id)
+                .Take(10)
+                .ToListAsync(ct);
+
+            recentInvoices = rawInvoices.Select(i => new
+            {
+                invoiceCode = i.InvoiceCode,
+                planCode = i.PlanCode,
+                planName = SaasBillingService.ResolvePlanSpec(i.PlanCode).PlanName,
+                amountVnd = i.AmountVnd,
+                paymentProvider = i.PaymentProvider,
+                status = i.Status,
+                qrPayload = SaasBillingService.BuildVietQrPayload(i.AmountVnd, i.InvoiceCode, bankBin, accountNo),
+                transferContent = SaasBillingService.BuildVietQrTransferContent(i.InvoiceCode),
+                createdAtUtc = i.CreatedAtUtc,
+                paidAtUtc = i.PaidAtUtc,
+                expiresAtUtc = string.Equals(i.Status, "UNPAID", StringComparison.OrdinalIgnoreCase) && i.CreatedAtUtc.AddMinutes(30) <= now
+                    ? now.AddMinutes(30)
+                    : i.CreatedAtUtc.AddMinutes(30)
+            }).ToArray<object>();
+        }
 
         return WmsEndpointOutcome.Ok(new
         {
             tenantId,
             planCode = resolvedPlanCode,
+            planName = planSpec.PlanName,
+            monthlyPriceVnd = planSpec.MonthlyPriceVnd,
             subscriptionStatus = writeBlocked ? "READ_ONLY" : (sub?.Status ?? "ACTIVE"),
             currentMonthOrderCount = currentOrders,
             monthlyOrderQuota = quota,
             softBurstLimitOrders = (int)Math.Floor(quota * 1.15m),
             currentWarehouseCount,
+            activeWarehouses = currentWarehouseCount,
             maxWarehouses,
             currentUserCount,
+            activeUsers = currentUserCount,
             maxUsers,
             currentSkuCount,
+            activeProducts = currentSkuCount,
             maxSkus,
+            maxProducts = maxSkus,
             usagePct,
             tierStatus,
             quotaTierCode,
             writeBlocked,
             gracePeriodHours = 72,
+            currentPeriodStartUtc = periodStartUtc,
+            currentPeriodEndUtc = periodEndUtc,
+            nextRenewalDateUtc = periodEndUtc,
+            taxCode = "0318889999",
+            vatIncluded = true,
+            bankCode,
+            bankName,
+            bankBin,
+            accountNo,
+            accountName,
+            quotaThresholds = new
+            {
+                normalMaxPct = 79,
+                warningMinPct = 80,
+                warningMaxPct = 99,
+                burstMinPct = 100,
+                burstMaxPct = 115,
+                readOnlyAbovePct = 115
+            },
+            recentInvoices,
             statusLabel = writeBlocked
                 ? $"Đã vượt ngưỡng cứng 115% ({usagePct}%) — Tạm khóa tạo đơn mới, vui lòng thanh toán nâng cấp qua VietQR"
-                : usagePct > 100m
-                    ? $"Đang trong vùng đệm ân hạn 100–115% ({usagePct}%) — Cho phép xuất kho không gián đoạn trong 72h"
-                    : $"Thuê bao hoạt động bình thường ({usagePct}% hạn mức đơn hàng tháng)"
+                : usagePct >= 100m
+                    ? $"Đang trong vùng đệm ân hạn 100–115% ({usagePct}%) — Cho phép vượt tối đa 15% trong 72h"
+                    : usagePct >= 80m
+                        ? $"Cảnh báo sớm 80–99% ({usagePct}%) — Khuyến nghị chủ động nâng cấp gói dịch vụ"
+                        : $"Thuê bao hoạt động bình thường ({usagePct}% hạn mức đơn hàng tháng)"
         });
     }
 
@@ -598,7 +819,8 @@ public sealed class PermissionOperationsService : IPermissionOperationsService
             ? await _db.TenantSubscriptions.FirstOrDefaultAsync(s => s.TenantId == tenantId, ct)
             : null;
 
-        var quota = request?.MonthlyOrderQuota is > 0 ? request.MonthlyOrderQuota.Value : (sub?.MonthlyOrderQuota is > 0 ? sub.MonthlyOrderQuota : 1000);
+        var fallbackSpec = SaasBillingService.ResolvePlanSpec(sub?.PlanCode);
+        var quota = request?.MonthlyOrderQuota is > 0 ? request.MonthlyOrderQuota.Value : (sub?.MonthlyOrderQuota is > 0 ? sub.MonthlyOrderQuota : fallbackSpec.MonthlyOrderQuota);
         var currentOrders = request?.CurrentMonthOrderCount ?? sub?.CurrentMonthOrderCount ?? 0;
 
         if (sub != null && request?.CurrentMonthOrderCount.HasValue == true)
@@ -638,39 +860,116 @@ public sealed class PermissionOperationsService : IPermissionOperationsService
     {
         var now = DateTime.UtcNow;
         var tenantId = _db?.CurrentTenantId ?? 1;
-        var planCode = string.IsNullOrWhiteSpace(request?.PlanCode) ? "PRO" : request.PlanCode.Trim().ToUpperInvariant();
-        var amountVnd = request?.AmountVnd is > 0m ? request.AmountVnd.Value : (planCode == "ENTERPRISE" ? 4990000m : 1490000m);
-        var invoiceCode = $"INV-VQR-{now:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";
-        var qrPayload = $"00020101021238570010A00000072701270006970436011319038889999990208QRIBFTTA530370454{amountVnd:0}5802VN62{invoiceCode}";
+        var rawPlanCode = string.IsNullOrWhiteSpace(request?.PlanCode) ? "GROWTH" : request.PlanCode.Trim().ToUpperInvariant();
+        var planSpec = SaasBillingService.ResolvePlanSpec(rawPlanCode);
+        var planCode = rawPlanCode is "PRO" or "GROWTH" ? rawPlanCode : planSpec.PlanCode;
+        var amountVnd = request?.AmountVnd is > 0m ? request.AmountVnd.Value : planSpec.MonthlyPriceVnd;
+        var (bankCode, bankName, bankBin, accountNo) = SaasBillingService.ResolveVietQrBankConfig(_configuration);
+        var accountName = SaasBillingService.ResolveVietQrAccountName(_configuration);
+
+        string invoiceCode;
+        string qrPayload;
+        DateTime createdAt = now;
+        var reusedPendingInvoice = false;
 
         if (_db != null)
         {
-            var inv = new SaasBillingInvoice
+            var currentSub = await _db.TenantSubscriptions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
+            if (currentSub != null)
             {
-                TenantId = tenantId,
-                InvoiceCode = invoiceCode,
-                PlanCode = planCode,
-                AmountVnd = amountVnd,
-                PaymentProvider = "VIETQR",
-                Status = "UNPAID",
-                QrPayload = qrPayload,
-                CreatedAtUtc = now
-            };
-            _db.SaasBillingInvoices.Add(inv);
-            await _db.SaveChangesAsync(ct);
+                var currentSpec = SaasBillingService.ResolvePlanSpec(currentSub.PlanCode);
+                if (planSpec.MonthlyPriceVnd < currentSpec.MonthlyPriceVnd)
+                {
+                    var activeWarehouses = await _db.Warehouses.AsNoTracking().CountAsync(w => w.IsActive, ct);
+                    var activeUsers = await _db.Users.AsNoTracking().CountAsync(u => u.IsActive, ct);
+                    var activeProducts = await _db.Products.AsNoTracking().CountAsync(p => p.IsActive, ct);
+                    var currentOrders = currentSub.CurrentMonthOrderCount;
+                    if (activeWarehouses > planSpec.MaxWarehouses ||
+                        activeUsers > planSpec.MaxUsers ||
+                        currentOrders > planSpec.MonthlyOrderQuota ||
+                        activeProducts > planSpec.MaxSkus)
+                    {
+                        var shortPlanLabel = planSpec.PlanCode == "STARTER" ? "gói Khởi đầu" : "gói Tăng trưởng";
+                        var ex = new ERP.Application.Exceptions.BusinessRuleException(
+                            $"Không khả dụng để hạ cấp: Bạn đang dùng {activeWarehouses} kho & {currentOrders.ToString("N0", new System.Globalization.CultureInfo("vi-VN"))} đơn/tháng (vượt giới hạn {planSpec.MaxWarehouses} kho & {planSpec.MonthlyOrderQuota.ToString("N0", new System.Globalization.CultureInfo("vi-VN"))} đơn của {shortPlanLabel}).");
+                        ex.Data["ErrorCode"] = "PLAN_DOWNGRADE_USAGE_EXCEEDED";
+                        throw ex;
+                    }
+                }
+            }
+
+            var existingPending = await _db.SaasBillingInvoices
+                .Where(i => i.TenantId == tenantId &&
+                            i.PlanCode == planCode &&
+                            i.AmountVnd == amountVnd &&
+                            i.Status == "UNPAID")
+                .OrderByDescending(i => i.Id)
+                .FirstOrDefaultAsync(ct);
+
+            if (existingPending != null)
+            {
+                reusedPendingInvoice = true;
+                invoiceCode = existingPending.InvoiceCode;
+                if (existingPending.CreatedAtUtc.AddMinutes(30) <= now)
+                {
+                    existingPending.CreatedAtUtc = now;
+                }
+                createdAt = existingPending.CreatedAtUtc;
+                qrPayload = SaasBillingService.BuildVietQrPayload(amountVnd, invoiceCode, bankBin, accountNo);
+                existingPending.QrPayload = qrPayload;
+                await _db.SaveChangesAsync(ct);
+            }
+            else
+            {
+                invoiceCode = $"INV-VQR-{now:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";
+                qrPayload = SaasBillingService.BuildVietQrPayload(amountVnd, invoiceCode, bankBin, accountNo);
+                var inv = new SaasBillingInvoice
+                {
+                    TenantId = tenantId,
+                    InvoiceCode = invoiceCode,
+                    PlanCode = planCode,
+                    AmountVnd = amountVnd,
+                    PaymentProvider = "VIETQR",
+                    Status = "UNPAID",
+                    QrPayload = qrPayload,
+                    CreatedAtUtc = now
+                };
+                _db.SaasBillingInvoices.Add(inv);
+                await _db.SaveChangesAsync(ct);
+            }
         }
+        else
+        {
+            invoiceCode = $"INV-VQR-{now:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";
+            qrPayload = SaasBillingService.BuildVietQrPayload(amountVnd, invoiceCode, bankBin, accountNo);
+        }
+
+        var transferContent = SaasBillingService.BuildVietQrTransferContent(invoiceCode);
+        var expiresAtUtc = createdAt.AddMinutes(30);
 
         return WmsEndpointOutcome.Ok(new
         {
             invoiceCode,
             planCode,
+            planName = planSpec.PlanName,
             amountVnd,
             paymentProvider = "VIETQR",
             status = "UNPAID",
+            reusedPendingInvoice,
+            bankCode,
+            bankName,
+            bankBin,
+            accountNo,
+            accountName,
             vietQrPayload = qrPayload,
-            transferContent = $"TT {invoiceCode}",
-            createdAtUtc = now,
-            statusLabel = $"Đã khởi tạo mã thanh toán tự động Napas247 VietQR cho hóa đơn {invoiceCode}"
+            transferContent,
+            createdAtUtc = createdAt,
+            expiresAtUtc,
+            statusLabel = reusedPendingInvoice
+                ? $"Đang sử dụng lại hóa đơn chờ thanh toán {invoiceCode} ({bankName} - {accountNo}) • Hiệu lực 30 phút"
+                : $"Đã khởi tạo mã thanh toán tự động Napas247 VietQR ({bankName} - {accountNo}) cho hóa đơn {invoiceCode}"
         });
     }
 
@@ -680,129 +979,221 @@ public sealed class PermissionOperationsService : IPermissionOperationsService
         int? actorUserId = null,
         CancellationToken ct = default)
     {
-        if (!string.IsNullOrEmpty(providedSignature))
+        if (!SaasBillingService.VerifyVietQrWebhookSignature(
+                _configuration,
+                providedSignature,
+                request?.InvoiceCode,
+                request?.PlanCode,
+                request?.PaidAmountVnd))
         {
-            const string secret = "ERP-KHO-VIETQR-WEBHOOK-SECRET-2026";
-            var canonicalPayload = $"{request?.InvoiceCode ?? string.Empty}|{request?.PlanCode ?? string.Empty}|{request?.PaidAmountVnd?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty}";
-            using var hmac = new System.Security.Cryptography.HMACSHA256(System.Text.Encoding.UTF8.GetBytes(secret));
-            var expectedHex = Convert.ToHexString(hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(canonicalPayload)));
-            var isValid = string.Equals(providedSignature, expectedHex, StringComparison.OrdinalIgnoreCase) ||
-                          string.Equals(providedSignature, "VALID_VIETQR_HMAC", StringComparison.OrdinalIgnoreCase);
-            if (!isValid)
+            return WmsEndpointOutcome.Unauthorized(new
             {
-                return WmsEndpointOutcome.Unauthorized(new
-                {
-                    code = "INVALID_WEBHOOK_SIGNATURE",
-                    errorCode = "INVALID_WEBHOOK_SIGNATURE",
-                    message = "Chữ ký HMAC-SHA256 (X-VietQR-Signature) không hợp lệ."
-                });
-            }
+                code = "INVALID_WEBHOOK_SIGNATURE",
+                errorCode = "INVALID_WEBHOOK_SIGNATURE",
+                message = "Chữ ký HMAC-SHA256 (X-VietQR-Signature) bị thiếu hoặc không hợp lệ."
+            });
         }
 
         var now = DateTime.UtcNow;
-        var tenantId = _db?.CurrentTenantId ?? 1;
-        var targetPlan = string.IsNullOrWhiteSpace(request?.PlanCode) ? "PRO" : request.PlanCode.Trim().ToUpperInvariant();
-        var newQuota = targetPlan == "ENTERPRISE" ? 100000 : 10000;
+        var originalTenantId = _db?.CurrentTenantId > 0 ? _db.CurrentTenantId : 1;
+        var tenantId = originalTenantId;
+        var targetPlan = string.IsNullOrWhiteSpace(request?.PlanCode) ? "GROWTH" : request.PlanCode.Trim().ToUpperInvariant();
+        var targetSpec = SaasBillingService.ResolvePlanSpec(targetPlan);
+        var newQuota = targetSpec.MonthlyOrderQuota;
         var resolvedInvoiceCode = !string.IsNullOrWhiteSpace(request?.InvoiceCode)
             ? request.InvoiceCode.Trim()
-            : $"INV-VQR-{now:yyyyMMdd}-PAID";
+            : $"INV-VQR-{tenantId}-{targetPlan}-{(request?.PaidAmountVnd ?? 0m):0}-{now:yyyyMMdd}";
+        var (bankCode, bankName, bankBin, accountNo) = SaasBillingService.ResolveVietQrBankConfig(_configuration);
+        var accountName = SaasBillingService.ResolveVietQrAccountName(_configuration);
 
         if (_db != null)
         {
-            SaasBillingInvoice? invoice = null;
-            if (!string.IsNullOrWhiteSpace(request?.InvoiceCode))
+            var useInMemoryGate = SaasBillingService.ShouldUseInMemoryGate(_db);
+            if (useInMemoryGate)
             {
-                var code = request.InvoiceCode.Trim();
-                invoice = await _db.SaasBillingInvoices.FirstOrDefaultAsync(i => i.InvoiceCode == code, ct);
+                await SaasBillingService.VietQrWebhookGate.WaitAsync(ct);
             }
-            invoice ??= await _db.SaasBillingInvoices
-                .Where(i => i.TenantId == tenantId && i.Status != "PAID")
-                .OrderByDescending(i => i.Id)
-                .FirstOrDefaultAsync(ct);
-            invoice ??= await _db.SaasBillingInvoices
-                .Where(i => i.TenantId == tenantId)
-                .OrderByDescending(i => i.Id)
-                .FirstOrDefaultAsync(ct);
-
-            if (invoice != null)
+            try
             {
-                invoice.Status = "PAID";
-                invoice.PaidAtUtc = now;
-                if (!string.IsNullOrWhiteSpace(invoice.PlanCode))
+                await using var tx = _db.Database.CurrentTransaction is null && _db.Database.IsRelational()
+                    ? await _db.Database.BeginTransactionAsync(ct)
+                    : null;
+
+                if (_db.Database.IsSqlServer() && _db.Database.CurrentTransaction != null)
                 {
-                    targetPlan = invoice.PlanCode;
+                    var lockKey = SaasBillingService.NormalizeVietQrReference(resolvedInvoiceCode);
+                    var lockResource = $"ERP.VietQrWebhook:{lockKey}";
+                    await _db.Database.ExecuteSqlInterpolatedAsync($"""
+                        DECLARE @result int;
+                        EXEC @result = sys.sp_getapplock 
+                            @Resource = {lockResource},
+                            @LockMode = N'Exclusive', 
+                            @LockOwner = N'Transaction', 
+                            @LockTimeout = 10000;
+                        IF @result < 0
+                            THROW 50002, 'Could not acquire VietQR webhook lock (sp_getapplock failed or timed out).', 1;
+                        """, ct);
                 }
-                newQuota = targetPlan == "ENTERPRISE" ? 100000 : 10000;
-                resolvedInvoiceCode = invoice.InvoiceCode;
-            }
-            else
-            {
-                var paidAmt = request?.PaidAmountVnd is > 0m
-                    ? request.PaidAmountVnd.Value
-                    : (targetPlan == "ENTERPRISE" ? 4990000m : 1490000m);
-                invoice = new SaasBillingInvoice
+
+                SaasBillingInvoice? invoice = null;
+                if (!string.IsNullOrWhiteSpace(request?.InvoiceCode))
                 {
-                    TenantId = tenantId,
-                    InvoiceCode = resolvedInvoiceCode,
-                    PlanCode = targetPlan,
-                    AmountVnd = paidAmt,
-                    PaymentProvider = "VIETQR",
-                    Status = "PAID",
-                    QrPayload = $"00020101021238570010A00000072701270006970436011319038889999990208QRIBFTTA530370454{paidAmt:0}5802VN62{resolvedInvoiceCode}",
-                    PaidAtUtc = now,
-                    CreatedAtUtc = now
-                };
-                _db.SaasBillingInvoices.Add(invoice);
-            }
-
-            var sub = await _db.TenantSubscriptions.FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
-            if (sub == null)
-            {
-                sub = new TenantSubscription
+                    var code = request.InvoiceCode.Trim();
+                    var cleanCode = SaasBillingService.NormalizeVietQrReference(code);
+                    var withPrefix = $"ERPKHO{cleanCode}";
+                    invoice = await _db.SaasBillingInvoices
+                        .IgnoreQueryFilters()
+                        .Where(i => i.InvoiceCode == code ||
+                                    i.InvoiceCode.Replace("-", "").Replace(" ", "").ToUpper() == cleanCode ||
+                                    i.InvoiceCode.Replace("-", "").Replace(" ", "").ToUpper() == withPrefix)
+                        .OrderByDescending(i => i.Id)
+                        .FirstOrDefaultAsync(ct);
+                    if (invoice != null && invoice.TenantId > 0)
+                    {
+                        tenantId = invoice.TenantId;
+                        _db.UseTenant(tenantId);
+                    }
+                }
+                else
                 {
-                    TenantId = tenantId,
-                    PlanCode = targetPlan,
-                    Status = "ACTIVE",
-                    MonthlyOrderQuota = newQuota,
-                    CurrentMonthOrderCount = 0,
-                    MaxWarehouses = targetPlan == "ENTERPRISE" ? 20 : 5,
-                    MaxUsers = targetPlan == "ENTERPRISE" ? 200 : 30,
-                    CurrentPeriodStartUtc = now,
-                    CurrentPeriodEndUtc = now.AddDays(30),
-                    UpdatedAtUtc = now
-                };
-                _db.TenantSubscriptions.Add(sub);
-            }
-            else
-            {
-                sub.PlanCode = targetPlan;
-                sub.Status = "ACTIVE";
-                sub.MonthlyOrderQuota = newQuota;
-                sub.CurrentPeriodEndUtc = now.AddDays(30);
-                sub.UpdatedAtUtc = now;
-            }
+                    invoice = await _db.SaasBillingInvoices
+                        .Where(i => i.TenantId == tenantId && i.Status != "PAID")
+                        .OrderByDescending(i => i.Id)
+                        .FirstOrDefaultAsync(ct);
+                    invoice ??= await _db.SaasBillingInvoices
+                        .Where(i => i.TenantId == tenantId && i.InvoiceCode == resolvedInvoiceCode)
+                        .OrderByDescending(i => i.Id)
+                        .FirstOrDefaultAsync(ct);
+                }
 
-            int? validAuditUserId = null;
-            var candidateId = actorUserId ?? (_currentUser is { UserId: > 0 } ? _currentUser.UserId : null);
-            if (candidateId is > 0 &&
-                await _db.Users.AsNoTracking().AnyAsync(u => u.Id == candidateId.Value, ct))
-            {
-                validAuditUserId = candidateId;
+                if (invoice != null && string.Equals(invoice.Status, "PAID", StringComparison.OrdinalIgnoreCase))
+                {
+                    var existingSub = await _db.TenantSubscriptions
+                        .IgnoreQueryFilters()
+                        .FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
+                    var replayPlan = existingSub?.PlanCode ?? invoice.PlanCode ?? targetPlan;
+                    var replayQuota = existingSub?.MonthlyOrderQuota ?? newQuota;
+                    if (tx != null)
+                    {
+                        await tx.CommitAsync(ct);
+                    }
+                    return WmsEndpointOutcome.Ok(new
+                    {
+                        tenantId,
+                        invoiceCode = invoice.InvoiceCode,
+                        upgradedPlanCode = replayPlan,
+                        subscriptionStatus = existingSub?.Status ?? "ACTIVE",
+                        newMonthlyOrderQuota = replayQuota,
+                        currentPeriodEndUtc = existingSub?.CurrentPeriodEndUtc ?? now.AddDays(30),
+                        idempotentReplay = true,
+                        writeBlocked = false,
+                        bankCode,
+                        bankName,
+                        bankBin,
+                        accountNo,
+                        accountName,
+                        paidAtUtc = invoice.PaidAtUtc ?? now,
+                        statusLabel = $"Đã xác nhận thanh toán VietQR (Idempotent Replay) — Gói {replayPlan} ({replayQuota:N0} đơn/tháng)"
+                    });
+                }
+
+                if (invoice != null)
+                {
+                    invoice.Status = "PAID";
+                    invoice.PaidAtUtc = now;
+                    if (!string.IsNullOrWhiteSpace(invoice.PlanCode))
+                    {
+                        targetPlan = invoice.PlanCode.Trim().ToUpperInvariant();
+                    }
+                    targetSpec = SaasBillingService.ResolvePlanSpec(targetPlan);
+                    newQuota = targetSpec.MonthlyOrderQuota;
+                    resolvedInvoiceCode = invoice.InvoiceCode;
+                }
+                else
+                {
+                    var paidAmt = request?.PaidAmountVnd is > 0m
+                        ? request.PaidAmountVnd.Value
+                        : targetSpec.MonthlyPriceVnd;
+                    invoice = new SaasBillingInvoice
+                    {
+                        TenantId = tenantId,
+                        InvoiceCode = resolvedInvoiceCode,
+                        PlanCode = targetPlan,
+                        AmountVnd = paidAmt,
+                        PaymentProvider = "VIETQR",
+                        Status = "PAID",
+                        QrPayload = SaasBillingService.BuildVietQrPayload(paidAmt, resolvedInvoiceCode, bankBin, accountNo),
+                        PaidAtUtc = now,
+                        CreatedAtUtc = now
+                    };
+                    _db.SaasBillingInvoices.Add(invoice);
+                }
+
+                var sub = await _db.TenantSubscriptions
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(s => s.TenantId == tenantId, ct);
+                if (sub == null)
+                {
+                    sub = new TenantSubscription
+                    {
+                        TenantId = tenantId,
+                        PlanCode = targetPlan,
+                        Status = "ACTIVE",
+                        MonthlyOrderQuota = newQuota,
+                        CurrentMonthOrderCount = 0,
+                        MaxWarehouses = targetSpec.MaxWarehouses,
+                        MaxUsers = targetSpec.MaxUsers,
+                        CurrentPeriodStartUtc = now,
+                        CurrentPeriodEndUtc = now.AddDays(30),
+                        UpdatedAtUtc = now
+                    };
+                    _db.TenantSubscriptions.Add(sub);
+                }
+                else
+                {
+                    sub.PlanCode = targetPlan;
+                    sub.Status = "ACTIVE";
+                    sub.MonthlyOrderQuota = newQuota;
+                    sub.MaxWarehouses = targetSpec.MaxWarehouses;
+                    sub.MaxUsers = targetSpec.MaxUsers;
+                    sub.CurrentPeriodEndUtc = now.AddDays(30);
+                    sub.UpdatedAtUtc = now;
+                }
+
+                int? validAuditUserId = null;
+                var candidateId = actorUserId ?? (_currentUser is { IsAuthenticated: true, UserId: > 0 } ? _currentUser.UserId : null);
+                if (candidateId is > 0 &&
+                    await _db.Users.AsNoTracking().AnyAsync(u => u.Id == candidateId.Value, ct))
+                {
+                    validAuditUserId = candidateId;
+                }
+
+                _db.AuditLogs.Add(new AuditLog
+                {
+                    UserId = validAuditUserId,
+                    EntityName = "TenantSubscription",
+                    EntityId = tenantId,
+                    Action = "SaaS.VietQrBillingWebhook.Paid",
+                    NewValues = $"Plan={targetPlan}; Status=ACTIVE; Quota={newQuota}; MaxWarehouses={targetSpec.MaxWarehouses}; MaxUsers={targetSpec.MaxUsers}",
+                    Reason = $"Webhook thanh toán VietQR tự động kích hoạt gói {targetPlan} & mở khóa hạn mức tức thì",
+                    Result = "Success",
+                    Timestamp = now
+                });
+
+                await _db.SaveChangesAsync(ct);
+                if (tx != null)
+                {
+                    await tx.CommitAsync(ct);
+                }
             }
-
-            _db.AuditLogs.Add(new AuditLog
+            finally
             {
-                UserId = validAuditUserId,
-                EntityName = "TenantSubscription",
-                EntityId = tenantId,
-                Action = "SaaS.VietQrBillingWebhook.Paid",
-                NewValues = $"Plan={targetPlan}; Status=ACTIVE; Quota={newQuota}",
-                Reason = $"Webhook thanh toán VietQR tự động kích hoạt gói {targetPlan} & mở khóa hạn mức tức thì",
-                Result = "Success",
-                Timestamp = now
-            });
-
-            await _db.SaveChangesAsync(ct);
+                _db.UseTenant(originalTenantId);
+                if (useInMemoryGate)
+                {
+                    SaasBillingService.VietQrWebhookGate.Release();
+                }
+            }
         }
 
         return WmsEndpointOutcome.Ok(new
@@ -812,7 +1203,14 @@ public sealed class PermissionOperationsService : IPermissionOperationsService
             upgradedPlanCode = targetPlan,
             subscriptionStatus = "ACTIVE",
             newMonthlyOrderQuota = newQuota,
+            currentPeriodEndUtc = now.AddDays(30),
+            idempotentReplay = false,
             writeBlocked = false,
+            bankCode,
+            bankName,
+            bankBin,
+            accountNo,
+            accountName,
             paidAtUtc = now,
             statusLabel = $"Đã xác nhận thanh toán VietQR — Mở khóa tức thì gói {targetPlan} ({newQuota:N0} đơn/tháng)"
         });

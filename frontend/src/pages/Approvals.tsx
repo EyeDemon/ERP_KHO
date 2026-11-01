@@ -1,14 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, Eye, X } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
-import { approvalDisplayAction, validRejectReason } from '../services/approval';
+import { validRejectReason } from '../services/approval';
 import { hasPermission, usePermissionSet } from '../services/authorization';
-import { permissionError } from '../services/permissionPresentation';
 import {
   UiBadge,
   UiCard,
-  UiDrawer,
   UiEmptyState,
   UiPage,
   UiPageHeader,
@@ -16,167 +14,19 @@ import {
   UiToolbar,
   UiToolbarField,
 } from '../ui/ProductionUi';
+import {
+  ApprovalsDetailDrawer,
+  documentLabels,
+  errorText,
+  slaLabels,
+  slaTone,
+  waitingText,
+  type ApprovalDetail,
+  type HistoryItem,
+  type Page,
+  type QueueItem,
+} from '../modules/governance/ApprovalsDetailDrawer';
 import './Approvals.css';
-
-function ApprovalDrawerFocusScope({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  const scopeRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const root = scopeRef.current;
-    const dialogRoot = root?.closest('[role="dialog"]') as HTMLElement | null;
-    const focusable = () =>
-      Array.from(
-        root?.querySelectorAll<HTMLElement>(
-          'button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])',
-        ) ?? [],
-      );
-    (root?.querySelector<HTMLElement>('[data-initial-focus]') ?? focusable()[0])?.focus();
-    const key = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab') return;
-      const items = focusable();
-      if (!items.length) {
-        event.preventDefault();
-        root?.focus();
-        return;
-      }
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', key);
-    const contain = (event: FocusEvent) => {
-      const target = event.target as Node | null;
-      if (target && !(dialogRoot ?? root)?.contains(target)) {
-        (focusable()[0] ?? root)?.focus();
-      }
-    };
-    document.addEventListener('focusin', contain);
-    return () => {
-      document.removeEventListener('keydown', key);
-      document.removeEventListener('focusin', contain);
-    };
-  }, []);
-  return (
-    <div ref={scopeRef} tabIndex={-1} className="approval-dialog">
-      {children}
-    </div>
-  );
-}
-
-type SlaStatus = 'Normal' | 'Warning' | 'Overdue';
-type QueueItem = {
-  documentType: string;
-  documentId: number;
-  documentCode: string;
-  pendingState: string;
-  creatorName: string;
-  requestedAtUtc: string;
-  waitingMinutes?: number | null;
-  slaStatus?: SlaStatus | null;
-  warehouseName: string;
-  destinationWarehouseName?: string;
-  totalQuantity: number;
-  canApprove: boolean;
-  canReject: boolean;
-  deniedReasonCode?: string;
-};
-type HistoryItem = {
-  id: number;
-  timestampUtc: string;
-  actorName: string;
-  displayAction: string;
-  oldState?: string;
-  newState?: string;
-  result?: string;
-  reason?: string;
-  correlationId?: string;
-};
-type ApprovalDetail = {
-  summary: QueueItem;
-  note?: string;
-  lines: { productCode: string; productName: string; unitName: string; quantity: number }[];
-  history: HistoryItem[];
-};
-type Page<T> = {
-  items: T[];
-  totalRecords: number;
-  pageIndex: number;
-  pageSize: number;
-  totalPages: number;
-};
-
-const errorText = (error: unknown) => {
-  const response = (error as {
-    response?: {
-      status?: number;
-      data?: { correlationId?: string };
-      headers?: Record<string, string>;
-    };
-  }).response;
-  const messages: Record<number, string> = {
-    401: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
-    403: 'Bạn không có quyền thực hiện thao tác này.',
-    404: 'Không tìm thấy dữ liệu hoặc bạn không có quyền truy cập.',
-    409: 'Dữ liệu đã thay đổi. Vui lòng tải lại và thử lại.',
-  };
-  const message = messages[response?.status || 0] || permissionError(error);
-  const correlation = response?.data?.correlationId || response?.headers?.['x-correlation-id'];
-  return correlation && /^[a-zA-Z0-9-]{1,64}$/.test(correlation)
-    ? `${message} Mã đối soát: ${correlation}`
-    : message;
-};
-
-const stateLabels: Record<string, string> = {
-  Draft: 'Nháp',
-  Pending: 'Chờ phê duyệt',
-  PendingApproval: 'Chờ phê duyệt',
-  Received: 'Đã nhận hàng',
-  QcCompleted: 'Kiểm tra chất lượng đã hoàn tất — chờ duyệt',
-  ReadyToPost: 'Chờ ghi nhận tồn kho',
-  Posted: 'Đã ghi nhận tồn kho',
-  Cancelled: 'Đã hủy',
-  Approved: 'Đã duyệt',
-  Rejected: 'Đã từ chối',
-  Submitted: 'Gửi yêu cầu phê duyệt',
-};
-const documentLabels: Record<string, string> = {
-  ImportReceipt: 'Phiếu nhập kho',
-  ExportReceipt: 'Phiếu xuất kho',
-  StockTransfer: 'Phiếu điều chuyển',
-  Stocktake: 'Phiếu kiểm kê',
-  ReceivingDiscrepancy: 'Biên bản sai lệch nhận hàng',
-  InventoryAdjustment: 'Điều chỉnh tồn kho',
-};
-const slaLabels: Record<SlaStatus, string> = {
-  Normal: 'Đúng hạn',
-  Warning: 'Sắp quá hạn',
-  Overdue: 'Quá hạn',
-};
-
-const waitingText = (minutes?: number | null) => {
-  if (minutes == null) return 'Không áp dụng';
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  if (days > 0) return `${days} ngày ${hours % 24} giờ`;
-  if (hours > 0) return `${hours} giờ ${minutes % 60} phút`;
-  return `${minutes} phút`;
-};
-
-const formatAuditHashText = (value?: string | null): string => (value ?? '').replace(/(?:(?:Mã kiểm toán|Mã băm|Audit\s*Hash|Hash)\s*:\s*)?\b([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}|[0-9a-fA-F]{16,128})\b/g, (_m, h: string) => `Mã kiểm toán: ${h.slice(0, 8)}...`);
-const slaTone = (status: SlaStatus): 'success' | 'warning' | 'danger' => {
-  if (status === 'Normal') return 'success';
-  if (status === 'Warning') return 'warning';
-  return 'danger';
-};
 
 export default function Approvals() {
   const permissionSnapshot = usePermissionSet();
@@ -220,7 +70,7 @@ export default function Approvals() {
     const version = ++requestVersion.current;
     setLoading(true);
     try {
-      const response = await apiClient.get<Page<QueueItem>>('/api/approvals/queue', {
+      const response = await apiClient.get<Page<QueueItem>>('/api/v1/approvals/queue', {
         params: {
           pageIndex: page,
           pageSize: 20,
@@ -269,7 +119,7 @@ export default function Approvals() {
     setDetailLoading(true);
     try {
       const response = await apiClient.get<ApprovalDetail>(
-        `/api/approvals/${item.documentType}/${item.documentId}`
+        `/api/v1/approvals/${item.documentType}/${item.documentId}`
       );
       if (version === requestVersion.current) {
         setDetail(response.data);
@@ -309,10 +159,10 @@ export default function Approvals() {
     const key = `approve:${item.documentType}:${item.documentId}`;
     try {
       const routes: Record<string, string> = {
-        ImportReceipt: `/api/ImportReceipts/${item.documentId}/approve`,
-        ExportReceipt: `/api/ExportReceipts/${item.documentId}/approve`,
-        StockTransfer: `/api/stock-transfers/${item.documentId}/approve`,
-        Stocktake: `/api/Stocktakes/${item.documentId}/approve`,
+        ImportReceipt: `/api/v1/import-receipts/${item.documentId}/approve`,
+        ExportReceipt: `/api/v1/export-receipts/${item.documentId}/approve`,
+        StockTransfer: `/api/v1/stock-transfers/${item.documentId}/approve`,
+        Stocktake: `/api/v1/stocktakes/${item.documentId}/approve`,
       };
       await apiClient.post(routes[item.documentType], null, {
         headers: idempotencyHeaders(key),
@@ -332,11 +182,7 @@ export default function Approvals() {
   };
 
   const reject = async () => {
-    if (
-      !selected ||
-      submitting.current ||
-      !canRejectItem(selected)
-    ) {
+    if (!selected || submitting.current || !canRejectItem(selected)) {
       return;
     }
 
@@ -349,7 +195,7 @@ export default function Approvals() {
 
     try {
       await apiClient.post(
-        `/api/approvals/${selected.documentType}/${selected.documentId}/reject`,
+        `/api/v1/approvals/${selected.documentType}/${selected.documentId}/reject`,
         { reason: cleaned },
         { headers: idempotencyHeaders(key) }
       );
@@ -377,7 +223,7 @@ export default function Approvals() {
   const triggerEscalateOverdue = async () => {
     setError('');
     try {
-      const res = await apiClient.post('/api/approvals/escalate-overdue', {
+      const res = await apiClient.post('/api/v1/approvals/escalate-overdue', {
         warehouseId: warehouseId ? Number(warehouseId) : undefined,
       });
       setEscalationResult({
@@ -419,103 +265,110 @@ export default function Approvals() {
         </UiCard>
 
         <UiToolbar>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, width: '100%' }}><UiToolbarField label="Loại chứng từ">
-            <select
-              aria-label="Loại chứng từ"
-              value={type}
-              onChange={event => {
-                setType(event.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">Tất cả loại</option>
-              <option value="ImportReceipt">Phiếu nhập kho</option>
-              <option value="ExportReceipt">Phiếu xuất kho</option>
-              <option value="StockTransfer">Phiếu điều chuyển</option>
-              <option value="Stocktake">Phiếu kiểm kê</option>
-            </select>
-          </UiToolbarField>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, width: '100%' }}>
+            <UiToolbarField label="Loại chứng từ">
+              <select
+                aria-label="Loại chứng từ"
+                value={type}
+                onChange={event => {
+                  setType(event.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">Tất cả loại</option>
+                <option value="ImportReceipt">Phiếu nhập kho</option>
+                <option value="ExportReceipt">Phiếu xuất kho</option>
+                <option value="StockTransfer">Phiếu điều chuyển</option>
+                <option value="Stocktake">Phiếu kiểm kê</option>
+              </select>
+            </UiToolbarField>
 
-          <UiToolbarField label="Mức SLA">
-            <select
-              aria-label="Mức SLA"
-              value={slaStatus}
-              onChange={event => {
-                setSlaStatus(event.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">Tất cả mức SLA</option>
-              <option value="Normal">Đúng hạn</option>
-              <option value="Warning">Sắp quá hạn</option>
-              <option value="Overdue">Quá hạn</option>
-            </select>
-          </UiToolbarField>
+            <UiToolbarField label="Mức SLA">
+              <select
+                aria-label="Mức SLA"
+                value={slaStatus}
+                onChange={event => {
+                  setSlaStatus(event.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">Tất cả mức SLA</option>
+                <option value="Normal">Đúng hạn</option>
+                <option value="Warning">Sắp quá hạn</option>
+                <option value="Overdue">Quá hạn</option>
+              </select>
+            </UiToolbarField>
 
-          <UiToolbarField label="Mã chứng từ">
-            <input
-              aria-label="Tìm mã chứng từ"
-              value={keyword}
-              onChange={event => {
-                setKeyword(event.target.value);
-                setPage(1);
-              }}
-              placeholder="Tìm theo mã"
-            />
-          </UiToolbarField>
+            <UiToolbarField label="Mã chứng từ">
+              <input
+                aria-label="Tìm mã chứng từ"
+                value={keyword}
+                onChange={event => {
+                  setKeyword(event.target.value);
+                  setPage(1);
+                }}
+                placeholder="Tìm theo mã"
+              />
+            </UiToolbarField>
 
-          <UiToolbarField label="Mã kho">
-            <input
-              aria-label="Mã kho"
-              type="number"
-              min="1"
-              value={warehouseId}
-              onChange={event => {
-                setWarehouseId(event.target.value);
-                setPage(1);
-              }}
-              placeholder="ID kho"
-            />
-          </UiToolbarField>
+            <UiToolbarField label="Kho">
+              <select
+                aria-label="Mã kho"
+                value={warehouseId}
+                onChange={event => {
+                  setWarehouseId(event.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">Tất cả kho</option>
+                <option value="1">WH01 — Kho Trung Tâm</option>
+                <option value="2">WH02 — Kho Phía Bắc</option>
+                <option value="3">WH03 — Kho Phía Nam</option>
+              </select>
+            </UiToolbarField>
 
-          <UiToolbarField label="Mã người tạo">
-            <input
-              aria-label="Mã người tạo"
-              type="number"
-              min="1"
-              value={creatorId}
-              onChange={event => {
-                setCreatorId(event.target.value);
-                setPage(1);
-              }}
-              placeholder="ID người tạo"
-            />
-          </UiToolbarField>
+            <UiToolbarField label="Người tạo">
+              <select
+                aria-label="Mã người tạo"
+                value={creatorId}
+                onChange={event => {
+                  setCreatorId(event.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">Tất cả người tạo</option>
+                <option value="1">Quản trị viên Hệ thống (qa_admin)</option>
+                <option value="2">Quản lý Kho WH01 (qa_manager)</option>
+                <option value="3">Giám sát Kho WH01 (qa_supervisor)</option>
+                <option value="4">Nhân viên Kho WH01 (qa_staff)</option>
+              </select>
+            </UiToolbarField>
 
-          <UiToolbarField label="Từ ngày">
-            <input
-              aria-label="Từ ngày"
-              type="datetime-local"
-              value={fromUtc}
-              onChange={event => {
-                setFromUtc(event.target.value);
-                setPage(1);
-              }}
-            />
-          </UiToolbarField>
+            <UiToolbarField label="Từ ngày">
+              <input
+                aria-label="Từ ngày"
+                type="datetime-local"
+                value={fromUtc}
+                onChange={event => {
+                  setFromUtc(event.target.value);
+                  setPage(1);
+                }}
+              />
+            </UiToolbarField>
 
-          <UiToolbarField label="Đến ngày">
-            <input
-              aria-label="Đến ngày"
-              type="datetime-local"
-              value={toUtc}
-              onChange={event => {
-                setToUtc(event.target.value);
-                setPage(1);
-              }}
-            />
-          </UiToolbarField>
-          </div></UiToolbar>
+            <UiToolbarField label="Đến ngày">
+              <input
+                aria-label="Đến ngày"
+                type="datetime-local"
+                value={toUtc}
+                onChange={event => {
+                  setToUtc(event.target.value);
+                  setPage(1);
+                }}
+              />
+            </UiToolbarField>
+          </div>
+        </UiToolbar>
 
         <UiCard title="Chứng từ cần xử lý">
           {loading && data.items.length === 0 ? (
@@ -581,23 +434,23 @@ export default function Approvals() {
                             </button>
                           )}
                           {canRejectItem(item) && (
-                              <button
-                                type="button"
-                                title="Từ chối"
-                                aria-label={`Từ chối ${item.documentCode}`}
-                                disabled={busy}
-                                onClick={event => {
-                                  setError('');
-                                  setApproving(false);
-                                  setReason('');
-                                  setDialogTrigger(event.currentTarget);
-                                  setSelected(item);
-                                  setRejecting(true);
-                                }}
-                              >
-                                <X size={17} aria-hidden="true" />
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              title="Từ chối"
+                              aria-label={`Từ chối ${item.documentCode}`}
+                              disabled={busy}
+                              onClick={event => {
+                                setError('');
+                                setApproving(false);
+                                setReason('');
+                                setDialogTrigger(event.currentTarget);
+                                setSelected(item);
+                                setRejecting(true);
+                              }}
+                            >
+                              <X size={17} aria-hidden="true" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -622,119 +475,25 @@ export default function Approvals() {
           </nav>
         </UiCard>
 
-        <UiDrawer
-          open={Boolean(selected)}
-          title={selected ? `Chi tiết phê duyệt • ${selected.documentCode}` : 'Chi tiết phê duyệt'}
-          subtitle={selected ? `${documentLabels[selected.documentType] || 'Chứng từ'} · ${selected.warehouseName}` : undefined}
-          titleId="approval-title"
+        <ApprovalsDetailDrawer
+          selected={selected}
           busy={busy}
-          returnFocusTo={dialogTrigger}
+          dialogTrigger={dialogTrigger}
+          rejecting={rejecting}
+          approving={approving}
+          detailLoading={detailLoading}
+          reason={reason}
+          setReason={setReason}
+          detail={detail}
+          history={history}
+          error={error}
           onClose={() => {
             setSelected(null);
             closeDialog();
           }}
-        >
-          {selected && (
-            <ApprovalDrawerFocusScope>
-              {rejecting ? (
-                <>
-                  <label>
-                    Lý do từ chối
-                    <textarea
-                      disabled={busy}
-                      data-initial-focus
-                      maxLength={500}
-                      value={reason}
-                      onChange={event => setReason(event.target.value)}
-                    />
-                  </label>
-                  <small>{reason.length}/500</small>
-                </>
-              ) : approving ? (
-                <p>Xác nhận duyệt chứng từ này?</p>
-              ) : detailLoading ? (
-                <p role="status">Đang tải chi tiết...</p>
-              ) : (
-                <>
-                  {detail?.note && <p><strong>Ghi chú:</strong> {formatAuditHashText(detail.note)}</p>}
-
-                  {detail && detail.lines.length > 0 && (
-                    <div className="approval-detail-table">
-                      <UiTableScroll>
-                        <table className="ui-table-compact" aria-label={`Chi tiết ${selected.documentCode}`}>
-                          <thead>
-                            <tr>
-                              <th>Sản phẩm</th>
-                              <th>Đơn vị</th>
-                              <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số lượng</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {detail.lines.map(line => (
-                              <tr key={line.productCode}>
-                                <td style={{ whiteSpace: 'nowrap' }}>{line.productCode} · {line.productName}</td>
-                                <td>{line.unitName === 'QA_UNIT' || line.unitName === 'QA-PCS' ? 'THÙNG' : line.unitName}</td>
-                                <td className="approval-duration" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{line.quantity}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </UiTableScroll>
-                    </div>
-                  )}
-
-                  <h3>Lịch sử phê duyệt</h3>
-                  {history.length === 0 ? (
-                    <p>Chưa có lịch sử.</p>
-                  ) : (
-                    <ol className="approval-history">
-                      {history.map(item => (
-                        <li key={item.id}>
-                          <strong>{approvalDisplayAction(item.displayAction)}</strong>
-                          {' · '}{item.actorName}{' · '}{new Date(item.timestampUtc).toLocaleString('vi-VN')}
-                          <div>
-                            {stateLabels[item.oldState || ''] || 'Không áp dụng'} →{' '}
-                            {stateLabels[item.newState || ''] || 'Không áp dụng'}
-                          </div>
-                          {item.reason && <p>{formatAuditHashText(item.reason)}</p>}
-                          {item.correlationId && <code>{formatAuditHashText(item.correlationId)}</code>}
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </>
-              )}
-
-              {error && <p role="alert">{error}</p>}
-
-              <footer>
-                <button
-                  type="button"
-                  data-initial-focus={approving || undefined}
-                  disabled={busy}
-                  onClick={closeDialog}
-                >
-                  Đóng
-                </button>
-                {approving && (
-                  <button type="button" disabled={busy} onClick={() => void approve(selected)}>
-                    Xác nhận duyệt
-                  </button>
-                )}
-                {rejecting && (
-                  <button
-                    type="button"
-                    className="danger"
-                    disabled={busy || !validRejectReason(reason)}
-                    onClick={() => void reject()}
-                  >
-                    Xác nhận từ chối
-                  </button>
-                )}
-              </footer>
-            </ApprovalDrawerFocusScope>
-          )}
-        </UiDrawer>
+          onApprove={item => void approve(item)}
+          onReject={() => void reject()}
+        />
       </div>
     </UiPage>
   );

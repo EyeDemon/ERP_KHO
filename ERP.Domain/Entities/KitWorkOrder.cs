@@ -19,6 +19,8 @@ public class KitWorkOrder : ITenantEntity
     public string Status { get; set; } = "Draft";
     public decimal PlannedKitQty { get; set; }
     public decimal CompletedKitQty { get; set; }
+    public string BaseUomCode { get; set; } = "PCS";
+    public decimal ConversionRateSnapshot { get; set; } = 1m;
     public int? TargetLocationId { get; set; }
     public int? TargetLotId { get; set; }
     public int? TargetHandlingUnitId { get; set; }
@@ -42,6 +44,8 @@ public class KitWorkOrderComponentLine : ITenantEntity
     public decimal ComponentRatioQty { get; set; }
     public decimal RequiredBaseQty { get; set; }
     public decimal ConsumedBaseQty { get; set; }
+    public string BaseUomCode { get; set; } = "PCS";
+    public decimal ConversionRateSnapshot { get; set; } = 1m;
     public int? SourceLocationId { get; set; }
     public int? SourceLotId { get; set; }
     public decimal ComponentUnitCost { get; set; }

@@ -20,7 +20,10 @@ public sealed class StockTransferReverseDraftControllerTests
         { ReasonCode = "TRANSFER_ROUTE_ERROR", Reason = "Trả về sau khi nhận" };
         service.Setup(x => x.CreateReverseDraftAsync(42, request, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new StockTransferDto { Id = 43, ReverseOfTransferId = 42 });
-        var controller = new StockTransfersController(service.Object);
+        var controller = new StockTransfersController(
+            service.Object,
+            Mock.Of<IWmsGovernanceOperationsService>(),
+            Mock.Of<IWarehouseAuthorizationService>());
         var result = Assert.IsType<CreatedAtActionResult>(
             await controller.ReverseDraft(42, request, CancellationToken.None));
         Assert.Equal(nameof(StockTransfersController.GetById), result.ActionName);

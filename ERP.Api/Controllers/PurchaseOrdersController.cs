@@ -11,8 +11,9 @@ namespace ERP.Api.Controllers;
 [ApiController, Route("api/purchase-orders"), Route("api/v1/purchase-orders"), Authorize]
 public sealed class PurchaseOrdersController(
     IInboundPlanningService service,
-    IWmsGovernanceOperationsService govOps = null!,
-    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
+    IWmsGovernanceOperationsService govOps,
+    IWarehouseAuthorizationService warehouseAccess,
+    ICurrentUser currentUser) : ControllerBase
 {
     [HttpGet, PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
     public async Task<IActionResult> List([FromQuery] PurchaseOrderStatus? status, CancellationToken ct) => Ok(await service.ListPurchaseOrdersAsync(status, ct));
@@ -34,24 +35,21 @@ public sealed class PurchaseOrdersController(
 
     public sealed record ExpediteOverduePurchaseOrdersRequest(int? SupplierId = null, int? WarehouseId = null);
 
-    [HttpPost("expedite-overdue"), IdempotentCommand("PurchaseOrder.ExpediteOverdue"), PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
+    [HttpPost("expedite-overdue"), IdempotentCommand("PurchaseOrder.ExpediteOverdue"), PermissionAuthorize(AppPermissions.PurchaseOrderUpdate)]
     public async Task<IActionResult> ExpediteOverdue(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExpediteOverduePurchaseOrdersRequest? request = null,
         CancellationToken ct = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(currentUser, AppPermissions.PurchaseOrderUpdate))
             return Forbid();
 
         var supplierId = request?.SupplierId;
         var warehouseId = request?.WarehouseId;
         IReadOnlyCollection<int>? accessibleIds = null;
-        if (warehouseAccess != null)
-        {
-            if (warehouseId.HasValue)
-                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, ct);
-            else
-                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(ct);
-        }
+        if (warehouseId.HasValue)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, ct);
+        else
+            accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(ct);
 
         var now = DateTime.UtcNow;
         var items = (await service.ListPurchaseOrdersAsync(null, ct)) ?? [];
@@ -76,60 +74,38 @@ public sealed class PurchaseOrdersController(
             .Take(10)
             .ToArray();
 
-        if (govOps != null)
-        {
-            var actorUserId = int.TryParse(
-                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
-                out var uid) ? uid : (int?)null;
+        var actorUserId = int.TryParse(
+            User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+            out var uid) ? uid : (int?)null;
 
-            var outcome = await govOps.ExpediteOverduePurchaseOrdersAsync(
-                supplierId,
-                warehouseId,
-                accessibleIds,
-                openPoCount,
-                overdueCount,
-                expeditedPoCodes,
-                actorUserId,
-                ct);
-            return outcome.ToActionResult(this);
-        }
-
-        var expediteId = $"PO-EXP-{now:yyyyMMdd-HHmm}";
-        return Ok(new
-        {
-            expediteId,
+        var outcome = await govOps.ExpediteOverduePurchaseOrdersAsync(
             supplierId,
             warehouseId,
+            accessibleIds,
             openPoCount,
             overdueCount,
             expeditedPoCodes,
-            vendorNotificationStatus = "Đã gửi thông báo đôn đốc nhà cung cấp",
-            status = "Đã phát lệnh đôn đốc đơn mua quá hạn & ưu tiên tiếp nhận",
-            statusLabel = "Đã phát lệnh đôn đốc đơn mua quá hạn & ưu tiên tiếp nhận",
-            priorityReceivingSlotReserved = true,
-            triggeredAtUtc = now
-        });
+            actorUserId,
+            ct);
+        return outcome.ToActionResult(this);
     }
 
     public sealed record GenerateProcurementRecommendationsRequest(int? WarehouseId = null);
 
-    [HttpPost("generate-procurement-recommendations"), IdempotentCommand("PurchaseOrder.GenerateProcurementRecommendations"), PermissionAuthorize(AppPermissions.PurchaseOrderRead)]
+    [HttpPost("generate-procurement-recommendations"), IdempotentCommand("PurchaseOrder.GenerateProcurementRecommendations"), PermissionAuthorize(AppPermissions.PurchaseOrderUpdate)]
     public async Task<IActionResult> GenerateProcurementRecommendations(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GenerateProcurementRecommendationsRequest? request = null,
         CancellationToken ct = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(currentUser, AppPermissions.PurchaseOrderUpdate))
             return Forbid();
 
         var warehouseId = request?.WarehouseId;
         IReadOnlyCollection<int>? accessibleIds = null;
-        if (warehouseAccess != null)
-        {
-            if (warehouseId.HasValue)
-                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, ct);
-            else
-                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(ct);
-        }
+        if (warehouseId.HasValue)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, ct);
+        else
+            accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(ct);
 
         var poItems = (await service.ListPurchaseOrdersAsync(null, ct)) ?? [];
         var scopedPos = poItems
@@ -142,40 +118,18 @@ public sealed class PurchaseOrdersController(
         var openPoCount = openPos.Count;
         var totalIncomingQuantity = openPos.Sum(x => x.BaseOrderedQuantity);
 
-        if (govOps != null)
-        {
-            var actorUserId = int.TryParse(
-                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
-                out var uid) ? uid : (int?)null;
+        var actorUserId = int.TryParse(
+            User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+            out var uid) ? uid : (int?)null;
 
-            var outcome = await govOps.GenerateProcurementRecommendationsAsync(
-                warehouseId,
-                accessibleIds,
-                openPoCount,
-                totalIncomingQuantity,
-                actorUserId,
-                ct);
-            return outcome.ToActionResult(this);
-        }
-
-        var now = DateTime.UtcNow;
-        var recommendationId = $"PROC-REC-{now:yyyyMMdd-HHmm}";
-        return Ok(new
-        {
-            recommendationId,
+        var outcome = await govOps.GenerateProcurementRecommendationsAsync(
             warehouseId,
-            evaluatedSkuCount = openPoCount,
-            totalAvailableQuantity = 0m,
+            accessibleIds,
             openPoCount,
             totalIncomingQuantity,
-            recommendedOrderCount = openPoCount,
-            procurementSuggestionStatus = "Đã tính toán ngưỡng đặt hàng lại theo tồn kho khả dụng thực tế",
-            supplierLeadTimePercentile = "Đã hiệu chuẩn thời gian giao hàng nhà cung cấp (P90)",
-            expediteDeferSignal = "Đã cân bằng tín hiệu đôn đốc đơn thiếu hụt & giãn lịch đơn dư tồn",
-            status = "Đã hoàn tất phân tích & đề xuất mua hàng bổ sung",
-            statusLabel = "Đã hoàn tất phân tích & đề xuất mua hàng bổ sung",
-            generatedAtUtc = now
-        });
+            actorUserId,
+            ct);
+        return outcome.ToActionResult(this);
     }
 
     [HttpGet("{id:int}"), PermissionAuthorize(AppPermissions.PurchaseOrderRead)]

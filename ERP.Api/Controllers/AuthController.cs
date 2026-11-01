@@ -4,11 +4,21 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authorization;
 using ERP.Application.Common;
+using ERP.Api.Infrastructure;
 using System.Security.Claims;
 
 namespace ERP.Api.Controllers
 {
     public sealed record RefreshRequestDto(string? RefreshToken = null);
+
+    public sealed record RegisterTenantRequestDto(
+        string? CompanyName = null,
+        string? TaxCode = null,
+        string? OwnerEmail = null,
+        string? IndustryTemplate = null,
+        string? PlanCode = null,
+        string? OwnerUsername = null,
+        string? OwnerPassword = null);
 
     [ApiController]
     [Route("api/[controller]")]
@@ -19,14 +29,42 @@ namespace ERP.Api.Controllers
         private readonly IUserSessionService _sessionService;
         private readonly IWebHostEnvironment _environment;
         private readonly SessionSecurityOptions _sessionOptions;
+        private readonly IPermissionOperationsService _permissionOps;
         private const string RefreshCookieName = "erp_refresh";
 
-        public AuthController(IAuthService authService, IUserSessionService sessionService, IWebHostEnvironment environment, SessionSecurityOptions sessionOptions)
+        public AuthController(
+            IAuthService authService,
+            IUserSessionService sessionService,
+            IWebHostEnvironment environment,
+            SessionSecurityOptions sessionOptions,
+            IPermissionOperationsService permissionOps)
         {
             _authService = authService;
             _sessionService = sessionService;
             _environment = environment;
             _sessionOptions = sessionOptions;
+            _permissionOps = permissionOps;
+        }
+
+        [HttpPost("register-tenant")]
+        [AllowAnonymous]
+        [EnableRateLimiting("Login")]
+        [IdempotentCommand("Auth.RegisterTenant")]
+        public async Task<IActionResult> RegisterTenant(
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] RegisterTenantRequestDto? request = null,
+            CancellationToken cancellationToken = default)
+        {
+            var input = new ProvisionTenantInput(
+                CompanyName: request?.CompanyName,
+                TaxCode: request?.TaxCode,
+                OwnerEmail: request?.OwnerEmail,
+                IndustryTemplate: request?.IndustryTemplate,
+                PlanCode: request?.PlanCode,
+                AllocateNewTenant: true,
+                OwnerUsername: request?.OwnerUsername,
+                OwnerPassword: request?.OwnerPassword);
+
+            return this.ToActionResult(await _permissionOps.ProvisionSaaSTenantAsync(input, cancellationToken));
         }
 
         [HttpPost("login")]
@@ -133,7 +171,7 @@ namespace ERP.Api.Controllers
             HttpOnly = true,
             Secure = !_environment.IsDevelopment() && !_environment.IsEnvironment("Testing"),
             SameSite = Enum.TryParse<SameSiteMode>(_sessionOptions.SameSite, true, out var mode) ? mode : SameSiteMode.Strict,
-            Path = "/api/Auth",
+            Path = "/",
             Expires = new DateTimeOffset(DateTime.SpecifyKind(expiresUtc, DateTimeKind.Utc)),
             IsEssential = true
         };

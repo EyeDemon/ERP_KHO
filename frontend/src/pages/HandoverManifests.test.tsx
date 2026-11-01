@@ -62,7 +62,7 @@ describe('HandoverManifests Page', () => {
           },
         } as never;
       }
-      if (url === '/api/v1/handover-manifests/confirm-handover') {
+      if (url === '/api/v1/handover-manifests/confirm-carrier-handover') {
         return {
           data: {
             manifestCode: 'HND-GHN-20261024-003',
@@ -101,7 +101,7 @@ describe('HandoverManifests Page', () => {
 
     await waitFor(() => {
       expect(apiClient.post).toHaveBeenCalledWith(
-        '/api/v1/handover-manifests/confirm-handover',
+        '/api/v1/handover-manifests/confirm-carrier-handover',
         expect.objectContaining({
           carrierCode: 'GHN',
           vehiclePlate: '51D-777.88',

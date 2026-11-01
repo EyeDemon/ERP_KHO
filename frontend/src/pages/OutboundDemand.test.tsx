@@ -40,12 +40,12 @@ const grant=(...codes:string[])=>{
 };
 
 const reads=()=>vi.mocked(apiClient.get).mockImplementation(async url=>{
-  if(url==='/api/sales-orders')return {data:[summary]} as never;
-  if(url==='/api/backorders')return {data:[backorder]} as never;
-  if(url==='/api/sales-orders/88')return {data:detail} as never;
-  if(url==='/api/business-partners')return {data:{items:[{id:2,code:'CUS-02',name:'Minh An',isCustomer:true,isActive:true}]}} as never;
-  if(url==='/api/warehouses')return {data:[{id:1,code:'WH-01',name:'DC Hồ Chí Minh',isActive:true}]} as never;
-  if(url==='/api/products')return {data:[{id:1,code:'SKU-1001',name:'Cà phê',isActive:true}]} as never;
+  if(url==='/api/v1/sales-orders')return {data:[summary]} as never;
+  if(url==='/api/v1/backorders')return {data:[backorder]} as never;
+  if(url==='/api/v1/sales-orders/88')return {data:detail} as never;
+  if(url==='/api/v1/business-partners')return {data:{items:[{id:2,code:'CUS-02',name:'Minh An',isCustomer:true,isActive:true}]}} as never;
+  if(url==='/api/v1/warehouses')return {data:[{id:1,code:'WH-01',name:'DC Hồ Chí Minh',isActive:true}]} as never;
+  if(url==='/api/v1/products')return {data:[{id:1,code:'SKU-1001',name:'Cà phê',isActive:true}]} as never;
   return {data:[]} as never;
 });
 
@@ -62,9 +62,25 @@ describe('Outbound demand and backorder workbench',()=>{
     const view=render(<OutboundDemand/>);
     expect(await view.findByText('SO-0088')).toBeTruthy();
     expect(await view.findByText(/BO-0009\s+—\s+SKU-1001/)).toBeTruthy();
+    expect(view.getByRole('tablist',{name:'Chọn phân khu quản lý đơn bán hàng'})).toBeTruthy();
+    expect(view.getByRole('tab',{name:'Tất cả phân khu'})).toBeTruthy();
+    expect(view.getByRole('tab',{name:'1. Danh sách đơn bán (1)'})).toBeTruthy();
+    expect(view.getAllByText(/Trang 1\/1/).length).toBeGreaterThan(0);
+    const codeBtn=view.getByRole('button',{name:'SO-0088'}) as HTMLButtonElement;
+    expect(codeBtn.getAttribute('title')).toBe('Mã đơn đầy đủ: SO-0088 (Bấm Sao chép để lấy mã gốc)');
+    expect((view.getByRole('columnheader',{name:'Đặt hàng'}) as HTMLElement).style.whiteSpace).toBe('nowrap');
     expect(view.queryByText('Release demand')).toBeNull();
     expect(view.queryByText('Reallocate')).toBeNull();
     expect(view.queryByText('Tạo Đơn bán hàng')).toBeNull();
+    cleanup();
+    vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(url==='/api/v1/sales-orders')return {data:[{...summary,orderCode:'SO-20261029-999-4C0'}]} as never;
+      if(url==='/api/v1/backorders')return {data:[]} as never;
+      return {data:[]} as never;
+    });
+    const emptyView=render(<OutboundDemand/>);
+    expect(await emptyView.findByText('Không có đơn nợ hàng nào đang mở')).toBeTruthy();
+    expect(emptyView.getByRole('button',{name:'SO-20261029...4C0'})).toBeTruthy();
   });
 
   it('releases sales order once with idempotency',async()=>{
@@ -77,7 +93,7 @@ describe('Outbound demand and backorder workbench',()=>{
     fireEvent.click(button);
     fireEvent.click(button);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
-    expect(apiClient.post).toHaveBeenCalledWith('/api/sales-orders/88/release',{
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/sales-orders/88/release',{
       rowVersion:'AQ=='
     },{headers:{'Idempotency-Key':'key:sales-order-release-88'}});
     expect(completeIdempotentAction).toHaveBeenCalledWith('sales-order-release-88');
@@ -108,6 +124,9 @@ describe('Outbound demand and backorder workbench',()=>{
     const create=await second.findByText('Tạo Đơn bán hàng');
     fireEvent.click(create);
     expect(await second.findByLabelText('External Order ID')).toBeTruthy();
+    expect(second.getByText('Mã đơn kênh bán')).toBeTruthy();
+    expect(second.getByText('Mã dòng kênh bán')).toBeTruthy();
+    expect(second.getByRole('button',{name:'Lưu đơn bán hàng'})).toBeTruthy();
     expect(second.getByLabelText('Khách hàng Sales Order')).toBeTruthy();
     expect(second.getByLabelText('SKU Sales Order 1')).toBeTruthy();
   });
@@ -117,7 +136,7 @@ describe('Outbound demand and backorder workbench',()=>{
       if(url==='/api/v1/sales-orders/import-marketplace-excel'){
         return {data:{importBatchId:'IMP-MKT-99',importedOrders:8,channel:'Shopee',status:'Đã đồng bộ 8 đơn Shopee'}} as never;
       }
-      if(url==='/api/shipments/normalize-vn-address'){
+      if(url==='/api/v1/shipments/normalize-vn-address'){
         return {data:{provinceName:'TP. Hồ Chí Minh',districtName:'Quận 1',wardName:'Phường Bến Nghé',wardCode:'26734',normalizedFullAddress:'Số 12 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh'}} as never;
       }
       return {data:{}} as never;
@@ -125,6 +144,9 @@ describe('Outbound demand and backorder workbench',()=>{
     const view=render(<OutboundDemand/>);
     await view.findByText('SO-0088');
 
+    expect(view.getByText('Tỷ lệ đáp ứng (đơn đã xuất giao)')).toBeTruthy();
+    expect(view.getByText('Chọn tệp Excel (.xlsx)')).toBeTruthy();
+    expect(view.getByRole('button',{name:'Phân tích định tuyến & đề xuất tách đơn liên kho'})).toBeTruthy();
     const fileInput=view.getByLabelText('Tệp Excel đơn hàng sàn') as HTMLInputElement;
     const excelFile=new File(['xlsx-bytes'],'orders.xlsx',{
       type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -146,7 +168,7 @@ describe('Outbound demand and backorder workbench',()=>{
 
     fireEvent.click(view.getByRole('button',{name:'Chuẩn hóa Địa chỉ 3 Cấp VN'}));
     expect(await view.findByText(/Phường Bến Nghé \(Mã: 26734\)/)).toBeTruthy();
-    expect(apiClient.post).toHaveBeenCalledWith('/api/shipments/normalize-vn-address',expect.objectContaining({rawAddress:expect.any(String)}));
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/shipments/normalize-vn-address',expect.objectContaining({rawAddress:expect.any(String)}));
   });
 
   it('Wave 60 [W60-03]: initializes Smart DOM order splitting with SO-QA-001 / QA-E2E-001 / WH01 and toggles MULTI_WAREHOUSE_SPLIT across WH01 & WH02',async()=>{

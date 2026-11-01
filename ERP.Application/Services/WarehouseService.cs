@@ -80,6 +80,13 @@ namespace ERP.Application.Services
         public async Task<WarehouseDto> CreateWarehouseAsync(CreateWarehouseDto dto, string username)
         {
             dto.Code = dto.Code.Trim();
+            var (currentActiveWarehouses, maxAllowedWarehouses) = await _warehouseRepository.GetWarehouseQuotaStatusAsync();
+            if (maxAllowedWarehouses.HasValue && currentActiveWarehouses >= maxAllowedWarehouses.Value)
+            {
+                throw new ForbiddenException(
+                    $"Thuê bao đã đạt giới hạn tối đa số lượng kho ({currentActiveWarehouses}/{maxAllowedWarehouses.Value} kho). Vui lòng nâng cấp gói cước để tạo thêm kho mới.",
+                    "SUBSCRIPTION_QUOTA_EXCEEDED");
+            }
             var exists = await _warehouseRepository.ExistsByCodeAsync(dto.Code);
             if (exists) throw new BusinessRuleException($"Mã kho {dto.Code} đã tồn tại");
 

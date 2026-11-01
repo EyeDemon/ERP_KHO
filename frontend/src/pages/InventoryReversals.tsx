@@ -88,7 +88,7 @@ export default function InventoryReversals(){
     setChainIntegrityBusy(true);
     setError('');
     try{
-      const response=await apiClient.post<ReversalChainIntegrityResult>('/api/inventory/reversals/verify-chain-integrity',{warehouseId});
+      const response=await apiClient.post<ReversalChainIntegrityResult>('/api/v1/inventory/reversals/verify-chain-integrity',{warehouseId});
       if(response?.data?.verificationId){
         setChainIntegrityResult(response.data);
       }else{
@@ -105,7 +105,7 @@ export default function InventoryReversals(){
 
   useEffect(()=>{
     let active=true;
-    void apiClient.get<ReversalReasonOption[]>('/api/inventory/reversal-reasons')
+    void apiClient.get<ReversalReasonOption[]>('/api/v1/inventory/reversal-reasons')
       .then(response=>{if(active)setReversalReasons(response.data)})
       .catch(()=>{if(active)setReasonsError('Không thể tải danh mục mã lý do đảo. Không thể xác nhận giao dịch khi chưa có mã hợp lệ.')});
     return ()=>{active=false};
@@ -113,7 +113,7 @@ export default function InventoryReversals(){
 
   useEffect(()=>{
     let active=true;
-    void apiClient.get<WarehouseOption[]>('/api/inventory/reversal-warehouses')
+    void apiClient.get<WarehouseOption[]>('/api/v1/inventory/reversal-warehouses')
       .then(response=>{if(active)setWarehouses(response.data)})
       .catch(()=>{if(active)setWarehouseError('Không thể tải danh sách kho được phân quyền.')});
     return ()=>{active=false};
@@ -127,7 +127,7 @@ export default function InventoryReversals(){
       const transactionFilter=transactionId===null?'':'&transactionId='+transactionId;
       const reversalFilter=reversalState==='all'?'':'&isReversed='+(reversalState==='reversed');
       const productFilter=productCode?'&productCode='+encodeURIComponent(productCode):'';
-      const response=await apiClient.get<Page>('/api/inventory/reversal-candidates?page='+targetPage+'&pageSize=20'+warehouseFilter+transactionFilter+reversalFilter+productFilter);
+      const response=await apiClient.get<Page>('/api/v1/inventory/reversal-candidates?page='+targetPage+'&pageSize=20'+warehouseFilter+transactionFilter+reversalFilter+productFilter);
       if(sequence!==requestSequence.current)return;
       setRows(response.data.items);
       setTotalRecords(response.data.totalRecords);
@@ -149,7 +149,7 @@ export default function InventoryReversals(){
     const key='inventory-reversal-'+selected.id+':'+reasonCode+':'+reason.trim();
     guard.current=true;setBusy(true);setError('');setSuccess('');
     try{
-      await apiClient.post('/api/inventory/reversals',{
+      await apiClient.post('/api/v1/inventory/reversals',{
         originalTransactionId:selected.id,
         reasonCode,
         reason:reason.trim(),
@@ -243,7 +243,7 @@ export default function InventoryReversals(){
               onChange={e=>setProductCodeInput(e.target.value)} placeholder="Nhập mã sản phẩm..." />
           </UiToolbarField>
           <UiToolbarField label="ID giao dịch">
-            <input aria-label="Tìm theo ID giao dịch" disabled={busy||loading} type="number" min="1" step="1"
+            <input aria-label="Tìm theo ID giao dịch" disabled={busy||loading} type="search" inputMode="numeric"
               value={transactionIdInput} onChange={e=>setTransactionIdInput(e.target.value)}
               placeholder="Ví dụ: 12345" />
           </UiToolbarField>

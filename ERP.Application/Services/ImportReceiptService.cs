@@ -134,6 +134,8 @@ namespace ERP.Application.Services
                 Status = ReceiptStatus.Draft,
                 Note = dto.Note,
                 SupplierId = dto.SupplierId,
+                PurchaseOrderId = dto.PurchaseOrderId,
+                AsnId = dto.AsnId,
                 CreatedBy = userId,
                 CreatedAt = DateTime.UtcNow,
                 Details = new List<ImportReceiptDetail>()

@@ -101,8 +101,8 @@ const WarehouseCalendar = () => {
     if (!targetWarehouseId) { setCalendar(null); setExceptions([]); return; }
     let exError = '';
     const [response, exceptionsResponse] = await Promise.all([
-      apiClient.get('/api/warehouses/' + targetWarehouseId + '/calendar'),
-      apiClient.get('/api/warehouses/' + targetWarehouseId + '/calendar/exceptions').catch((err: unknown) => {
+      apiClient.get('/api/v1/warehouses/' + targetWarehouseId + '/calendar'),
+      apiClient.get('/api/v1/warehouses/' + targetWarehouseId + '/calendar/exceptions').catch((err: unknown) => {
         const httpErr = err as { response?: { status?: number } };
         if (httpErr?.response?.status && httpErr.response.status >= 400) {
           exError = messageOf(err, 'Không thể tải danh sách ngoại lệ lịch kho.');
@@ -119,7 +119,7 @@ const WarehouseCalendar = () => {
     let cancelled = false;
     setLoading(true);
     setError('');
-    void apiClient.get('/api/warehouses').then(response => {
+    void apiClient.get('/api/v1/warehouses').then(response => {
       if (cancelled) return;
       const rows = response.data as Warehouse[];
       setWarehouses(rows);
@@ -144,7 +144,7 @@ const WarehouseCalendar = () => {
     if (!calendar || saving) return;
     setSaving(true); setError(''); setSuccess('');
     try {
-      await apiClient.put('/api/warehouses/' + warehouseId + '/calendar', { timeZoneId: timeZoneId.trim(), rowVersion: calendar.rowVersion, days });
+      await apiClient.put('/api/v1/warehouses/' + warehouseId + '/calendar', { timeZoneId: timeZoneId.trim(), rowVersion: calendar.rowVersion, days });
       setSuccess('Đã cập nhật lịch vận hành kho.');
       await loadCalendar(warehouseId);
     } catch (failure) {
@@ -178,10 +178,10 @@ const WarehouseCalendar = () => {
     setSaving(true); setError(''); setSuccess('');
     try {
       if (shiftForm.id) {
-        await apiClient.put('/api/warehouses/' + warehouseId + '/calendar/shifts/' + shiftForm.id, payload);
+        await apiClient.put('/api/v1/warehouses/' + warehouseId + '/calendar/shifts/' + shiftForm.id, payload);
         setSuccess('Đã cập nhật ca làm việc.');
       } else {
-        await apiClient.post('/api/warehouses/' + warehouseId + '/calendar/shifts', payload);
+        await apiClient.post('/api/v1/warehouses/' + warehouseId + '/calendar/shifts', payload);
         setSuccess('Đã tạo ca làm việc.');
       }
       setShiftForm(null);
@@ -196,7 +196,7 @@ const WarehouseCalendar = () => {
     if (!warehouseId || saving || !exceptionForm.windowDateOrRange.trim() || !exceptionForm.reason.trim()) return;
     setSaving(true); setError(''); setSuccess('');
     try {
-      await apiClient.post('/api/warehouses/' + warehouseId + '/calendar/exceptions', {
+      await apiClient.post('/api/v1/warehouses/' + warehouseId + '/calendar/exceptions', {
         exceptionType: exceptionForm.exceptionType,
         windowDateOrRange: exceptionForm.windowDateOrRange.trim(),
         reason: exceptionForm.reason.trim(),
@@ -224,7 +224,7 @@ const WarehouseCalendar = () => {
     setGovernanceBusy(true);
     setError('');
     try {
-      const res = await apiClient.post('/api/warehouses/' + warehouseId + '/calendar/verify-shift-coverage', {});
+      const res = await apiClient.post('/api/v1/warehouses/' + warehouseId + '/calendar/verify-shift-coverage', {});
       if (res?.data?.verificationId && res?.data?.shiftCoverageStatus) {
         setShiftVerification({
           verificationId: String(res.data.verificationId),
@@ -247,7 +247,7 @@ const WarehouseCalendar = () => {
     setGovernanceBusy(true);
     setError('');
     try {
-      const res = await apiClient.post('/api/warehouses/' + warehouseId + '/calendar/optimize-labor-interleaving', {});
+      const res = await apiClient.post('/api/v1/warehouses/' + warehouseId + '/calendar/optimize-labor-interleaving', {});
       if (res?.data?.optimizationId && res?.data?.interleavingMode) {
         setLaborOptimization({
           optimizationId: String(res.data.optimizationId),

@@ -1,3 +1,5 @@
+@import './design-tokens.css';
+
 :root {
   --ui-background: #F8FAFC;
   --ui-foreground: #0F172A;
@@ -138,6 +140,15 @@
   word-break: normal;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.production-ui th.ui-cell-numeric,
+.production-ui td.ui-cell-numeric,
+.production-ui th.inbound-planning-numeric,
+.production-ui td.inbound-planning-numeric {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .production-ui .ui-cell-partner {
@@ -661,6 +672,8 @@
   background: var(--ui-surface-muted);
   color: var(--ui-secondary);
   white-space: nowrap;
+  overflow: visible;
+  flex-shrink: 0;
 }
 
 .production-ui .ui-badge.success {
@@ -669,8 +682,9 @@
 }
 
 .production-ui .ui-badge.warning {
-  background: var(--ui-warning-soft);
-  color: var(--ui-warning);
+  background: #FEF3C7;
+  color: #78350F;
+  border: 1px solid #F59E0B;
 }
 
 .production-ui .ui-badge.info { background: #E0F2FE; color: #0369A1; border: 1px solid #7DD3FC; }

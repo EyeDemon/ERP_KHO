@@ -1284,6 +1284,12 @@ public sealed class SqlServerShipmentLoadingTests
             .Where(x => x.WarehouseId == fixture.WarehouseId && x.ProductId == fixture.ProductId)
             .ExecuteDeleteAsync();
         await db.Database.ExecuteSqlRawAsync("ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
+        await db.CustomerReturnLines
+            .Where(x => x.CustomerReturn!.WarehouseId == fixture.WarehouseId)
+            .ExecuteDeleteAsync();
+        await db.CustomerReturns
+            .Where(x => x.WarehouseId == fixture.WarehouseId)
+            .ExecuteDeleteAsync();
         await db.ShipmentProofOfDeliveries
             .Where(x => x.Shipment.WarehouseId == fixture.WarehouseId)
             .ExecuteDeleteAsync();

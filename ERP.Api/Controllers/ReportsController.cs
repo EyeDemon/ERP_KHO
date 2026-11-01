@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace ERP.Api.Controllers;
 
@@ -18,16 +17,20 @@ namespace ERP.Api.Controllers;
 public class ReportsController : ControllerBase
 {
     private readonly IReportService _reportService;
-    private readonly IWarehouseAuthorizationService? _warehouseAuth;
-    private readonly IReportOperationsService? _reportOps;
-    private readonly ICurrentUser? _currentUser;
+    private readonly IWarehouseAuthorizationService _warehouseAuth;
+    private readonly IReportOperationsService _reportOps;
+    private readonly ICurrentUser _currentUser;
 
     public ReportsController(
         IReportService reportService,
-        IReportOperationsService? reportOps = null,
-        IWarehouseAuthorizationService? warehouseAuth = null,
-        ICurrentUser? currentUser = null)
+        IReportOperationsService reportOps,
+        IWarehouseAuthorizationService warehouseAuth,
+        ICurrentUser currentUser)
     {
+        ArgumentNullException.ThrowIfNull(reportService);
+        ArgumentNullException.ThrowIfNull(reportOps);
+        ArgumentNullException.ThrowIfNull(warehouseAuth);
+        ArgumentNullException.ThrowIfNull(currentUser);
         _reportService = reportService;
         _reportOps = reportOps;
         _warehouseAuth = warehouseAuth;
@@ -59,10 +62,9 @@ public class ReportsController : ControllerBase
         GetOperationalDashboard(_reportOps, warehouseAuth, cancellationToken);
 
     [NonAction]
-    public Task<IActionResult> GetOperationalDashboard(IReportOperationsService? reportOps, IWarehouseAuthorizationService? warehouseAuth = null, CancellationToken cancellationToken = default) =>
+    public Task<IActionResult> GetOperationalDashboard(IReportOperationsService reportOps, IWarehouseAuthorizationService? warehouseAuth = null, CancellationToken cancellationToken = default) =>
         ReportsExcelHelper.ExecuteReportOpAsync(this, reportOps ?? _reportOps,
-            ops => ops.GetOperationalDashboardAsync(warehouseAuth ?? _warehouseAuth, cancellationToken),
-            () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("OperationalDashboard", warehouseAuth ?? _warehouseAuth, cancellationToken: cancellationToken));
+            ops => ops.GetOperationalDashboardAsync(warehouseAuth ?? _warehouseAuth, cancellationToken));
 
     [HttpGet("multi-warehouse-control-tower")]
     [Authorize]
@@ -74,10 +76,9 @@ public class ReportsController : ControllerBase
         GetMultiWarehouseControlTower(_reportOps, warehouseAuth, cancellationToken);
 
     [NonAction]
-    public Task<IActionResult> GetMultiWarehouseControlTower(IReportOperationsService? reportOps, IWarehouseAuthorizationService? warehouseAuth = null, CancellationToken cancellationToken = default) =>
+    public Task<IActionResult> GetMultiWarehouseControlTower(IReportOperationsService reportOps, IWarehouseAuthorizationService? warehouseAuth = null, CancellationToken cancellationToken = default) =>
         ReportsExcelHelper.ExecuteReportOpAsync(this, reportOps ?? _reportOps,
-            ops => ops.GetMultiWarehouseControlTowerAsync(warehouseAuth ?? _warehouseAuth, cancellationToken),
-            () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("MultiWarehouseControlTower", warehouseAuth ?? _warehouseAuth, cancellationToken: cancellationToken));
+            ops => ops.GetMultiWarehouseControlTowerAsync(warehouseAuth ?? _warehouseAuth, cancellationToken));
 
     [HttpGet("productivity-and-bi-snapshot")]
     [Authorize]
@@ -89,36 +90,35 @@ public class ReportsController : ControllerBase
         GetProductivityAndBiSnapshot(_reportOps, warehouseAuth, warehouseId, cancellationToken);
 
     [NonAction]
-    public Task<IActionResult> GetProductivityAndBiSnapshot(IReportOperationsService? reportOps, IWarehouseAuthorizationService? warehouseAuth = null, int? warehouseId = null, CancellationToken cancellationToken = default) =>
+    public Task<IActionResult> GetProductivityAndBiSnapshot(IReportOperationsService reportOps, IWarehouseAuthorizationService? warehouseAuth = null, int? warehouseId = null, CancellationToken cancellationToken = default) =>
         ReportsExcelHelper.ExecuteReportOpAsync(this, reportOps ?? _reportOps,
-            ops => ops.GetProductivityAndBiSnapshotAsync(warehouseAuth ?? _warehouseAuth, warehouseId, cancellationToken),
-            () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("ProductivityAndBiSnapshot", warehouseAuth ?? _warehouseAuth, warehouseId, cancellationToken: cancellationToken));
+            ops => ops.GetProductivityAndBiSnapshotAsync(warehouseAuth ?? _warehouseAuth, warehouseId, cancellationToken));
 
     [HttpPost("sync-bi-snapshot")]
-    [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
+    [PermissionAuthorize(AppPermissions.InventoryMovementCreate, AppPermissions.InventoryWrite)]
     public async Task<IActionResult> SyncBiSnapshot([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] SyncBiSnapshotRequest? request = null, [FromServices] IWarehouseAuthorizationService? warehouseAuth = null, CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (!this.HasActionPermission(_currentUser, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryWrite)) return Forbid();
         var auth = warehouseAuth ?? _warehouseAuth;
-        return await ReportsExcelHelper.ExecuteReportOpAsync(this, _reportOps, ops => ops.SyncBiSnapshotAsync(request?.WarehouseId, auth, GetActorUserId(), cancellationToken), () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("SyncBiSnapshot", auth, request?.WarehouseId, cancellationToken: cancellationToken));
+        return await ReportsExcelHelper.ExecuteReportOpAsync(this, _reportOps, ops => ops.SyncBiSnapshotAsync(request?.WarehouseId, auth, GetActorUserId(), cancellationToken));
     }
 
     [HttpPost("export-gl-journal")]
-    [Authorize]
+    [PermissionAuthorize(AppPermissions.InventoryCostRead, AppPermissions.ExportReceiptUpdate, AppPermissions.InventoryMovementCreate)]
     public async Task<IActionResult> ExportGlJournal([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ExportGlJournalRequest? request = null, [FromServices] IWarehouseAuthorizationService? warehouseAuth = null, CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (!this.HasActionPermission(_currentUser, AppPermissions.InventoryCostRead, AppPermissions.ExportReceiptUpdate, AppPermissions.InventoryMovementCreate)) return Forbid();
         var auth = warehouseAuth ?? _warehouseAuth;
-        return await ReportsExcelHelper.ExecuteReportOpAsync(this, _reportOps, ops => ops.ExportGlJournalAsync(request?.WarehouseId, auth, GetActorUserId(), cancellationToken), () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("ExportGlJournal", auth, request?.WarehouseId, cancellationToken: cancellationToken));
+        return await ReportsExcelHelper.ExecuteReportOpAsync(this, _reportOps, ops => ops.ExportGlJournalAsync(request?.WarehouseId, auth, GetActorUserId(), cancellationToken));
     }
 
     [HttpPost("compliance-evidence-bundle")]
-    [Authorize]
+    [PermissionAuthorize(AppPermissions.InventoryMovementCreate, AppPermissions.InventoryWrite)]
     public async Task<IActionResult> ComplianceEvidenceBundle([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ComplianceEvidenceBundleRequest? request = null, [FromServices] IWarehouseAuthorizationService? warehouseAuth = null, CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (!this.HasActionPermission(_currentUser, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryWrite)) return Forbid();
         var auth = warehouseAuth ?? _warehouseAuth;
-        return await ReportsExcelHelper.ExecuteReportOpAsync(this, _reportOps, ops => ops.ComplianceEvidenceBundleAsync(request?.WarehouseId, auth, GetActorUserId(), cancellationToken), () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("ComplianceEvidenceBundle", auth, request?.WarehouseId, cancellationToken: cancellationToken));
+        return await ReportsExcelHelper.ExecuteReportOpAsync(this, _reportOps, ops => ops.ComplianceEvidenceBundleAsync(request?.WarehouseId, auth, GetActorUserId(), cancellationToken));
     }
 
     [HttpGet("cod-reconciliation")]
@@ -128,21 +128,23 @@ public class ReportsController : ControllerBase
     [HttpGet("~/api/finance/cod-reconciliation")]
     [PermissionAuthorize(AppPermissions.InventoryRead)]
     public Task<IActionResult> GetCodAndSettlementReconciliation([FromQuery] int? warehouseId = null, [FromQuery] string? carrierCode = null, CancellationToken cancellationToken = default) =>
-        ReportsExcelHelper.ExecuteReportOpAsync(this, _reportOps, ops => ops.GetCodAndSettlementReconciliationAsync(warehouseId, carrierCode, _warehouseAuth, cancellationToken), () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("GetCodAndSettlementReconciliation", _warehouseAuth, warehouseId, carrierCode, cancellationToken: cancellationToken));
+        ReportsExcelHelper.ExecuteReportOpAsync(this, _reportOps, ops => ops.GetCodAndSettlementReconciliationAsync(warehouseId, carrierCode, _warehouseAuth, cancellationToken));
 
     [HttpPost("cod-reconciliation/verify")]
     [HttpPost("cod-shipping-reconciliation")]
     [HttpPost("cod-and-settlement-reconciliation/verify")]
     [HttpPost("reconcile-cod-settlement")]
     [HttpPost("cod-reconciliation/import")]
+    [HttpPost("~/api/v1/finance/cod-reconciliation/verify")]
     [HttpPost("~/api/v1/finance/cod-reconciliation/import")]
-    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    [HttpPost("~/api/finance/cod-reconciliation/verify")]
+    [PermissionAuthorize(AppPermissions.ExportReceiptUpdate, AppPermissions.InventoryMovementCreate)]
     [IdempotentCommand("Report.VerifyCodAndSettlementReconciliation")]
     public async Task<IActionResult> VerifyCodAndSettlementReconciliation([ModelBinder(BinderType = typeof(FlexibleBodyOrFormModelBinder))] VerifyCodSettlementRequest? request = null, [ModelBinder(BinderType = typeof(FlexibleFormFileModelBinder))] IFormFile? file = null, CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (!this.HasActionPermission(_currentUser, AppPermissions.ExportReceiptUpdate, AppPermissions.InventoryMovementCreate)) return Forbid();
         IReadOnlyList<CodSettlementItemRequestBase>? items = file is { Length: > 0 } ? await ReportsExcelHelper.ParseCodSettlementFileAsync(file, request?.CarrierCode, cancellationToken) : request?.Items?.Cast<CodSettlementItemRequestBase>().ToList();
-        return await ReportsExcelHelper.ExecuteReportOpAsync(this, _reportOps, ops => ops.VerifyCodAndSettlementReconciliationAsync(request?.WarehouseId, request?.CarrierCode, request?.ReconcileMode, items, _warehouseAuth, cancellationToken), () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("VerifyCodAndSettlementReconciliation", _warehouseAuth, request?.WarehouseId, request?.CarrierCode, codItems: items, cancellationToken: cancellationToken));
+        return await ReportsExcelHelper.ExecuteReportOpAsync(this, _reportOps, ops => ops.VerifyCodAndSettlementReconciliationAsync(request?.WarehouseId, request?.CarrierCode, request?.ReconcileMode, items, _warehouseAuth, cancellationToken));
     }
 
     [HttpGet("owner-gross-profit")]
@@ -151,28 +153,25 @@ public class ReportsController : ControllerBase
     [PermissionAuthorize(AppPermissions.InventoryRead)]
     public Task<IActionResult> GetOwnerGrossProfit([FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default) =>
         ReportsExcelHelper.ExecuteReportOpAsync(this, _reportOps,
-            ops => ops.GetOwnerGrossProfitAsync(warehouseId, CanReadInventoryCost(), _warehouseAuth, cancellationToken),
-            () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("GetOwnerGrossProfit", _warehouseAuth, warehouseId, canReadCost: CanReadInventoryCost(), cancellationToken: cancellationToken));
+            ops => ops.GetOwnerGrossProfitAsync(warehouseId, CanReadInventoryCost(), _warehouseAuth, cancellationToken));
 
     [HttpGet("3pl-storage-snapshot")]
     [HttpPost("3pl-storage-snapshot")]
-    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    [PermissionAuthorize(AppPermissions.InventoryRead, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryWrite)]
     public async Task<IActionResult> GetOrCaptureThreePlStorageSnapshot([FromQuery] int? warehouseId = null, [FromQuery] int? ownerId = null, CancellationToken cancellationToken = default)
     {
         var isPost = HttpMethods.IsPost(Request?.Method ?? "GET");
-        if (isPost && User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (isPost && !this.HasActionPermission(_currentUser, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryWrite)) return Forbid();
         return await ReportsExcelHelper.ExecuteReportOpAsync(this, _reportOps,
-            ops => ops.GetOrCaptureThreePlStorageSnapshotAsync(warehouseId, ownerId, isPost, GetActorUserId(), _warehouseAuth, cancellationToken),
-            () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("GetOrCaptureThreePlStorageSnapshot", _warehouseAuth, warehouseId, isPost: isPost, actorUserId: GetActorUserId(), cancellationToken: cancellationToken));
+            ops => ops.GetOrCaptureThreePlStorageSnapshotAsync(warehouseId, ownerId, isPost, GetActorUserId(), _warehouseAuth, cancellationToken));
     }
 
     [HttpGet("onboarding-wizard/status")]
     [HttpPost("onboarding-wizard/quick-start")]
-    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    [PermissionAuthorize(AppPermissions.InventoryRead, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryWrite)]
     public Task<IActionResult> GetOnboardingWizardStatus(CancellationToken cancellationToken = default) =>
         ReportsExcelHelper.ExecuteReportOpAsync(this, _reportOps,
-            ops => ops.GetOnboardingWizardStatusAsync(cancellationToken),
-            () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("GetOnboardingWizardStatus", _warehouseAuth, cancellationToken: cancellationToken));
+            ops => ops.GetOnboardingWizardStatusAsync(cancellationToken));
 
     [HttpGet("warehouse-tasks")]
     [Authorize]
@@ -184,10 +183,9 @@ public class ReportsController : ControllerBase
         GetWarehouseTasks(_reportOps, warehouseAuth, warehouseId, cancellationToken);
 
     [NonAction]
-    public Task<IActionResult> GetWarehouseTasks(IReportOperationsService? reportOps, IWarehouseAuthorizationService? warehouseAuth = null, int? warehouseId = null, CancellationToken cancellationToken = default) =>
+    public Task<IActionResult> GetWarehouseTasks(IReportOperationsService reportOps, IWarehouseAuthorizationService? warehouseAuth = null, int? warehouseId = null, CancellationToken cancellationToken = default) =>
         ReportsExcelHelper.ExecuteReportOpAsync(this, reportOps ?? _reportOps,
-            ops => ops.GetWarehouseTasksAsync(warehouseAuth ?? _warehouseAuth, warehouseId, cancellationToken),
-            () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("WarehouseTasks", warehouseAuth ?? _warehouseAuth, warehouseId, cancellationToken: cancellationToken));
+            ops => ops.GetWarehouseTasksAsync(warehouseAuth ?? _warehouseAuth, warehouseId, cancellationToken));
 
     [HttpGet("operational-exceptions")]
     [Authorize]
@@ -199,13 +197,12 @@ public class ReportsController : ControllerBase
         GetOperationalExceptions(_reportOps, warehouseAuth, warehouseId, includeAcknowledged, cancellationToken);
 
     [NonAction]
-    public Task<IActionResult> GetOperationalExceptions(IReportOperationsService? reportOps, IWarehouseAuthorizationService? warehouseAuth = null, int? warehouseId = null, bool includeAcknowledged = false, CancellationToken cancellationToken = default) =>
+    public Task<IActionResult> GetOperationalExceptions(IReportOperationsService reportOps, IWarehouseAuthorizationService? warehouseAuth = null, int? warehouseId = null, bool includeAcknowledged = false, CancellationToken cancellationToken = default) =>
         ReportsExcelHelper.ExecuteReportOpAsync(this, reportOps ?? _reportOps,
-            ops => ops.GetOperationalExceptionsAsync(warehouseAuth ?? _warehouseAuth, warehouseId, includeAcknowledged, cancellationToken),
-            () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("OperationalExceptions", warehouseAuth ?? _warehouseAuth, warehouseId, cancellationToken: cancellationToken));
+            ops => ops.GetOperationalExceptionsAsync(warehouseAuth ?? _warehouseAuth, warehouseId, includeAcknowledged, cancellationToken));
 
     [HttpPost("operational-dashboard/exceptions/{code}/acknowledge")]
-    [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
+    [PermissionAuthorize(AppPermissions.InventoryMovementCreate, AppPermissions.InventoryWrite)]
     [IdempotentCommand("OperationalException.Acknowledge")]
     public Task<IActionResult> AcknowledgeOperationalDashboardExceptionByCode([FromRoute] string code, [FromBody] AcknowledgeOperationalExceptionDto? body = null, CancellationToken cancellationToken = default) =>
         AcknowledgeOperationalDashboardExceptionByCode(code, _reportOps, _warehouseAuth, body, cancellationToken);
@@ -215,14 +212,14 @@ public class ReportsController : ControllerBase
         AcknowledgeOperationalDashboardExceptionByCode(code, _reportOps, warehouseAuth, body, cancellationToken);
 
     [NonAction]
-    public Task<IActionResult> AcknowledgeOperationalDashboardExceptionByCode(string code, IReportOperationsService? reportOps, IWarehouseAuthorizationService? warehouseAuth = null, AcknowledgeOperationalExceptionDto? body = null, CancellationToken cancellationToken = default)
+    public Task<IActionResult> AcknowledgeOperationalDashboardExceptionByCode(string code, IReportOperationsService reportOps, IWarehouseAuthorizationService? warehouseAuth = null, AcknowledgeOperationalExceptionDto? body = null, CancellationToken cancellationToken = default)
     {
         var req = new AcknowledgeOperationalExceptionDto(!string.IsNullOrWhiteSpace(body?.ExceptionCode) ? body!.ExceptionCode : code, body?.WarehouseId, body?.ResolutionNote, body?.ExceptionType);
         return AcknowledgeOperationalException(req, reportOps, warehouseAuth, cancellationToken);
     }
 
     [HttpPost("operational-exceptions/acknowledge")]
-    [Authorize(Roles = AppRoles.AdminManagerOrStaff)]
+    [PermissionAuthorize(AppPermissions.InventoryMovementCreate, AppPermissions.InventoryWrite)]
     [IdempotentCommand("OperationalException.Acknowledge")]
     public Task<IActionResult> AcknowledgeOperationalException([FromBody] AcknowledgeOperationalExceptionDto request, CancellationToken cancellationToken = default) =>
         AcknowledgeOperationalException(request, _reportOps, _warehouseAuth, cancellationToken);
@@ -232,13 +229,12 @@ public class ReportsController : ControllerBase
         AcknowledgeOperationalException(request, _reportOps, warehouseAuth, cancellationToken);
 
     [NonAction]
-    public async Task<IActionResult> AcknowledgeOperationalException(AcknowledgeOperationalExceptionDto request, IReportOperationsService? reportOps, IWarehouseAuthorizationService? warehouseAuth = null, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> AcknowledgeOperationalException(AcknowledgeOperationalExceptionDto request, IReportOperationsService reportOps, IWarehouseAuthorizationService? warehouseAuth = null, CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (!this.HasActionPermission(_currentUser, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryWrite)) return Forbid();
         var auth = warehouseAuth ?? _warehouseAuth;
         return await ReportsExcelHelper.ExecuteReportOpAsync(this, reportOps ?? _reportOps,
-            ops => ops.AcknowledgeOperationalExceptionAsync(request, auth, GetActorUserId(), cancellationToken),
-            () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("AcknowledgeOperationalException", auth, actorUserId: GetActorUserId(), ackRequest: request, cancellationToken: cancellationToken));
+            ops => ops.AcknowledgeOperationalExceptionAsync(request, auth, GetActorUserId(), cancellationToken));
     }
 
     [HttpGet("global-search")]
@@ -251,10 +247,9 @@ public class ReportsController : ControllerBase
         GlobalSearch(_reportOps, warehouseAuth, q, cancellationToken);
 
     [NonAction]
-    public Task<IActionResult> GlobalSearch(IReportOperationsService? reportOps, IWarehouseAuthorizationService? warehouseAuth = null, string? q = null, CancellationToken cancellationToken = default) =>
+    public Task<IActionResult> GlobalSearch(IReportOperationsService reportOps, IWarehouseAuthorizationService? warehouseAuth = null, string? q = null, CancellationToken cancellationToken = default) =>
         ReportsExcelHelper.ExecuteReportOpAsync(this, reportOps ?? _reportOps,
-            ops => ops.GlobalSearchAsync(warehouseAuth ?? _warehouseAuth, q, cancellationToken),
-            () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("GlobalSearch", warehouseAuth ?? _warehouseAuth, cancellationToken: cancellationToken));
+            ops => ops.GlobalSearchAsync(warehouseAuth ?? _warehouseAuth, q, cancellationToken));
 
     [HttpGet("analytics-summary")]
     [Authorize]
@@ -266,10 +261,9 @@ public class ReportsController : ControllerBase
         GetAnalyticsSummary(_reportOps, warehouseAuth, warehouseId, days, cancellationToken);
 
     [NonAction]
-    public Task<IActionResult> GetAnalyticsSummary(IReportOperationsService? reportOps, IWarehouseAuthorizationService? warehouseAuth = null, int? warehouseId = null, int days = 30, CancellationToken cancellationToken = default) =>
+    public Task<IActionResult> GetAnalyticsSummary(IReportOperationsService reportOps, IWarehouseAuthorizationService? warehouseAuth = null, int? warehouseId = null, int days = 30, CancellationToken cancellationToken = default) =>
         ReportsExcelHelper.ExecuteReportOpAsync(this, reportOps ?? _reportOps,
-            ops => ops.GetAnalyticsSummaryAsync(warehouseAuth ?? _warehouseAuth, warehouseId, days, cancellationToken),
-            () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("AnalyticsSummary", warehouseAuth ?? _warehouseAuth, warehouseId, cancellationToken: cancellationToken));
+            ops => ops.GetAnalyticsSummaryAsync(warehouseAuth ?? _warehouseAuth, warehouseId, days, cancellationToken));
 
     [HttpGet("expiry-aging")]
     [Authorize]
@@ -281,10 +275,45 @@ public class ReportsController : ControllerBase
         GetExpiryAgingReport(_reportOps, warehouseAuth, warehouseId, productId, nearExpiryDays, onlyLots, cancellationToken);
 
     [NonAction]
-    public Task<IActionResult> GetExpiryAgingReport(IReportOperationsService? reportOps, IWarehouseAuthorizationService? warehouseAuth = null, int? warehouseId = null, int? productId = null, int nearExpiryDays = 30, bool onlyLots = false, CancellationToken cancellationToken = default) =>
+    public Task<IActionResult> GetExpiryAgingReport(IReportOperationsService reportOps, IWarehouseAuthorizationService? warehouseAuth = null, int? warehouseId = null, int? productId = null, int nearExpiryDays = 30, bool onlyLots = false, CancellationToken cancellationToken = default) =>
         ReportsExcelHelper.ExecuteReportOpAsync(this, reportOps ?? _reportOps,
-            ops => ops.GetExpiryAgingReportAsync(warehouseAuth ?? _warehouseAuth, warehouseId, productId, nearExpiryDays, onlyLots, cancellationToken),
-            () => ReportOperationsTextAndFallbackHelper.FallbackWhenNoOpsAsync("ExpiryAging", warehouseAuth ?? _warehouseAuth, warehouseId, cancellationToken: cancellationToken));
+            ops => ops.GetExpiryAgingReportAsync(warehouseAuth ?? _warehouseAuth, warehouseId, productId, nearExpiryDays, onlyLots, cancellationToken));
+
+    [HttpGet("stock-card")]
+    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    public Task<IActionResult> GetStockCard(
+        [FromQuery] int? warehouseId = null,
+        [FromQuery] int? productId = null,
+        [FromQuery] int? lotId = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        CancellationToken cancellationToken = default) =>
+        ReportsExcelHelper.ExecuteReportOpAsync(this, _reportOps,
+            ops => ops.GetStockCardS12DnAsync(warehouseId, productId, lotId, fromDate, toDate, _warehouseAuth, cancellationToken));
+
+    [HttpGet("stock-card/export")]
+    [HttpGet("stock-card/export-excel")]
+    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    public async Task<IActionResult> ExportStockCard(
+        [FromQuery] int? warehouseId = null,
+        [FromQuery] int? productId = null,
+        [FromQuery] int? lotId = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        CancellationToken cancellationToken = default)
+    {
+        var outcome = await _reportOps.GetStockCardS12DnAsync(warehouseId, productId, lotId, fromDate, toDate, _warehouseAuth, cancellationToken);
+        if (outcome.StatusCode != StatusCodes.Status200OK || outcome.Payload is not StockCardS12DnReportDto card)
+        {
+            return this.ToActionResult(outcome);
+        }
+
+        var bytes = ReportsExcelHelper.BuildStockCardS12DnExcel(card);
+        return File(
+            bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"TheKho_S12DN_WH{card.WarehouseId}_SP{card.ProductId}_{DateTime.Now:yyyyMMddHHmmss}.xlsx");
+    }
 
     [HttpGet("inventory")]
     public async Task<IActionResult> GetInventoryReport([FromQuery] DateTime? asOfDate, [FromQuery] int? warehouseId, [FromQuery] int? productId, CancellationToken cancellationToken = default) =>
@@ -298,7 +327,7 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("inventory-in-out-stock")]
-    [Authorize(Roles = AppRoles.AdminManagerOrViewer)]
+    [PermissionAuthorize(AppPermissions.InventoryRead)]
     public Task<IActionResult> GetInventoryInOutReport([FromQuery] DateTime? fromDate, [FromQuery] DateTime? toDate, [FromQuery] int? warehouseId, [FromQuery] int? productId, CancellationToken cancellationToken = default) =>
         GetInventoryInOutStock(fromDate, toDate, warehouseId, productId, _reportOps, _warehouseAuth, cancellationToken);
 
@@ -308,9 +337,8 @@ public class ReportsController : ControllerBase
         try
         {
             var ops = reportOps ?? _reportOps;
-            var report = ops is not null
-                ? await ops.ComputeInventoryInOutStockAsync(warehouseAuth ?? _warehouseAuth, fromDate, toDate, warehouseId, productId, cancellationToken)
-                : await _reportService.GetInventoryInOutReportAsync(fromDate, toDate, warehouseId, productId, cancellationToken);
+            var report = await ops.ComputeInventoryInOutStockAsync(warehouseAuth ?? _warehouseAuth, fromDate, toDate, warehouseId, productId, cancellationToken)
+                ?? await _reportService.GetInventoryInOutReportAsync(fromDate, toDate, warehouseId, productId, cancellationToken);
             return Ok(report);
         }
         catch (BusinessRuleException ex)
@@ -320,14 +348,13 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("inventory-in-out-stock/export")]
-    [Authorize(Roles = AppRoles.AdminManagerOrViewer)]
+    [PermissionAuthorize(AppPermissions.InventoryRead)]
     public async Task<IActionResult> ExportInventoryInOutReport([FromQuery] DateTime? fromDate, [FromQuery] DateTime? toDate, [FromQuery] int? warehouseId, [FromQuery] int? productId, CancellationToken cancellationToken = default)
     {
         try
         {
-            var report = _reportOps is not null
-                ? await _reportOps.ComputeInventoryInOutStockAsync(_warehouseAuth, fromDate, toDate, warehouseId, productId, cancellationToken)
-                : await _reportService.GetInventoryInOutReportAsync(fromDate, toDate, warehouseId, productId, cancellationToken);
+            var report = await _reportOps.ComputeInventoryInOutStockAsync(_warehouseAuth, fromDate, toDate, warehouseId, productId, cancellationToken)
+                ?? await _reportService.GetInventoryInOutReportAsync(fromDate, toDate, warehouseId, productId, cancellationToken);
             return File(ReportsExcelHelper.BuildInventoryInOutReportExcel(report), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"BaoCaoXuatNhapTon_{DateTime.Now:yyyyMMddHHmmss}.xlsx");
         }
         catch (BusinessRuleException ex)

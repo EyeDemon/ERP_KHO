@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
+import { OutboundPipelineStepper } from '../components/common/OutboundPipelineStepper';
 
 type ManifestRecord = {
   id: number;
@@ -175,7 +176,7 @@ const HandoverManifests = () => {
     setCriticalAlert('');
     setNotice('');
     try {
-      const res = await apiClient.post<Record<string, unknown>>('/api/v1/handover-manifests/confirm-handover', {
+      const res = await apiClient.post<Record<string, unknown>>('/api/v1/handover-manifests/confirm-carrier-handover', {
         carrierCode,
         vehiclePlate: vehiclePlate.trim(),
         driverName: driverName.trim(),
@@ -203,6 +204,7 @@ const HandoverManifests = () => {
         title="Biên bản Bàn giao Bưu tá & Chốt Chặn Đơn Hủy Phút Chót"
         description="Quét mã vận đơn AWB lên xe tải hoặc bưu tá, tự động phát hiện và chặn đơn hàng bị khách hủy giữa chừng để yêu cầu hoàn kệ và chống quét trùng mã vận đơn."
       />
+      <OutboundPipelineStepper />
 
       {error && <div role="alert">{error}</div>}
       {criticalAlert && (

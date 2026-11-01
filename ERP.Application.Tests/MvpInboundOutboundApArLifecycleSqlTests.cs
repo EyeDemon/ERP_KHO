@@ -1122,6 +1122,8 @@ public sealed class MvpInboundOutboundApArLifecycleSqlTests
 
         if (whId > 0)
         {
+            await db.CustomerReturnLines.Where(x => x.CustomerReturn!.WarehouseId == whId).ExecuteDeleteAsync();
+            await db.CustomerReturns.Where(x => x.WarehouseId == whId).ExecuteDeleteAsync();
             await db.ExportReceiptDetails.Where(x => x.ExportReceipt.WarehouseId == whId).ExecuteDeleteAsync();
             await db.ExportReceipts.Where(x => x.WarehouseId == whId).ExecuteDeleteAsync();
 

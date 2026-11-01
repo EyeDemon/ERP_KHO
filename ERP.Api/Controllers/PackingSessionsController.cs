@@ -15,8 +15,8 @@ namespace ERP.Api.Controllers;
 [Authorize]
 public sealed class PackingSessionsController(
     IPackingService service,
-    IPackingSessionOperationsService packingOps = null!,
-    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
+    IPackingSessionOperationsService packingOps,
+    IWarehouseAuthorizationService warehouseAccess) : ControllerBase
 {
     public sealed record VerifyPackagingProfileRequest(
         int? ProductId = null,
@@ -84,64 +84,22 @@ public sealed class PackingSessionsController(
     [HttpGet("packaging-profiles")]
     [PermissionAuthorize(AppPermissions.PackingRead)]
     public IActionResult GetPackagingProfiles() =>
-        packingOps != null
-            ? Ok(packingOps.GetPackagingProfilesPayload())
-            : Ok(new
-            {
-                profiles = new[]
-                {
-                    new { code = "CARTON-S", type = "CARTON", maxWeightKg = 15m, maxVolumeM3 = 0.04m },
-                    new { code = "CARTON-L", type = "CARTON", maxWeightKg = 30m, maxVolumeM3 = 0.12m },
-                    new { code = "TOTE-STD", type = "TOTE", maxWeightKg = 25m, maxVolumeM3 = 0.06m },
-                    new { code = "PALLET-EUR", type = "PALLET", maxWeightKg = 1000m, maxVolumeM3 = 1.80m }
-                },
-                cartonizationPolicy = "Hệ thống gợi ý quy cách thùng/kiện — Nhân viên đóng gói xác nhận thực tế",
-                status = "Đã tải danh mục quy cách bao bì đóng gói",
-                statusLabel = "Đã tải danh mục quy cách bao bì đóng gói"
-            });
+        Ok(packingOps.GetPackagingProfilesPayload());
 
     [HttpPost("verify-packaging-profile")]
-    [PermissionAuthorize(AppPermissions.PackingRead)]
+    [PermissionAuthorize(AppPermissions.PackingExecute)]
     public async Task<IActionResult> VerifyPackagingProfile(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] VerifyPackagingProfileRequest? request = null,
-        CancellationToken cancellationToken = default)
-    {
-        if (packingOps != null)
-            return this.ToActionResult(await packingOps.VerifyPackagingProfileAsync(request, warehouseAccess, cancellationToken));
+        CancellationToken cancellationToken = default) =>
+        this.ToActionResult(await packingOps.VerifyPackagingProfileAsync(request, warehouseAccess, cancellationToken));
 
-        if (warehouseAccess != null && request?.WarehouseId.HasValue == true)
-            await warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
-
-        return Ok(new
-        {
-            verificationId = $"PKG-VER-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            warehouseId = request?.WarehouseId,
-            productId = request?.ProductId,
-            activePackingSessionsCount = 0,
-            handlingUnitsCount = 0,
-            totalGrossWeightKg = 0m,
-            totalVolumeM3 = 0m,
-            dimensionConfiguredProductsCount = 0,
-            cartonType = string.IsNullOrWhiteSpace(request?.CartonType) ? "STD-CARTON-M" : request.CartonType.Trim(),
-            volumetricFitConfirmed = true,
-            gs1SsccReady = true,
-            gs1SsccStatus = "Sẵn sàng cấp mã kiện chuẩn GS1 SSCC-18",
-            status = "Đã kiểm tra quy cách đóng gói & tải trọng kiện hàng thực tế",
-            statusLabel = "Đã kiểm tra quy cách đóng gói & tải trọng kiện hàng thực tế",
-            verifiedAtUtc = DateTime.UtcNow
-        });
-    }
-
-    [HttpPost("execute-kitting-vas"), IdempotentCommand("Packing.ExecuteKittingVas"), PermissionAuthorize(AppPermissions.PackingRead)]
+    [HttpPost("execute-kitting-vas"), IdempotentCommand("Packing.ExecuteKittingVas"), PermissionAuthorize(AppPermissions.PackingExecute)]
     public async Task<IActionResult> ExecuteKittingVas(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ExecuteKittingVasRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.PackingExecute))
             return Forbid();
-
-        if (packingOps == null)
-            return StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." });
 
         return this.ToActionResult(await packingOps.ExecuteKittingVasAsync(request, TryGetActorUserId(), warehouseAccess, cancellationToken));
     }
@@ -239,7 +197,7 @@ public sealed class PackingSessionsController(
     [HttpPost("video-evidences")]
     [HttpPost("{sessionId:int}/video-evidence")]
     [HttpPost("packing-video-evidence")]
-    [PermissionAuthorize(AppPermissions.PackingRead)]
+    [PermissionAuthorize(AppPermissions.PackingExecute)]
     [IdempotentCommand("Packing.RecordVideoEvidence")]
     public async Task<IActionResult> RecordPackingVideoEvidence(
         [ModelBinder(BinderType = typeof(FlexibleBodyOrFormModelBinder))] RecordPackingVideoEvidenceRequest? request = null,
@@ -247,11 +205,8 @@ public sealed class PackingSessionsController(
         [FromRoute] int? sessionId = null,
         [ModelBinder(BinderType = typeof(FlexibleFormFileModelBinder))] Microsoft.AspNetCore.Http.IFormFile? videoFile = null)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.PackingExecute))
             return Forbid();
-
-        if (packingOps == null)
-            return StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." });
 
         await using var videoStream = videoFile is { Length: > 0 } ? videoFile.OpenReadStream() : null;
         return this.ToActionResult(await packingOps.RecordPackingVideoEvidenceAsync(
@@ -272,9 +227,7 @@ public sealed class PackingSessionsController(
         [FromQuery] string? orderCode = null,
         [FromRoute] int? sessionId = null,
         CancellationToken cancellationToken = default) =>
-        packingOps == null
-            ? Ok(new { items = Array.Empty<object>(), evidences = Array.Empty<object>(), totalCount = 0 })
-            : this.ToActionResult(await packingOps.ListPackingVideoEvidencesAsync(trackingNumber, orderCode, sessionId, cancellationToken));
+        this.ToActionResult(await packingOps.ListPackingVideoEvidencesAsync(trackingNumber, orderCode, sessionId, cancellationToken));
 
     [HttpGet("video-evidence/{trackingNumber}")]
     [HttpGet("video-evidences/{trackingNumber}")]
@@ -282,9 +235,7 @@ public sealed class PackingSessionsController(
     public async Task<IActionResult> GetPackingVideoEvidence(
         string trackingNumber,
         CancellationToken cancellationToken = default) =>
-        packingOps == null
-            ? StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." })
-            : this.ToActionResult(await packingOps.GetPackingVideoEvidenceAsync(trackingNumber, cancellationToken));
+        this.ToActionResult(await packingOps.GetPackingVideoEvidenceAsync(trackingNumber, cancellationToken));
 
     [HttpPost("{id:int}/cancel")]
     [PermissionAuthorize(AppPermissions.PackingExecute)]
@@ -307,9 +258,6 @@ public sealed class PackingSessionsController(
         [FromQuery] string? preferredCartonCode = null,
         CancellationToken cancellationToken = default)
     {
-        if (packingOps == null)
-            return StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." });
-
         var resolvedId = !string.IsNullOrWhiteSpace(id) ? id : packingSessionId;
         return this.ToActionResult(await packingOps.BuildCartonRecommendationAsync(
             resolvedId,
@@ -324,18 +272,15 @@ public sealed class PackingSessionsController(
 
     [HttpPost("{id}/recommend-carton")]
     [HttpPost("recommend-carton")]
-    [PermissionAuthorize(AppPermissions.PackingRead)]
+    [PermissionAuthorize(AppPermissions.PackingExecute)]
     [IdempotentCommand("PackingSession.RecommendCarton")]
     public async Task<IActionResult> RecommendCarton(
         [FromRoute] string? id = null,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RecommendCartonRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.PackingExecute))
             return Forbid();
-
-        if (packingOps == null)
-            return StatusCode(503, new { code = "DB_UNAVAILABLE", message = "Cơ sở dữ liệu chưa sẵn sàng." });
 
         return this.ToActionResult(await packingOps.BuildCartonRecommendationAsync(id, request, warehouseAccess, cancellationToken));
     }

@@ -33,7 +33,7 @@ describe('master data production UI', () => {
     localStorage.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     get.mockImplementation(async (url) => ({
-      data: url === '/api/warehouses' ? [warehouse] : url === '/api/units' ? [unit] : [],
+      data: url === '/api/v1/warehouses' ? [warehouse] : url === '/api/v1/units' ? [unit] : [],
     }) as never);
     put.mockResolvedValue({ data: {} } as never);
   });
@@ -68,7 +68,7 @@ describe('master data production UI', () => {
     fireEvent.change(view.getByLabelText('Tên kho'), { target: { value: 'DC Hồ Chí Minh mới' } });
     fireEvent.click(view.getByRole('button', { name: 'Lưu kho' }));
 
-    await waitFor(() => expect(put).toHaveBeenCalledWith('/api/warehouses/1', {
+    await waitFor(() => expect(put).toHaveBeenCalledWith('/api/v1/warehouses/1', {
       name: 'DC Hồ Chí Minh mới',
       address: 'TP.HCM',
       isActive: true,
@@ -100,7 +100,7 @@ describe('master data production UI', () => {
     fireEvent.change(view.getByLabelText('Tên đơn vị tính'), { target: { value: 'Cái mới' } });
     fireEvent.click(view.getByRole('button', { name: 'Lưu đơn vị' }));
 
-    await waitFor(() => expect(put).toHaveBeenCalledWith('/api/units/1', {
+    await waitFor(() => expect(put).toHaveBeenCalledWith('/api/v1/units/1', {
       name: 'Cái mới',
       isActive: true,
     }));

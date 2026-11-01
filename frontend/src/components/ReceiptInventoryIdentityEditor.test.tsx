@@ -55,7 +55,7 @@ describe('ReceiptInventoryIdentityEditor',()=>{
     fireEvent.click(save);fireEvent.click(save);
 
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
-    expect(apiClient.post).toHaveBeenCalledWith('/api/importreceipts/88/inventory-identities',{
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/import-receipts/88/inventory-identities',{
       lines:[{
         lineId:11,targetStatus:'AVAILABLE',baseQuantity:10,lotNumber:'LOT-NEW',
         manufactureDate:'2026-09-01',expiryDate:'2027-09-01',serialNumber:null

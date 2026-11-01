@@ -62,7 +62,7 @@ describe('Native stock-transfer return traceability navigation', () => {
     expect(link.getAttribute('href')).toBe('/inventory-traceability?referenceType=StockTransfer&referenceId=81');
     fireEvent.click(link);
     await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith(
-      '/api/inventory/traceability?referenceType=StockTransfer&referenceId=81&limit=200'
+      '/api/v1/inventory/traceability?referenceType=StockTransfer&referenceId=81&limit=200'
     ));
     expect((view.getByLabelText('Loại tham chiếu') as HTMLInputElement).value).toBe('StockTransfer');
     expect((view.getByLabelText('ID tham chiếu') as HTMLInputElement).value).toBe('81');

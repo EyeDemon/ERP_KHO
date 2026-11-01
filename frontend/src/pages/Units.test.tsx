@@ -43,7 +43,7 @@ describe('Units page with UiDrawer', { timeout: 20000 }, () => {
     fireEvent.click(view.getByRole('button', { name: 'Lưu đơn vị' }));
 
     await waitFor(() =>
-      expect(post).toHaveBeenCalledWith('/api/units', {
+      expect(post).toHaveBeenCalledWith('/api/v1/units', {
         code: 'PAL',
         name: 'Pallet',
       }),
@@ -61,7 +61,7 @@ describe('Units page with UiDrawer', { timeout: 20000 }, () => {
     fireEvent.click(view.getByRole('button', { name: 'Lưu đơn vị' }));
 
     await waitFor(() =>
-      expect(put).toHaveBeenCalledWith('/api/units/1', {
+      expect(put).toHaveBeenCalledWith('/api/v1/units/1', {
         name: 'Chiếc',
         isActive: true,
       }),

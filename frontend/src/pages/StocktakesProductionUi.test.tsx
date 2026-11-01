@@ -46,9 +46,9 @@ describe('Stocktakes shared production UI', () => {
     localStorage.setItem('role', 'Manager');
     localStorage.setItem('userId', '99');
     get.mockImplementation(async (url) => {
-      if (url === '/api/stocktakes') return { data: [summary] } as never;
-      if (url === '/api/warehouses') return { data: [{ id: 1, name: 'DC Hồ Chí Minh', isActive: true }] } as never;
-      if (url === '/api/stocktakes/1') return { data: detail } as never;
+      if (url === '/api/v1/stocktakes') return { data: [summary] } as never;
+      if (url === '/api/v1/warehouses') return { data: [{ id: 1, name: 'DC Hồ Chí Minh', isActive: true }] } as never;
+      if (url === '/api/v1/stocktakes/1') return { data: detail } as never;
       return { data: [] } as never;
     });
   });
@@ -133,9 +133,9 @@ describe('Stocktakes shared production UI', () => {
     };
 
     get.mockImplementation(async (url) => {
-      if (url === '/api/stocktakes') return { data: [summary] } as never;
-      if (url === '/api/warehouses') return { data: [{ id: 1, name: 'DC Hồ Chí Minh', isActive: true }] } as never;
-      if (url === '/api/stocktakes/1') return { data: detail } as never;
+      if (url === '/api/v1/stocktakes') return { data: [summary] } as never;
+      if (url === '/api/v1/warehouses') return { data: [{ id: 1, name: 'DC Hồ Chí Minh', isActive: true }] } as never;
+      if (url === '/api/v1/stocktakes/1') return { data: detail } as never;
       if (url === '/api/v1/stocktakes/1/count-attempts-and-auto-approval') return { data: autoApprovalPayload } as never;
       return { data: [] } as never;
     });

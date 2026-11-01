@@ -17,6 +17,10 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.Email).HasMaxLength(100);
         builder.Property(x => x.WarehouseAccessRevision).IsConcurrencyToken();
         builder.Property(x => x.SecurityRevision).IsConcurrencyToken();
+        builder.Property(x => x.TotpSecretProtected).HasMaxLength(512);
+        builder.Property(x => x.TotpEnrollmentStatus).IsRequired().HasMaxLength(32).HasDefaultValue("IDLE");
+        builder.Property(x => x.TotpRecoveryCodeHashesJson).HasMaxLength(2000);
+        builder.Property(x => x.TotpActivatedAtUtc);
 
         builder.HasOne(x => x.Role)
                .WithMany(r => r.Users)

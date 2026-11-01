@@ -3821,6 +3821,80 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
     await context.SaveChangesAsync();
 
+    var consignmentPartners = await context.BusinessPartners.IgnoreQueryFilters()
+        .Where(p => p.TenantId == 1 && p.IsActive && (p.Id == supplier.Id || p.Code == "DT-QA-01"))
+        .OrderBy(p => p.Id)
+        .ToListAsync();
+    foreach (var cp in consignmentPartners)
+    {
+        var consignment3PlStock = await context.InventoryStocks.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s =>
+                s.TenantId == 1 &&
+                s.WarehouseId == primaryWarehouse.Id &&
+                s.ProductId == product.Id &&
+                s.Status == InventoryStatus.Available &&
+                s.LocationId == storageBin.Id &&
+                s.LotId == null &&
+                s.SerialId == null &&
+                s.HandlingUnitId == null &&
+                s.OwnerId == cp.Id);
+        if (consignment3PlStock is null)
+        {
+            consignment3PlStock = new InventoryStock
+            {
+                TenantId = 1,
+                WarehouseId = primaryWarehouse.Id,
+                ProductId = product.Id,
+                LocationId = storageBin.Id,
+                Status = InventoryStatus.Available,
+                OwnerId = cp.Id,
+                Quantity = 40m,
+                ReservedQuantity = 0m,
+                MovingAverageCost = 250000m,
+                LastUpdated = DateTime.UtcNow
+            };
+            consignment3PlStock.RefreshGrainHash();
+            context.InventoryStocks.Add(consignment3PlStock);
+        }
+        else
+        {
+            consignment3PlStock.Quantity = 40m;
+            consignment3PlStock.ReservedQuantity = 0m;
+            consignment3PlStock.MovingAverageCost = 250000m;
+            consignment3PlStock.LastUpdated = DateTime.UtcNow;
+            consignment3PlStock.RefreshGrainHash();
+        }
+
+        var hasConsignment3PlTx = await context.InventoryTransactions.IgnoreQueryFilters()
+            .AnyAsync(t =>
+                t.TenantId == 1 &&
+                t.WarehouseId == primaryWarehouse.Id &&
+                t.ProductId == product.Id &&
+                t.OwnerId == cp.Id &&
+                t.ReferenceType == "Consignment3PlSeed");
+        if (!hasConsignment3PlTx)
+        {
+            context.InventoryTransactions.Add(new InventoryTransaction
+            {
+                TenantId = 1,
+                WarehouseId = primaryWarehouse.Id,
+                ProductId = product.Id,
+                LocationId = storageBin.Id,
+                OwnerId = cp.Id,
+                InventoryStatus = InventoryStatus.Available,
+                TransactionType = TransactionType.Import,
+                Quantity = 40m,
+                UnitCost = 250000m,
+                ReferenceType = "Consignment3PlSeed",
+                ReferenceId = cp.Id,
+                TransactionDate = DateTime.UtcNow.AddDays(-2),
+                CreatedBy = qaAdmin.Id,
+                Note = $"Nhập kho ký gửi 3PL định danh chủ hàng {cp.Code} (OwnerId={cp.Id})"
+            });
+        }
+    }
+    await context.SaveChangesAsync();
+
     // 7. Idempotent Inventory Reconciliation pass — ensure 100% Match across all (WarehouseId, ProductId, Status) pairs
     await context.Database.ExecuteSqlRawAsync(
         "DELETE FROM InventoryStocks WHERE Status <> 0 AND Quantity <= 0 AND ReservedQuantity <= 0;");
@@ -4023,9 +4097,11 @@ WHERE m.TotalPackages <= 0;
 DELETE FROM dbo.SaasPlans;
 INSERT INTO dbo.SaasPlans (PlanCode, PlanName, MonthlyPriceVnd, MonthlyOrderQuota, MaxWarehouses, MaxUsers, IsActive)
 VALUES
+(N'FREE_TRIAL', N'Dùng thử Miễn phí 14 ngày', 0, 300, 1, 3, 1),
 (N'STARTER', N'Gói Khởi đầu — 490.000 đ/tháng', 490000, 1500, 1, 5, 1),
 (N'GROWTH', N'Gói Tăng trưởng — 1.490.000 đ/tháng', 1490000, 10000, 3, 20, 1),
-(N'PRO', N'Gói Doanh nghiệp — 3.490.000 đ/tháng', 3490000, 100000, 20, 100, 1);
+(N'PRO', N'Gói Tăng trưởng — 1.490.000 đ/tháng', 1490000, 10000, 3, 20, 1),
+(N'ENTERPRISE', N'Gói Doanh nghiệp — 3.490.000 đ/tháng', 3490000, 100000, 20, 100, 1);
 
 DELETE FROM dbo.TenantSubscriptions WHERE TenantId = 1;
 INSERT INTO dbo.TenantSubscriptions (TenantId, PlanCode, Status, MonthlyOrderQuota, CurrentMonthOrderCount, MaxWarehouses, MaxUsers, TrialEndsAtUtc, CurrentPeriodStartUtc, CurrentPeriodEndUtc, UpdatedAtUtc)

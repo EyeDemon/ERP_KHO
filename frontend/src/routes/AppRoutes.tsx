@@ -1,6 +1,7 @@
 import { Suspense, lazy, type ReactNode } from 'react';
-import { Navigate, Routes, Route } from 'react-router-dom';
+import { Navigate, Routes, Route, useInRouterContext, useLocation } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
+import WorkspaceErrorBoundary from '../components/common/WorkspaceErrorBoundary';
 import { canViewApprovals, canViewStocktakes, hasPermission, usePermissionSet } from '../services/authorization';
 import { isReadOnlyDemoRuntime } from '../services/runtimeMode';
 import { UiCard, UiPage } from '../ui/ProductionUi';
@@ -44,6 +45,7 @@ const CodReconciliation = lazy(() => import('../pages/CodReconciliation'));
 const OnboardingWizard = lazy(() => import('../pages/OnboardingWizard'));
 const HandoverManifests = lazy(() => import('../pages/HandoverManifests'));
 const CostValuation = lazy(() => import('../pages/CostValuation'));
+const CustomerReturns = lazy(() => import('../pages/CustomerReturns'));
 
 const AccessDenied = () => (
   <UiPage>
@@ -57,33 +59,51 @@ const AccessDenied = () => (
   </UiPage>
 );
 
+const RouteLoadingFallback = () => (
+  <div role="status" className="ui-page">Đang tải phân hệ...</div>
+);
+
+const RouteErrorGuard = ({ children }: { children: ReactNode }) => {
+  const inRouter = useInRouterContext();
+  const location = inRouter ? useLocation() : null;
+  const locationKey =
+    location?.pathname ?? (typeof window !== 'undefined' ? window.location.pathname : '/');
+  return (
+    <WorkspaceErrorBoundary locationKey={locationKey}>
+      <Suspense fallback={<RouteLoadingFallback />}>{children}</Suspense>
+    </WorkspaceErrorBoundary>
+  );
+};
+
 const PermissionRoute = ({ permission, children }: { permission: string | string[]; children: ReactNode }) => {
   usePermissionSet();
   const allowed = Array.isArray(permission)
     ? permission.some(code => hasPermission(code))
     : hasPermission(permission);
-  return allowed ? children : <AccessDenied />;
+  return allowed ? <RouteErrorGuard>{children}</RouteErrorGuard> : <AccessDenied />;
 };
 
 const StocktakeRoute = ({ children }: { children: ReactNode }) => {
   usePermissionSet();
-  return (isReadOnlyDemoRuntime() || canViewStocktakes()) ? children : <Navigate to="/" replace />;
+  return (isReadOnlyDemoRuntime() || canViewStocktakes()) ? <RouteErrorGuard>{children}</RouteErrorGuard> : <Navigate to="/" replace />;
 };
 const ApprovalRoute = () => {
   usePermissionSet();
-  return canViewApprovals() ? <Approvals /> : <AccessDenied />;
+  return canViewApprovals() ? <RouteErrorGuard><Approvals /></RouteErrorGuard> : <AccessDenied />;
 };
 
 const AppRoutes = () => {
   return (
-    <Suspense fallback={<div role="status" className="ui-page">Đang tải phân hệ...</div>}>
-      <Routes>
-        <Route path="/login" element={<Login />} />
+    <WorkspaceErrorBoundary>
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <Routes>
+          <Route path="/login" element={<RouteErrorGuard><Login /></RouteErrorGuard>} />
+          <Route path="/register" element={<RouteErrorGuard><OnboardingWizard /></RouteErrorGuard>} />
 
-        {/* Hệ thống vận hành thật (Production ERP WMS) */}
-        <Route path="/" element={<MainLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="dashboard" element={<Dashboard />} />
+          {/* Hệ thống vận hành thật (Production ERP WMS) */}
+          <Route path="/" element={<MainLayout />}>
+            <Route index element={<RouteErrorGuard><Dashboard /></RouteErrorGuard>} />
+            <Route path="dashboard" element={<RouteErrorGuard><Dashboard /></RouteErrorGuard>} />
           <Route path="products" element={<PermissionRoute permission="product.read"><Products /></PermissionRoute>} />
           <Route path="categories" element={<PermissionRoute permission="product.read"><Categories /></PermissionRoute>} />
           <Route path="warehouses" element={<PermissionRoute permission="warehouse.read"><Warehouses /></PermissionRoute>} />
@@ -99,6 +119,7 @@ const AppRoutes = () => {
           <Route path="purchase-orders" element={<PermissionRoute permission="purchase_order.read"><PurchaseOrders /></PermissionRoute>} />
           <Route path="asns" element={<PermissionRoute permission="asn.read"><Asns /></PermissionRoute>} />
           <Route path="import-receipts" element={<PermissionRoute permission="receipt.read"><ImportReceipts /></PermissionRoute>} />
+          <Route path="customer-returns" element={<PermissionRoute permission={['return.read', 'receipt.read']}><CustomerReturns /></PermissionRoute>} />
           <Route path="inventory" element={<PermissionRoute permission="inventory.read"><Inventory /></PermissionRoute>} />
           <Route path="inventory-locks" element={<PermissionRoute permission="inventory_lock.read"><InventoryLocks /></PermissionRoute>} />
           <Route path="inventory-movements" element={<PermissionRoute permission="inventory.read"><InventoryMovements /></PermissionRoute>} />
@@ -127,9 +148,10 @@ const AppRoutes = () => {
           <Route path="roles" element={<Navigate to="/permissions" replace />} />
           <Route path="warehouse-scopes" element={<Navigate to="/permissions" replace />} />
         </Route>
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </Suspense>
+        <Route path="*" element={<RouteErrorGuard><NotFound /></RouteErrorGuard>} />
+        </Routes>
+      </Suspense>
+    </WorkspaceErrorBoundary>
   );
 };
 

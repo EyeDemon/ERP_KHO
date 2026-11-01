@@ -25,10 +25,10 @@ afterEach(cleanup);
 it('refreshes a stale draft revision before the next PUT', async () => {
   let current = transfer;
   vi.mocked(apiClient.get).mockImplementation(async url => {
-    if (url === '/api/stock-transfers') return { data: { items: [current], totalPages: 1 } } as never;
-    if (url === '/api/stock-transfers/71') return { data: current } as never;
-    if (url === '/api/warehouses') return { data: [{ id: 1, name: 'Kho A' }, { id: 2, name: 'Kho B' }] } as never;
-    if (url === '/api/products') return { data: [{ id: 9, code: 'SKU-9', name: 'Sản phẩm' }] } as never;
+    if (url === '/api/v1/stock-transfers') return { data: { items: [current], totalPages: 1 } } as never;
+    if (url === '/api/v1/stock-transfers/71') return { data: current } as never;
+    if (url === '/api/v1/warehouses') return { data: [{ id: 1, name: 'Kho A' }, { id: 2, name: 'Kho B' }] } as never;
+    if (url === '/api/v1/products') return { data: [{ id: 9, code: 'SKU-9', name: 'Sản phẩm' }] } as never;
     return { data: [] } as never;
   });
   const put = vi.mocked(apiClient.put);

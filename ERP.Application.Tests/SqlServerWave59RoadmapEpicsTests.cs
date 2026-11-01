@@ -414,6 +414,8 @@ public sealed class SqlServerWave59RoadmapEpicsTests
             }
             if (shipmentId > 0)
             {
+                await cleanupDb.CustomerReturnLines.Where(l => l.CustomerReturn!.ShipmentId == shipmentId || l.CustomerReturn!.WarehouseId == fx.WarehouseId).ExecuteDeleteAsync();
+                await cleanupDb.CustomerReturns.Where(r => r.ShipmentId == shipmentId || r.WarehouseId == fx.WarehouseId).ExecuteDeleteAsync();
                 await cleanupDb.ShipmentTrackingEvents.Where(e => e.ShipmentId == shipmentId).ExecuteDeleteAsync();
                 await cleanupDb.ShipmentProofOfDeliveries.Where(p => p.ShipmentId == shipmentId).ExecuteDeleteAsync();
             }

@@ -34,10 +34,10 @@ describe('ExportReceipts shared production UI', () => {
     localStorage.clear();
     setCurrentPermissions([]);
     get.mockImplementation(async (url) => {
-      if (url === '/api/exportreceipts') return { data: [draftReceipt] } as never;
-      if (url === '/api/warehouses') return { data: [] } as never;
-      if (url === '/api/products') return { data: [] } as never;
-      if (url === '/api/business-partners') return { data: { items: [] } } as never;
+      if (url === '/api/v1/export-receipts') return { data: [draftReceipt] } as never;
+      if (url === '/api/v1/warehouses') return { data: [] } as never;
+      if (url === '/api/v1/products') return { data: [] } as never;
+      if (url === '/api/v1/business-partners') return { data: { items: [] } } as never;
       return { data: [] } as never;
     });
   });
@@ -64,10 +64,10 @@ describe('ExportReceipts shared production UI', () => {
     localStorage.setItem('userId', '99');
     setCurrentPermissions(['export_receipt.read', 'export_receipt.create']);
     get.mockImplementation(async (url) => {
-      if (url === '/api/exportreceipts') return { data: [] } as never;
-      if (url === '/api/warehouses') return { data: [{ id: 1, name: 'Kho A' }] } as never;
-      if (url === '/api/products') return { data: [{ id: 7, code: 'SKU-7', name: 'Sản phẩm 7' }] } as never;
-      if (url === '/api/inventorystocks/current') return { data: [{ availableQuantity: 20 }, { availableQuantity: 30 }] } as never;
+      if (url === '/api/v1/export-receipts') return { data: [] } as never;
+      if (url === '/api/v1/warehouses') return { data: [{ id: 1, name: 'Kho A' }] } as never;
+      if (url === '/api/v1/products') return { data: [{ id: 7, code: 'SKU-7', name: 'Sản phẩm 7' }] } as never;
+      if (url === '/api/v1/inventory-stocks/current') return { data: [{ availableQuantity: 20 }, { availableQuantity: 30 }] } as never;
       return { data: [] } as never;
     });
 
@@ -100,8 +100,8 @@ describe('ExportReceipts shared production UI', () => {
       dispatchedAt: '2026-10-03T12:00:00Z',
     };
     get.mockImplementation(async (url) => {
-      if (url === '/api/exportreceipts') return { data: [dispatched] } as never;
-      if (url === '/api/exportreceipts/22') return { data: dispatched } as never;
+      if (url === '/api/v1/export-receipts') return { data: [dispatched] } as never;
+      if (url === '/api/v1/export-receipts/22') return { data: dispatched } as never;
       return { data: [] } as never;
     });
 
@@ -137,8 +137,8 @@ describe('ExportReceipts shared production UI', () => {
       approvedAt: '2026-10-03T11:00:00Z',
     };
     get.mockImplementation(async (url) => {
-      if (url === '/api/exportreceipts') return { data: [approved] } as never;
-      if (url === '/api/exportreceipts/23') return { data: approved } as never;
+      if (url === '/api/v1/export-receipts') return { data: [approved] } as never;
+      if (url === '/api/v1/export-receipts/23') return { data: approved } as never;
       return { data: [] } as never;
     });
 
@@ -164,10 +164,10 @@ describe('ExportReceipts shared production UI', () => {
       'partner.read',
     ]);
     get.mockImplementation(async (url) => {
-      if (url === '/api/exportreceipts') return { data: [{ ...draftReceipt, allowPerReceiptDispatchMode: true, writeEnabled: false }] } as never;
-      if (url === '/api/warehouses') return { data: [] } as never;
-      if (url === '/api/products') return { data: [] } as never;
-      if (url === '/api/business-partners') return { data: { items: [] } } as never;
+      if (url === '/api/v1/export-receipts') return { data: [{ ...draftReceipt, allowPerReceiptDispatchMode: true, writeEnabled: false }] } as never;
+      if (url === '/api/v1/warehouses') return { data: [] } as never;
+      if (url === '/api/v1/products') return { data: [] } as never;
+      if (url === '/api/v1/business-partners') return { data: { items: [] } } as never;
       return { data: [] } as never;
     });
 
@@ -203,8 +203,8 @@ describe('ExportReceipts shared production UI', () => {
       ],
     };
     get.mockImplementation(async (url) => {
-      if (url === '/api/exportreceipts') return { data: [maskedReceipt] } as never;
-      if (url === '/api/exportreceipts/24') return { data: maskedReceipt } as never;
+      if (url === '/api/v1/export-receipts') return { data: [maskedReceipt] } as never;
+      if (url === '/api/v1/export-receipts/24') return { data: maskedReceipt } as never;
       return { data: [] } as never;
     });
 
@@ -214,8 +214,8 @@ describe('ExportReceipts shared production UI', () => {
 
     fireEvent.click(view.getByRole('button', { name: 'Chi tiết' }));
     expect(await view.findByText('MP-SHOPEE-9988')).toBeTruthy();
-    expect(view.getByText('GHN-EXPRESS')).toBeTruthy();
-    expect(view.getByText('AWB-77665544')).toBeTruthy();
+    expect(view.getAllByText('GHN-EXPRESS').length).toBeGreaterThan(0);
+    expect(view.getAllByText('AWB-77665544').length).toBeGreaterThan(0);
     expect(view.getAllByText('Ẩn theo phân quyền').length).toBeGreaterThanOrEqual(3);
   });
 
@@ -227,10 +227,10 @@ describe('ExportReceipts shared production UI', () => {
     setCurrentPermissions(['export_receipt.read', 'export_receipt.create', 'export_receipt.approve', 'export_receipt.dispatch']);
     const approvedReceipt = { ...draftReceipt, id: 25, code: 'ER-2026-0025', status: 'Approved', approvedBy: 5 };
     get.mockImplementation(async (url) => {
-      if (url === '/api/exportreceipts') return { data: [approvedReceipt] } as never;
-      if (url === '/api/warehouses') return { data: [{ id: 1, name: 'Kho A' }] } as never;
-      if (url === '/api/products') return { data: [{ id: 7, code: 'SKU-7', name: 'Sản phẩm 7' }] } as never;
-      if (url === '/api/inventorystocks/current') return { data: [{ availableQuantity: 50 }] } as never;
+      if (url === '/api/v1/export-receipts') return { data: [approvedReceipt] } as never;
+      if (url === '/api/v1/warehouses') return { data: [{ id: 1, name: 'Kho A' }] } as never;
+      if (url === '/api/v1/products') return { data: [{ id: 7, code: 'SKU-7', name: 'Sản phẩm 7' }] } as never;
+      if (url === '/api/v1/inventory-stocks/current') return { data: [{ availableQuantity: 50 }] } as never;
       return { data: [] } as never;
     });
 
@@ -262,7 +262,7 @@ describe('ExportReceipts shared production UI', () => {
     expect((view.getByLabelText('Số lượng dòng 1') as HTMLInputElement).value).toBe('12');
     expect((view.getByLabelText('Mã đơn sàn TMĐT') as HTMLInputElement).value).toBe('MP-TIKTOK-01');
     expect(post).toHaveBeenCalledWith(
-      '/api/exportreceipts',
+      '/api/v1/export-receipts',
       expect.objectContaining({
         marketplaceOrderId: 'MP-TIKTOK-01',
         carrierCode: 'GHTK',
@@ -320,10 +320,22 @@ describe('ExportReceipts shared production UI', () => {
         'In Gộp Phiếu Gửi Hàng Nhiệt 100x150mm Theo Vị Trí Kệ & Biên Bản Bàn Giao Bưu Tá Điện Tử',
       ),
     ).toBeTruthy();
-    expect(view.getByText(/Đơn quá hạn bàn giao sàn:/)).toBeTruthy();
-    expect(view.getByText(/Đơn sắp trễ hạn \(< 2 giờ\):/)).toBeTruthy();
-    expect(view.getByText(/Đơn phải giao trong ngày:/)).toBeTruthy();
+    expect(view.getByText('Đơn quá hạn bàn giao sàn')).toBeTruthy();
+    expect(view.getByText('Đơn sắp trễ hạn (< 2 giờ)')).toBeTruthy();
+    expect(view.getByText('Đơn phải giao trong ngày')).toBeTruthy();
     expect(view.getByText('Viettel SInvoice • Mẫu 1/001 • C26TAA')).toBeTruthy();
+    expect(view.getByTestId('handover-receipt-selector-table')).toBeTruthy();
+    expect(view.getByRole('table', { name: 'Chọn phiếu xuất để in gộp vận đơn & chốt bàn giao' })).toBeTruthy();
+    expect(view.getByRole('tablist', { name: 'Chọn phân khu quản lý phiếu xuất kho' })).toBeTruthy();
+    expect((view.getByRole('columnheader', { name: 'Trạng thái' }) as HTMLElement).style.whiteSpace).toBe('nowrap');
+    expect(view.getAllByText(/Trang 1\/1/).length).toBeGreaterThan(0);
+    expect(view.getByTestId('export-create-disabled-hint')).toBeTruthy();
+    const overdueKpi = view.getByTestId('kpi-export-overdue-handover');
+    expect(overdueKpi.getAttribute('title')).toBe('Bấm để lọc danh sách');
+    fireEvent.click(overdueKpi);
+    expect(view.getByTestId('btn-reset-export-quick-filter')).toBeTruthy();
+    fireEvent.click(view.getByTestId('btn-reset-export-quick-filter'));
+    expect(view.queryByTestId('btn-reset-export-quick-filter')).toBeNull();
 
     fireEvent.click(
       view.getByRole('button', { name: 'In Gộp Phiếu Gửi Hàng Nhiệt 100x150mm (Sắp xếp theo Kệ A→Z)' }),
@@ -363,7 +375,7 @@ describe('ExportReceipts shared production UI', () => {
       ),
     ).toBeTruthy();
     expect(vi.mocked(apiClient.post)).toHaveBeenCalledWith(
-      '/api/ExportReceipts/confirm-carrier-handover',
+      '/api/v1/export-receipts/confirm-carrier-handover',
       expect.objectContaining({
         trackingNumbers: ['GHN84920188', 'VTP99201122'],
       }),

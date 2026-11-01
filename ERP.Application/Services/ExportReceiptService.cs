@@ -425,6 +425,16 @@ namespace ERP.Application.Services
                         await _packingDispatchReadiness.EnsureSourceReadyAsync("ExportReceipt", receipt.Id);
                     if (_shipmentDispatchReadiness is not null)
                         await _shipmentDispatchReadiness.EnsureSourceReadyAsync("ExportReceipt", receipt.Id);
+                    if (receipt.ShipmentId.HasValue)
+                        throw new ConcurrencyException("Phiếu xuất đã được gắn với Shipment. Hãy xác nhận xuất tại Shipment để tránh trừ tồn 2 lần.");
+
+                    var existingExportTxs = await _inventoryTransactionRepository.FindAsync(t =>
+                        t.WarehouseId == receipt.WarehouseId &&
+                        t.ReferenceId == receipt.Id &&
+                        t.ReferenceType == "ExportReceipt" &&
+                        (t.TransactionType == TransactionType.Export || t.TransactionType == TransactionType.Ship));
+                    if (existingExportTxs.Any())
+                        throw new ConcurrencyException("Phiếu xuất này đã được ghi nhận bút toán xuất kho trước đó.");
 
                     await _inventoryStockRepository.AcquireAllocationLocksAsync(
                         receipt.WarehouseId,

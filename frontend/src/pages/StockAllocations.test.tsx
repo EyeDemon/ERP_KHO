@@ -13,8 +13,8 @@ describe('StockAllocations production UI',()=>{
   beforeEach(()=>{
     vi.resetAllMocks();localStorage.clear();
     get.mockImplementation((url)=>{
-      if(url==='/api/inventory/allocations/reservations')return Promise.resolve({data:[reservation]} as never);
-      if(url==='/api/inventory/allocations/candidates')return Promise.resolve({data:[candidate]} as never);
+      if(url==='/api/v1/inventory/allocations/reservations')return Promise.resolve({data:[reservation]} as never);
+      if(url==='/api/v1/inventory/allocations/candidates')return Promise.resolve({data:[candidate]} as never);
       return Promise.resolve({data:{items:[allocation],totalRecords:1,pageIndex:1,pageSize:20}} as never);
     });
     post.mockResolvedValue({data:[]} as never);
@@ -35,7 +35,7 @@ describe('StockAllocations production UI',()=>{
     await waitFor(()=>expect((button as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(button);fireEvent.click(button);
     await waitFor(()=>expect(post).toHaveBeenCalledTimes(1));
-    expect(post).toHaveBeenCalledWith('/api/inventory/allocations/auto',{reservationId:9031,quantity:40,locationId:null},{headers:{'Idempotency-Key':'key:allocation:auto:9031:40:auto'}});
+    expect(post).toHaveBeenCalledWith('/api/v1/inventory/allocations/auto',{reservationId:9031,quantity:40,locationId:null},{headers:{'Idempotency-Key':'key:allocation:auto:9031:40:auto'}});
   });
   it('releases an active Allocation with a reason',async()=>{
     localStorage.setItem('permissions',JSON.stringify(['allocation.read','allocation.release']));
@@ -45,6 +45,6 @@ describe('StockAllocations production UI',()=>{
     fireEvent.change(view.getByLabelText('Lý do thao tác Allocation'),{target:{value:'Đổi kế hoạch xuất'}});
     fireEvent.click(view.getByRole('button',{name:'Xác nhận'}));
     await waitFor(()=>expect(post).toHaveBeenCalledTimes(1));
-    expect(post).toHaveBeenCalledWith('/api/inventory/allocations/7711/release',{reason:'Đổi kế hoạch xuất'},{headers:{'Idempotency-Key':'key:allocation:release:7711:release'}});
+    expect(post).toHaveBeenCalledWith('/api/v1/inventory/allocations/7711/release',{reason:'Đổi kế hoạch xuất'},{headers:{'Idempotency-Key':'key:allocation:release:7711:release'}});
   });
 });

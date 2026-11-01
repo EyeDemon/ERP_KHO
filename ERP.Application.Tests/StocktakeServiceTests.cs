@@ -59,7 +59,7 @@ namespace ERP.Application.Tests
 
             var act = async () => await _service.ApproveStocktakeAsync(1, 99);
 
-            await act.Should().ThrowAsync<BusinessRuleException>().WithMessage("Chỉ có thể duyệt phiếu ở trạng thái nháp");
+            await act.Should().ThrowAsync<BusinessRuleException>().WithMessage("Chỉ có thể duyệt phiếu ở trạng thái nháp hoặc đã hoàn tất kiểm đếm");
             _mockUnitOfWork.Verify(x => x.BeginTransactionAsync(), Times.Once);
             _mockUnitOfWork.Verify(x => x.RollbackTransactionAsync(), Times.Once);
             _mockUnitOfWork.Verify(x => x.CommitTransactionAsync(), Times.Never);

@@ -6,5 +6,6 @@ namespace ERP.Domain.Interfaces
     {
         Task<bool> ExistsByCodeAsync(string code, int? excludeId = null);
         Task<bool> HasTransactionsAsync(int warehouseId);
+        Task<(int CurrentActiveCount, int? MaxAllowed)> GetWarehouseQuotaStatusAsync() => Task.FromResult((0, (int?)null));
     }
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useInRouterContext, useLocation } from 'react-router-dom';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
@@ -55,7 +56,13 @@ const mapRawValuationItems = (rawItems: unknown[], hidden: boolean): ValuationRo
   });
 
 const CostValuation = () => {
+  const inRouter = useInRouterContext();
+  const location = inRouter ? useLocation() : null;
+  const pathname = location?.pathname ?? (typeof window !== 'undefined' ? window.location.pathname : '/cost-valuation');
+  const isMisaRoute = pathname.startsWith('/misa-exports');
+
   const canReadCost = usePermission('inventory.cost.read');
+  const [activeMode, setActiveMode] = useState<'all' | 'misa'>(() => (isMisaRoute ? 'misa' : 'all'));
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -73,6 +80,10 @@ const CostValuation = () => {
   const [valuationRows, setValuationRows] = useState<ValuationRow[]>([]);
   const [einvoiceBuyerTaxCode, setEinvoiceBuyerTaxCode] = useState('');
   const [einvoiceBuyerName, setEinvoiceBuyerName] = useState('');
+
+  useEffect(() => {
+    setActiveMode(isMisaRoute ? 'misa' : 'all');
+  }, [isMisaRoute]);
 
   const loadCostValuation = useCallback(async () => {
     setLoading(true);
@@ -114,8 +125,7 @@ const CostValuation = () => {
         setValuationRows(mapRawValuationItems(primaryList, hidden));
       } else {
         const invRes = await apiClient
-          .get<Record<string, unknown> | unknown[]>('/api/v1/inventory')
-          .catch(() => apiClient.get<Record<string, unknown> | unknown[]>('/api/Inventory'))
+          .get<Record<string, unknown> | unknown[]>('/api/v1/inventory-reconciliation/valuation')
           .catch(() => null);
         const invData = invRes?.data;
         const invList = Array.isArray(invData)
@@ -195,6 +205,55 @@ const CostValuation = () => {
     }
   };
 
+  const renderMisaExportCard = () => (
+    <UiCard
+      title="Kết xuất Bảng kê Kế toán MISA AMIS (.xlsx) & Phát hành Hóa đơn Điện tử Nháp NĐ 70/2025"
+      subtitle="Tự động định khoản Nợ/Có TK 1561, 632, 131, 331 và chuẩn bị dữ liệu XML hóa đơn điện tử có mã của Cơ quan Thuế"
+    >
+      <div className="ui-stack" style={{ gap: 12 }}>
+        <div className="ui-inline-wrap" style={{ gap: 10 }}>
+          <button
+            type="button"
+            data-testid="btn-export-misa-xlsx"
+            disabled={busy}
+            onClick={() => void handleExportMisaExcel()}
+          >
+            Kết xuất Bảng kê .xlsx Chuẩn MISA AMIS
+          </button>
+          <button type="button" className="ui-btn-secondary" disabled={busy} onClick={() => void loadCostValuation()}>
+            Tính lại Giá vốn Bình quân
+          </button>
+        </div>
+
+        <form onSubmit={handleIssueDraftEinvoice} className="ui-inline-wrap" style={{ alignItems: 'end', gap: 12 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            Mã số thuế người mua
+            <input
+              aria-label="Mã số thuế người mua HĐĐT"
+              value={einvoiceBuyerTaxCode}
+              onChange={(e) => setEinvoiceBuyerTaxCode(e.target.value)}
+              placeholder="VD: 0312345678"
+              style={{ minWidth: 200 }}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            Tên đơn vị mua hàng
+            <input
+              aria-label="Tên đơn vị mua hàng HĐĐT"
+              value={einvoiceBuyerName}
+              onChange={(e) => setEinvoiceBuyerName(e.target.value)}
+              placeholder="Nhập tên doanh nghiệp mua..."
+              style={{ minWidth: 260 }}
+            />
+          </label>
+          <button type="submit" data-testid="btn-issue-einvoice-nd70" disabled={busy}>
+            Phát hành HĐĐT Nháp NĐ 70/2025
+          </button>
+        </form>
+      </div>
+    </UiCard>
+  );
+
   return (
     <UiPage>
       <UiPageHeader
@@ -202,6 +261,52 @@ const CostValuation = () => {
         title="Giá Vốn Bình Quân Gia Quyền, Lãi Gộp Chủ Shop & Kết Xuất MISA AMIS"
         description="Tính giá vốn bình quân gia quyền di động, bảo mật giá vốn theo quyền RBAC, kết xuất bảng kê .xlsx chuẩn MISA AMIS và phát hành HĐĐT nháp NĐ 70/2025."
       />
+
+      <div
+        role="tablist"
+        aria-label="Chế độ xem Định giá Giá vốn và Kết xuất MISA AMIS"
+        data-testid="cost-valuation-mode-tabs"
+        style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}
+      >
+        <button
+          type="button"
+          role="tab"
+          data-testid="tab-cost-valuation-all"
+          aria-selected={activeMode === 'all'}
+          onClick={() => setActiveMode('all')}
+          style={
+            activeMode === 'all'
+              ? { background: '#0f172a', color: '#ffffff', borderColor: '#0f172a', fontWeight: 600, padding: '8px 14px', borderRadius: 8 }
+              : { background: '#ffffff', color: '#1e293b', borderColor: '#cbd5e1', fontWeight: 500, padding: '8px 14px', borderRadius: 8 }
+          }
+        >
+          Toàn bộ Định giá &amp; MISA
+        </button>
+        <button
+          type="button"
+          role="tab"
+          data-testid="tab-cost-valuation-misa"
+          aria-selected={activeMode === 'misa'}
+          onClick={() => setActiveMode('misa')}
+          style={
+            activeMode === 'misa'
+              ? { background: '#0f172a', color: '#ffffff', borderColor: '#0f172a', fontWeight: 600, padding: '8px 14px', borderRadius: 8 }
+              : { background: '#ffffff', color: '#1e293b', borderColor: '#cbd5e1', fontWeight: 500, padding: '8px 14px', borderRadius: 8 }
+          }
+        >
+          Kết xuất Kế toán MISA AMIS (.xlsx) &amp; HĐĐT NĐ 70/2025
+        </button>
+      </div>
+
+      {activeMode === 'misa' && (
+        <div
+          role="status"
+          data-testid="misa-export-active-banner"
+          style={{ padding: '10px 14px', borderRadius: 8, background: '#eff6ff', border: '1px solid #93c5fd', color: '#1e3a8a', marginBottom: 12, fontSize: 13.5, fontWeight: 600 }}
+        >
+          Đang mở phân hệ Kết xuất MISA AMIS (/misa-exports) — Ưu tiên hiển thị công cụ Kết xuất Bảng kê .xlsx &amp; HĐĐT NĐ 70/2025.
+        </div>
+      )}
 
       {error && <div role="alert">{error}</div>}
       {notice && (
@@ -215,18 +320,13 @@ const CostValuation = () => {
         <div
           role="status"
           data-testid="rbac-cost-hidden-banner"
-          style={{
-            padding: '10px 14px',
-            borderRadius: 8,
-            background: '#fffbeb',
-            color: '#92400e',
-            border: '1px solid #fde68a',
-            marginBottom: 12,
-          }}
+          style={{ padding: '10px 14px', borderRadius: 8, background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', marginBottom: 12 }}
         >
           Tài khoản hiện tại không có quyền <code>inventory.cost.read</code> — Các chỉ số Giá vốn hàng bán và Lợi nhuận gộp được ẩn bảo mật theo phân quyền RBAC.
         </div>
       )}
+
+      {activeMode === 'misa' && renderMisaExportCard()}
 
       <UiMetricGrid>
         <UiMetric value={formatCurrencyVnd(financeSummary.grossRevenue)} label="Doanh thu thuần thực xuất" />
@@ -248,144 +348,44 @@ const CostValuation = () => {
         title="Báo cáo Lợi nhuận Ròng Chủ Shop Sau Khấu Trừ Thuế Sàn TMĐT NĐ 70/2025 & Phí Hạ Tầng"
         subtitle="Minh bạch hóa các khoản khấu trừ thuế tại nguồn 1,5% (1% GTGT + 0,5% TNCN) và phí hạ tầng xử lý đơn cố định"
       >
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-            gap: 12,
-          }}
-        >
-          <div
-            style={{
-              padding: '12px 14px',
-              borderRadius: 10,
-              border: '1px solid #cbd5e1',
-              background: '#f8fafc',
-            }}
-          >
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+          <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc' }}>
             <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 600 }}>
               Thuế Sàn TMĐT Khấu trừ Nộp thay 1,5% (1% GTGT + 0,5% TNCN)
             </div>
-            <div
-              style={{
-                fontSize: 18,
-                fontWeight: 700,
-                color: '#0f172a',
-                marginTop: 4,
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
               {formatCurrencyVnd(financeSummary.withheldTaxTotalAmount)}
             </div>
           </div>
 
-          <div
-            style={{
-              padding: '12px 14px',
-              borderRadius: 10,
-              border: '1px solid #cbd5e1',
-              background: '#f8fafc',
-            }}
-          >
+          <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc' }}>
             <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 600 }}>
               Phí Hạ tầng Đơn hàng Cố định (3.000đ/đơn)
             </div>
-            <div
-              style={{
-                fontSize: 18,
-                fontWeight: 700,
-                color: '#0f172a',
-                marginTop: 4,
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
               {formatCurrencyVnd(financeSummary.fixedInfrastructureFeeTotal)}
             </div>
           </div>
 
-          <div
-            style={{
-              padding: '12px 14px',
-              borderRadius: 10,
-              border: '1px solid #a7f3d0',
-              background: '#ecfdf5',
-            }}
-          >
+          <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #a7f3d0', background: '#ecfdf5' }}>
             <div style={{ fontSize: 12.5, color: '#065f46', fontWeight: 600 }}>
               Lợi nhuận Ròng Sau Thuế Sàn &amp; Phí
             </div>
-            <div
-              style={{
-                fontSize: 18,
-                fontWeight: 700,
-                color: '#065f46',
-                marginTop: 4,
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#065f46', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
               {costHiddenByRbac ? 'Ẩn theo RBAC' : formatCurrencyVnd(financeSummary.netProfitAfterWithheldTax)}
             </div>
           </div>
         </div>
       </UiCard>
 
-      <UiCard
-        title="Kết xuất Bảng kê Kế toán MISA AMIS (.xlsx) & Phát hành Hóa đơn Điện tử Nháp NĐ 70/2025"
-        subtitle="Tự động định khoản Nợ/Có TK 1561, 632, 131, 331 và chuẩn bị dữ liệu XML hóa đơn điện tử có mã của Cơ quan Thuế"
-      >
-        <div className="ui-stack" style={{ gap: 12 }}>
-          <div className="ui-inline-wrap" style={{ gap: 10 }}>
-            <button
-              type="button"
-              data-testid="btn-export-misa-xlsx"
-              disabled={busy}
-              onClick={() => void handleExportMisaExcel()}
-            >
-              Kết xuất Bảng kê .xlsx Chuẩn MISA AMIS
-            </button>
-            <button type="button" className="ui-btn-secondary" disabled={busy} onClick={() => void loadCostValuation()}>
-              Tính lại Giá vốn Bình quân
-            </button>
-          </div>
-
-          <form onSubmit={handleIssueDraftEinvoice} className="ui-inline-wrap" style={{ alignItems: 'end', gap: 12 }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              Mã số thuế người mua
-              <input
-                aria-label="Mã số thuế người mua HĐĐT"
-                value={einvoiceBuyerTaxCode}
-                onChange={(e) => setEinvoiceBuyerTaxCode(e.target.value)}
-                placeholder="VD: 0312345678"
-                style={{ minWidth: 200 }}
-              />
-            </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              Tên đơn vị mua hàng
-              <input
-                aria-label="Tên đơn vị mua hàng HĐĐT"
-                value={einvoiceBuyerName}
-                onChange={(e) => setEinvoiceBuyerName(e.target.value)}
-                placeholder="Nhập tên doanh nghiệp mua..."
-                style={{ minWidth: 260 }}
-              />
-            </label>
-            <button type="submit" data-testid="btn-issue-einvoice-nd70" disabled={busy}>
-              Phát hành HĐĐT Nháp NĐ 70/2025
-            </button>
-          </form>
-        </div>
-      </UiCard>
+      {activeMode === 'all' && renderMisaExportCard()}
 
       <UiCard title={`Bảng Định giá Tồn kho theo Giá vốn Bình quân Gia quyền • ${valuationRows.length} mặt hàng`}>
         {valuationRows.length === 0 ? (
           <p className="ui-muted-text">Chưa có dòng chi tiết định giá mặt hàng hoặc dữ liệu được tổng hợp ở cấp toàn kho.</p>
         ) : (
           <UiTableScroll>
-            <table
-              className="ui-table-compact"
-              aria-label="Bảng định giá tồn kho bình quân gia quyền"
-              style={{ width: '100%' }}
-            >
+            <table className="ui-table-compact" aria-label="Bảng định giá tồn kho bình quân gia quyền" style={{ width: '100%' }}>
               <thead>
                 <tr>
                   <th>Mã mặt hàng</th>
@@ -401,27 +401,17 @@ const CostValuation = () => {
               <tbody>
                 {valuationRows.map((row, idx) => (
                   <tr key={`${row.productId}-${row.productCode}-${idx}`}>
-                    <td>
-                      <strong>{row.productCode}</strong>
-                    </td>
+                    <td><strong>{row.productCode}</strong></td>
                     <td>{row.productName}</td>
                     <td>{row.warehouseName}</td>
                     <td>{row.unitName}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.onHandQty}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.availableQty}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {costHiddenByRbac ? (
-                        <UiBadge tone="warning">Ẩn theo RBAC</UiBadge>
-                      ) : (
-                        formatCurrencyVnd(row.movingAverageUnitCost)
-                      )}
+                      {costHiddenByRbac ? <UiBadge tone="warning">Ẩn theo RBAC</UiBadge> : formatCurrencyVnd(row.movingAverageUnitCost)}
                     </td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                      {costHiddenByRbac ? (
-                        <UiBadge tone="warning">Ẩn theo RBAC</UiBadge>
-                      ) : (
-                        formatCurrencyVnd(row.totalInventoryValue)
-                      )}
+                      {costHiddenByRbac ? <UiBadge tone="warning">Ẩn theo RBAC</UiBadge> : formatCurrencyVnd(row.totalInventoryValue)}
                     </td>
                   </tr>
                 ))}

@@ -35,6 +35,20 @@ namespace ERP.Infrastructure.Repositories
             return await query.AnyAsync();
         }
 
+        public async Task<(int CurrentActiveCount, int? MaxAllowed)> GetWarehouseQuotaStatusAsync()
+        {
+            var tenantId = _context.CurrentTenantId > 0 ? _context.CurrentTenantId : 1;
+            var sub = await _context.TenantSubscriptions.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.TenantId == tenantId);
+            if (sub == null || sub.MaxWarehouses <= 0)
+            {
+                return (0, null);
+            }
+
+            var activeCount = await _dbSet.AsNoTracking().CountAsync(w => w.IsActive);
+            return (activeCount, sub.MaxWarehouses);
+        }
+
         public async Task<bool> HasTransactionsAsync(int warehouseId)
         {
             if (await _context.InventoryTransactions.AnyAsync(t => t.WarehouseId == warehouseId)) return true;

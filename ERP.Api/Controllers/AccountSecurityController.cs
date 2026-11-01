@@ -18,8 +18,8 @@ public sealed record ResetPasswordAdminRequest(string? TemporaryPassword = null,
 public sealed class AccountSecurityController(
     IAccountAdminService service,
     IUserSessionService sessionService,
-    IWmsGovernanceOperationsService govOps = null!,
-    IPasswordHasherService? passwordHasher = null) : ControllerBase
+    IWmsGovernanceOperationsService govOps,
+    IPasswordHasherService passwordHasher) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> Get(int userId, CancellationToken cancellationToken) =>
@@ -32,19 +32,8 @@ public sealed class AccountSecurityController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] AccountSecurityCommandDto? request = null,
         CancellationToken cancellationToken = default)
     {
-        var actorUserId = ResolveActorUserId();
-        if (govOps is not null)
-        {
-            var outcome = await govOps.LockUserAccountAsync(userId, request?.RowVersion, actorUserId, sessionService, cancellationToken);
-            return outcome.ToActionResult(this);
-        }
-
-        if (actorUserId.HasValue && actorUserId.Value == userId)
-            throw new ERP.Application.Exceptions.BusinessRuleException("Không thể tự khóa hoặc đặt lại mật khẩu tài khoản của chính mình.");
-        if (sessionService is not null && !string.IsNullOrWhiteSpace(request?.RowVersion))
-            await sessionService.RevokeUserSessionsAsAdminAsync(userId, request.RowVersion, cancellationToken);
-
-        return Ok(new { userId, isLockedOut = true, lockoutEnd = DateTime.UtcNow.AddMinutes(30) });
+        var outcome = await govOps.LockUserAccountAsync(userId, request?.RowVersion, ResolveActorUserId(), sessionService, cancellationToken);
+        return outcome.ToActionResult(this);
     }
 
     [HttpPost("unlock")]
@@ -70,36 +59,16 @@ public sealed class AccountSecurityController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ResetPasswordAdminRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        var actorUserId = ResolveActorUserId();
-        if (govOps is not null)
-        {
-            var outcome = await govOps.ResetUserPasswordAsync(
-                userId,
-                request?.TemporaryPassword,
-                request?.Reason,
-                request?.RowVersion,
-                actorUserId,
-                sessionService,
-                passwordHasher,
-                cancellationToken);
-            return outcome.ToActionResult(this);
-        }
-
-        if (actorUserId.HasValue && actorUserId.Value == userId)
-            throw new ERP.Application.Exceptions.BusinessRuleException("Không thể tự khóa hoặc đặt lại mật khẩu tài khoản của chính mình.");
-
-        if (string.IsNullOrWhiteSpace(request?.TemporaryPassword) || request.TemporaryPassword.Trim().Length < 8)
-            throw new ERP.Application.Exceptions.BusinessRuleException("Mật khẩu tạm thời phải có tối thiểu 8 ký tự.");
-
-        if (sessionService is not null && !string.IsNullOrWhiteSpace(request.RowVersion))
-            await sessionService.RevokeUserSessionsAsAdminAsync(userId, request.RowVersion, cancellationToken);
-
-        return Ok(new
-        {
+        var outcome = await govOps.ResetUserPasswordAsync(
             userId,
-            status = "PASSWORD_RESET_COMPLETED",
-            resetAtUtc = DateTime.UtcNow
-        });
+            request?.TemporaryPassword,
+            request?.Reason,
+            request?.RowVersion,
+            ResolveActorUserId(),
+            sessionService,
+            passwordHasher,
+            cancellationToken);
+        return outcome.ToActionResult(this);
     }
 
     [HttpDelete]
@@ -108,9 +77,6 @@ public sealed class AccountSecurityController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] AccountSecurityCommandDto? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (govOps is null)
-            return NoContent();
-
         var outcome = await govOps.DeleteUserAccountAsync(
             userId,
             request?.RowVersion,
@@ -119,49 +85,41 @@ public sealed class AccountSecurityController(
         return outcome.ToActionResult(this);
     }
 
-    public sealed record VerifyTotpRequest(string? Code = null, string? TotpCode = null, string? Base32Secret = null);
+    public sealed record VerifyTotpRequest(string? Code = null, string? TotpCode = null)
+    {
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public Dictionary<string, System.Text.Json.JsonElement>? ExtensionData { get; init; }
+
+        public bool HasClientSuppliedSecret() =>
+            ExtensionData != null &&
+            ExtensionData.Any(kvp =>
+                (string.Equals(kvp.Key, "base32Secret", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(kvp.Key, "secretKey", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(kvp.Key, "secretKeyBase32", StringComparison.OrdinalIgnoreCase)) &&
+                kvp.Value.ValueKind == System.Text.Json.JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(kvp.Value.GetString()));
+    }
 
     [HttpPost("totp/setup")]
     [IdempotentCommand("AccountSecurity.TotpSetup")]
     public async Task<IActionResult> SetupTotp(int userId, CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.UserManage))
             return Forbid();
 
-        var resolvedName = govOps is not null ? await govOps.GetUsernameByIdAsync(userId, cancellationToken) : null;
-        var username = !string.IsNullOrWhiteSpace(resolvedName) ? resolvedName.Trim() : $"user_{userId}";
+        var outcome = await govOps.SetupTotpAsync(userId, ResolveActorUserId(), cancellationToken);
+        return outcome.ToActionResult(this);
+    }
 
-        var secretBytes = GetTotpSecretBytes(userId, username);
-        var base32Secret = EncodeBase32(secretBytes);
-        var otpauthUri = $"otpauth://totp/ERP_WMS:{username}?secret={base32Secret}&issuer=ERP_WMS&digits=6&period=30";
-        var timeStep = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
-        var currentTotpCode = ComputeTotpCode(secretBytes, timeStep);
+    [HttpPost("totp/reveal-secret")]
+    [IdempotentCommand("AccountSecurity.TotpRevealSecret")]
+    public async Task<IActionResult> RevealTotpSecret(int userId, CancellationToken cancellationToken = default)
+    {
+        if (!this.HasActionPermission(null, AppPermissions.UserManage))
+            return Forbid();
 
-        var now = DateTime.UtcNow;
-        if (govOps is not null)
-        {
-            await govOps.LogTotpAuditAsync(
-                userId,
-                ResolveActorUserId(),
-                "AccountSecurity.TotpSetup",
-                $"{base32Secret[..8]}...",
-                "Khởi tạo khóa xác thực 2 lớp TOTP MFA chuẩn RFC 6238",
-                now,
-                cancellationToken);
-        }
-
-        return Ok(new
-        {
-            userId,
-            username,
-            base32Secret,
-            otpauthUri,
-            currentTotpCode,
-            digits = 6,
-            periodSeconds = 30,
-            algorithm = "HMAC-SHA1 (RFC 6238)",
-            statusLabel = "Đã khởi tạo khóa xác thực 2 lớp TOTP MFA chuẩn RFC 6238"
-        });
+        var outcome = await govOps.RevealTotpSecretAsync(userId, cancellationToken);
+        return outcome.ToActionResult(this);
     }
 
     [HttpPost("totp/verify")]
@@ -171,46 +129,60 @@ public sealed class AccountSecurityController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyTotpRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.UserManage))
             return Forbid();
 
-        var resolvedName = govOps is not null ? await govOps.GetUsernameByIdAsync(userId, cancellationToken) : null;
-        var username = !string.IsNullOrWhiteSpace(resolvedName) ? resolvedName.Trim() : $"user_{userId}";
-
-        var secretBytes = GetTotpSecretBytes(userId, username);
-        var candidateCode = (request?.Code ?? request?.TotpCode ?? string.Empty).Trim();
-        var timeStep = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
-        var isValid = candidateCode.Length == 6 &&
-            (string.Equals(candidateCode, ComputeTotpCode(secretBytes, timeStep), StringComparison.Ordinal) ||
-             string.Equals(candidateCode, ComputeTotpCode(secretBytes, timeStep - 1), StringComparison.Ordinal) ||
-             string.Equals(candidateCode, ComputeTotpCode(secretBytes, timeStep + 1), StringComparison.Ordinal));
-
-        var now = DateTime.UtcNow;
-        if (govOps is not null)
+        if (request?.HasClientSuppliedSecret() == true)
         {
-            await govOps.LogTotpAuditAsync(
-                userId,
-                ResolveActorUserId(),
-                "AccountSecurity.TotpVerify",
-                isValid ? "VERIFIED" : "INVALID",
-                isValid
-                    ? $"Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số ({candidateCode}) theo chuẩn RFC 6238"
-                    : "Mã bảo mật 2 lớp 6 chữ số không hợp lệ hoặc đã hết hạn",
-                now,
-                cancellationToken);
+            return BadRequest(new
+            {
+                code = "TOTP_CLIENT_SECRET_REJECTED",
+                errorCode = "TOTP_CLIENT_SECRET_REJECTED",
+                verified = false,
+                message = "Không chấp nhận khóa bí mật TOTP do client tự gửi lên; hệ thống chỉ đối chiếu với khóa đã lưu bảo mật trên máy chủ."
+            });
         }
 
-        return Ok(new
-        {
-            verified = isValid,
-            userId,
-            username,
-            algorithm = "HMAC-SHA1 (RFC 6238)",
-            verifiedAtUtc = now,
-            statusLabel = isValid
-                ? $"Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số ({candidateCode}) theo chuẩn RFC 6238"
-                : "Mã bảo mật 2 lớp 6 chữ số không hợp lệ hoặc đã hết hạn"
-        });
+        var candidateCode = (request?.Code ?? request?.TotpCode ?? string.Empty).Trim();
+        var outcome = await govOps.VerifyTotpAsync(userId, candidateCode, ResolveActorUserId(), cancellationToken);
+        return outcome.ToActionResult(this);
+    }
+
+    [HttpPost("totp/confirm-activation")]
+    [IdempotentCommand("AccountSecurity.TotpConfirmActivation")]
+    public async Task<IActionResult> ConfirmTotpActivation(int userId, CancellationToken cancellationToken = default)
+    {
+        if (!this.HasActionPermission(null, AppPermissions.UserManage))
+            return Forbid();
+
+        var outcome = await govOps.ConfirmTotpActivationAsync(userId, ResolveActorUserId(), cancellationToken);
+        return outcome.ToActionResult(this);
+    }
+
+    [HttpPost("totp/cancel")]
+    [IdempotentCommand("AccountSecurity.TotpCancel")]
+    public async Task<IActionResult> CancelTotpEnrollment(int userId, CancellationToken cancellationToken = default)
+    {
+        if (!this.HasActionPermission(null, AppPermissions.UserManage))
+            return Forbid();
+
+        var outcome = await govOps.CancelTotpEnrollmentAsync(userId, ResolveActorUserId(), cancellationToken);
+        return outcome.ToActionResult(this);
+    }
+
+    [HttpPost("totp/regenerate-recovery-codes")]
+    [IdempotentCommand("AccountSecurity.TotpRegenerateRecoveryCodes")]
+    public async Task<IActionResult> RegenerateRecoveryCodes(
+        int userId,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyTotpRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!this.HasActionPermission(null, AppPermissions.UserManage))
+            return Forbid();
+
+        var candidateCode = (request?.Code ?? request?.TotpCode ?? string.Empty).Trim();
+        var outcome = await govOps.RegenerateRecoveryCodesAsync(userId, candidateCode, ResolveActorUserId(), cancellationToken);
+        return outcome.ToActionResult(this);
     }
 
     public sealed record GrantSupportImpersonationRequest(
@@ -232,49 +204,26 @@ public sealed class AccountSecurityController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GrantSupportImpersonationRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.UserManage))
             return Forbid();
 
-        if (govOps is not null)
-        {
-            var outcome = await govOps.GrantSupportImpersonationAsync(
-                request?.SupportTicketCode,
-                request?.ExpiresInMinutes,
-                request?.ReadOnlyScope ?? true,
-                request?.SupportAgentUserId,
-                ResolveActorUserId(),
-                cancellationToken);
-            return outcome.ToActionResult(this);
-        }
-
-        var now = DateTime.UtcNow;
-        var expiresMinutes = Math.Clamp(request?.ExpiresInMinutes ?? 30, 5, 60);
-        var expiresAtUtc = now.AddMinutes(expiresMinutes);
-        var ticketCode = string.IsNullOrWhiteSpace(request?.SupportTicketCode) ? $"SUP-{now:yyyyMMdd}-01" : request.SupportTicketCode.Trim();
-        var supportToken = $"IMP-{Guid.NewGuid():N}".ToUpperInvariant();
-
-        return Ok(new
-        {
-            sessionId = (int?)null,
-            supportTicketCode = ticketCode,
-            supportImpersonationToken = supportToken,
-            readOnlyScope = request?.ReadOnlyScope ?? true,
-            expiresInMinutes = expiresMinutes,
-            grantedAtUtc = now,
-            expiresAtUtc,
-            statusLabel = $"Đã cấp quyền hỗ trợ kỹ thuật có thời hạn ({expiresMinutes} phút) kèm nhật ký AuditLog bất biến"
-        });
+        var outcome = await govOps.GrantSupportImpersonationAsync(
+            request?.SupportTicketCode,
+            request?.ExpiresInMinutes,
+            request?.ReadOnlyScope ?? true,
+            request?.SupportAgentUserId,
+            ResolveActorUserId(),
+            cancellationToken);
+        return outcome.ToActionResult(this);
     }
 
     [HttpGet("~/api/v1/security/support-impersonation/sessions")]
     [HttpGet("~/api/security/support-impersonation/sessions")]
     [HttpGet("~/api/v1/account-security/support-impersonation/sessions")]
     [HttpGet("~/api/account-security/support-impersonation/sessions")]
+    [PermissionAuthorize(AppPermissions.PermissionRead)]
     public async Task<IActionResult> ListSupportImpersonationSessions(CancellationToken cancellationToken = default)
     {
-        if (govOps is null)
-            return Ok(Array.Empty<object>());
-
         var outcome = await govOps.ListSupportImpersonationSessionsAsync(cancellationToken);
         return outcome.ToActionResult(this);
     }
@@ -286,11 +235,8 @@ public sealed class AccountSecurityController(
     [IdempotentCommand("AccountSecurity.RevokeSupportImpersonation")]
     public async Task<IActionResult> RevokeSupportImpersonation(int sessionId, CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.UserManage))
             return Forbid();
-
-        if (govOps is null)
-            return NotFound();
 
         var outcome = await govOps.RevokeSupportImpersonationAsync(sessionId, ResolveActorUserId(), cancellationToken);
         return outcome.ToActionResult(this);
@@ -306,40 +252,14 @@ public sealed class AccountSecurityController(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] AnonymizeBuyerPiiRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.UserManage))
             return Forbid();
 
-        if (govOps is not null)
-        {
-            var outcome = await govOps.AnonymizeExpiredBuyerPiiAsync(
-                request?.RetentionDays,
-                ResolveActorUserId(),
-                cancellationToken);
-            return outcome.ToActionResult(this);
-        }
-
-        var now = DateTime.UtcNow;
-        var retentionDays = Math.Max(1, request?.RetentionDays ?? 90);
-        return Ok(new
-        {
-            retentionDays,
-            cutoffUtc = now.AddDays(-retentionDays),
-            anonymizedCount = 0,
-            anonymizedReceiptsCount = 0,
-            anonymizedOrdersCount = 0,
-            anonymizedReturnsCount = 0,
-            complianceStandard = "Nghị định 13/2023/NĐ-CP về Bảo vệ dữ liệu cá nhân",
-            ledgerIntegrityPreserved = true,
-            executedAtUtc = now,
-            statusLabel = $"Đã ẩn danh hóa PII người mua quá hạn {retentionDays} ngày (0 chứng từ) theo Nghị định 13/2023/NĐ-CP"
-        });
-    }
-
-    public static byte[] GetTotpSecretBytes(int userId, string username)
-    {
-        var raw = System.Text.Encoding.UTF8.GetBytes($"ERP_WMS_RFC6238_TOTP_SECRET:{userId}:{username.Trim().ToLowerInvariant()}");
-        var hash = System.Security.Cryptography.SHA256.HashData(raw);
-        return hash[..20];
+        var outcome = await govOps.AnonymizeExpiredBuyerPiiAsync(
+            request?.RetentionDays,
+            ResolveActorUserId(),
+            cancellationToken);
+        return outcome.ToActionResult(this);
     }
 
     public static string EncodeBase32(ReadOnlySpan<byte> data)
@@ -363,6 +283,36 @@ public sealed class AccountSecurityController(
             output.Append(alphabet[(buffer << (5 - bitsLeft)) & 0x1F]);
         }
         return output.ToString();
+    }
+
+    public static byte[] DecodeBase32(string base32)
+    {
+        const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+        var clean = base32.Trim().Replace(" ", "").Replace("-", "").TrimEnd('=').ToUpperInvariant();
+        if (clean.Length == 0)
+        {
+            return Array.Empty<byte>();
+        }
+
+        var bytes = new List<byte>((clean.Length * 5) / 8);
+        int buffer = 0;
+        int bitsLeft = 0;
+        foreach (var ch in clean)
+        {
+            var val = alphabet.IndexOf(ch);
+            if (val < 0)
+            {
+                return Array.Empty<byte>();
+            }
+            buffer = (buffer << 5) | val;
+            bitsLeft += 5;
+            if (bitsLeft >= 8)
+            {
+                bytes.Add((byte)((buffer >> (bitsLeft - 8)) & 0xFF));
+                bitsLeft -= 8;
+            }
+        }
+        return bytes.ToArray();
     }
 
     public static string ComputeTotpCode(byte[] secretBytes, long timeStep)

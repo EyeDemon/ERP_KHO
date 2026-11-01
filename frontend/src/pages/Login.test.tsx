@@ -55,7 +55,7 @@ it('hỗ trợ đăng nhập Multi-Tenant với Mã doanh nghiệp (Tenant) ho�
   fireEvent.submit(view.getByRole('button', { name: 'Đăng nhập' }).closest('form')!);
 
   await waitFor(() => {
-    expect(apiClient.post).toHaveBeenCalledWith('/api/auth/login', {
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/auth/login', {
       username: 'admin',
       password: 'Secret!202',
       tenantCode: 'TENANT-202',

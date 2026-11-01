@@ -10,6 +10,7 @@ using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Domain.Exceptions;
 using ERP.Infrastructure.Persistence;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Infrastructure.Services;
@@ -17,10 +18,18 @@ namespace ERP.Infrastructure.Services;
 public sealed class WmsGovernanceOperationsService(
     ErpKhoDbContext db,
     IWarehouseAuthorizationService? warehouseAccess = null,
-    ICurrentUser? currentUser = null) : IWmsGovernanceOperationsService
+    ICurrentUser? currentUser = null,
+    IDataProtectionProvider? dataProtectionProvider = null) : IWmsGovernanceOperationsService
 {
+    private const string TotpProtectionPurpose = "ERP.User.TotpSecret.v1";
+    private static readonly IDataProtectionProvider FallbackDataProtectionProvider =
+        DataProtectionProvider.Create("ERP.KHO.TotpSecret.v1");
+
     public IWarehouseAuthorizationService? WarehouseAccess => warehouseAccess;
     public ICurrentUser? CurrentUser => currentUser;
+
+    private IDataProtector GetTotpProtector() =>
+        (dataProtectionProvider ?? FallbackDataProtectionProvider).CreateProtector(TotpProtectionPurpose);
 
     // -------------------------------------------------------------------------
     // UnitsController
@@ -717,6 +726,8 @@ public sealed class WmsGovernanceOperationsService(
         int? warehouseId,
         int activePartnersCount,
         string billingPeriod,
+        DateTime periodFromUtc,
+        DateTime periodToUtc,
         decimal totalOnHandUnits,
         decimal billableStorageUnits,
         decimal inboundUnits,
@@ -741,49 +752,97 @@ public sealed class WmsGovernanceOperationsService(
         decimal? storageRatePerUnit,
         decimal? inboundRatePerUnit,
         decimal? outboundRatePerUnit,
+        DateTime? periodFromUtc,
+        DateTime? periodToUtc,
         CancellationToken ct)
     {
-        var activePartnersCount = await db.BusinessPartners.AsNoTracking().CountAsync(x => x.IsActive, ct);
-        int? resolvedPartnerId = partnerId;
-        var partnerCode = "BP-3PL-DEFAULT";
-        var partnerName = "Đối tác Chủ hàng 3PL Tiêu chuẩn";
+        var now = DateTime.UtcNow;
+        var effectivePeriodFromUtc = periodFromUtc ?? now.Date.AddDays(-30);
+        var effectivePeriodToUtc = periodToUtc ?? now;
+        if (effectivePeriodToUtc < effectivePeriodFromUtc)
+        {
+            (effectivePeriodFromUtc, effectivePeriodToUtc) = (effectivePeriodToUtc, effectivePeriodFromUtc);
+        }
 
-        var partner = partnerId.HasValue
-            ? await db.BusinessPartners.AsNoTracking().FirstOrDefaultAsync(x => x.Id == partnerId.Value, ct)
-            : await db.BusinessPartners.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
+        var activePartnersCount = await db.BusinessPartners.AsNoTracking().CountAsync(x => x.IsActive, ct);
+        int? resolvedPartnerId = null;
+        var partnerCode = "BP-3PL-UNASSIGNED";
+        var partnerName = "Chưa có chủ hàng ký gửi 3PL hợp lệ";
+
+        ERP.Domain.Entities.BusinessPartner? partner = null;
+        if (partnerId.HasValue)
+        {
+            partner = await db.BusinessPartners.AsNoTracking().FirstOrDefaultAsync(x => x.Id == partnerId.Value, ct);
+            if (partner != null)
+            {
+                resolvedPartnerId = partner.Id;
+            }
+        }
+        else
+        {
+            var defaultConsignmentOwnerId = await db.InventoryStocks.AsNoTracking()
+                .Where(s => s.OwnerId != null && s.Quantity > 0m && (!warehouseId.HasValue || s.WarehouseId == warehouseId.Value))
+                .OrderByDescending(s => s.Quantity)
+                .Select(s => s.OwnerId)
+                .FirstOrDefaultAsync(ct);
+
+            if (defaultConsignmentOwnerId.HasValue)
+            {
+                partner = await db.BusinessPartners.AsNoTracking().FirstOrDefaultAsync(x => x.Id == defaultConsignmentOwnerId.Value, ct);
+                if (partner != null)
+                {
+                    resolvedPartnerId = partner.Id;
+                }
+            }
+        }
 
         if (partner != null)
         {
-            resolvedPartnerId = partner.Id;
             partnerCode = (partner.Code ?? string.Empty).Trim();
             partnerName = (partner.Name ?? string.Empty).Trim();
         }
 
-        var stockQuery = db.InventoryStocks.AsNoTracking();
-        if (warehouseId.HasValue)
-            stockQuery = stockQuery.Where(s => s.WarehouseId == warehouseId.Value);
-        var totalOnHandUnits = await stockQuery.SumAsync(s => (decimal?)s.Quantity, ct) ?? 0m;
+        var totalOnHandUnits = 0m;
+        var inboundUnits = 0m;
+        var outboundUnits = 0m;
 
-        var txQuery = db.InventoryTransactions.AsNoTracking();
-        if (warehouseId.HasValue)
-            txQuery = txQuery.Where(t => t.WarehouseId == warehouseId.Value);
+        if (resolvedPartnerId.HasValue)
+        {
+            var ownerId = resolvedPartnerId.Value;
+            var stockQuery = db.InventoryStocks.AsNoTracking()
+                .Where(s => s.OwnerId == ownerId);
+            if (warehouseId.HasValue)
+            {
+                stockQuery = stockQuery.Where(s => s.WarehouseId == warehouseId.Value);
+            }
 
-        var inboundUnits = await txQuery
-            .Where(t => t.TransactionType == TransactionType.Import ||
-                        t.TransactionType == TransactionType.TransferIn)
-            .SumAsync(t => (decimal?)Math.Abs(t.Quantity), ct) ?? 0m;
+            totalOnHandUnits = await stockQuery.SumAsync(s => (decimal?)s.Quantity, ct) ?? 0m;
 
-        var outboundUnits = await txQuery
-            .Where(t => t.TransactionType == TransactionType.Export ||
-                        t.TransactionType == TransactionType.Ship ||
-                        t.TransactionType == TransactionType.AdjustmentIncrease)
-            .SumAsync(t => (decimal?)Math.Abs(t.Quantity), ct) ?? 0m;
+            var txQuery = db.InventoryTransactions.AsNoTracking()
+                .Where(t => t.OwnerId == ownerId &&
+                            t.TransactionDate >= effectivePeriodFromUtc &&
+                            t.TransactionDate <= effectivePeriodToUtc);
+            if (warehouseId.HasValue)
+            {
+                txQuery = txQuery.Where(t => t.WarehouseId == warehouseId.Value);
+            }
+
+            inboundUnits = await txQuery
+                .Where(t => t.TransactionType == TransactionType.Import ||
+                            t.TransactionType == TransactionType.TransferIn)
+                .SumAsync(t => (decimal?)Math.Abs(t.Quantity), ct) ?? 0m;
+
+            outboundUnits = await txQuery
+                .Where(t => t.TransactionType == TransactionType.Export ||
+                            t.TransactionType == TransactionType.Ship)
+                .SumAsync(t => (decimal?)Math.Abs(t.Quantity), ct) ?? 0m;
+        }
 
         var effectiveStorageRate = storageRatePerUnit is > 0m ? storageRatePerUnit.Value : 15000m;
         var effectiveInboundRate = inboundRatePerUnit is > 0m ? inboundRatePerUnit.Value : 8000m;
         var effectiveOutboundRate = outboundRatePerUnit is > 0m ? outboundRatePerUnit.Value : 9000m;
 
-        var billableStorageUnits = Math.Max(1m, totalOnHandUnits);
+        var billableStorageUnits = totalOnHandUnits;
         var storageFeeAmount = Math.Round(billableStorageUnits * effectiveStorageRate, 0);
         var inboundHandlingFeeAmount = Math.Round(inboundUnits * effectiveInboundRate, 0);
         var outboundHandlingFeeAmount = Math.Round(outboundUnits * effectiveOutboundRate, 0);
@@ -817,14 +876,23 @@ public sealed class WmsGovernanceOperationsService(
                 outboundHandlingFeeAmount)
         };
 
+        var resolvedPeriod = !string.IsNullOrWhiteSpace(billingPeriod)
+            ? billingPeriod.Trim()
+            : now.ToString("yyyy-MM");
+        var resolvedStatementCode = resolvedPartnerId.HasValue
+            ? $"3PL-STMT-{resolvedPartnerId.Value}-{resolvedPeriod.Replace("-", "")}"
+            : $"3PL-STMT-NONE-{resolvedPeriod.Replace("-", "")}";
+
         return new ThreePlBillingComputationResult(
-            $"3PL-STMT-{DateTime.UtcNow:yyyyMMdd}-01",
+            resolvedStatementCode,
             resolvedPartnerId,
             partnerCode,
             partnerName,
             warehouseId,
             activePartnersCount,
-            !string.IsNullOrWhiteSpace(billingPeriod) ? billingPeriod.Trim() : DateTime.UtcNow.ToString("yyyy-MM"),
+            resolvedPeriod,
+            effectivePeriodFromUtc,
+            effectivePeriodToUtc,
             totalOnHandUnits,
             billableStorageUnits,
             inboundUnits,
@@ -850,7 +918,9 @@ public sealed class WmsGovernanceOperationsService(
         decimal? storageRatePerUnit,
         decimal? inboundRatePerUnit,
         decimal? outboundRatePerUnit,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        DateTime? periodFromUtc = null,
+        DateTime? periodToUtc = null)
     {
         var summary = await Compute3PlBillingCoreAsync(
             partnerId,
@@ -859,6 +929,8 @@ public sealed class WmsGovernanceOperationsService(
             storageRatePerUnit,
             inboundRatePerUnit,
             outboundRatePerUnit,
+            periodFromUtc,
+            periodToUtc,
             ct);
 
         return WmsEndpointOutcome.Ok(new
@@ -870,6 +942,8 @@ public sealed class WmsGovernanceOperationsService(
             summary.warehouseId,
             summary.activePartnersCount,
             summary.billingPeriod,
+            summary.periodFromUtc,
+            summary.periodToUtc,
             summary.totalOnHandUnits,
             summary.billableStorageUnits,
             summary.inboundUnits,
@@ -901,7 +975,9 @@ public sealed class WmsGovernanceOperationsService(
         decimal? outboundRatePerUnit,
         bool createReceivableInvoice,
         int? actorUserId,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        DateTime? periodFromUtc = null,
+        DateTime? periodToUtc = null)
     {
         var summary = await Compute3PlBillingCoreAsync(
             partnerId,
@@ -910,9 +986,15 @@ public sealed class WmsGovernanceOperationsService(
             storageRatePerUnit,
             inboundRatePerUnit,
             outboundRatePerUnit,
+            periodFromUtc,
+            periodToUtc,
             ct);
 
         var now = DateTime.UtcNow;
+        string? receivableInvoiceCode = null;
+        var isRelational = db.Database.IsRelational();
+        await using var tx = isRelational ? await db.Database.BeginTransactionAsync(ct) : null;
+
         db.AuditLogs.Add(new AuditLog
         {
             UserId = actorUserId,
@@ -926,46 +1008,68 @@ public sealed class WmsGovernanceOperationsService(
             Timestamp = now
         });
 
-        string? receivableInvoiceCode = null;
         ThreePlBillingStatement? statementRecord = null;
         if (summary.partnerId.HasValue && summary.partnerId.Value > 0)
         {
-            statementRecord = new ThreePlBillingStatement
+            statementRecord = await db.ThreePlBillingStatements
+                .FirstOrDefaultAsync(x => x.PartnerId == summary.partnerId.Value && x.StatementCode == summary.statementCode, ct);
+            if (statementRecord == null)
             {
-                WarehouseId = summary.warehouseId,
-                PartnerId = summary.partnerId.Value,
-                StatementCode = summary.statementCode,
-                PeriodFromUtc = now.Date.AddDays(-30),
-                PeriodToUtc = now,
-                TotalOnHandQty = summary.totalOnHandUnits,
-                TotalInboundQty = summary.inboundUnits,
-                TotalOutboundQty = summary.outboundUnits,
-                StorageFeeAmount = summary.storageFeeAmount,
-                InboundHandlingFeeAmount = summary.inboundHandlingFeeAmount,
-                OutboundHandlingFeeAmount = summary.outboundHandlingFeeAmount,
-                TotalBillingAmount = summary.totalBillingAmount,
-                Status = "ISSUED",
-                CreatedByUserId = actorUserId,
-                CreatedAtUtc = now
-            };
-            db.ThreePlBillingStatements.Add(statementRecord);
+                statementRecord = new ThreePlBillingStatement
+                {
+                    WarehouseId = summary.warehouseId,
+                    PartnerId = summary.partnerId.Value,
+                    StatementCode = summary.statementCode,
+                    PeriodFromUtc = summary.periodFromUtc,
+                    PeriodToUtc = summary.periodToUtc,
+                    TotalOnHandQty = summary.totalOnHandUnits,
+                    TotalInboundQty = summary.inboundUnits,
+                    TotalOutboundQty = summary.outboundUnits,
+                    StorageFeeAmount = summary.storageFeeAmount,
+                    InboundHandlingFeeAmount = summary.inboundHandlingFeeAmount,
+                    OutboundHandlingFeeAmount = summary.outboundHandlingFeeAmount,
+                    TotalBillingAmount = summary.totalBillingAmount,
+                    Status = "ISSUED",
+                    CreatedByUserId = actorUserId,
+                    CreatedAtUtc = now
+                };
+                db.ThreePlBillingStatements.Add(statementRecord);
+            }
+            else
+            {
+                statementRecord.PeriodFromUtc = summary.periodFromUtc;
+                statementRecord.PeriodToUtc = summary.periodToUtc;
+                statementRecord.TotalOnHandQty = summary.totalOnHandUnits;
+                statementRecord.TotalInboundQty = summary.inboundUnits;
+                statementRecord.TotalOutboundQty = summary.outboundUnits;
+                statementRecord.StorageFeeAmount = summary.storageFeeAmount;
+                statementRecord.InboundHandlingFeeAmount = summary.inboundHandlingFeeAmount;
+                statementRecord.OutboundHandlingFeeAmount = summary.outboundHandlingFeeAmount;
+                statementRecord.TotalBillingAmount = summary.totalBillingAmount;
+            }
+
+            await db.SaveChangesAsync(ct);
         }
 
-        if (createReceivableInvoice)
+        if (createReceivableInvoice && summary.partnerId.HasValue && summary.partnerId.Value > 0)
         {
-            var targetPartner = partnerId.HasValue
-                ? await db.BusinessPartners.FirstOrDefaultAsync(x => x.Id == partnerId.Value, ct)
-                : await db.BusinessPartners.Where(x => x.IsCustomer && x.IsActive).OrderBy(x => x.Id).FirstOrDefaultAsync(ct)
-                  ?? await db.BusinessPartners.Where(x => x.IsActive).OrderBy(x => x.Id).FirstOrDefaultAsync(ct);
+            var targetPartner = await db.BusinessPartners
+                .FirstOrDefaultAsync(x => x.Id == summary.partnerId.Value, ct);
 
             if (targetPartner != null)
             {
-                receivableInvoiceCode = $"AR-3PL-{now:yyyyMMdd}";
-                if (statementRecord != null) { statementRecord.ReceivableInvoiceCode = receivableInvoiceCode; }
-                var existingInvoice = await db.PartnerDebtInvoices
-                    .FirstOrDefaultAsync(x => x.Code == receivableInvoiceCode || (x.DebtType == PartnerDebtType.AR && x.SourceType == "ThreePlBilling" && x.SourceId == targetPartner.Id), ct);
+                receivableInvoiceCode = $"AR-3PL-{targetPartner.Id}-{now:yyyyMMdd}";
+                var invoiceSourceId = statementRecord?.Id is > 0 ? statementRecord.Id : targetPartner.Id;
+                if (statementRecord != null)
+                {
+                    statementRecord.ReceivableInvoiceCode = receivableInvoiceCode;
+                }
 
-                if (existingInvoice != null) { receivableInvoiceCode = existingInvoice.Code; }
+                var existingInvoice = await db.PartnerDebtInvoices
+                    .FirstOrDefaultAsync(x => x.Code == receivableInvoiceCode
+                        || (x.DebtType == PartnerDebtType.AR && x.SourceType == "ThreePlBilling" && x.SourceId == invoiceSourceId)
+                        || (x.DebtType == PartnerDebtType.AR && x.SourceType == "ThreePlBilling" && x.PartnerId == targetPartner.Id && x.SourceCode == summary.statementCode), ct);
+
                 if (existingInvoice == null)
                 {
                     var newInvoice = new PartnerDebtInvoice
@@ -975,7 +1079,7 @@ public sealed class WmsGovernanceOperationsService(
                         PartnerId = targetPartner.Id,
                         DebtType = PartnerDebtType.AR,
                         SourceType = "ThreePlBilling",
-                        SourceId = targetPartner.Id,
+                        SourceId = invoiceSourceId,
                         SourceCode = summary.statementCode,
                         Currency = "VND",
                         SubTotalAmount = summary.subTotalAmount,
@@ -991,7 +1095,6 @@ public sealed class WmsGovernanceOperationsService(
                         CreatedAtUtc = now
                     };
                     db.PartnerDebtInvoices.Add(newInvoice);
-                    await db.SaveChangesAsync(ct);
 
                     targetPartner.ReceivableBalance += summary.totalBillingAmount;
                     targetPartner.UpdatedAt = now;
@@ -1000,13 +1103,13 @@ public sealed class WmsGovernanceOperationsService(
                     {
                         TenantId = db.CurrentTenantId,
                         PartnerId = targetPartner.Id,
-                        InvoiceId = newInvoice.Id,
+                        Invoice = newInvoice,
                         DebtType = PartnerDebtType.AR,
                         TransactionType = PartnerDebtTransactionType.InvoiceCreated,
                         AmountDelta = summary.totalBillingAmount,
                         BalanceAfter = targetPartner.ReceivableBalance,
                         ReferenceType = "ThreePlBilling",
-                        ReferenceId = newInvoice.Id,
+                        ReferenceId = invoiceSourceId,
                         ReferenceCode = receivableInvoiceCode,
                         Note = $"Ghi nhận công nợ phải thu từ bảng kê phí dịch vụ kho 3PL {summary.statementCode}",
                         CreatedBy = actorUserId ?? 1,
@@ -1016,6 +1119,8 @@ public sealed class WmsGovernanceOperationsService(
                 else
                 {
                     var delta = summary.totalBillingAmount - existingInvoice.TotalAmount;
+                    existingInvoice.Code = receivableInvoiceCode;
+                    existingInvoice.SourceId = invoiceSourceId;
                     existingInvoice.SubTotalAmount = summary.subTotalAmount;
                     existingInvoice.TaxAmount = summary.vatAmount;
                     existingInvoice.TotalAmount = summary.totalBillingAmount;
@@ -1026,14 +1131,38 @@ public sealed class WmsGovernanceOperationsService(
                     {
                         targetPartner.ReceivableBalance += delta;
                         targetPartner.UpdatedAt = now;
+
+                        db.PartnerDebtLedgers.Add(new PartnerDebtLedger
+                        {
+                            TenantId = db.CurrentTenantId,
+                            PartnerId = targetPartner.Id,
+                            InvoiceId = existingInvoice.Id,
+                            Invoice = existingInvoice,
+                            DebtType = PartnerDebtType.AR,
+                            TransactionType = PartnerDebtTransactionType.InvoiceCreated,
+                            AmountDelta = delta,
+                            BalanceAfter = targetPartner.ReceivableBalance,
+                            ReferenceType = "ThreePlBilling",
+                            ReferenceId = invoiceSourceId,
+                            ReferenceCode = receivableInvoiceCode,
+                            Note = $"Điều chỉnh công nợ phải thu từ cập nhật bảng kê phí dịch vụ kho 3PL {summary.statementCode} (Chênh lệch: {delta:0.##} VND)",
+                            CreatedBy = actorUserId ?? 1,
+                            CreatedAtUtc = now
+                        });
                     }
                 }
             }
         }
 
         await db.SaveChangesAsync(ct);
+        if (tx != null)
+        {
+            await tx.CommitAsync(ct);
+        }
 
-        var arInvoiceCode = createReceivableInvoice ? $"AR-3PL-{now:yyyyMMdd}" : null;
+        var arInvoiceCode = createReceivableInvoice && receivableInvoiceCode != null
+            ? receivableInvoiceCode
+            : null;
 
         return WmsEndpointOutcome.Ok(new
         {
@@ -1045,6 +1174,8 @@ public sealed class WmsGovernanceOperationsService(
             summary.warehouseId,
             summary.activePartnersCount,
             summary.billingPeriod,
+            summary.periodFromUtc,
+            summary.periodToUtc,
             summary.totalOnHandUnits,
             summary.billableStorageUnits,
             summary.inboundUnits,
@@ -1062,9 +1193,9 @@ public sealed class WmsGovernanceOperationsService(
             summary.currency,
             summary.statementLines,
             receivableInvoiceCode = arInvoiceCode,
-            receivableInvoiceCreated = createReceivableInvoice,
+            receivableInvoiceCreated = arInvoiceCode != null,
             status = "ISSUED",
-            statusLabel = createReceivableInvoice
+            statusLabel = arInvoiceCode != null
                 ? $"Đã phát hành bảng kê {summary.statementCode} và ghi nhận hóa đơn phải thu {arInvoiceCode} ({summary.totalBillingAmount:N0} đ)"
                 : "Đã phát hành bảng kê phí dịch vụ 3PL",
             issuedAtUtc = now,
@@ -3286,8 +3417,537 @@ public sealed class WmsGovernanceOperationsService(
 
     public async Task<string?> GetUsernameByIdAsync(int userId, CancellationToken cancellationToken = default)
     {
-        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+        var user = await db.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == db.CurrentTenantId, cancellationToken);
         return !string.IsNullOrWhiteSpace(user?.Username) ? user.Username.Trim() : null;
+    }
+
+    public async Task<WmsEndpointOutcome> SetupTotpAsync(
+        int userId,
+        int? actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await db.Users
+            .FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == db.CurrentTenantId, cancellationToken);
+        if (user is null)
+        {
+            return WmsEndpointOutcome.NotFound(new
+            {
+                userId,
+                code = "USER_NOT_FOUND",
+                errorCode = "USER_NOT_FOUND",
+                message = "Không tìm thấy người dùng trong không gian thuê bao hiện tại."
+            });
+        }
+
+        var username = !string.IsNullOrWhiteSpace(user.Username) ? user.Username.Trim() : $"user_{userId}";
+        var secretBytes = RandomNumberGenerator.GetBytes(20);
+        var base32Secret = EncodeTotpBase32(secretBytes);
+        var protectedSecret = GetTotpProtector().Protect(base32Secret);
+
+        user.TotpSecretProtected = protectedSecret;
+        user.TotpEnrollmentStatus = "PENDING_OTP";
+        user.TotpRecoveryCodeHashesJson = null;
+        user.TotpActivatedAtUtc = null;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        var now = DateTime.UtcNow;
+        db.AuditLogs.Add(new AuditLog
+        {
+            UserId = actorUserId,
+            EntityName = "UserTotpMfa",
+            EntityId = userId,
+            Action = "AccountSecurity.TotpSetup",
+            NewValues = $"{base32Secret[..8]}...",
+            Reason = "Khởi tạo khóa xác thực 2 lớp TOTP MFA chuẩn RFC 6238 (Chờ xác minh OTP)",
+            Result = "Success",
+            Timestamp = now
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        var otpauthUri = $"otpauth://totp/ERP_WMS:{username}?secret={base32Secret}&issuer=ERP_WMS&digits=6&period=30";
+        return WmsEndpointOutcome.Ok(new
+        {
+            userId,
+            username,
+            status = "PENDING_OTP",
+            enrollmentStatus = "PENDING_OTP",
+            otpauthUri,
+            recoveryCodes = Array.Empty<string>(),
+            digits = 6,
+            periodSeconds = 30,
+            algorithm = "HMAC-SHA1 (RFC 6238)",
+            statusLabel = "Đã khởi tạo khóa xác thực 2 lớp TOTP MFA chuẩn RFC 6238 (Chờ xác minh mã 6 chữ số)"
+        });
+    }
+
+    public async Task<WmsEndpointOutcome> RevealTotpSecretAsync(
+        int userId,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await db.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == db.CurrentTenantId, cancellationToken);
+        if (user is null)
+        {
+            return WmsEndpointOutcome.NotFound(new
+            {
+                userId,
+                code = "USER_NOT_FOUND",
+                errorCode = "USER_NOT_FOUND",
+                message = "Không tìm thấy người dùng trong không gian thuê bao hiện tại."
+            });
+        }
+
+        if (string.IsNullOrWhiteSpace(user.TotpSecretProtected) ||
+            string.Equals(user.TotpEnrollmentStatus, "ACTIVE", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(user.TotpEnrollmentStatus, "IDLE", StringComparison.OrdinalIgnoreCase))
+        {
+            return WmsEndpointOutcome.BadRequest(new
+            {
+                userId,
+                code = "TOTP_SECRET_SEALED",
+                errorCode = "TOTP_SECRET_SEALED",
+                message = "Khóa cấu hình 2 lớp đã được ẩn an toàn hoặc chưa khởi tạo phiên thiết lập."
+            });
+        }
+
+        string base32Secret;
+        try
+        {
+            base32Secret = GetTotpProtector().Unprotect(user.TotpSecretProtected);
+        }
+        catch (CryptographicException)
+        {
+            return WmsEndpointOutcome.BadRequest(new
+            {
+                userId,
+                code = "TOTP_SECRET_SEALED",
+                errorCode = "TOTP_SECRET_SEALED",
+                message = "Không thể giải mã khóa cấu hình 2 lớp. Vui lòng khởi tạo lại phiên thiết lập."
+            });
+        }
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            userId,
+            status = user.TotpEnrollmentStatus,
+            enrollmentStatus = user.TotpEnrollmentStatus,
+            secret = base32Secret,
+            base32Secret,
+            secretKeyBase32 = base32Secret
+        });
+    }
+
+    public async Task<WmsEndpointOutcome> VerifyTotpAsync(
+        int userId,
+        string? candidateCode,
+        int? actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await db.Users
+            .FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == db.CurrentTenantId, cancellationToken);
+        if (user is null)
+        {
+            return WmsEndpointOutcome.NotFound(new
+            {
+                userId,
+                code = "USER_NOT_FOUND",
+                errorCode = "USER_NOT_FOUND",
+                message = "Không tìm thấy người dùng trong không gian thuê bao hiện tại."
+            });
+        }
+
+        var username = !string.IsNullOrWhiteSpace(user.Username) ? user.Username.Trim() : $"user_{userId}";
+        if (string.IsNullOrWhiteSpace(user.TotpSecretProtected) ||
+            string.Equals(user.TotpEnrollmentStatus, "IDLE", StringComparison.OrdinalIgnoreCase))
+        {
+            return WmsEndpointOutcome.BadRequest(new
+            {
+                verified = false,
+                userId,
+                username,
+                code = "INVALID_TOTP_CODE",
+                errorCode = "INVALID_TOTP_CODE",
+                message = "Chưa khởi tạo phiên thiết lập xác thực 2 lớp cho người dùng này."
+            });
+        }
+
+        byte[] secretBytes;
+        try
+        {
+            var base32Secret = GetTotpProtector().Unprotect(user.TotpSecretProtected);
+            secretBytes = DecodeTotpBase32(base32Secret);
+        }
+        catch (CryptographicException)
+        {
+            return WmsEndpointOutcome.BadRequest(new
+            {
+                verified = false,
+                userId,
+                username,
+                code = "INVALID_TOTP_CODE",
+                errorCode = "INVALID_TOTP_CODE",
+                message = "Khóa cấu hình 2 lớp không hợp lệ. Vui lòng khởi tạo lại phiên thiết lập."
+            });
+        }
+
+        var cleanCode = (candidateCode ?? string.Empty).Trim();
+        var timeStep = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
+        var isValid = secretBytes.Length >= 10 &&
+            cleanCode.Length == 6 &&
+            (string.Equals(cleanCode, ComputeRfc6238TotpCode(secretBytes, timeStep), StringComparison.Ordinal) ||
+             string.Equals(cleanCode, ComputeRfc6238TotpCode(secretBytes, timeStep - 1), StringComparison.Ordinal) ||
+             string.Equals(cleanCode, ComputeRfc6238TotpCode(secretBytes, timeStep + 1), StringComparison.Ordinal));
+
+        var now = DateTime.UtcNow;
+        db.AuditLogs.Add(new AuditLog
+        {
+            UserId = actorUserId,
+            EntityName = "UserTotpMfa",
+            EntityId = userId,
+            Action = "AccountSecurity.TotpVerify",
+            NewValues = isValid ? "VERIFIED" : "INVALID",
+            Reason = isValid
+                ? $"Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số ({cleanCode}) và cấp 8 mã khôi phục dự phòng"
+                : "Mã bảo mật 2 lớp 6 chữ số không hợp lệ hoặc đã hết hạn",
+            Result = "Success",
+            Timestamp = now
+        });
+
+        if (!isValid)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            return WmsEndpointOutcome.BadRequest(new
+            {
+                verified = false,
+                userId,
+                username,
+                code = "INVALID_TOTP_CODE",
+                errorCode = "INVALID_TOTP_CODE",
+                message = "Mã xác thực 6 chữ số không chính xác hoặc đã hết hạn. Vui lòng kiểm tra lại trên ứng dụng Authenticator."
+            });
+        }
+
+        var issuedRecoveryCodes = GenerateTotpRecoveryCodeBatch();
+        var recoveryHashes = issuedRecoveryCodes
+            .Select(HashRecoveryCode)
+            .ToArray();
+
+        user.TotpRecoveryCodeHashesJson = JsonSerializer.Serialize(recoveryHashes);
+        user.TotpEnrollmentStatus = "PENDING_RECOVERY_ACK";
+        user.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            verified = true,
+            userId,
+            username,
+            status = "PENDING_RECOVERY_ACK",
+            enrollmentStatus = "PENDING_RECOVERY_ACK",
+            recoveryCodes = issuedRecoveryCodes,
+            algorithm = "HMAC-SHA1 (RFC 6238)",
+            verifiedAtUtc = now,
+            statusLabel = $"Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số ({cleanCode}) và cấp 8 mã khôi phục dự phòng"
+        });
+    }
+
+    public async Task<WmsEndpointOutcome> ConfirmTotpActivationAsync(
+        int userId,
+        int? actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await db.Users
+            .FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == db.CurrentTenantId, cancellationToken);
+        if (user is null)
+        {
+            return WmsEndpointOutcome.NotFound(new
+            {
+                userId,
+                code = "USER_NOT_FOUND",
+                errorCode = "USER_NOT_FOUND",
+                message = "Không tìm thấy người dùng trong không gian thuê bao hiện tại."
+            });
+        }
+
+        if (string.IsNullOrWhiteSpace(user.TotpSecretProtected) ||
+            (!string.Equals(user.TotpEnrollmentStatus, "PENDING_RECOVERY_ACK", StringComparison.OrdinalIgnoreCase) &&
+             !string.Equals(user.TotpEnrollmentStatus, "ACTIVE", StringComparison.OrdinalIgnoreCase)))
+        {
+            return WmsEndpointOutcome.BadRequest(new
+            {
+                activated = false,
+                userId,
+                code = "TOTP_RECOVERY_ACK_REQUIRED",
+                errorCode = "TOTP_RECOVERY_ACK_REQUIRED",
+                message = "Vui lòng xác minh mã 6 chữ số và lưu 8 mã khôi phục dự phòng trước khi hoàn tất kích hoạt xác thực 2 lớp."
+            });
+        }
+
+        var now = DateTime.UtcNow;
+        user.TotpEnrollmentStatus = "ACTIVE";
+        user.TotpActivatedAtUtc = now;
+        user.UpdatedAt = now;
+
+        db.AuditLogs.Add(new AuditLog
+        {
+            UserId = actorUserId,
+            EntityName = "UserTotpMfa",
+            EntityId = userId,
+            Action = "AccountSecurity.TotpConfirmActivation",
+            NewValues = "ACTIVE",
+            Reason = "Đã xác nhận lưu 8 mã khôi phục dự phòng và kích hoạt chính thức xác thực 2 lớp",
+            Result = "Success",
+            Timestamp = now
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            activated = true,
+            userId,
+            status = "ACTIVE",
+            enrollmentStatus = "ACTIVE",
+            activatedAtUtc = now,
+            statusLabel = "Đã bật xác thực 2 lớp. Khóa cấu hình và mã khôi phục đã được ẩn an toàn."
+        });
+    }
+
+    public async Task<WmsEndpointOutcome> CancelTotpEnrollmentAsync(
+        int userId,
+        int? actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await db.Users
+            .FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == db.CurrentTenantId, cancellationToken);
+        if (user is null)
+        {
+            return WmsEndpointOutcome.NotFound(new
+            {
+                userId,
+                code = "USER_NOT_FOUND",
+                errorCode = "USER_NOT_FOUND",
+                message = "Không tìm thấy người dùng trong không gian thuê bao hiện tại."
+            });
+        }
+
+        var now = DateTime.UtcNow;
+        user.TotpSecretProtected = null;
+        user.TotpEnrollmentStatus = "IDLE";
+        user.TotpRecoveryCodeHashesJson = null;
+        user.TotpActivatedAtUtc = null;
+        user.UpdatedAt = now;
+
+        db.AuditLogs.Add(new AuditLog
+        {
+            UserId = actorUserId,
+            EntityName = "UserTotpMfa",
+            EntityId = userId,
+            Action = "AccountSecurity.TotpCancel",
+            NewValues = "CANCELLED",
+            Reason = "Đã hủy thiết lập xác thực 2 lớp chưa hoàn tất và vô hiệu hóa bộ mã khôi phục tạm",
+            Result = "Success",
+            Timestamp = now
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            cancelled = true,
+            userId,
+            status = "IDLE",
+            enrollmentStatus = "IDLE",
+            recoveryCodes = Array.Empty<string>(),
+            statusLabel = "Đã hủy phiên thiết lập xác thực 2 lớp chưa hoàn tất và vô hiệu hóa bộ mã khôi phục tạm."
+        });
+    }
+
+    public async Task<WmsEndpointOutcome> RegenerateRecoveryCodesAsync(
+        int userId,
+        string? candidateCode,
+        int? actorUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await db.Users
+            .FirstOrDefaultAsync(u => u.Id == userId && u.TenantId == db.CurrentTenantId, cancellationToken);
+        if (user is null)
+        {
+            return WmsEndpointOutcome.NotFound(new
+            {
+                userId,
+                code = "USER_NOT_FOUND",
+                errorCode = "USER_NOT_FOUND",
+                message = "Không tìm thấy người dùng trong không gian thuê bao hiện tại."
+            });
+        }
+
+        var username = !string.IsNullOrWhiteSpace(user.Username) ? user.Username.Trim() : $"user_{userId}";
+        if (string.IsNullOrWhiteSpace(user.TotpSecretProtected))
+        {
+            return WmsEndpointOutcome.BadRequest(new
+            {
+                regenerated = false,
+                userId,
+                username,
+                code = "INVALID_TOTP_CODE",
+                errorCode = "INVALID_TOTP_CODE",
+                message = "Chưa thiết lập khóa xác thực 2 lớp cho người dùng này."
+            });
+        }
+
+        byte[] secretBytes;
+        try
+        {
+            var base32Secret = GetTotpProtector().Unprotect(user.TotpSecretProtected);
+            secretBytes = DecodeTotpBase32(base32Secret);
+        }
+        catch (CryptographicException)
+        {
+            return WmsEndpointOutcome.BadRequest(new
+            {
+                regenerated = false,
+                userId,
+                username,
+                code = "INVALID_TOTP_CODE",
+                errorCode = "INVALID_TOTP_CODE",
+                message = "Khóa cấu hình 2 lớp không hợp lệ."
+            });
+        }
+
+        var cleanCode = (candidateCode ?? string.Empty).Trim();
+        var timeStep = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
+        var isValid = secretBytes.Length >= 10 &&
+            cleanCode.Length == 6 &&
+            (string.Equals(cleanCode, ComputeRfc6238TotpCode(secretBytes, timeStep), StringComparison.Ordinal) ||
+             string.Equals(cleanCode, ComputeRfc6238TotpCode(secretBytes, timeStep - 1), StringComparison.Ordinal) ||
+             string.Equals(cleanCode, ComputeRfc6238TotpCode(secretBytes, timeStep + 1), StringComparison.Ordinal));
+
+        if (!isValid)
+        {
+            return WmsEndpointOutcome.BadRequest(new
+            {
+                regenerated = false,
+                userId,
+                username,
+                code = "INVALID_TOTP_CODE",
+                errorCode = "INVALID_TOTP_CODE",
+                message = "Mã xác thực 6 chữ số không chính xác hoặc đã hết hạn. Vui lòng nhập mã OTP hiện tại từ ứng dụng Authenticator để sinh lại mã khôi phục."
+            });
+        }
+
+        var newRecoveryCodes = GenerateTotpRecoveryCodeBatch();
+        var recoveryHashes = newRecoveryCodes
+            .Select(HashRecoveryCode)
+            .ToArray();
+
+        var now = DateTime.UtcNow;
+        user.TotpRecoveryCodeHashesJson = JsonSerializer.Serialize(recoveryHashes);
+        user.TotpEnrollmentStatus = "PENDING_RECOVERY_ACK";
+        user.UpdatedAt = now;
+
+        db.AuditLogs.Add(new AuditLog
+        {
+            UserId = actorUserId,
+            EntityName = "UserTotpMfa",
+            EntityId = userId,
+            Action = "AccountSecurity.TotpRegenerateRecoveryCodes",
+            NewValues = "REGENERATED",
+            Reason = "Đã xác thực OTP 6 chữ số, thu hồi bộ mã khôi phục cũ và cấp 8 mã khôi phục dự phòng mới",
+            Result = "Success",
+            Timestamp = now
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            regenerated = true,
+            userId,
+            username,
+            status = "PENDING_RECOVERY_ACK",
+            enrollmentStatus = "PENDING_RECOVERY_ACK",
+            recoveryCodes = newRecoveryCodes,
+            regeneratedAtUtc = now,
+            statusLabel = "Đã thu hồi bộ mã khôi phục cũ và cấp 8 mã khôi phục dự phòng mới."
+        });
+    }
+
+    private static string[] GenerateTotpRecoveryCodeBatch()
+    {
+        var recoveryCodes = new string[8];
+        for (int i = 0; i < recoveryCodes.Length; i++)
+        {
+            var rBytes = RandomNumberGenerator.GetBytes(4);
+            var hex = Convert.ToHexString(rBytes);
+            recoveryCodes[i] = $"{hex[..4]}-{hex[4..8]}";
+        }
+        return recoveryCodes;
+    }
+
+    private static string HashRecoveryCode(string recoveryCode) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(recoveryCode.Trim().ToUpperInvariant())));
+
+    public static string EncodeTotpBase32(ReadOnlySpan<byte> data)
+    {
+        const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+        var output = new StringBuilder((data.Length * 8 + 4) / 5);
+        int buffer = 0;
+        int bitsLeft = 0;
+        foreach (var b in data)
+        {
+            buffer = (buffer << 8) | b;
+            bitsLeft += 8;
+            while (bitsLeft >= 5)
+            {
+                output.Append(alphabet[(buffer >> (bitsLeft - 5)) & 0x1F]);
+                bitsLeft -= 5;
+            }
+        }
+        if (bitsLeft > 0)
+        {
+            output.Append(alphabet[(buffer << (5 - bitsLeft)) & 0x1F]);
+        }
+        return output.ToString();
+    }
+
+    public static byte[] DecodeTotpBase32(string base32)
+    {
+        const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+        var clean = base32.Trim().Replace(" ", "").Replace("-", "").TrimEnd('=').ToUpperInvariant();
+        if (clean.Length == 0)
+            return Array.Empty<byte>();
+
+        var bytes = new List<byte>((clean.Length * 5) / 8);
+        int buffer = 0;
+        int bitsLeft = 0;
+        foreach (var ch in clean)
+        {
+            var val = alphabet.IndexOf(ch);
+            if (val < 0)
+                return Array.Empty<byte>();
+            buffer = (buffer << 5) | val;
+            bitsLeft += 5;
+            if (bitsLeft >= 8)
+            {
+                bytes.Add((byte)((buffer >> (bitsLeft - 8)) & 0xFF));
+                bitsLeft -= 8;
+            }
+        }
+        return bytes.ToArray();
+    }
+
+    public static string ComputeRfc6238TotpCode(byte[] secretBytes, long timeStep)
+    {
+        Span<byte> counterBytes = stackalloc byte[8];
+        BinaryPrimitives.WriteInt64BigEndian(counterBytes, timeStep);
+        var hmac = HMACSHA1.HashData(secretBytes, counterBytes);
+        var offset = hmac[^1] & 0x0F;
+        var binaryCode =
+            ((hmac[offset] & 0x7F) << 24) |
+            ((hmac[offset + 1] & 0xFF) << 16) |
+            ((hmac[offset + 2] & 0xFF) << 8) |
+            (hmac[offset + 3] & 0xFF);
+        var otp = binaryCode % 1_000_000;
+        return otp.ToString("D6");
     }
 
     public async Task LogTotpAuditAsync(

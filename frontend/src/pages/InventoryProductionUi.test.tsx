@@ -15,10 +15,10 @@ describe('Inventory shared production UI', () => {
     vi.resetAllMocks();
     get.mockImplementation(async (url) => {
       const value = String(url);
-      if (value === '/api/warehouses') {
+      if (value === '/api/v1/warehouses') {
         return { data: [{ id: 1, name: 'DC Hồ Chí Minh', isActive: true }] } as never;
       }
-      if (value.startsWith('/api/InventoryStocks/current?')) {
+      if (value.startsWith('/api/v1/inventory-stocks/current?')) {
         return {
           data: [{
             productId: 10,
@@ -35,10 +35,10 @@ describe('Inventory shared production UI', () => {
           }],
         } as never;
       }
-      if (value === '/api/inventory/statuses') {
+      if (value === '/api/v1/inventory/statuses') {
         return { data: [{ code: 'AVAILABLE', name: 'Khả dụng', isAvailable: true, isReservable: true, isAllocatable: true, isPickable: true, isShippable: true }] } as never;
       }
-      if (value.startsWith('/api/inventory/buckets?')) {
+      if (value.startsWith('/api/v1/inventory/buckets?')) {
         return { data: [{
           inventoryStockId: 55,
           productId: 10,
@@ -64,7 +64,7 @@ describe('Inventory shared production UI', () => {
           lastUpdated: '2026-10-03T08:00:00Z',
         }] } as never;
       }
-      if (value.startsWith('/api/InventoryTransactions?')) {
+      if (value.startsWith('/api/v1/inventory-transactions?')) {
         return {
           data: {
             items: [{
@@ -91,7 +91,7 @@ describe('Inventory shared production UI', () => {
           },
         } as never;
       }
-      if (value.startsWith('/api/Reports/inventory-in-out-stock?')) {
+      if (value.startsWith('/api/v1/reports/inventory-in-out-stock?')) {
         return {
           data: [{
             productId: 10,

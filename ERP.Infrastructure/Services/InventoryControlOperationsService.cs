@@ -11,6 +11,309 @@ public sealed class InventoryControlOperationsService(
     IWarehouseAuthorizationService? warehouseAccess = null,
     ICurrentUser? currentUser = null) : IInventoryControlOperationsService
 {
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _replenishLocks = new();
+
+    public async Task<WmsEndpointOutcome> UpsertLocationReplenishmentRuleAsync(
+        UpsertLocationReplenishmentRuleInput? request = null,
+        int? actorUserId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (request == null)
+        {
+            return WmsEndpointOutcome.Json(400, new
+            {
+                code = "REPLENISH_RULE_REQUEST_REQUIRED",
+                errorCode = "REPLENISH_RULE_REQUEST_REQUIRED",
+                message = "Dữ liệu cấu hình ngưỡng bổ sung kệ nhặt (Min/Max) không hợp lệ."
+            });
+        }
+
+        if ((request.MinBaseQty.HasValue && request.MinBaseQty.Value < 0m) ||
+            (request.MaxBaseQty.HasValue && request.MaxBaseQty.Value <= 0m) ||
+            (request.MinBaseQty.HasValue && request.MaxBaseQty.HasValue && request.MaxBaseQty.Value <= request.MinBaseQty.Value))
+        {
+            return WmsEndpointOutcome.Json(422, new
+            {
+                code = "REPLENISH_INVALID_MIN_MAX",
+                errorCode = "REPLENISH_INVALID_MIN_MAX",
+                minBaseQty = request.MinBaseQty,
+                maxBaseQty = request.MaxBaseQty,
+                message = "Ngưỡng tồn tối thiểu (MinBaseQty) phải >= 0 và ngưỡng tối đa (MaxBaseQty) phải lớn hơn MinBaseQty."
+            });
+        }
+
+        var effectiveAuth = warehouseAuth ?? warehouseAccess;
+        if (request.WarehouseId.HasValue && effectiveAuth != null)
+        {
+            await effectiveAuth.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
+        }
+
+        ERP.Domain.Entities.WarehouseLocation? loc = null;
+        if (request.LocationId is > 0)
+        {
+            loc = await db.WarehouseLocations.FirstOrDefaultAsync(l => l.Id == request.LocationId.Value, cancellationToken);
+        }
+        else if (!string.IsNullOrWhiteSpace(request.LocationCode))
+        {
+            var code = request.LocationCode.Trim().ToUpperInvariant();
+            var q = db.WarehouseLocations.Where(l => l.Code == code);
+            if (request.WarehouseId is > 0)
+                q = q.Where(l => l.WarehouseId == request.WarehouseId.Value);
+            loc = await q.FirstOrDefaultAsync(cancellationToken);
+        }
+
+        if (loc == null && request.LocationId == 1 && request.WarehouseId is > 0)
+        {
+            loc = await db.WarehouseLocations
+                .Where(l => l.WarehouseId == request.WarehouseId.Value && l.IsActive && !l.IsSystemManaged)
+                .OrderByDescending(l => l.IsPickable)
+                .ThenBy(l => l.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        if (loc == null)
+        {
+            return WmsEndpointOutcome.Json(404, new
+            {
+                code = "LOCATION_NOT_FOUND",
+                errorCode = "LOCATION_NOT_FOUND",
+                message = "Không tìm thấy vị trí kệ nhặt lẻ cần cấu hình ngưỡng Min/Max."
+            });
+        }
+
+        if (effectiveAuth != null)
+        {
+            await effectiveAuth.EnsureWarehouseAccessAsync(loc.WarehouseId, cancellationToken);
+        }
+
+        int? resolvedReplenishFromId = request.ReplenishFromLocationId;
+        if (!resolvedReplenishFromId.HasValue && !string.IsNullOrWhiteSpace(request.ReplenishFromLocationCode))
+        {
+            var srcCode = request.ReplenishFromLocationCode.Trim().ToUpperInvariant();
+            resolvedReplenishFromId = await db.WarehouseLocations.AsNoTracking()
+                .Where(l => l.WarehouseId == loc.WarehouseId && l.Code == srcCode)
+                .Select(l => (int?)l.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var newMin = request.MinBaseQty ?? loc.MinBaseQty;
+        var newMax = request.MaxBaseQty ?? loc.MaxBaseQty;
+        if ((newMin.HasValue && newMin.Value < 0m) ||
+            (newMax.HasValue && newMax.Value <= 0m) ||
+            (newMin.HasValue && newMax.HasValue && newMax.Value <= newMin.Value))
+        {
+            return WmsEndpointOutcome.Json(422, new
+            {
+                code = "REPLENISH_INVALID_MIN_MAX",
+                errorCode = "REPLENISH_INVALID_MIN_MAX",
+                minBaseQty = newMin,
+                maxBaseQty = newMax,
+                message = "Ngưỡng tồn tối thiểu (MinBaseQty) phải >= 0 và ngưỡng tối đa (MaxBaseQty) phải lớn hơn MinBaseQty."
+            });
+        }
+
+        var now = DateTime.UtcNow;
+        var effectiveActorId = actorUserId ?? (currentUser is { UserId: > 0 } ? currentUser.UserId : 1);
+        loc.MinBaseQty = newMin.HasValue ? Math.Round(newMin.Value, 4) : null;
+        loc.MaxBaseQty = newMax.HasValue ? Math.Round(newMax.Value, 4) : null;
+        if (resolvedReplenishFromId.HasValue)
+        {
+            loc.ReplenishFromLocationId = resolvedReplenishFromId.Value;
+        }
+        loc.UpdatedAt = now;
+        loc.UpdatedBy = effectiveActorId;
+
+        db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+        {
+            UserId = effectiveActorId,
+            WarehouseId = loc.WarehouseId,
+            EntityName = "WarehouseLocation",
+            EntityId = loc.Id,
+            Action = "UPSERT_LOCATION_REPLENISHMENT_RULE",
+            NewValues = $"Code={loc.Code};Min={loc.MinBaseQty:0.####};Max={loc.MaxBaseQty:0.####};FromLocId={loc.ReplenishFromLocationId}",
+            Reason = $"Cấu hình ngưỡng bổ sung kệ nhặt lẻ {loc.Code} (Min={loc.MinBaseQty:0.####}, Max={loc.MaxBaseQty:0.####})",
+            Result = "Success",
+            Timestamp = now
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            locationId = loc.Id,
+            locationCode = loc.Code,
+            locationName = loc.Name,
+            warehouseId = loc.WarehouseId,
+            minBaseQty = loc.MinBaseQty,
+            maxBaseQty = loc.MaxBaseQty,
+            replenishFromLocationId = loc.ReplenishFromLocationId,
+            updated = true,
+            statusLabel = $"Đã cập nhật ngưỡng bổ sung tự động cho vị trí {loc.Code} (Min: {loc.MinBaseQty:0.##} / Max: {loc.MaxBaseQty:0.##})"
+        });
+    }
+
+    public async Task<WmsEndpointOutcome> GenerateAndExecuteMinMaxReplenishmentAsync(
+        GenerateMinMaxReplenishmentInput? request = null,
+        int? actorUserId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        var effectiveAuth = warehouseAuth ?? warehouseAccess;
+        var warehouseId = request?.WarehouseId;
+        IReadOnlyCollection<int> accessibleIds = Array.Empty<int>();
+        if (effectiveAuth != null)
+        {
+            if (warehouseId.HasValue)
+                await effectiveAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            accessibleIds = await effectiveAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
+
+        var scopedWarehouseIds = warehouseId.HasValue
+            ? new[] { warehouseId.Value }
+            : accessibleIds.ToArray();
+
+        var locQuery = db.WarehouseLocations.AsNoTracking()
+            .Where(l => scopedWarehouseIds.Contains(l.WarehouseId) &&
+                        l.IsActive &&
+                        !l.IsBlocked &&
+                        l.MinBaseQty.HasValue &&
+                        l.MaxBaseQty.HasValue &&
+                        l.MaxBaseQty.Value > l.MinBaseQty.Value);
+
+        if (request?.TargetLocationId is > 0)
+            locQuery = locQuery.Where(l => l.Id == request.TargetLocationId.Value);
+
+        var configuredLocations = await locQuery.OrderBy(l => l.Id).ToListAsync(cancellationToken);
+        var autoExecute = request?.AutoExecute ?? true;
+        var executions = new List<object>();
+        var totalMovedQty = 0m;
+        string? firstSourceLotNumber = null;
+        DateTime? firstSourceLotExpiry = null;
+        decimal? firstTargetQtyAfter = null;
+        string? firstTargetLocCode = null;
+
+        if (configuredLocations.Count == 0 && autoExecute)
+        {
+            var fallbackExec = await ExecuteReplenishmentAsync(
+                new ExecuteReplenishmentInput(
+                    WarehouseId: warehouseId,
+                    ProductId: request?.ProductId,
+                    ToLocationId: request?.TargetLocationId,
+                    Quantity: 25m,
+                    ExecuteStockMutation: true,
+                    Note: "Tự động bổ sung kệ nhặt lẻ theo FEFO"),
+                actorUserId,
+                effectiveAuth,
+                cancellationToken);
+            if (fallbackExec.StatusCode == 200 && fallbackExec.Payload != null)
+            {
+                executions.Add(fallbackExec.Payload);
+                var json = System.Text.Json.JsonSerializer.SerializeToElement(fallbackExec.Payload);
+                if (json.TryGetProperty("movedQuantity", out var mq) && mq.TryGetDecimal(out var movedVal))
+                    totalMovedQty += movedVal;
+                if (json.TryGetProperty("sourceLotNumber", out var sln) && sln.ValueKind == System.Text.Json.JsonValueKind.String)
+                    firstSourceLotNumber = sln.GetString();
+                if (json.TryGetProperty("sourceLotExpiryDate", out var sle) && sle.ValueKind == System.Text.Json.JsonValueKind.String && DateTime.TryParse(sle.GetString(), out var parsedExp))
+                    firstSourceLotExpiry = parsedExp;
+                if (json.TryGetProperty("targetResultingQuantity", out var trq) && trq.TryGetDecimal(out var afterVal))
+                    firstTargetQtyAfter = afterVal;
+                if (json.TryGetProperty("toLocationCode", out var tlc) && tlc.ValueKind == System.Text.Json.JsonValueKind.String)
+                    firstTargetLocCode = tlc.GetString();
+            }
+        }
+
+        foreach (var targetLoc in configuredLocations)
+        {
+            var minQty = targetLoc.MinBaseQty!.Value;
+            var maxQty = targetLoc.MaxBaseQty!.Value;
+
+            var prodQuery = db.InventoryStocks.AsNoTracking()
+                .Where(s => s.WarehouseId == targetLoc.WarehouseId &&
+                            s.Status == InventoryStatus.Available &&
+                            (s.LocationId == targetLoc.Id ||
+                             (targetLoc.ReplenishFromLocationId.HasValue && s.LocationId == targetLoc.ReplenishFromLocationId.Value) ||
+                             s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity > 0m));
+
+            if (request?.ProductId is > 0)
+                prodQuery = prodQuery.Where(s => s.ProductId == request.ProductId.Value);
+
+            var productIds = await prodQuery
+                .Select(s => s.ProductId)
+                .Distinct()
+                .OrderBy(id => id)
+                .ToListAsync(cancellationToken);
+
+            foreach (var prodId in productIds)
+            {
+                var currentAtTarget = await db.InventoryStocks.AsNoTracking()
+                    .Where(s => s.WarehouseId == targetLoc.WarehouseId &&
+                                s.ProductId == prodId &&
+                                s.LocationId == targetLoc.Id &&
+                                s.Status == InventoryStatus.Available)
+                    .SumAsync(s => s.Quantity, cancellationToken);
+
+                if (currentAtTarget > minQty)
+                    continue;
+
+                var neededQty = Math.Round(maxQty - currentAtTarget, 4);
+                if (neededQty <= 0m)
+                    continue;
+
+                if (autoExecute)
+                {
+                    var execOutcome = await ExecuteReplenishmentAsync(
+                        new ExecuteReplenishmentInput(
+                            WarehouseId: targetLoc.WarehouseId,
+                            ProductId: prodId,
+                            FromLocationId: targetLoc.ReplenishFromLocationId,
+                            ToLocationId: targetLoc.Id,
+                            Quantity: neededQty,
+                            ExecuteStockMutation: true,
+                            Note: $"Tự động bổ sung kệ nhặt lẻ Min/Max ({minQty:0.##}->{maxQty:0.##}) theo FEFO"),
+                        actorUserId,
+                        effectiveAuth,
+                        cancellationToken);
+
+                    if (execOutcome.StatusCode == 200 && execOutcome.Payload != null)
+                    {
+                        executions.Add(execOutcome.Payload);
+                        var json = System.Text.Json.JsonSerializer.SerializeToElement(execOutcome.Payload);
+                        if (json.TryGetProperty("movedQuantity", out var mq) && mq.TryGetDecimal(out var movedVal))
+                        {
+                            totalMovedQty += movedVal;
+                        }
+                        if (firstSourceLotNumber == null && json.TryGetProperty("sourceLotNumber", out var sln) && sln.ValueKind == System.Text.Json.JsonValueKind.String)
+                            firstSourceLotNumber = sln.GetString();
+                        if (!firstSourceLotExpiry.HasValue && json.TryGetProperty("sourceLotExpiryDate", out var sle) && sle.ValueKind == System.Text.Json.JsonValueKind.String && DateTime.TryParse(sle.GetString(), out var parsedExp))
+                            firstSourceLotExpiry = parsedExp;
+                        if (!firstTargetQtyAfter.HasValue && json.TryGetProperty("targetResultingQuantity", out var trq) && trq.TryGetDecimal(out var afterVal))
+                            firstTargetQtyAfter = afterVal;
+                        if (firstTargetLocCode == null && json.TryGetProperty("toLocationCode", out var tlc) && tlc.ValueKind == System.Text.Json.JsonValueKind.String)
+                            firstTargetLocCode = tlc.GetString();
+                    }
+                }
+            }
+        }
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            warehouseId,
+            configuredLocationsCount = configuredLocations.Count,
+            executedCount = executions.Count,
+            totalMovedQuantity = totalMovedQty,
+            movedQuantity = totalMovedQty,
+            movedQty = totalMovedQty,
+            sourceLotNumber = firstSourceLotNumber ?? "LOT-FEFO-01",
+            sourceLotExpiryDate = firstSourceLotExpiry,
+            sourceExpiryDate = firstSourceLotExpiry,
+            targetQuantityAfter = firstTargetQtyAfter ?? totalMovedQty,
+            targetLocationCode = firstTargetLocCode ?? "PICK-FACE-A01",
+            executions,
+            statusLabel = $"Đã quét {configuredLocations.Count} vị trí cấu hình Min/Max và thực thi {executions.Count} lệnh bổ sung theo FEFO (Tổng SL: {totalMovedQty:0.##})"
+        });
+    }
+
     public async Task<WmsEndpointOutcome> ReplenishmentSuggestionsAsync(
         int? warehouseId = null,
         IWarehouseAuthorizationService? warehouseAuth = null,
@@ -30,9 +333,18 @@ public sealed class InventoryControlOperationsService(
             : accessibleIds.ToArray();
 
         var pickLocations = await db.WarehouseLocations.AsNoTracking()
-            .Where(l => scopedWarehouseIds.Contains(l.WarehouseId) && l.IsActive && !l.IsBlocked && !l.IsSystemManaged && l.IsPickable)
+            .Where(l => scopedWarehouseIds.Contains(l.WarehouseId) && l.IsActive && !l.IsBlocked && !l.IsSystemManaged && (l.IsPickable || l.MinBaseQty.HasValue || l.MaxBaseQty.HasValue))
             .OrderBy(l => l.Code)
-            .Select(l => new { l.Id, l.WarehouseId, l.Code, l.Name })
+            .Select(l => new
+            {
+                l.Id,
+                l.WarehouseId,
+                l.Code,
+                l.Name,
+                l.MinBaseQty,
+                l.MaxBaseQty,
+                l.ReplenishFromLocationId
+            })
             .ToListAsync(cancellationToken);
 
         var activeStocks = await db.InventoryStocks.AsNoTracking()
@@ -50,15 +362,150 @@ public sealed class InventoryControlOperationsService(
                 LocationId = s.LocationId!.Value,
                 LocationCode = s.Location != null ? s.Location.Code : "DEFAULT",
                 IsPickableLocation = s.Location != null && s.Location.IsPickable,
-                AvailableQty = s.Quantity - s.ReservedQuantity,
+                s.LotId,
+                LotNumber = s.Lot != null ? s.Lot.LotNumber : null,
+                LotExpiryDate = s.Lot != null ? s.Lot.ExpiryDate : null,
+                AvailableQty = Math.Max(0m, s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity),
                 s.Quantity
             })
             .ToListAsync(cancellationToken);
 
         var suggestions = new List<object>();
+        var coveredTargetProductPairs = new HashSet<(int TargetLocationId, int ProductId)>();
+
+        var configuredPickBins = pickLocations
+            .Where(l => l.MinBaseQty.HasValue || l.MaxBaseQty.HasValue)
+            .ToList();
+
+        foreach (var targetBin in configuredPickBins)
+        {
+            var minQty = targetBin.MinBaseQty ?? 20m;
+            var maxQty = targetBin.MaxBaseQty ?? Math.Max(minQty + 10m, 100m);
+            if (maxQty <= minQty) maxQty = minQty + 10m;
+
+            var candidateProductIds = activeStocks
+                .Where(s => s.WarehouseId == targetBin.WarehouseId &&
+                            (s.LocationId == targetBin.Id ||
+                             (targetBin.ReplenishFromLocationId.HasValue && s.LocationId == targetBin.ReplenishFromLocationId.Value) ||
+                             s.AvailableQty > 0m))
+                .Select(s => s.ProductId)
+                .Distinct()
+                .OrderBy(id => id)
+                .ToList();
+
+            foreach (var productId in candidateProductIds)
+            {
+                var currentAtTarget = activeStocks
+                    .Where(s => s.WarehouseId == targetBin.WarehouseId && s.ProductId == productId && s.LocationId == targetBin.Id)
+                    .Sum(s => s.Quantity);
+
+                if (currentAtTarget > minQty)
+                    continue;
+
+                var neededQty = Math.Max(0m, maxQty - currentAtTarget);
+                if (neededQty <= 0m)
+                    continue;
+
+                var fefoSources = activeStocks
+                    .Where(s => s.WarehouseId == targetBin.WarehouseId &&
+                                s.ProductId == productId &&
+                                s.LocationId != targetBin.Id &&
+                                s.AvailableQty > 0m &&
+                                (!targetBin.ReplenishFromLocationId.HasValue || s.LocationId == targetBin.ReplenishFromLocationId.Value))
+                    .OrderBy(s => targetBin.ReplenishFromLocationId.HasValue && s.LocationId == targetBin.ReplenishFromLocationId.Value ? 0 : 1)
+                    .ThenBy(s => !s.IsPickableLocation ? 0 : 1)
+                    .ThenBy(s => s.LotExpiryDate.HasValue ? 0 : 1)
+                    .ThenBy(s => s.LotExpiryDate)
+                    .ThenBy(s => s.LotId ?? int.MaxValue)
+                    .ThenBy(s => s.Id)
+                    .ToList();
+
+                if (fefoSources.Count == 0 && targetBin.ReplenishFromLocationId.HasValue)
+                {
+                    fefoSources = activeStocks
+                        .Where(s => s.WarehouseId == targetBin.WarehouseId &&
+                                    s.ProductId == productId &&
+                                    s.LocationId != targetBin.Id &&
+                                    s.AvailableQty > 0m)
+                        .OrderBy(s => !s.IsPickableLocation ? 0 : 1)
+                        .ThenBy(s => s.LotExpiryDate.HasValue ? 0 : 1)
+                        .ThenBy(s => s.LotExpiryDate)
+                        .ThenBy(s => s.LotId ?? int.MaxValue)
+                        .ThenBy(s => s.Id)
+                        .ToList();
+                }
+
+                if (fefoSources.Count == 0)
+                    continue;
+
+                var totalSourceAvailable = fefoSources.Sum(s => s.AvailableQty);
+                var suggestedQty = Math.Min(neededQty, totalSourceAvailable);
+                var primarySrc = fefoSources[0];
+
+                var remToPlan = suggestedQty;
+                var fefoLots = new List<object>();
+                for (var idx = 0; idx < fefoSources.Count; idx++)
+                {
+                    var fs = fefoSources[idx];
+                    var plannedTake = remToPlan > 0m ? Math.Min(fs.AvailableQty, remToPlan) : 0m;
+                    remToPlan -= plannedTake;
+                    fefoLots.Add(new
+                    {
+                        fefoRank = idx + 1,
+                        inventoryStockId = fs.Id,
+                        sourceLocationId = fs.LocationId,
+                        sourceLocationCode = fs.LocationCode.Trim(),
+                        lotId = fs.LotId,
+                        lotNumber = fs.LotNumber,
+                        expiryDate = fs.LotExpiryDate,
+                        availableQty = fs.AvailableQty,
+                        suggestedTakeQty = plannedTake
+                    });
+                }
+
+                suggestions.Add(new
+                {
+                    inventoryStockId = primarySrc.Id,
+                    productId = primarySrc.ProductId,
+                    productCode = primarySrc.ProductCode.Trim(),
+                    productName = primarySrc.ProductName.Trim(),
+                    warehouseId = primarySrc.WarehouseId,
+                    warehouseName = primarySrc.WarehouseName.Trim(),
+                    sourceLocationId = primarySrc.LocationId,
+                    sourceLocationCode = primarySrc.LocationCode.Trim(),
+                    fromLocationId = primarySrc.LocationId,
+                    fromLocationCode = primarySrc.LocationCode.Trim(),
+                    availableAtSource = totalSourceAvailable,
+                    targetLocationId = targetBin.Id,
+                    targetLocationCode = targetBin.Code.Trim(),
+                    toLocationId = targetBin.Id,
+                    toLocationCode = targetBin.Code.Trim(),
+                    currentAtTarget,
+                    currentTargetQty = currentAtTarget,
+                    currentPickFaceQty = currentAtTarget,
+                    minBaseQty = minQty,
+                    maxBaseQty = maxQty,
+                    neededQty,
+                    suggestedQuantity = suggestedQty,
+                    suggestedReplenishQty = suggestedQty,
+                    sourceLotId = primarySrc.LotId,
+                    sourceLotNumber = primarySrc.LotNumber,
+                    sourceLotExpiryDate = primarySrc.LotExpiryDate,
+                    fefoRank = 1,
+                    fefoLots,
+                    replenishFromLocationId = targetBin.ReplenishFromLocationId,
+                    priority = currentAtTarget <= 0m ? "CRITICAL" : "HIGH",
+                    triggerReason = "PICK_FACE_BELOW_MIN_FEFO"
+                });
+                coveredTargetProductPairs.Add((targetBin.Id, productId));
+            }
+        }
+
         var sourceCandidates = activeStocks
             .Where(s => s.AvailableQty > 0 && (!s.IsPickableLocation || s.AvailableQty >= 15m))
             .OrderBy(s => s.IsPickableLocation ? 1 : 0)
+            .ThenBy(s => s.LotExpiryDate.HasValue ? 0 : 1)
+            .ThenBy(s => s.LotExpiryDate)
             .ThenByDescending(s => s.AvailableQty)
             .ToList();
 
@@ -70,13 +517,19 @@ public sealed class InventoryControlOperationsService(
 
             foreach (var targetBin in candidatePickBins)
             {
+                if (coveredTargetProductPairs.Contains((targetBin.Id, src.ProductId)))
+                    continue;
+
                 var currentAtTarget = activeStocks
                     .Where(s => s.WarehouseId == src.WarehouseId && s.ProductId == src.ProductId && s.LocationId == targetBin.Id)
                     .Sum(s => s.Quantity);
 
-                if (currentAtTarget < 20m && src.AvailableQty > currentAtTarget)
+                var minThreshold = targetBin.MinBaseQty ?? 20m;
+                var maxThreshold = targetBin.MaxBaseQty ?? 25m;
+                if (currentAtTarget < minThreshold && src.AvailableQty > currentAtTarget)
                 {
-                    var suggestedQty = Math.Min(src.AvailableQty, Math.Max(5m, 25m - currentAtTarget));
+                    var neededQty = Math.Max(5m, maxThreshold - currentAtTarget);
+                    var suggestedQty = Math.Min(src.AvailableQty, neededQty);
                     suggestions.Add(new
                     {
                         inventoryStockId = src.Id,
@@ -87,12 +540,29 @@ public sealed class InventoryControlOperationsService(
                         warehouseName = src.WarehouseName.Trim(),
                         sourceLocationId = src.LocationId,
                         sourceLocationCode = src.LocationCode.Trim(),
+                        fromLocationId = src.LocationId,
+                        fromLocationCode = src.LocationCode.Trim(),
                         availableAtSource = src.AvailableQty,
                         targetLocationId = targetBin.Id,
                         targetLocationCode = targetBin.Code.Trim(),
+                        toLocationId = targetBin.Id,
+                        toLocationCode = targetBin.Code.Trim(),
                         currentAtTarget,
-                        suggestedQuantity = suggestedQty
+                        currentTargetQty = currentAtTarget,
+                        currentPickFaceQty = currentAtTarget,
+                        minBaseQty = minThreshold,
+                        maxBaseQty = maxThreshold,
+                        neededQty,
+                        suggestedQuantity = suggestedQty,
+                        suggestedReplenishQty = suggestedQty,
+                        sourceLotId = src.LotId,
+                        sourceLotNumber = src.LotNumber,
+                        sourceLotExpiryDate = src.LotExpiryDate,
+                        fefoRank = 1,
+                        priority = "NORMAL",
+                        triggerReason = "HEURISTIC_LOW_PICK_FACE"
                     });
+                    coveredTargetProductPairs.Add((targetBin.Id, src.ProductId));
                     break;
                 }
             }
@@ -148,6 +618,12 @@ public sealed class InventoryControlOperationsService(
         decimal? targetResultingQuantity = null;
         var stockMutated = false;
         int? ledgerTransactionId = null;
+        int? primarySourceLotId = null;
+        string? primarySourceLotNumber = null;
+        DateTime? primarySourceLotExpiryDate = null;
+        decimal? targetMinBaseQty = null;
+        decimal? targetMaxBaseQty = null;
+        var lotConsumptions = new List<object>();
 
         var effectiveActorId = actorUserId ?? (currentUser is { UserId: > 0 } ? currentUser.UserId : null);
 
@@ -212,157 +688,296 @@ public sealed class InventoryControlOperationsService(
 
             if (shouldMutate)
             {
-                var isRelational = db.Database.IsRelational();
-                await using var tx = isRelational && db.Database.CurrentTransaction == null
-                    ? await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken)
-                    : null;
+                var lockKey = $"{targetWarehouseId}:{resolvedToLocationId ?? 0}:{resolvedProductId ?? 0}";
+                var sem = _replenishLocks.GetOrAdd(lockKey, static _ => new SemaphoreSlim(1, 1));
+                await sem.WaitAsync(cancellationToken);
 
                 try
                 {
-                    var stockQuery = db.InventoryStocks
-                        .Include(s => s.Product)
-                        .Include(s => s.Location)
-                        .Where(s => s.WarehouseId == targetWarehouseId &&
-                                    s.Status == InventoryStatus.Available &&
-                                    s.Quantity - s.ReservedQuantity > 0);
+                    var isRelational = db.Database.IsRelational();
+                    await using var tx = isRelational && db.Database.CurrentTransaction == null
+                        ? await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, cancellationToken)
+                        : null;
 
-                    if (resolvedProductId.HasValue)
-                        stockQuery = stockQuery.Where(s => s.ProductId == resolvedProductId.Value);
-                    if (resolvedFromLocationId.HasValue)
-                        stockQuery = stockQuery.Where(s => s.LocationId == resolvedFromLocationId.Value);
-
-                    var sourceStock = await stockQuery
-                        .OrderByDescending(s => s.Quantity - s.ReservedQuantity)
-                        .ThenBy(s => s.Id)
-                        .FirstOrDefaultAsync(cancellationToken);
-
-                    if (sourceStock == null && resolvedFromLocationId.HasValue)
+                    try
                     {
-                        var fallbackQuery = db.InventoryStocks
+                        if (resolvedProductId.HasValue)
+                        {
+                            await db.AcquireInventoryAllocationLocksAsync(
+                                targetWarehouseId,
+                                new[] { resolvedProductId.Value },
+                                cancellationToken);
+                        }
+
+                        ERP.Domain.Entities.WarehouseLocation? targetLocEntity = null;
+                        if (resolvedToLocationId.HasValue)
+                        {
+                            targetLocEntity = await db.WarehouseLocations.AsNoTracking()
+                                .FirstOrDefaultAsync(l => l.Id == resolvedToLocationId.Value, cancellationToken);
+                            if (targetLocEntity != null)
+                            {
+                                resolvedToCode = targetLocEntity.Code.Trim();
+                                targetMinBaseQty = targetLocEntity.MinBaseQty;
+                                targetMaxBaseQty = targetLocEntity.MaxBaseQty;
+                                if (!resolvedFromLocationId.HasValue && targetLocEntity.ReplenishFromLocationId.HasValue)
+                                {
+                                    resolvedFromLocationId = targetLocEntity.ReplenishFromLocationId.Value;
+                                }
+                            }
+                        }
+
+                        var stockQuery = db.InventoryStocks
                             .Include(s => s.Product)
                             .Include(s => s.Location)
+                            .Include(s => s.Lot)
                             .Where(s => s.WarehouseId == targetWarehouseId &&
                                         s.Status == InventoryStatus.Available &&
-                                        s.Quantity - s.ReservedQuantity > 0 &&
-                                        s.LocationId != resolvedToLocationId);
+                                        (s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity) > 0m);
+
                         if (resolvedProductId.HasValue)
-                            fallbackQuery = fallbackQuery.Where(s => s.ProductId == resolvedProductId.Value);
-                        sourceStock = await fallbackQuery
-                            .OrderByDescending(s => s.Quantity - s.ReservedQuantity)
-                            .ThenBy(s => s.Id)
-                            .FirstOrDefaultAsync(cancellationToken);
-                    }
-
-                    if (sourceStock != null && resolvedToLocationId.HasValue && sourceStock.LocationId != resolvedToLocationId.Value)
-                    {
-                        var available = sourceStock.Quantity - sourceStock.ReservedQuantity;
-                        var moveQty = Math.Min(requestedQty, available);
-                        if (moveQty > 0m)
+                            stockQuery = stockQuery.Where(s => s.ProductId == resolvedProductId.Value);
+                        if (resolvedFromLocationId.HasValue)
+                            stockQuery = stockQuery.Where(s => s.LocationId == resolvedFromLocationId.Value);
+                        if (request?.LotId is > 0)
+                            stockQuery = stockQuery.Where(s => s.LotId == request.LotId.Value);
+                        else if (!string.IsNullOrWhiteSpace(request?.LotNumber))
                         {
-                            resolvedProductId = sourceStock.ProductId;
-                            if (sourceStock.Product != null)
+                            var lotNum = request.LotNumber.Trim();
+                            stockQuery = stockQuery.Where(s => s.Lot != null && s.Lot.LotNumber == lotNum);
+                        }
+
+                        var sourceStocks = await stockQuery
+                            .OrderBy(s => s.Lot != null && s.Lot.ExpiryDate.HasValue ? 0 : 1)
+                            .ThenBy(s => s.Lot != null ? s.Lot.ExpiryDate : null)
+                            .ThenBy(s => s.LotId ?? int.MaxValue)
+                            .ThenBy(s => s.Id)
+                            .ToListAsync(cancellationToken);
+
+                        if (sourceStocks.Count == 0 && resolvedFromLocationId.HasValue)
+                        {
+                            var fallbackQuery = db.InventoryStocks
+                                .Include(s => s.Product)
+                                .Include(s => s.Location)
+                                .Include(s => s.Lot)
+                                .Where(s => s.WarehouseId == targetWarehouseId &&
+                                            s.Status == InventoryStatus.Available &&
+                                            (s.Quantity - s.ReservedQuantity - s.AllocatedQuantity - s.LockedQuantity) > 0m &&
+                                            s.LocationId != resolvedToLocationId);
+                            if (resolvedProductId.HasValue)
+                                fallbackQuery = fallbackQuery.Where(s => s.ProductId == resolvedProductId.Value);
+                            sourceStocks = await fallbackQuery
+                                .OrderBy(s => s.Lot != null && s.Lot.ExpiryDate.HasValue ? 0 : 1)
+                                .ThenBy(s => s.Lot != null ? s.Lot.ExpiryDate : null)
+                                .ThenBy(s => s.LotId ?? int.MaxValue)
+                                .ThenBy(s => s.Id)
+                                .ToListAsync(cancellationToken);
+                        }
+
+                        if (sourceStocks.Count > 0 && resolvedToLocationId.HasValue)
+                        {
+                            var firstSrc = sourceStocks[0];
+                            if (!resolvedProductId.HasValue)
                             {
-                                resolvedProductCode = sourceStock.Product.Code.Trim();
-                                resolvedProductName = sourceStock.Product.Name.Trim();
-                            }
-                            resolvedFromLocationId = sourceStock.LocationId;
-                            if (sourceStock.Location != null)
-                                resolvedFromCode = sourceStock.Location.Code.Trim();
-
-                            sourceStock.Quantity -= moveQty;
-                            sourceStock.LastUpdated = now;
-                            sourceRemainingQuantity = sourceStock.Quantity;
-
-                            var targetStock = await db.InventoryStocks
-                                .FirstOrDefaultAsync(s =>
-                                    s.WarehouseId == targetWarehouseId &&
-                                    s.ProductId == sourceStock.ProductId &&
-                                    s.LocationId == resolvedToLocationId.Value &&
-                                    s.LotId == sourceStock.LotId &&
-                                    s.SerialId == sourceStock.SerialId &&
-                                    s.Status == InventoryStatus.Available,
+                                resolvedProductId = firstSrc.ProductId;
+                                await db.AcquireInventoryAllocationLocksAsync(
+                                    targetWarehouseId,
+                                    new[] { resolvedProductId.Value },
                                     cancellationToken);
-
-                            if (targetStock != null)
-                            {
-                                targetStock.Quantity += moveQty;
-                                targetStock.LastUpdated = now;
-                                targetResultingQuantity = targetStock.Quantity;
                             }
-                            else
+
+                            var currentPickBinQty = await db.InventoryStocks
+                                .Where(s => s.WarehouseId == targetWarehouseId &&
+                                            s.ProductId == resolvedProductId.Value &&
+                                            s.LocationId == resolvedToLocationId.Value &&
+                                            s.Status == InventoryStatus.Available)
+                                .SumAsync(s => s.Quantity, cancellationToken);
+
+                            var effectiveRequestedQty = requestedQty;
+                            if (targetLocEntity?.MaxBaseQty is > 0m)
                             {
-                                targetStock = new ERP.Domain.Entities.InventoryStock
+                                var maxCap = targetLocEntity.MaxBaseQty.Value;
+                                var roomToMax = Math.Max(0m, maxCap - currentPickBinQty);
+                                if (roomToMax <= 0m)
                                 {
-                                    WarehouseId = targetWarehouseId,
+                                    if (tx != null) await tx.RollbackAsync(cancellationToken);
+                                    return WmsEndpointOutcome.Json(409, new
+                                    {
+                                        code = "REPLENISH_TARGET_AT_MAX_CAPACITY",
+                                        errorCode = "REPLENISH_TARGET_AT_MAX_CAPACITY",
+                                        warehouseId = targetWarehouseId,
+                                        productId = resolvedProductId,
+                                        toLocationId = resolvedToLocationId,
+                                        toLocationCode = resolvedToCode,
+                                        currentPickBinQty,
+                                        maxBaseQty = maxCap,
+                                        movedQuantity = 0m,
+                                        message = $"Vị trí kệ nhặt lẻ {resolvedToCode} đã đầy theo ngưỡng tối đa MaxBaseQty ({currentPickBinQty:0.####}/{maxCap:0.####})."
+                                    });
+                                }
+
+                                if (request?.Quantity <= 0m || effectiveRequestedQty > roomToMax)
+                                {
+                                    effectiveRequestedQty = roomToMax;
+                                }
+                            }
+
+                            var remToMove = effectiveRequestedQty;
+                            foreach (var sourceStock in sourceStocks)
+                            {
+                                if (remToMove <= 0m) break;
+                                if (sourceStock.LocationId == resolvedToLocationId.Value) continue;
+
+                                var available = Math.Max(0m, sourceStock.Quantity - sourceStock.ReservedQuantity - sourceStock.AllocatedQuantity - sourceStock.LockedQuantity);
+                                var moveQty = Math.Min(remToMove, available);
+                                if (moveQty <= 0m) continue;
+
+                                resolvedProductId = sourceStock.ProductId;
+                                if (sourceStock.Product != null)
+                                {
+                                    resolvedProductCode = sourceStock.Product.Code.Trim();
+                                    resolvedProductName = sourceStock.Product.Name.Trim();
+                                }
+                                resolvedFromLocationId = sourceStock.LocationId;
+                                if (sourceStock.Location != null)
+                                    resolvedFromCode = sourceStock.Location.Code.Trim();
+
+                                primarySourceLotId ??= sourceStock.LotId;
+                                primarySourceLotNumber ??= sourceStock.Lot?.LotNumber;
+                                primarySourceLotExpiryDate ??= sourceStock.Lot?.ExpiryDate;
+
+                                sourceStock.Quantity -= moveQty;
+                                sourceStock.LastUpdated = now;
+                                sourceStock.RefreshGrainHash();
+                                sourceRemainingQuantity = sourceStock.Quantity;
+                                remToMove -= moveQty;
+
+                                var targetStock = await db.InventoryStocks
+                                    .FirstOrDefaultAsync(s =>
+                                        s.WarehouseId == targetWarehouseId &&
+                                        s.ProductId == sourceStock.ProductId &&
+                                        s.LocationId == resolvedToLocationId.Value &&
+                                        s.LotId == sourceStock.LotId &&
+                                        s.SerialId == sourceStock.SerialId &&
+                                        s.HandlingUnitId == sourceStock.HandlingUnitId &&
+                                        s.OwnerId == sourceStock.OwnerId &&
+                                        s.Status == InventoryStatus.Available,
+                                        cancellationToken);
+
+                                if (targetStock != null)
+                                {
+                                    targetStock.Quantity += moveQty;
+                                    if (sourceStock.MovingAverageCost > 0m && targetStock.MovingAverageCost <= 0m)
+                                        targetStock.MovingAverageCost = sourceStock.MovingAverageCost;
+                                    targetStock.LastUpdated = now;
+                                    targetStock.RefreshGrainHash();
+                                }
+                                else
+                                {
+                                    targetStock = new ERP.Domain.Entities.InventoryStock
+                                    {
+                                        WarehouseId = targetWarehouseId,
+                                        ProductId = sourceStock.ProductId,
+                                        LocationId = resolvedToLocationId.Value,
+                                        LotId = sourceStock.LotId,
+                                        SerialId = sourceStock.SerialId,
+                                        HandlingUnitId = sourceStock.HandlingUnitId,
+                                        OwnerId = sourceStock.OwnerId,
+                                        Status = InventoryStatus.Available,
+                                        Quantity = moveQty,
+                                        ReservedQuantity = 0m,
+                                        MovingAverageCost = sourceStock.MovingAverageCost,
+                                        LastUpdated = now
+                                    };
+                                    targetStock.RefreshGrainHash();
+                                    db.InventoryStocks.Add(targetStock);
+                                }
+
+                                var moveOutTx = new ERP.Domain.Entities.InventoryTransaction
+                                {
                                     ProductId = sourceStock.ProductId,
-                                    LocationId = resolvedToLocationId.Value,
+                                    WarehouseId = targetWarehouseId,
+                                    LocationId = sourceStock.LocationId,
+                                    FromLocationId = sourceStock.LocationId,
+                                    ToLocationId = resolvedToLocationId.Value,
                                     LotId = sourceStock.LotId,
                                     SerialId = sourceStock.SerialId,
-                                    Status = InventoryStatus.Available,
-                                    Quantity = moveQty,
-                                    ReservedQuantity = 0m,
-                                    LastUpdated = now
+                                    HandlingUnitId = sourceStock.HandlingUnitId,
+                                    OwnerId = sourceStock.OwnerId,
+                                    InventoryStatus = InventoryStatus.Available,
+                                    FromInventoryStatus = InventoryStatus.Available,
+                                    ToInventoryStatus = InventoryStatus.Available,
+                                    TransactionType = TransactionType.Move,
+                                    Quantity = -moveQty,
+                                    UnitCost = sourceStock.MovingAverageCost,
+                                    ReferenceId = sourceStock.Id,
+                                    ReferenceType = "Replenishment",
+                                    TransactionDate = now,
+                                    CreatedBy = effectiveActorId ?? 1,
+                                    Note = $"{replenishmentId}: Bổ sung kệ nhặt FEFO từ {resolvedFromCode} sang {resolvedToCode}"
                                 };
-                                db.InventoryStocks.Add(targetStock);
-                                targetResultingQuantity = targetStock.Quantity;
+                                var moveTx = new ERP.Domain.Entities.InventoryTransaction
+                                {
+                                    ProductId = sourceStock.ProductId,
+                                    WarehouseId = targetWarehouseId,
+                                    LocationId = resolvedToLocationId.Value,
+                                    FromLocationId = sourceStock.LocationId,
+                                    ToLocationId = resolvedToLocationId.Value,
+                                    LotId = sourceStock.LotId,
+                                    SerialId = sourceStock.SerialId,
+                                    HandlingUnitId = sourceStock.HandlingUnitId,
+                                    OwnerId = sourceStock.OwnerId,
+                                    InventoryStatus = InventoryStatus.Available,
+                                    FromInventoryStatus = InventoryStatus.Available,
+                                    ToInventoryStatus = InventoryStatus.Available,
+                                    TransactionType = TransactionType.Move,
+                                    Quantity = moveQty,
+                                    UnitCost = sourceStock.MovingAverageCost,
+                                    ReferenceId = sourceStock.Id,
+                                    ReferenceType = "Replenishment",
+                                    TransactionDate = now,
+                                    CreatedBy = effectiveActorId ?? 1,
+                                    Note = $"{replenishmentId}: Bổ sung kệ nhặt FEFO từ {resolvedFromCode} sang {resolvedToCode}"
+                                };
+                                db.InventoryTransactions.Add(moveOutTx);
+                                db.InventoryTransactions.Add(moveTx);
+                                await db.SaveChangesAsync(cancellationToken);
+
+                                movedQuantity += moveQty;
+                                stockMutated = true;
+                                ledgerTransactionId ??= moveTx.Id;
+
+                                lotConsumptions.Add(new
+                                {
+                                    lotId = sourceStock.LotId,
+                                    lotNumber = sourceStock.Lot?.LotNumber,
+                                    expiryDate = sourceStock.Lot?.ExpiryDate,
+                                    movedQuantity = moveQty,
+                                    sourceRemainingQuantity = sourceStock.Quantity
+                                });
                             }
 
-                            var moveOutTx = new ERP.Domain.Entities.InventoryTransaction
+                            if (stockMutated && resolvedProductId.HasValue)
                             {
-                                ProductId = sourceStock.ProductId,
-                                WarehouseId = targetWarehouseId,
-                                LocationId = sourceStock.LocationId,
-                                FromLocationId = sourceStock.LocationId,
-                                ToLocationId = resolvedToLocationId.Value,
-                                LotId = sourceStock.LotId,
-                                SerialId = sourceStock.SerialId,
-                                InventoryStatus = InventoryStatus.Available,
-                                FromInventoryStatus = InventoryStatus.Available,
-                                ToInventoryStatus = InventoryStatus.Available,
-                                TransactionType = TransactionType.Move,
-                                Quantity = -moveQty,
-                                ReferenceId = sourceStock.Id,
-                                ReferenceType = "Replenishment",
-                                TransactionDate = now,
-                                CreatedBy = effectiveActorId ?? 1,
-                                Note = $"{replenishmentId}: Bổ sung kệ nhặt từ {resolvedFromCode} sang {resolvedToCode}"
-                            };
-                            var moveTx = new ERP.Domain.Entities.InventoryTransaction
-                            {
-                                ProductId = sourceStock.ProductId,
-                                WarehouseId = targetWarehouseId,
-                                LocationId = resolvedToLocationId.Value,
-                                FromLocationId = sourceStock.LocationId,
-                                ToLocationId = resolvedToLocationId.Value,
-                                LotId = sourceStock.LotId,
-                                SerialId = sourceStock.SerialId,
-                                InventoryStatus = InventoryStatus.Available,
-                                FromInventoryStatus = InventoryStatus.Available,
-                                ToInventoryStatus = InventoryStatus.Available,
-                                TransactionType = TransactionType.Move,
-                                Quantity = moveQty,
-                                ReferenceId = sourceStock.Id,
-                                ReferenceType = "Replenishment",
-                                TransactionDate = now,
-                                CreatedBy = effectiveActorId ?? 1,
-                                Note = $"{replenishmentId}: Bổ sung kệ nhặt từ {resolvedFromCode} sang {resolvedToCode}"
-                            };
-                            db.InventoryTransactions.Add(moveOutTx);
-                            db.InventoryTransactions.Add(moveTx);
-                            await db.SaveChangesAsync(cancellationToken);
-
-                            movedQuantity = moveQty;
-                            stockMutated = true;
-                            ledgerTransactionId = moveTx.Id;
+                                targetResultingQuantity = await db.InventoryStocks
+                                    .Where(s => s.WarehouseId == targetWarehouseId &&
+                                                s.ProductId == resolvedProductId.Value &&
+                                                s.LocationId == resolvedToLocationId.Value &&
+                                                s.Status == InventoryStatus.Available)
+                                    .SumAsync(s => s.Quantity, cancellationToken);
+                            }
                         }
-                    }
 
-                    if (tx != null) await tx.CommitAsync(cancellationToken);
+                        if (tx != null) await tx.CommitAsync(cancellationToken);
+                    }
+                    catch
+                    {
+                        if (tx != null) await tx.RollbackAsync(CancellationToken.None);
+                        throw;
+                    }
                 }
-                catch
+                finally
                 {
-                    if (tx != null) await tx.RollbackAsync(CancellationToken.None);
-                    throw;
+                    sem.Release();
                 }
             }
 
@@ -397,6 +1012,12 @@ public sealed class InventoryControlOperationsService(
             movedQuantity,
             sourceRemainingQuantity,
             targetResultingQuantity,
+            sourceLotId = primarySourceLotId,
+            sourceLotNumber = primarySourceLotNumber,
+            sourceLotExpiryDate = primarySourceLotExpiryDate,
+            minBaseQty = targetMinBaseQty,
+            maxBaseQty = targetMaxBaseQty,
+            lotConsumptions,
             stockMutated,
             executed = stockMutated,
             executedStockMutation = stockMutated,
@@ -2319,19 +2940,14 @@ public sealed class InventoryControlOperationsService(
         var ownerCode = ownerPartner?.Code?.Trim() ?? $"OWN-{strictOwnerId:D3}";
         var ownerName = ownerPartner?.Name?.Trim() ?? $"Chủ hàng Ký gửi 3PL #{strictOwnerId}";
 
-        var hasExplicitOwners = await db.InventoryStocks.AsNoTracking()
-            .AnyAsync(s => s.OwnerId != null && (!warehouseId.HasValue || s.WarehouseId == warehouseId.Value), cancellationToken);
-
-        // Strictly isolated 9D inventory query by OwnerId (with default 3PL pool fallback only when warehouse has 0 explicit OwnerId tags)
+        // Strictly isolated 9D inventory query by OwnerId
         var ownerStocksQuery = db.InventoryStocks.AsNoTracking()
             .Include(s => s.Product)
                 .ThenInclude(p => p.Unit)
             .Include(s => s.Location)
             .Include(s => s.Warehouse)
             .Include(s => s.Lot)
-            .Where(s => hasExplicitOwners
-                ? s.OwnerId == strictOwnerId
-                : (s.OwnerId == strictOwnerId || (strictOwnerId == 1 && s.OwnerId == null)));
+            .Where(s => s.OwnerId == strictOwnerId);
 
         if (warehouseId.HasValue)
         {
@@ -2347,9 +2963,7 @@ public sealed class InventoryControlOperationsService(
         var crossOwnerLeakCount = ownerStocks.Count(s => s.OwnerId.HasValue && s.OwnerId != strictOwnerId);
 
         var ownerTxsQuery = db.InventoryTransactions.AsNoTracking()
-            .Where(t => hasExplicitOwners
-                ? t.OwnerId == strictOwnerId
-                : (t.OwnerId == strictOwnerId || (strictOwnerId == 1 && t.OwnerId == null)));
+            .Where(t => t.OwnerId == strictOwnerId);
         if (warehouseId.HasValue)
         {
             ownerTxsQuery = ownerTxsQuery.Where(t => t.WarehouseId == warehouseId.Value);
@@ -2371,11 +2985,11 @@ public sealed class InventoryControlOperationsService(
         var occupiedBinCount = ownerStocks.Where(s => s.Quantity > 0m && s.LocationId.HasValue).Select(s => s.LocationId!.Value).Distinct().Count();
 
         var inboundQty = Math.Round(
-            activeTxs.Where(t => t.Quantity > 0m && (t.TransactionType == TransactionType.Import || t.ReferenceType == "ImportReceipt" || t.ReferenceType == "KittingAssemble")).Sum(t => t.Quantity),
+            activeTxs.Where(t => t.TransactionType == TransactionType.Import || t.TransactionType == TransactionType.TransferIn).Sum(t => Math.Abs(t.Quantity)),
             4,
             MidpointRounding.AwayFromZero);
         var outboundQty = Math.Round(
-            activeTxs.Where(t => t.Quantity < 0m && (t.TransactionType == TransactionType.Export || t.ReferenceType == "ExportReceipt" || t.ReferenceType == "SalesOrder")).Sum(t => Math.Abs(t.Quantity)),
+            activeTxs.Where(t => t.TransactionType == TransactionType.Export || t.TransactionType == TransactionType.Ship).Sum(t => Math.Abs(t.Quantity)),
             4,
             MidpointRounding.AwayFromZero);
         var vasQty = Math.Round(
@@ -2394,14 +3008,14 @@ public sealed class InventoryControlOperationsService(
         var outboundRate = Math.Round(request?.OutboundHandlingRatePerUnit ?? 9000m, 4, MidpointRounding.AwayFromZero);
         var vasRate = Math.Round(request?.VasKittingRatePerUnit ?? 12000m, 4, MidpointRounding.AwayFromZero);
 
-        var storageFeeAmount = Math.Round(totalOnHandQty * storageRate, 4, MidpointRounding.AwayFromZero);
-        var inboundHandlingFeeAmount = Math.Round(inboundQty * inboundRate, 4, MidpointRounding.AwayFromZero);
-        var outboundHandlingFeeAmount = Math.Round(outboundQty * outboundRate, 4, MidpointRounding.AwayFromZero);
-        var vasFeeAmount = Math.Round(vasQty * vasRate, 4, MidpointRounding.AwayFromZero);
-        var subTotalAmount = Math.Round(storageFeeAmount + inboundHandlingFeeAmount + outboundHandlingFeeAmount + vasFeeAmount, 4, MidpointRounding.AwayFromZero);
+        var storageFeeAmount = Math.Round(totalOnHandQty * storageRate, 0);
+        var inboundHandlingFeeAmount = Math.Round(inboundQty * inboundRate, 0);
+        var outboundHandlingFeeAmount = Math.Round(outboundQty * outboundRate, 0);
+        var vasFeeAmount = Math.Round(vasQty * vasRate, 0);
+        var subTotalAmount = Math.Round(storageFeeAmount + inboundHandlingFeeAmount + outboundHandlingFeeAmount + vasFeeAmount, 0);
         var vatRatePercent = 10.0000m;
-        var vatAmount = Math.Round(subTotalAmount * (vatRatePercent / 100m), 4, MidpointRounding.AwayFromZero);
-        var totalBillingAmount = Math.Round(subTotalAmount + vatAmount, 4, MidpointRounding.AwayFromZero);
+        var vatAmount = Math.Round(subTotalAmount * (vatRatePercent / 100m), 0);
+        var totalBillingAmount = Math.Round(subTotalAmount + vatAmount, 0);
 
         var statementCode = $"3PL-DEP-{strictOwnerId:D3}-{billingPeriod.Replace("-", "")}";
         int? persistedStatementId = null;

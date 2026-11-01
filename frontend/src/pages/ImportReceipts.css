@@ -5,19 +5,35 @@
 
 .import-receipts .import-form-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--ui-space-3);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 16px;
+  align-items: start;
+}
+
+.import-receipts .ui-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: flex-start;
 }
 
 .import-receipts .import-line {
   display: grid;
   grid-template-columns: minmax(180px, 1.4fr) minmax(150px, 1fr) minmax(140px, .8fr) minmax(150px, 1fr) minmax(160px, 1fr) auto;
   gap: var(--ui-space-2);
-  align-items: end;
+  align-items: start;
   padding: var(--ui-space-3);
   border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius);
   background: var(--ui-background);
+}
+
+.import-receipts .import-pda-scanner-zone .scanner-input-row input,
+.import-receipts .import-pda-scanner-zone .scanner-input-row button,
+.import-receipts .import-pda-scanner-zone select,
+.import-receipts .import-pda-scanner-zone input[role="spinbutton"],
+.import-receipts .import-pda-scanner-zone button {
+  min-height: 44px;
 }
 
 .import-receipts .import-line-summary {

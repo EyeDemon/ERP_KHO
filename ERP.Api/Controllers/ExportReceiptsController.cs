@@ -15,18 +15,23 @@ namespace ERP.Api.Controllers;
 public class ExportReceiptsController : ControllerBase
 {
     private readonly IExportReceiptService _exportReceiptService;
-    private readonly IExportReceiptOperationsService? _exportReceiptOps;
-    private readonly IWarehouseAuthorizationService? _warehouseAccess;
-    private readonly ICurrentUser? _currentUser;
-    private readonly IHandoverManifestService? _handoverManifestService;
+    private readonly IExportReceiptOperationsService _exportReceiptOps;
+    private readonly IWarehouseAuthorizationService _warehouseAccess;
+    private readonly ICurrentUser _currentUser;
+    private readonly IHandoverManifestService _handoverManifestService;
 
     public ExportReceiptsController(
         IExportReceiptService exportReceiptService,
-        IExportReceiptOperationsService exportReceiptOps = null!,
-        IWarehouseAuthorizationService warehouseAccess = null!,
-        ICurrentUser? currentUser = null,
-        IHandoverManifestService? handoverManifestService = null)
+        IExportReceiptOperationsService exportReceiptOps,
+        IWarehouseAuthorizationService warehouseAccess,
+        ICurrentUser currentUser,
+        IHandoverManifestService handoverManifestService)
     {
+        ArgumentNullException.ThrowIfNull(exportReceiptService);
+        ArgumentNullException.ThrowIfNull(exportReceiptOps);
+        ArgumentNullException.ThrowIfNull(warehouseAccess);
+        ArgumentNullException.ThrowIfNull(currentUser);
+        ArgumentNullException.ThrowIfNull(handoverManifestService);
         _exportReceiptService = exportReceiptService;
         _exportReceiptOps = exportReceiptOps;
         _warehouseAccess = warehouseAccess;
@@ -34,8 +39,7 @@ public class ExportReceiptsController : ControllerBase
         _handoverManifestService = handoverManifestService;
     }
 
-    private IExportReceiptOperationsService RequireOps() =>
-        _exportReceiptOps ?? throw new InvalidOperationException("IExportReceiptOperationsService is required for this database-backed operation.");
+    private IExportReceiptOperationsService RequireOps() => _exportReceiptOps;
 
     private IActionResult ToActionResult(HandoverManifestOperationResult result) =>
         result.StatusCode switch
@@ -48,21 +52,8 @@ public class ExportReceiptsController : ControllerBase
             _ => StatusCode(result.StatusCode, result.Payload)
         };
 
-    private bool HasPermissionOrDefault(string permission)
-    {
-        if (_currentUser != null) return _currentUser.HasPermission(permission);
-        if (User?.Claims.Any() == true)
-        {
-            if (User.Claims.Any(c =>
-                (string.Equals(c.Type, "permission", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(c.Type, "permissions", StringComparison.OrdinalIgnoreCase)) &&
-                string.Equals(c.Value, permission, StringComparison.OrdinalIgnoreCase)))
-                return true;
-            if (User.IsInRole(AppRoles.WarehouseStaff) || User.IsInRole(AppRoles.Viewer))
-                return false;
-        }
-        return true;
-    }
+    private bool HasPermissionOrDefault(string permission) =>
+        this.HasActionPermission(_currentUser, permission);
 
     private bool CanReadInventoryCost() => HasPermissionOrDefault(AppPermissions.InventoryCostRead);
     private bool CanReprintAwb() => HasPermissionOrDefault(ERP.Domain.Security.AppPermissions.ExportReceiptReprintAwb);
@@ -74,56 +65,32 @@ public class ExportReceiptsController : ControllerBase
     }
 
     [HttpGet, PermissionAuthorize(AppPermissions.ExportReceiptRead)]
-    public async Task<IActionResult> GetAll() => Ok(await _exportReceiptService.GetAllAsync());
+    public async Task<IActionResult> GetAll(
+        [FromQuery] int? pageNumber = null,
+        [FromQuery] int? pageSize = null)
+    {
+        var items = await _exportReceiptService.GetAllAsync();
+        if (pageNumber.HasValue || pageSize.HasValue)
+        {
+            var size = Math.Clamp(pageSize ?? 50, 1, 100);
+            var page = Math.Max(1, pageNumber ?? 1);
+            if (Response != null)
+            {
+                Response.Headers["X-Total-Count"] = items.Count().ToString();
+            }
+            return Ok(items.Skip((page - 1) * size).Take(size));
+        }
+
+        return Ok(items);
+    }
 
     [HttpGet("pipeline-summary"), PermissionAuthorize(AppPermissions.ExportReceiptRead)]
-    public async Task<IActionResult> GetPipelineSummary()
-    {
-        var items = (await _exportReceiptService.GetAllAsync()).ToList();
-        var now = DateTime.UtcNow;
-        var activePending = items.Where(x => x.Status is not ("Dispatched" or "Completed" or "Cancelled" or "CancelPendingPutback")).ToList();
-        var slaOverdueCount = activePending.Count(x => x.MarketplaceShipByUtc.HasValue && x.MarketplaceShipByUtc.Value < now);
-        var slaAtRiskUnder2HoursCount = activePending.Count(x => x.MarketplaceShipByUtc.HasValue && x.MarketplaceShipByUtc.Value >= now && x.MarketplaceShipByUtc.Value <= now.AddHours(2));
-        var slaDueTodayCount = activePending.Count(x => x.MarketplaceShipByUtc.HasValue && x.MarketplaceShipByUtc.Value > now.AddHours(2) && x.MarketplaceShipByUtc.Value.Date == now.Date);
-        var marketplacePrioritizedCount = items.Count(x => !string.IsNullOrWhiteSpace(x.MarketplaceOrderId) || !string.IsNullOrWhiteSpace(x.TrackingNumber));
-        var slaComplianceRatePct = items.Count == 0 ? 100m : decimal.Round(((items.Count - slaOverdueCount) * 100m) / items.Count, 2);
-
-        return Ok(new
-        {
-            totalReceipts = items.Count,
-            draftCount = items.Count(x => string.Equals(x.Status, "Draft", StringComparison.OrdinalIgnoreCase)),
-            approvedReadyCount = items.Count(x => string.Equals(x.Status, "Approved", StringComparison.OrdinalIgnoreCase)),
-            dispatchedCount = items.Count(x => x.Status is "Dispatched" or "Completed"),
-            cancelledCount = items.Count(x => string.Equals(x.Status, "Cancelled", StringComparison.OrdinalIgnoreCase)),
-            slaOverdueCount,
-            slaAtRiskUnder2HoursCount,
-            slaDueTodayCount,
-            slaComplianceRatePct,
-            marketplacePrioritizedCount,
-            status = "Đã tải tổng quan luồng phiếu xuất kho",
-            statusLabel = "Đã tải tổng quan luồng phiếu xuất kho & đồng hồ SLA giao hàng sàn TMĐT"
-        });
-    }
+    public async Task<IActionResult> GetPipelineSummary([FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default) =>
+        (await _exportReceiptOps.GetPipelineSummaryAsync(warehouseId, _warehouseAccess, cancellationToken)).ToActionResult(this);
 
     [HttpGet("sla-queue"), HttpGet("marketplace-sla-queue"), HttpGet("~/api/v1/outbound/sla-queue"), PermissionAuthorize(AppPermissions.ExportReceiptRead)]
-    public async Task<IActionResult> GetSlaQueue([FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
-    {
-        if (_exportReceiptOps != null)
-            return (await _exportReceiptOps.GetSlaQueueAsync(warehouseId, cancellationToken)).ToActionResult(this);
-
-        var now = DateTime.UtcNow;
-        var dtoItems = (await _exportReceiptService.GetAllAsync())
-            .Where(x => x.MarketplaceShipByUtc.HasValue && x.Status is not ("Dispatched" or "Completed" or "Cancelled" or "CancelPendingPutback"))
-            .OrderBy(x => x.MarketplaceShipByUtc).ToList();
-        return Ok(new
-        {
-            totalCount = dtoItems.Count,
-            breachedCount = dtoItems.Count(x => x.MarketplaceShipByUtc!.Value < now),
-            atRiskUnder2HoursCount = dtoItems.Count(x => x.MarketplaceShipByUtc!.Value >= now && x.MarketplaceShipByUtc!.Value <= now.AddHours(2)),
-            onTrackCount = dtoItems.Count(x => x.MarketplaceShipByUtc!.Value > now.AddHours(2)),
-            items = dtoItems
-        });
-    }
+    public async Task<IActionResult> GetSlaQueue([FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default) =>
+        (await _exportReceiptOps.GetSlaQueueAsync(warehouseId, cancellationToken)).ToActionResult(this);
 
     [HttpGet("{id:int}"), PermissionAuthorize(AppPermissions.ExportReceiptRead)]
     public async Task<IActionResult> GetById(int id) => Ok(await _exportReceiptService.GetByIdAsync(id));
@@ -141,7 +108,13 @@ public class ExportReceiptsController : ControllerBase
         try
         {
             var receipt = await _exportReceiptService.CreateAsync(dto, userId);
-            if (_exportReceiptOps != null) await _exportReceiptOps.IncrementSubscriptionOrderCountAsync(cancellationToken);
+            if (_exportReceiptOps != null)
+            {
+                await _exportReceiptOps.IncrementSubscriptionOrderCountAsync(
+                    cancellationToken,
+                    receipt.SalesOrderId ?? dto.SalesOrderId,
+                    receipt.MarketplaceOrderId ?? dto.MarketplaceOrderId);
+            }
             return CreatedAtAction(nameof(GetById), new { id = receipt.Id }, receipt);
         }
         catch (BusinessRuleException ex) { return BadRequest(new { message = ex.Message }); }
@@ -193,18 +166,13 @@ public class ExportReceiptsController : ControllerBase
 
     public sealed record VerifyDispatchCutoffRequest(int? WarehouseId = null) : VerifyDispatchCutoffInput(WarehouseId);
 
-    [HttpPost("verify-dispatch-cutoff"), PermissionAuthorize(AppPermissions.ExportReceiptRead)]
+    [HttpPost("verify-dispatch-cutoff"), PermissionAuthorize(AppPermissions.ExportReceiptDispatch, AppPermissions.ExportReceiptUpdate)]
     public async Task<IActionResult> VerifyDispatchCutoff(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] VerifyDispatchCutoffRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (_exportReceiptOps != null)
-            return (await _exportReceiptOps.VerifyDispatchCutoffAsync(request, TryGetUserId(out var uid) ? uid : null, _warehouseAccess, cancellationToken)).ToActionResult(this);
-        if (_warehouseAccess != null && request?.WarehouseId.HasValue == true)
-            await _warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
-        var now = DateTime.UtcNow;
-        return Ok(new { verificationId = $"EXP-CUT-{now:yyyyMMdd-HHmm}", warehouseId = request?.WarehouseId, checkedExportReceiptsCount = 0, openPickingTasksCount = 0, outboundCutoffLocal = "22:00", singleShipDeductionGuard = "Chốt trừ tồn kho 1 lần duy nhất khi xác nhận xuất", cutoffComplianceStatus = "Đạt chuẩn giờ chốt xuất kho (22:00)", status = "Đã đối soát giờ chốt xuất kho & khóa trừ tồn đơn nhất", statusLabel = "Đã đối soát giờ chốt xuất kho & khóa trừ tồn đơn nhất", verifiedAtUtc = now });
+        if (!this.HasActionPermission(_currentUser, AppPermissions.ExportReceiptDispatch, AppPermissions.ExportReceiptUpdate)) return Forbid();
+        return (await _exportReceiptOps.VerifyDispatchCutoffAsync(request, TryGetUserId(out var uid) ? uid : null, _warehouseAccess, cancellationToken)).ToActionResult(this);
     }
 
     public sealed record BatchPrintAwbRequest(int? WarehouseId = null, List<int>? ReceiptIds = null, List<int>? ExportReceiptIds = null, bool EnforceReprintReason = false, string? ReprintReason = null) : BatchPrintAwbInput(WarehouseId, ReceiptIds, ExportReceiptIds, EnforceReprintReason, ReprintReason);
@@ -217,10 +185,10 @@ public class ExportReceiptsController : ControllerBase
     public sealed record ImportOpeningBalanceRequest(int? WarehouseId = null, int? ProductId = null, int? LocationId = null, decimal? Quantity = null, decimal? UnitCost = null, List<OpeningBalanceItemRequest>? Items = null);
     public sealed record OpeningBalanceImportRequest(int? WarehouseId = null, int? ProductId = null, int? LocationId = null, decimal? Quantity = null, decimal? UnitCost = null, List<OpeningBalanceItemInput>? Items = null) : ImportOpeningBalanceInput(WarehouseId, ProductId, LocationId, Quantity, UnitCost, Items);
 
-    [HttpPost("batch-print-awb"), HttpPost("batch-print-thermal-awb"), HttpPost("~/api/v1/outbound/print-thermal-labels"), PermissionAuthorize(AppPermissions.ExportReceiptRead), IdempotentCommand("ExportReceipt.BatchPrintAwb")]
+    [HttpPost("batch-print-awb"), HttpPost("batch-print-thermal-awb"), HttpPost("~/api/v1/outbound/print-thermal-labels"), PermissionAuthorize(AppPermissions.ExportReceiptUpdate, AppPermissions.ExportReceiptDispatch), IdempotentCommand("ExportReceipt.BatchPrintAwb")]
     public async Task<IActionResult> BatchPrintAwb([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] BatchPrintAwbRequest? request = null, CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (!this.HasActionPermission(_currentUser, AppPermissions.ExportReceiptUpdate, AppPermissions.ExportReceiptDispatch)) return Forbid();
         var outcome = await RequireOps().BatchPrintAwbAsync(request, CanReprintAwb(), TryGetUserId(out var uid) ? uid : null, User?.Identity?.IsAuthenticated == true, _warehouseAccess, _currentUser, cancellationToken);
         return outcome.ToActionResult(this);
     }
@@ -234,10 +202,10 @@ public class ExportReceiptsController : ControllerBase
         return ToActionResult(result);
     }
 
-    [HttpPost("handover-manifests/scan-awb"), PermissionAuthorize(AppPermissions.ExportReceiptRead), IdempotentCommand("HandoverManifest.ScanAwb")]
+    [HttpPost("handover-manifests/scan-awb"), PermissionAuthorize(AppPermissions.ExportReceiptDispatch, AppPermissions.ExportReceiptUpdate), IdempotentCommand("HandoverManifest.ScanAwb")]
     public async Task<IActionResult> ScanHandoverAwb([FromRoute] int? manifestIdRoute = null, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ScanHandoverAwbRequest? request = null, CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (!this.HasActionPermission(_currentUser, AppPermissions.ExportReceiptDispatch, AppPermissions.ExportReceiptUpdate)) return Forbid();
         var actorUserId = TryGetUserId(out var uid) ? (int?)uid : null;
         var input = request == null ? null : new ScanHandoverAwbInputDto(request.ManifestId, request.WarehouseId, request.CarrierCode, request.TrackingNumber, request.ExportReceiptId, request.VehiclePlate, request.DriverName, request.DriverPhone);
         var result = _handoverManifestService != null
@@ -246,10 +214,10 @@ public class ExportReceiptsController : ControllerBase
         return ToActionResult(result);
     }
 
-    [HttpPost("handover-manifests/{id:int}/seal"), PermissionAuthorize(AppPermissions.ExportReceiptRead), IdempotentCommand("HandoverManifest.Seal")]
+    [HttpPost("handover-manifests/{id:int}/seal"), PermissionAuthorize(AppPermissions.ExportReceiptDispatch, AppPermissions.ExportReceiptUpdate), IdempotentCommand("HandoverManifest.Seal")]
     public async Task<IActionResult> SealHandoverManifest(int id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] SealHandoverManifestRequest? request = null, CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (!this.HasActionPermission(_currentUser, AppPermissions.ExportReceiptDispatch, AppPermissions.ExportReceiptUpdate)) return Forbid();
         var actorUserId = TryGetUserId(out var uid) ? (int?)uid : null;
         var input = request == null ? null : new SealHandoverManifestInputDto(request.DriverName, request.DriverPhone, request.VehiclePlate, request.DigitalSignatureHash);
         var result = _handoverManifestService != null
@@ -258,10 +226,10 @@ public class ExportReceiptsController : ControllerBase
         return ToActionResult(result);
     }
 
-    [HttpPost("confirm-carrier-handover"), HttpPost("handover-manifests/confirm"), PermissionAuthorize(AppPermissions.ExportReceiptRead), IdempotentCommand("HandoverManifest.ConfirmCarrierHandover")]
+    [HttpPost("confirm-carrier-handover"), HttpPost("handover-manifests/confirm"), PermissionAuthorize(AppPermissions.ExportReceiptDispatch, AppPermissions.ExportReceiptUpdate), IdempotentCommand("HandoverManifest.ConfirmCarrierHandover")]
     public async Task<IActionResult> ConfirmCarrierHandover([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ConfirmCarrierHandoverRequest? request = null, CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (!this.HasActionPermission(_currentUser, AppPermissions.ExportReceiptDispatch, AppPermissions.ExportReceiptUpdate)) return Forbid();
         var actorUserId = TryGetUserId(out var uid) ? (int?)uid : null;
         var input = request == null ? null : new ConfirmCarrierHandoverInputDto(request.WarehouseId, request.CarrierCode, request.TrackingNumbers, request.VehiclePlate, request.DriverName, request.DriverPhone, request.ManifestId, request.ExportReceiptIds);
         var result = _handoverManifestService != null
@@ -288,13 +256,13 @@ public class ExportReceiptsController : ControllerBase
     };
 
     [HttpPost("data-imports/opening-balance"), HttpPost("~/api/v1/inventory/opening-balances/import"), HttpPost("~/api/v1/inventory/opening-balance-import"), HttpPost("~/api/inventory/opening-balance-import")]
-    [PermissionAuthorize(AppPermissions.InventoryOpeningBalanceImport, AppPermissions.InventoryWrite), IdempotentCommand("Inventory.ImportOpeningBalance")]
+    [PermissionAuthorize(AppPermissions.InventoryOpeningBalanceImport), IdempotentCommand("Inventory.ImportOpeningBalance")]
     public async Task<IActionResult> ImportOpeningBalance(
         [ModelBinder(BinderType = typeof(FlexibleBodyOrFormModelBinder))] ImportOpeningBalanceRequest? request = null,
         CancellationToken cancellationToken = default,
         [ModelBinder(BinderType = typeof(FlexibleFormFileModelBinder))] IFormFile? file = null)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (!this.HasActionPermission(_currentUser, AppPermissions.InventoryOpeningBalanceImport)) return Forbid();
         var uploadedFile = file ?? (Request?.HasFormContentType == true && Request.Form.Files.Count > 0 ? Request.Form.Files[0] : null);
         var parsedFileItems = WmsControllerExcelHelper.ParseOpeningBalanceExcel(uploadedFile);
         var input = request == null ? null : new ImportOpeningBalanceInput(request.WarehouseId, request.ProductId, request.LocationId, request.Quantity, request.UnitCost, request.Items?.Cast<OpeningBalanceItemInput>().ToList());
@@ -306,38 +274,26 @@ public class ExportReceiptsController : ControllerBase
     public async Task<IActionResult> GetMisaExcelExport([FromQuery] int? warehouseId = null, [FromQuery] string? format = null, CancellationToken cancellationToken = default)
     {
         var canReadCost = CanReadInventoryCost();
-        MisaExcelExportData data;
-        if (_exportReceiptOps != null)
-            data = await _exportReceiptOps.GetMisaExcelExportDataAsync(warehouseId, canReadCost, _warehouseAccess, cancellationToken);
-        else
-        {
-            if (warehouseId.HasValue && _warehouseAccess != null) await _warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
-            data = new MisaExcelExportData(canReadCost, 0m, 0m, []);
-        }
+        var data = await _exportReceiptOps.GetMisaExcelExportDataAsync(warehouseId, canReadCost, _warehouseAccess, cancellationToken);
         return WmsControllerExcelHelper.BuildMisaExcelExportOutcome(data, format).ToActionResult(this);
     }
 
     public sealed record ExportMisaEinvoiceRequest(int? WarehouseId = null, string? Standard = null, string? Format = null) : ExportMisaEinvoiceInput(WarehouseId, Standard, Format);
 
-    [HttpPost("export-misa-einvoice"), HttpPost("misa-excel-export"), HttpPost("misa-excel-preview"), PermissionAuthorize(AppPermissions.ExportReceiptRead), IdempotentCommand("ExportReceipt.ExportMisaEinvoice")]
+    [HttpPost("export-misa-einvoice"), HttpPost("misa-excel-export"), HttpPost("misa-excel-preview"), PermissionAuthorize(AppPermissions.ExportReceiptUpdate, AppPermissions.ExportReceiptDispatch), IdempotentCommand("ExportReceipt.ExportMisaEinvoice")]
     public async Task<IActionResult> ExportMisaEinvoicePost([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ExportMisaEinvoiceRequest? request = null, CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (!this.HasActionPermission(_currentUser, AppPermissions.ExportReceiptUpdate, AppPermissions.ExportReceiptDispatch)) return Forbid();
         return await GetMisaExcelExport(request?.WarehouseId, request?.Format ?? request?.Standard, cancellationToken);
     }
 
     public sealed record IssueEinvoiceNd70DraftRequest(int? ExportReceiptId = null, int? WarehouseId = null, string? BuyerTaxCode = null, string? BuyerName = null, string? DecreeStandard = null) : IssueEinvoiceNd70DraftInput(ExportReceiptId, WarehouseId, BuyerTaxCode, BuyerName, DecreeStandard);
 
-    [HttpPost("einvoice-nd70-draft"), PermissionAuthorize(AppPermissions.ExportReceiptRead), IdempotentCommand("ExportReceipt.IssueEinvoiceNd70Draft")]
+    [HttpPost("einvoice-nd70-draft"), PermissionAuthorize(AppPermissions.ExportReceiptUpdate, AppPermissions.ExportReceiptDispatch), IdempotentCommand("ExportReceipt.IssueEinvoiceNd70Draft")]
     public async Task<IActionResult> IssueEinvoiceNd70Draft([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] IssueEinvoiceNd70DraftRequest? request = null, CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (_exportReceiptOps != null)
-            return (await _exportReceiptOps.IssueEinvoiceNd70DraftAsync(request, TryGetUserId(out var uid) ? uid : null, User?.Identity?.IsAuthenticated == true, _currentUser, cancellationToken)).ToActionResult(this);
-        var now = DateTime.UtcNow;
-        var receiptId = request?.ExportReceiptId ?? 1;
-        var draftCode = $"EINV-ND70-{now:yyyyMMdd}-{receiptId:D4}";
-        return Ok(new { exportReceiptId = receiptId, invoiceDraftCode = draftCode, draftNumber = draftCode, buyerTaxCode = string.IsNullOrWhiteSpace(request?.BuyerTaxCode) ? "0318999888" : request.BuyerTaxCode.Trim(), buyerName = string.IsNullOrWhiteSpace(request?.BuyerName) ? "Khách hàng Doanh nghiệp" : request.BuyerName.Trim(), decreeStandard = string.IsNullOrWhiteSpace(request?.DecreeStandard) ? "ND70_2025_TT32_2025" : request.DecreeStandard.Trim(), provider = "MISA_MEINVOICE", status = "DRAFT_ISSUED", statusLabel = $"Đã phát hành Hóa đơn điện tử nháp ({draftCode}) tuân thủ Nghị định 70/2025/NĐ-CP & Thông tư 32/2025/TT-BTC", issuedAtUtc = now });
+        if (!this.HasActionPermission(_currentUser, AppPermissions.ExportReceiptUpdate, AppPermissions.ExportReceiptDispatch)) return Forbid();
+        return (await _exportReceiptOps.IssueEinvoiceNd70DraftAsync(request, TryGetUserId(out var uid) ? uid : null, User?.Identity?.IsAuthenticated == true, _currentUser, cancellationToken)).ToActionResult(this);
     }
 
     [HttpGet("accounting-einvoice/preview"), PermissionAuthorize(AppPermissions.ExportReceiptRead)]
@@ -366,12 +322,12 @@ public class ExportReceiptsController : ControllerBase
         return outcome.ToActionResult(this);
     }
 
-    [HttpPost("accounting-einvoice/sync"), PermissionAuthorize(AppPermissions.ExportReceiptRead), IdempotentCommand("ExportReceipt.SyncAccountingAndEinvoiceNd70")]
+    [HttpPost("accounting-einvoice/sync"), PermissionAuthorize(AppPermissions.ExportReceiptUpdate, AppPermissions.ExportReceiptDispatch), IdempotentCommand("ExportReceipt.SyncAccountingAndEinvoiceNd70")]
     public async Task<IActionResult> SyncAccountingAndEInvoiceOutbox(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] SyncAccountingAndEInvoiceInput? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (!this.HasActionPermission(_currentUser, AppPermissions.ExportReceiptUpdate, AppPermissions.ExportReceiptDispatch)) return Forbid();
         var canReadCost = CanReadInventoryCost();
         var outcome = await RequireOps().SyncAccountingAndEInvoiceOutboxAsync(
             request ?? new SyncAccountingAndEInvoiceInput(),

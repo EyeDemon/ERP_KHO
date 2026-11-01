@@ -11,7 +11,9 @@ namespace ERP.Api.Controllers;
 [ApiController]
 [Route("api/v1/handover-manifests")]
 [Route("api/handover-manifests")]
-public sealed class HandoverManifestsController(IHandoverManifestService handoverManifestService) : ControllerBase
+public sealed class HandoverManifestsController(
+    IHandoverManifestService handoverManifestService,
+    ICurrentUser currentUser) : ControllerBase
 {
     private readonly IHandoverManifestService _handoverManifestService = handoverManifestService;
 
@@ -49,14 +51,14 @@ public sealed class HandoverManifestsController(IHandoverManifestService handove
 
     [HttpPost("scan-awb")]
     [HttpPost("~/api/v1/integrations/handover-manifests/{manifestIdRoute:int}/scan")]
-    [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
+    [PermissionAuthorize(AppPermissions.ExportReceiptUpdate, AppPermissions.ExportReceiptDispatch, AppPermissions.ShipmentDispatch)]
     [IdempotentCommand("HandoverManifest.ScanAwb")]
     public async Task<IActionResult> ScanHandoverAwb(
         [FromRoute] int? manifestIdRoute = null,
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExportReceiptsController.ScanHandoverAwbRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(currentUser, AppPermissions.ExportReceiptUpdate, AppPermissions.ExportReceiptDispatch, AppPermissions.ShipmentDispatch))
             return Forbid();
 
         var result = await _handoverManifestService.ScanHandoverAwbAsync(
@@ -80,14 +82,14 @@ public sealed class HandoverManifestsController(IHandoverManifestService handove
 
     [HttpPost("{id:int}/seal")]
     [HttpPost("~/api/v1/integrations/handover-manifests/{id:int}/seal")]
-    [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
+    [PermissionAuthorize(AppPermissions.ExportReceiptUpdate, AppPermissions.ExportReceiptDispatch, AppPermissions.ShipmentDispatch)]
     [IdempotentCommand("HandoverManifest.Seal")]
     public async Task<IActionResult> SealHandoverManifest(
         int id,
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExportReceiptsController.SealHandoverManifestRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(currentUser, AppPermissions.ExportReceiptUpdate, AppPermissions.ExportReceiptDispatch, AppPermissions.ShipmentDispatch))
             return Forbid();
 
         var result = await _handoverManifestService.SealHandoverManifestAsync(
@@ -107,13 +109,13 @@ public sealed class HandoverManifestsController(IHandoverManifestService handove
 
     [HttpPost("confirm")]
     [HttpPost("confirm-carrier-handover")]
-    [PermissionAuthorize(AppPermissions.ExportReceiptRead)]
+    [PermissionAuthorize(AppPermissions.ExportReceiptUpdate, AppPermissions.ExportReceiptDispatch, AppPermissions.ShipmentDispatch)]
     [IdempotentCommand("HandoverManifest.ConfirmCarrierHandover")]
     public async Task<IActionResult> ConfirmCarrierHandover(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExportReceiptsController.ConfirmCarrierHandoverRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(currentUser, AppPermissions.ExportReceiptUpdate, AppPermissions.ExportReceiptDispatch, AppPermissions.ShipmentDispatch))
             return Forbid();
 
         var result = await _handoverManifestService.ConfirmCarrierHandoverAsync(

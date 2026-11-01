@@ -20,8 +20,8 @@ const bucket={
 };
 const reads=()=>vi.mocked(apiClient.get).mockImplementation(async url=>{
   const value=String(url);
-  if(value==='/api/inventory/buckets?')return {data:[bucket]} as never;
-  if(value==='/api/putaway-tasks/locations?warehouseId=1')return {data:[
+  if(value==='/api/v1/inventory/buckets?')return {data:[bucket]} as never;
+  if(value==='/api/v1/putaway-tasks/locations?warehouseId=1')return {data:[
     {id:7,warehouseId:1,code:'A01-R01-B01',name:'Source',isActive:true,isBlocked:false,isSystemManaged:false},
     {id:8,warehouseId:1,code:'A01-R01-B02',name:'Destination',isActive:true,isBlocked:false,isSystemManaged:false}
   ]} as never;
@@ -51,7 +51,7 @@ describe('InventoryMovements',()=>{
     const button=view.getByText('Xác nhận di chuyển');
     fireEvent.click(button);fireEvent.click(button);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
-    expect(apiClient.post).toHaveBeenCalledWith('/api/inventory/movements',{
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/inventory/movements',{
       inventoryStockId:51,destinationLocationId:8,quantity:4,reason:'Slotting optimization'
     },{headers:{'Idempotency-Key':'key:inventory-move-51'}});
     expect(completeIdempotentAction).toHaveBeenCalledWith('inventory-move-51');

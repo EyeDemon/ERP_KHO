@@ -19,6 +19,10 @@ public class User : ITenantEntity
     public DateTime? LastFailedLoginAt { get; set; }
     public long WarehouseAccessRevision { get; set; }
     public long SecurityRevision { get; set; }
+    public string? TotpSecretProtected { get; set; }
+    public string TotpEnrollmentStatus { get; set; } = "IDLE";
+    public string? TotpRecoveryCodeHashesJson { get; set; }
+    public DateTime? TotpActivatedAtUtc { get; set; }
 
     // Navigation
     public Role Role { get; set; } = null!;

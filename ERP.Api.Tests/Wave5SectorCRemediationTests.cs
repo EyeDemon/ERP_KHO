@@ -321,9 +321,9 @@ public sealed class Wave5SectorCRemediationTests
             .Should().Contain(AppPermissions.InventoryRead);
 
         typeof(ReportsController).GetMethod(nameof(ReportsController.GetInventoryInOutReport))!
-            .GetCustomAttributes<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>()
-            .Select(a => a.Roles)
-            .Should().Contain(AppRoles.AdminManagerOrViewer);
+            .GetCustomAttributes<PermissionAuthorizeAttribute>()
+            .Select(a => a.Permission)
+            .Should().Contain(AppPermissions.InventoryRead);
 
         await using var db = CreateDbContext();
         db.Warehouses.Add(new Warehouse { Id = 1, Code = "WH1", Name = "Main", IsActive = true });
@@ -384,7 +384,13 @@ public sealed class Wave5SectorCRemediationTests
         warehouseAuth.Setup(x => x.EnsureWarehouseAccessAsync(99, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var controller = new ReportsController(reportService.Object)
+        var reportOps = new ReportOperationsService(db, warehouseAuth.Object);
+
+        var controller = new ReportsController(
+            reportService.Object,
+            reportOps,
+            warehouseAuth.Object,
+            Mock.Of<ICurrentUser>())
         {
             ControllerContext = new ControllerContext
             {
@@ -398,8 +404,6 @@ public sealed class Wave5SectorCRemediationTests
                 }
             }
         };
-
-        var reportOps = new ReportOperationsService(db, warehouseAuth.Object);
 
         // Unauthorized warehouseId=99 must return ForbidResult instead of 200 OK with empty/100% metrics
         (await controller.GetWarehouseTasks(reportOps, warehouseAuth.Object, warehouseId: 99, cancellationToken: CancellationToken.None)).Should().BeOfType<ForbidResult>();
@@ -532,7 +536,8 @@ public sealed class Wave5SectorCRemediationTests
         var secController = new AccountSecurityController(
             new Mock<IAccountAdminService>().Object,
             new Mock<IUserSessionService>().Object,
-            new WmsGovernanceOperationsService(db))
+            new WmsGovernanceOperationsService(db),
+            Mock.Of<IPasswordHasherService>())
         {
             ControllerContext = new ControllerContext
             {

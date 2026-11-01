@@ -18,7 +18,10 @@ public sealed class StockTransfersReturnControllerTests
         { ReasonCode = "TRANSFER_DISPATCH_ERROR", Reason = "Điều chuyển sai" };
         service.Setup(x => x.ReturnAsync(42, request, It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        var controller = new StockTransfersController(service.Object);
+        var controller = new StockTransfersController(
+            service.Object,
+            Mock.Of<IWmsGovernanceOperationsService>(),
+            Mock.Of<IWarehouseAuthorizationService>());
 
         var result = await controller.Return(42, request, CancellationToken.None);
 
@@ -30,7 +33,10 @@ public sealed class StockTransfersReturnControllerTests
     [Fact]
     public void ReturnReasonsExposeControlledReadOnlyCatalog()
     {
-        var controller = new StockTransfersController(Mock.Of<IStockTransferService>());
+        var controller = new StockTransfersController(
+            Mock.Of<IStockTransferService>(),
+            Mock.Of<IWmsGovernanceOperationsService>(),
+            Mock.Of<IWarehouseAuthorizationService>());
         var result = Assert.IsType<OkObjectResult>(controller.ReturnReasons());
         Assert.Same(StockTransferReturnReasonCatalog.All, result.Value);
         Assert.Equal(3, StockTransferReturnReasonCatalog.All.Count);

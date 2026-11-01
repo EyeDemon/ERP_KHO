@@ -12,7 +12,6 @@ namespace ERP.Api.Controllers;
 [ApiController]
 [Route("api/inventory")]
 [Route("api/v1/inventory")]
-[Route("api/v1/inventory-control")]
 public sealed class InventoryControlController : ControllerBase
 {
     private readonly IInventoryLockService _lockService;
@@ -20,25 +19,20 @@ public sealed class InventoryControlController : ControllerBase
     private readonly IInventoryControlOperationsService _controlOps;
     private readonly IWarehouseAuthorizationService _warehouseAccess;
 
-    [ActivatorUtilitiesConstructor]
     public InventoryControlController(
         IInventoryLockService lockService,
         IInventoryMovementService movementService,
-        IInventoryControlOperationsService controlOps = null!,
-        IWarehouseAuthorizationService warehouseAccess = null!)
+        IInventoryControlOperationsService controlOps,
+        IWarehouseAuthorizationService warehouseAccess)
     {
+        ArgumentNullException.ThrowIfNull(lockService);
+        ArgumentNullException.ThrowIfNull(movementService);
+        ArgumentNullException.ThrowIfNull(controlOps);
+        ArgumentNullException.ThrowIfNull(warehouseAccess);
         _lockService = lockService;
         _movementService = movementService;
         _controlOps = controlOps;
         _warehouseAccess = warehouseAccess;
-    }
-
-    public InventoryControlController(
-        IInventoryLockService lockService,
-        IInventoryControlOperationsService controlOps = null!,
-        IWarehouseAuthorizationService warehouseAccess = null!)
-        : this(lockService, null!, controlOps, warehouseAccess)
-    {
     }
 
     [HttpGet("locks")]
@@ -82,6 +76,8 @@ public sealed class InventoryControlController : ControllerBase
         Ok(await _movementService.MoveAsync(request, cancellationToken));
 
     [HttpGet("replenishment-suggestions")]
+    [HttpGet("/api/v1/inventory-control/replenishment-suggestions")]
+    [HttpGet("/api/inventory-control/replenishment-suggestions")]
     [PermissionAuthorize(AppPermissions.InventoryRead)]
     public async Task<IActionResult> ReplenishmentSuggestions(
         [FromServices] IInventoryControlOperationsService? opsSvc = null,
@@ -92,6 +88,82 @@ public sealed class InventoryControlController : ControllerBase
         var effectiveOps = opsSvc ?? _controlOps;
         var effectiveAuth = warehouseAuth ?? _warehouseAccess;
         var outcome = await effectiveOps.ReplenishmentSuggestionsAsync(warehouseId, effectiveAuth, cancellationToken);
+        return this.ToActionResult(outcome);
+    }
+
+    [HttpPost("replenishment-rules")]
+    [HttpPut("locations/{locationId:int}/replenishment-rule")]
+    [HttpPost("locations/{locationId:int}/replenishment-rule")]
+    [HttpPost("/api/v1/inventory-control/replenishment-rules")]
+    [HttpPut("/api/v1/inventory-control/locations/{locationId:int}/replenishment-rule")]
+    [HttpPost("/api/v1/inventory-control/locations/{locationId:int}/replenishment-rule")]
+    [HttpPut("/api/v1/warehouses/{warehouseId:int}/locations/{locationId:int}/replenishment-rule")]
+    [HttpPost("/api/v1/warehouses/{warehouseId:int}/locations/{locationId:int}/replenishment-rule")]
+    [IdempotentCommand("Inventory.UpsertReplenishmentRule")]
+    [PermissionAuthorize(AppPermissions.InventoryMovementCreate, AppPermissions.InventoryLockManage, AppPermissions.LocationManage, AppPermissions.WarehouseManage)]
+    public Task<IActionResult> UpsertLocationReplenishmentRule(
+        [FromRoute] int? locationId = null,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] UpsertLocationReplenishmentRuleInput? request = null,
+        [FromServices] IInventoryControlOperationsService? opsSvc = null,
+        [FromServices] IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default) =>
+        UpsertLocationReplenishmentRuleWithWarehouse(null, locationId, request, opsSvc, warehouseAuth, cancellationToken);
+
+    [NonAction]
+    public async Task<IActionResult> UpsertLocationReplenishmentRuleWithWarehouse(
+        int? warehouseId = null,
+        int? locationId = null,
+        UpsertLocationReplenishmentRuleInput? request = null,
+        IInventoryControlOperationsService? opsSvc = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!this.HasActionPermission(null, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryLockManage, AppPermissions.LocationManage, AppPermissions.WarehouseManage))
+            return Forbid();
+
+        var effectiveOps = opsSvc ?? _controlOps;
+        var effectiveAuth = warehouseAuth ?? _warehouseAccess;
+        var effectiveReq = request ?? new UpsertLocationReplenishmentRuleInput();
+        if (locationId is > 0 && !effectiveReq.LocationId.HasValue)
+        {
+            effectiveReq = effectiveReq with { LocationId = locationId.Value };
+        }
+        if (warehouseId is > 0 && !effectiveReq.WarehouseId.HasValue)
+        {
+            effectiveReq = effectiveReq with { WarehouseId = warehouseId.Value };
+        }
+        var outcome = await effectiveOps.UpsertLocationReplenishmentRuleAsync(
+            effectiveReq,
+            GetActorUserId(),
+            effectiveAuth,
+            cancellationToken);
+        return this.ToActionResult(outcome);
+    }
+
+    [HttpPost("replenishment/generate-min-max")]
+    [HttpPost("replenishment/generate-and-execute")]
+    [HttpPost("/api/v1/inventory-control/replenishment/generate-min-max")]
+    [HttpPost("/api/v1/inventory-control/replenishment/generate-and-execute")]
+    [HttpPost("/api/inventory-control/replenishment/generate-min-max")]
+    [HttpPost("/api/inventory-control/replenishment/generate-and-execute")]
+    [IdempotentCommand("Inventory.GenerateMinMaxReplenishment")]
+    [PermissionAuthorize(AppPermissions.InventoryMovementCreate, AppPermissions.InventoryLockManage)]
+    public async Task<IActionResult> GenerateAndExecuteMinMaxReplenishment(
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GenerateMinMaxReplenishmentInput? request = null,
+        [FromServices] IInventoryControlOperationsService? opsSvc = null,
+        [FromServices] IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!this.HasActionPermission(null, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryLockManage))
+            return Forbid();
+
+        var effectiveOps = opsSvc ?? _controlOps;
+        var effectiveAuth = warehouseAuth ?? _warehouseAccess;
+        var outcome = await effectiveOps.GenerateAndExecuteMinMaxReplenishmentAsync(
+            request ?? new GenerateMinMaxReplenishmentInput(),
+            GetActorUserId(),
+            effectiveAuth,
+            cancellationToken);
         return this.ToActionResult(outcome);
     }
 
@@ -110,7 +182,8 @@ public sealed class InventoryControlController : ControllerBase
         int? SourceLocationId = null,
         string? SourceLocationCode = null,
         int? TargetLocationId = null,
-        string? TargetLocationCode = null) : ExecuteReplenishmentInput(
+        string? TargetLocationCode = null,
+        int? LotId = null) : ExecuteReplenishmentInput(
             WarehouseId,
             ProductId,
             ProductCode,
@@ -125,19 +198,21 @@ public sealed class InventoryControlController : ControllerBase
             SourceLocationId,
             SourceLocationCode,
             TargetLocationId,
-            TargetLocationCode);
+            TargetLocationCode,
+            LotId);
 
     [HttpPost("execute-replenishment")]
+    [HttpPost("/api/v1/inventory-control/execute-replenishment")]
     [HttpPost("/api/inventory-control/execute-replenishment")]
     [IdempotentCommand("Inventory.ExecuteReplenishment")]
-    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    [PermissionAuthorize(AppPermissions.InventoryMovementCreate, AppPermissions.InventoryLockManage)]
     public async Task<IActionResult> ExecuteReplenishment(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExecuteReplenishmentRequest? request = null,
         [FromServices] IInventoryControlOperationsService? opsSvc = null,
         [FromServices] IWarehouseAuthorizationService? warehouseAuth = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryLockManage))
             return Forbid();
 
         var effectiveOps = opsSvc ?? _controlOps;
@@ -148,16 +223,17 @@ public sealed class InventoryControlController : ControllerBase
     }
 
     [HttpPost("replenishment/break-bulk")]
+    [HttpPost("/api/v1/inventory-control/replenishment/break-bulk")]
     [HttpPost("/api/inventory-control/replenishment/break-bulk")]
     [IdempotentCommand("Inventory.BreakBulkReplenishment")]
-    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    [PermissionAuthorize(AppPermissions.InventoryMovementCreate, AppPermissions.InventoryLockManage)]
     public async Task<IActionResult> ExecuteBreakBulkReplenishment(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExecuteBreakBulkReplenishmentInput? request = null,
         [FromServices] IInventoryControlOperationsService? opsSvc = null,
         [FromServices] IWarehouseAuthorizationService? warehouseAuth = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryLockManage))
             return Forbid();
 
         var effectiveOps = opsSvc ?? _controlOps;
@@ -168,6 +244,7 @@ public sealed class InventoryControlController : ControllerBase
     }
 
     [HttpGet("advanced-planning-suite")]
+    [HttpGet("/api/v1/inventory-control/advanced-planning-suite")]
     [HttpGet("/api/inventory-control/advanced-planning-suite")]
     [PermissionAuthorize(AppPermissions.InventoryRead)]
     public async Task<IActionResult> AdvancedPlanningSuite(
@@ -195,15 +272,16 @@ public sealed class InventoryControlController : ControllerBase
             LeadTimeDelayDays);
 
     [HttpPost("what-if-simulation")]
+    [HttpPost("/api/v1/inventory-control/what-if-simulation")]
     [HttpPost("/api/inventory-control/what-if-simulation")]
-    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    [PermissionAuthorize(AppPermissions.InventoryMovementCreate, AppPermissions.InventoryLockManage)]
     public async Task<IActionResult> RunWhatIfSimulation(
         [FromServices] IInventoryControlOperationsService? opsSvc = null,
         [FromServices] IWarehouseAuthorizationService? warehouseAuth = null,
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] WhatIfSimulationRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryLockManage))
             return Forbid();
 
         var effectiveOps = opsSvc ?? _controlOps;
@@ -218,13 +296,14 @@ public sealed class InventoryControlController : ControllerBase
 
     [HttpPost("evaluate-decision-policy-governance")]
     [HttpPost("audit-decision-policies")]
+    [HttpPost("/api/v1/inventory-control/audit-decision-policies")]
     [HttpPost("/api/inventory-control/audit-decision-policies")]
-    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    [PermissionAuthorize(AppPermissions.InventoryMovementCreate, AppPermissions.InventoryLockManage)]
     public async Task<IActionResult> EvaluateDecisionPolicyGovernance(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EvaluateDecisionPolicyRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryLockManage))
             return Forbid();
 
         var actorUserId = GetActorUserId();
@@ -233,6 +312,7 @@ public sealed class InventoryControlController : ControllerBase
     }
 
     [HttpGet("slotting-interleaving/evaluate")]
+    [HttpGet("/api/v1/inventory-control/slotting-interleaving/evaluate")]
     [HttpGet("/api/inventory-control/slotting-interleaving/evaluate")]
     [PermissionAuthorize(AppPermissions.InventoryRead)]
     public async Task<IActionResult> PreviewAbcSlottingAndTaskInterleaving(
@@ -253,18 +333,19 @@ public sealed class InventoryControlController : ControllerBase
     }
 
     [HttpPost("slotting-interleaving/evaluate")]
+    [HttpPost("/api/v1/inventory-control/slotting-interleaving/evaluate")]
     [HttpPost("/api/inventory-control/slotting-interleaving/evaluate")]
     [HttpPost("/api/v1/putaway-tasks/abc-slotting-interleaving")]
     [HttpPost("/api/putaway-tasks/abc-slotting-interleaving")]
     [IdempotentCommand("Inventory.AbcSlottingInterleaving")]
-    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    [PermissionAuthorize(AppPermissions.InventoryMovementCreate, AppPermissions.InventoryLockManage)]
     public async Task<IActionResult> EvaluateAbcSlottingAndTaskInterleaving(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EvaluateAbcSlottingInput? request = null,
         [FromServices] IInventoryControlOperationsService? opsSvc = null,
         [FromServices] IWarehouseAuthorizationService? warehouseAuth = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryLockManage))
             return Forbid();
 
         var effectiveOps = opsSvc ?? _controlOps;
@@ -278,6 +359,7 @@ public sealed class InventoryControlController : ControllerBase
     }
 
     [HttpGet("3pl-depositor-portal")]
+    [HttpGet("/api/v1/inventory-control/3pl-depositor-portal")]
     [HttpGet("/api/inventory-control/3pl-depositor-portal")]
     [HttpGet("/api/v1/business-partners/3pl-depositor-portal")]
     [HttpGet("/api/business-partners/3pl-depositor-portal")]
@@ -309,18 +391,19 @@ public sealed class InventoryControlController : ControllerBase
     }
 
     [HttpPost("3pl-depositor-portal")]
+    [HttpPost("/api/v1/inventory-control/3pl-depositor-portal")]
     [HttpPost("/api/inventory-control/3pl-depositor-portal")]
     [HttpPost("/api/v1/business-partners/3pl-depositor-portal")]
     [HttpPost("/api/business-partners/3pl-depositor-portal")]
     [IdempotentCommand("ThreePlDepositorPortal.IssueBillingStatement")]
-    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    [PermissionAuthorize(AppPermissions.InventoryMovementCreate, AppPermissions.InventoryLockManage)]
     public async Task<IActionResult> ExecuteThreePlDepositorPortal(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ThreePlDepositorPortalInput? request = null,
         [FromServices] IInventoryControlOperationsService? opsSvc = null,
         [FromServices] IWarehouseAuthorizationService? warehouseAuth = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(null, AppPermissions.InventoryMovementCreate, AppPermissions.InventoryLockManage))
             return Forbid();
 
         var effectiveOps = opsSvc ?? _controlOps;

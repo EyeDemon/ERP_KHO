@@ -16,10 +16,10 @@ describe('Inventory opening balance multipart FormData import & template downloa
     vi.resetAllMocks();
     get.mockImplementation(async (url) => {
       const value = String(url);
-      if (value === '/api/warehouses') {
+      if (value === '/api/v1/warehouses') {
         return { data: [{ id: 1, name: 'DC Hồ Chí Minh', isActive: true }] } as never;
       }
-      if (value.startsWith('/api/InventoryStocks/current?')) {
+      if (value.startsWith('/api/v1/inventory-stocks/current?')) {
         return {
           data: [
             {

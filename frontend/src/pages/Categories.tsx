@@ -49,7 +49,7 @@ export default function Categories() {
 
   const loadCategories = async () => {
     try {
-      const response = await apiClient.get('/api/product-categories');
+      const response = await apiClient.get('/api/v1/product-categories');
       const items = Array.isArray(response?.data)
         ? response.data
         : Array.isArray(response?.data?.items)
@@ -111,7 +111,7 @@ export default function Categories() {
       };
       if (editingId !== null) {
         try {
-          await apiClient.put(`/api/product-categories/${editingId}`, payload);
+          await apiClient.put(`/api/v1/product-categories/${editingId}`, payload);
         } catch {
           // Cập nhật lạc quan trên giao diện nếu API đang ở chế độ mô phỏng
         }
@@ -126,7 +126,7 @@ export default function Categories() {
       } else {
         let createdId = Date.now();
         try {
-          const res = await apiClient.post('/api/product-categories', payload);
+          const res = await apiClient.post('/api/v1/product-categories', payload);
           if (res?.data?.id) createdId = Number(res.data.id);
         } catch {
           // Bổ sung trực tiếp trên danh sách nếu backend chưa phản hồi

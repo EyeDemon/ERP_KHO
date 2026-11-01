@@ -11,8 +11,9 @@ namespace ERP.Api.Controllers;
 [ApiController, Route("api/asns"), Route("api/v1/asns"), Authorize]
 public sealed class AsnsController(
     IInboundPlanningService service,
-    IWmsGovernanceOperationsService govOps = null!,
-    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
+    IWmsGovernanceOperationsService govOps,
+    IWarehouseAuthorizationService warehouseAccess,
+    ICurrentUser currentUser) : ControllerBase
 {
     [HttpGet, PermissionAuthorize(AppPermissions.AsnRead)]
     public async Task<IActionResult> List([FromQuery] AsnStatus? status, CancellationToken ct) => Ok(await service.ListAsnsAsync(status, ct));
@@ -34,30 +35,27 @@ public sealed class AsnsController(
 
     public sealed record PreAllocateAsnStagingRequest(int? WarehouseId = null, string? AsnNumber = null);
 
-    [HttpPost("pre-allocate-staging"), PermissionAuthorize(AppPermissions.AsnRead)]
+    [HttpPost("pre-allocate-staging"), PermissionAuthorize(AppPermissions.AsnUpdate)]
     public async Task<IActionResult> PreAllocateStaging(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] PreAllocateAsnStagingRequest? request = null,
         CancellationToken ct = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(currentUser, AppPermissions.AsnUpdate))
             return Forbid();
 
         var warehouseId = request?.WarehouseId;
         var targetWarehouseId = warehouseId ?? 1;
         IReadOnlyList<int>? accessibleIds = null;
-        if (warehouseAccess != null)
+        if (warehouseId.HasValue)
         {
-            if (warehouseId.HasValue)
-            {
-                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, ct);
-            }
-            else
-            {
-                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(ct);
-                if (accessibleIds.Count == 0)
-                    return Forbid();
-                targetWarehouseId = accessibleIds[0];
-            }
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, ct);
+        }
+        else
+        {
+            accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(ct);
+            if (accessibleIds.Count == 0)
+                return Forbid();
+            targetWarehouseId = accessibleIds[0];
         }
 
         var asns = (await service.ListAsnsAsync(null, ct)) ?? [];
@@ -76,37 +74,17 @@ public sealed class AsnsController(
                 ?? scopedAsns.FirstOrDefault()?.Code?.Trim()
                 ?? "ASN-QA-001");
 
-        if (govOps != null)
-        {
-            var actorUserId = int.TryParse(
-                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
-                out var uid) ? uid : (int?)null;
+        var actorUserId = int.TryParse(
+            User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+            out var uid) ? uid : (int?)null;
 
-            var outcome = await govOps.PreAllocateAsnStagingAsync(
-                targetWarehouseId,
-                preAllocatedAsnCount,
-                resolvedAsnNumber,
-                actorUserId,
-                ct);
-            return outcome.ToActionResult(this);
-        }
-
-        var now = DateTime.UtcNow;
-        var stagingReservationId = $"ASN-STG-{now:yyyyMMdd-HHmm}";
-        return Ok(new
-        {
-            stagingReservationId,
-            warehouseId = targetWarehouseId,
-            asnNumber = resolvedAsnNumber,
+        var outcome = await govOps.PreAllocateAsnStagingAsync(
+            targetWarehouseId,
             preAllocatedAsnCount,
-            stagingLaneCode = "RCV-01",
-            stagingLocationName = "RCV-01 — Khu vực tiếp nhận & tập kết hàng nhập",
-            stagingStatus = "Đã phân bổ trước khu vực tiếp nhận & tập kết hàng nhập",
-            status = "Đã phân bổ trước khu vực tập kết hàng nhập",
-            statusLabel = "Đã phân bổ trước khu vực tập kết hàng nhập",
-            dockPreAssigned = true,
-            reservedAtUtc = now
-        });
+            resolvedAsnNumber,
+            actorUserId,
+            ct);
+        return outcome.ToActionResult(this);
     }
 
     [HttpGet("{id:int}"), PermissionAuthorize(AppPermissions.AsnRead)]

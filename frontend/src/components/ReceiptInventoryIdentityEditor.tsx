@@ -65,7 +65,7 @@ export default function ReceiptInventoryIdentityEditor({
     let active=true;
     if(tracked.length===0){setRows([]);return()=>{active=false}};
     setLoading(true);setError('');
-    apiClient.get(`/api/importreceipts/${receiptId}/inventory-identities`)
+    apiClient.get(`/api/v1/import-receipts/${receiptId}/inventory-identities`)
       .then(response=>{
         if(!active)return;
         setRows((response.data as Array<Record<string,unknown>>).map(item=>({
@@ -110,7 +110,7 @@ export default function ReceiptInventoryIdentityEditor({
     lock.current=true;setBusy(true);setError('');
     const key=`receipt-inventory-identity-${receiptId}`;
     try{
-      const response=await apiClient.post(`/api/importreceipts/${receiptId}/inventory-identities`,{
+      const response=await apiClient.post(`/api/v1/import-receipts/${receiptId}/inventory-identities`,{
         lines:rows.map(row=>({
           lineId:row.lineId,
           targetStatus:row.targetStatus,

@@ -22,7 +22,11 @@ namespace ERP.Api.Tests
         {
             // Arrange
             var mockService = new Mock<IProductService>();
-            var controller = new ProductsController(mockService.Object)
+            var controller = new ProductsController(
+                mockService.Object,
+                Mock.Of<IProductCatalogService>(),
+                Mock.Of<IProductOperationsService>(),
+                Mock.Of<ICurrentUser>())
             {
                 ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
             };
@@ -67,7 +71,11 @@ namespace ERP.Api.Tests
         {
             // Arrange
             var mockService = new Mock<IReportService>();
-            var controller = new ReportsController(mockService.Object);
+            var controller = new ReportsController(
+                mockService.Object,
+                Mock.Of<IReportOperationsService>(),
+                Mock.Of<IWarehouseAuthorizationService>(),
+                Mock.Of<ICurrentUser>());
             using var cts = new CancellationTokenSource();
             var token = cts.Token;
 
@@ -101,7 +109,8 @@ namespace ERP.Api.Tests
                 mockService.Object,
                 sessionService.Object,
                 environment.Object,
-                new SessionSecurityOptions())
+                new SessionSecurityOptions(),
+                Mock.Of<IPermissionOperationsService>())
             {
                 ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
             };

@@ -27,6 +27,11 @@ public sealed class IdempotentCommandFilter(
     {
         if (!int.TryParse(actionContext.HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
         {
+            if (actionContext.ActionDescriptor.EndpointMetadata.OfType<Microsoft.AspNetCore.Authorization.IAllowAnonymous>().Any())
+            {
+                await next();
+                return;
+            }
             actionContext.Result = new UnauthorizedResult();
             return;
         }
@@ -137,18 +142,9 @@ public sealed class IdempotentCommandFilter(
             var rejectedAudit = executed.Exception is ForbiddenException
                 ? RejectionAudit(userId, actionContext.ActionArguments, executed.Exception.Message, TrackedWarehouses(actionContext.ActionArguments))
                 : null;
-            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-            if (!context.Database.IsRelational())
-            {
-                context.ChangeTracker.Clear();
-                var orphan = await context.IdempotencyRecords.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.Id == record.Id, CancellationToken.None);
-                if (orphan is not null)
-                {
-                    context.IdempotencyRecords.Remove(orphan);
-                    await context.SaveChangesAsync(CancellationToken.None);
-                }
-            }
-            context.ChangeTracker.Clear();
+            if (transaction is not null && context.Database.CurrentTransaction is not null)
+                await transaction.RollbackAsync(CancellationToken.None);
+            await CleanupOrphanProcessingRecordAsync(record.Id);
             if (rejectedAudit is not null)
             {
                 context.AuditLogs.Add(rejectedAudit);
@@ -160,18 +156,9 @@ public sealed class IdempotentCommandFilter(
         var statusCode = ResultStatus(executed.Result);
         if (statusCode >= 400)
         {
-            if (transaction is not null) await transaction.RollbackAsync(CancellationToken.None);
-            if (!context.Database.IsRelational())
-            {
-                context.ChangeTracker.Clear();
-                var orphan = await context.IdempotencyRecords.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.Id == record.Id, CancellationToken.None);
-                if (orphan is not null)
-                {
-                    context.IdempotencyRecords.Remove(orphan);
-                    await context.SaveChangesAsync(CancellationToken.None);
-                }
-            }
-            context.ChangeTracker.Clear();
+            if (transaction is not null && context.Database.CurrentTransaction is not null)
+                await transaction.RollbackAsync(CancellationToken.None);
+            await CleanupOrphanProcessingRecordAsync(record.Id);
             return;
         }
 
@@ -186,8 +173,36 @@ public sealed class IdempotentCommandFilter(
             record.ResponseBody = BuildTruncatedReplayEnvelope(record.ResponseBody, statusCode);
         record.CompletedAtUtc = DateTime.UtcNow;
         await context.SaveChangesAsync(actionContext.HttpContext.RequestAborted);
-        if (transaction is not null) await transaction.CommitAsync(actionContext.HttpContext.RequestAborted);
+        if (transaction is not null && context.Database.CurrentTransaction is not null)
+            await transaction.CommitAsync(actionContext.HttpContext.RequestAborted);
         context.ChangeTracker.Clear();
+    }
+
+    private async Task CleanupOrphanProcessingRecordAsync(long recordId)
+    {
+        context.ChangeTracker.Clear();
+        if (recordId <= 0)
+            return;
+
+        try
+        {
+            var orphan = await context.IdempotencyRecords
+                .IgnoreQueryFilters()
+                .SingleOrDefaultAsync(x => x.Id == recordId && x.Status == IdempotencyStatus.Processing, CancellationToken.None);
+            if (orphan is not null)
+            {
+                context.IdempotencyRecords.Remove(orphan);
+                await context.SaveChangesAsync(CancellationToken.None);
+            }
+        }
+        catch
+        {
+            // Ignore cleanup failure if transaction rollback already removed the row.
+        }
+        finally
+        {
+            context.ChangeTracker.Clear();
+        }
     }
 
     private static string BuildTruncatedReplayEnvelope(string originalJson, int statusCode)

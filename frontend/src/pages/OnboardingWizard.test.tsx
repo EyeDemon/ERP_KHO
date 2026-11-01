@@ -36,7 +36,11 @@ describe('OnboardingWizard Page', () => {
     });
 
     vi.mocked(apiClient.post).mockImplementation(async (url: string, body?: any) => {
-      if (url === '/api/v1/permissions/saas/tenants/provision') {
+      if (
+        url === '/api/v1/auth/register-tenant' ||
+        url === '/api/v1/permissions/saas-tenants/provision' ||
+        url === '/api/v1/permissions/saas/tenants/provision'
+      ) {
         return {
           data: {
             completedSteps: 3,
@@ -80,10 +84,11 @@ describe('OnboardingWizard Page', () => {
     fireEvent.click(screen.getByTestId('btn-provision-tenant'));
     await waitFor(() => {
       expect(apiClient.post).toHaveBeenCalledWith(
-        '/api/v1/permissions/saas/tenants/provision',
+        '/api/v1/auth/register-tenant',
         expect.objectContaining({
           tenantCode: 'TENANT-SME-2026',
           templateCode: 'ECOMMERCE_3ZONES',
+          allocateNewTenant: true,
         }),
       );
     });

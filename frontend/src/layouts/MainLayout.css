@@ -1,6 +1,7 @@
 .app-shell {
   display: flex;
-  min-height: 100dvh;
+  min-height: 100vh;
+  align-items: stretch;
   background: #F8FAFC;
   color: #0F172A;
   font-family: Inter, "Be Vietnam Pro", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -33,15 +34,19 @@
 .app-sidebar {
   width: 250px;
   flex: 0 0 250px;
-  height: 100dvh;
-  position: sticky;
-  top: 0;
-  overflow-y: auto;
+  min-height: 100vh;
+  align-self: stretch;
   background: #0F172A;
   color: #FFFFFF;
   border-right: 1px solid #1E293B;
   padding: 20px 16px;
+  box-sizing: border-box;
   z-index: 300;
+}
+
+.app-sidebar-sticky {
+  position: sticky;
+  top: 20px;
 }
 
 .app-sidebar-header {
@@ -346,19 +351,23 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  border: 1px solid transparent;
+  gap: 6px;
+  min-height: 34px;
+  padding: 4px 10px;
+  border: 1px solid #CBD5E1;
   border-radius: 6px;
-  background: transparent;
-  color: #334155;
+  background: #FFFFFF;
+  color: #0F172A;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .logout-button:hover {
-  background: #F2F3F4;
-  border-color: #E6E8EA;
+  background: #F1F5F9;
+  border-color: #94A3B8;
 }
 
 .app-content {
@@ -467,15 +476,30 @@
   outline-offset: 2px;
 }
 
-@media (max-width: 1024px) {
+@media (min-width: 1024px) {
+  .app-sidebar {
+    display: block;
+    position: relative;
+    transform: none;
+    visibility: visible;
+  }
+}
+
+@media (max-width: 1023px) {
   .app-sidebar {
     position: fixed;
     left: 0;
     top: 0;
+    height: 100dvh;
+    overflow-y: auto;
     transform: translateX(-100%);
     visibility: hidden;
     transition: transform 150ms ease, visibility 150ms ease;
     box-shadow: none;
+  }
+
+  .app-sidebar-sticky {
+    position: static;
   }
 
   .app-sidebar.open {
@@ -568,7 +592,7 @@
     background: #0F172A;
     border-top: 1px solid #1E293B;
     z-index: 240;
-    padding: 2px 4px;
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
     gap: 2px;
   }
 
@@ -577,14 +601,25 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    min-width: 0;
     min-height: 48px;
     gap: 2px;
     color: #CBD5E1;
     text-decoration: none;
-    font-size: 12px;
+    font-size: 10px;
     font-weight: 600;
     border-radius: 6px;
-    padding: 4px 2px;
+    padding: 6px 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-bottom-nav-link span {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 

@@ -12,7 +12,7 @@ vi.mock('../services/idempotency',()=>({idempotencyHeaders:()=>({'Idempotency-Ke
 const summary={id:1,receiptCode:'PN-1',warehouseName:'Kho A',status:'Open',assignedUserId:null,requiredBaseQuantity:10,movedBaseQuantity:0,rowVersion:'AQ==',items:[]};
 const detail={...summary,status:'Assigned',items:[{id:2,productCode:'SP1',productName:'Sản phẩm',inventoryStatus:'Available',sourceLocationCode:'RECEIVING',operationUnitCode:'EA',baseUnitCode:'EA',requiredOperationQuantity:10,requiredBaseQuantity:10,movedBaseQuantity:0,remainingBaseQuantity:10}]};
 const destinations=[{id:3,code:'A01',name:'Kệ A',locationType:'Storage',isPickable:true}];
-const mockReads=(task=detail)=>vi.mocked(apiClient.get).mockImplementation(async url=>({data:url==='/api/putaway-tasks'?[summary]:url.includes('destinations')?destinations:task}) as never);
+const mockReads=(task=detail)=>vi.mocked(apiClient.get).mockImplementation(async url=>({data:url==='/api/v1/putaway-tasks'?[summary]:url.includes('destinations')?destinations:task}) as never);
 const grant=(...permissions:string[])=>{permissionState.granted.clear();permissions.forEach(permission=>permissionState.granted.add(permission));};
 
 describe('Cất hàng',()=>{
@@ -94,7 +94,7 @@ describe('Cất hàng',()=>{
    const btn=await v.findByText('PN-1');
    expect((btn as HTMLElement).style.whiteSpace).toBe('nowrap');
    const fromSpan=v.getByText('Bãi tiếp nhận');
-   const toSpan=v.getByText('→ BIN-A01-01');
+   const toSpan=v.getByText('→ Kệ lưu trữ đích');
    expect(fromSpan.tagName).toBe('SPAN');
    expect(toSpan.tagName).toBe('SPAN');
    expect((fromSpan as HTMLElement).style.whiteSpace).toBe('nowrap');
@@ -110,7 +110,7 @@ describe('Cất hàng',()=>{
  it('renders CancelPendingPutback and PutbackTask labels in Vietnamese and keeps detail form open on 409 INSUFFICIENT_AVAILABLE_STOCK',async()=>{
    const pendingPutback={...detail,id:9,receiptCode:'PN-PUTBACK',status:'CancelPendingPutback',taskType:'PutbackTask'};
    const activePutback={...detail,id:1,receiptCode:'PN-1',status:'InProgress',taskType:'PutbackTask'};
-   vi.mocked(apiClient.get).mockImplementation(async url=>({data:url==='/api/putaway-tasks'?[pendingPutback,activePutback]:url.includes('destinations')?destinations:activePutback}) as never);
+   vi.mocked(apiClient.get).mockImplementation(async url=>({data:url==='/api/v1/putaway-tasks'?[pendingPutback,activePutback]:url.includes('destinations')?destinations:activePutback}) as never);
    vi.mocked(apiClient.post).mockRejectedValueOnce({response:{status:409,data:{code:'INSUFFICIENT_AVAILABLE_STOCK'}}});
    const v=render(<PutawayTasks/>);
    await v.findByText('PN-1');
@@ -130,7 +130,7 @@ describe('Cất hàng',()=>{
    expect(v.queryByPlaceholderText(/Bin, SKU, Lot, Serial, LPN/)).toBeNull();
    expect(v.getByRole('button', { name: 'Chấm điểm Tối ưu Xếp dỡ & Khớp Vị trí Kệ' })).toBeTruthy();
    expect(v.getByTestId('putaway-ledger-pair-panel').textContent).toContain(
-     'Chân nguồn -Q (Bãi tiếp nhận) • Chân đích +Q (Kệ lưu trữ BIN-A01-01)',
+     'Chân nguồn -Q (Bãi tiếp nhận) • Chân đích +Q (Kệ lưu trữ đích)',
    );
  });
 });

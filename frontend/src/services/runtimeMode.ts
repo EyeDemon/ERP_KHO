@@ -16,6 +16,7 @@ export const readOnlyDemoPermissions = [
   'purchase_order.read',
   'asn.read',
   'receipt.read',
+  'return.read',
   'export_receipt.read',
   'allocation.read',
   'picking.read',
@@ -35,3 +36,13 @@ export const readOnlyDemoPermissions = [
   'permission.read',
   'role.read',
 ] as const;
+
+export const publicTenantOnboardingEndpoints = [
+  '/api/v1/auth/register-tenant',
+  '/api/v1/auth/register-tenant',
+] as const;
+
+export const isPublicTenantOnboardingEndpoint = (url?: string): boolean => {
+  const normalized = (url ?? '').split('?')[0].replace(/\/+$/, '').toLowerCase();
+  return publicTenantOnboardingEndpoints.some((route) => normalized.endsWith(route));
+};

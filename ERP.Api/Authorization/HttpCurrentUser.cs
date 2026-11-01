@@ -8,6 +8,13 @@ namespace ERP.Api.Authorization;
 public sealed class HttpCurrentUser(IHttpContextAccessor httpContextAccessor) : ICurrentUser
 {
     internal const string EffectiveRoleKey = "DatabaseAuthorization.Role";
+    internal const string EffectivePermissionsCacheKey = "DatabaseAuthorization.Permissions";
+    internal const string CachedPermissionsKey = "DatabaseAuthorization.CachedPermissionSet";
+
+    private sealed record CachedRolePermissions(
+        bool HasDatabaseRolePermissions,
+        HashSet<string> GrantedCodes);
+
     private ClaimsPrincipal User => httpContextAccessor.HttpContext?.User ?? new ClaimsPrincipal();
 
     public bool IsAuthenticated => User.Identity?.IsAuthenticated == true;
@@ -46,69 +53,50 @@ public sealed class HttpCurrentUser(IHttpContextAccessor httpContextAccessor) : 
             && !string.Equals(effectiveRole, AppRoles.Manager, StringComparison.OrdinalIgnoreCase)
             && !string.Equals(effectiveRole, "Accountant", StringComparison.OrdinalIgnoreCase);
 
-        var db = httpContextAccessor.HttpContext?.RequestServices?.GetService<ErpKhoDbContext>();
-        if (db is not null)
+        var httpContext = httpContextAccessor.HttpContext;
+        if (httpContext is not null)
         {
-            try
+            if (httpContext.Items.TryGetValue(CachedPermissionsKey, out var preloadedObj) &&
+                preloadedObj is IReadOnlySet<string> preloadedSet)
             {
-                var roleId = 0;
-                if (int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) && uid > 0)
+                if (preloadedSet.Contains(normalizedCode))
                 {
-                    roleId = db.Users
-                        .IgnoreQueryFilters()
-                        .AsNoTracking()
-                        .Where(u => u.Id == uid && u.IsActive)
-                        .Select(u => u.RoleId)
-                        .FirstOrDefault();
+                    return true;
                 }
 
-                if (roleId <= 0 && !string.IsNullOrWhiteSpace(effectiveRole))
+                if (!IsGlobalAdmin && !hasExplicitClaim)
                 {
-                    roleId = db.Roles
-                        .IgnoreQueryFilters()
-                        .AsNoTracking()
-                        .Where(r => r.RoleName == effectiveRole)
-                        .Select(r => r.Id)
-                        .FirstOrDefault();
-                }
-
-                if (roleId > 0)
-                {
-                    var normalizedLower = normalizedCode.ToLowerInvariant();
-                    var permissionId = db.Permissions
-                        .IgnoreQueryFilters()
-                        .AsNoTracking()
-                        .Where(p => p.Code.ToLower() == normalizedLower)
-                        .Select(p => p.Id)
-                        .FirstOrDefault();
-
-                    if (permissionId > 0 && db.RolePermissions.IgnoreQueryFilters().AsNoTracking().Any())
-                    {
-                        var grantedInDb = db.RolePermissions
-                            .IgnoreQueryFilters()
-                            .AsNoTracking()
-                            .Any(rp => rp.RoleId == roleId && rp.PermissionId == permissionId);
-
-                        if (grantedInDb)
-                        {
-                            return true;
-                        }
-
-                        if (!IsGlobalAdmin)
-                        {
-                            return false;
-                        }
-                    }
+                    return false;
                 }
             }
-            catch
+
+            if (httpContext.Items[EffectivePermissionsCacheKey] is not CachedRolePermissions cached)
             {
-                // Fallback to claims and role defaults if DbContext is disposed or uninitialized.
+                cached = LoadRolePermissionsFromDb(httpContext, effectiveRole);
+                httpContext.Items[EffectivePermissionsCacheKey] = cached;
+                if (cached.HasDatabaseRolePermissions)
+                {
+                    httpContext.Items[CachedPermissionsKey] = cached.GrantedCodes;
+                }
+            }
+
+            if (cached.HasDatabaseRolePermissions)
+            {
+                if (cached.GrantedCodes.Contains(normalizedCode))
+                {
+                    return true;
+                }
+
+                if (!IsGlobalAdmin)
+                {
+                    return false;
+                }
             }
         }
 
         if (isRestrictedRole
-            && string.Equals(normalizedCode, ERP.Domain.Security.AppPermissions.InventoryCostRead, StringComparison.OrdinalIgnoreCase)
+            && (string.Equals(normalizedCode, ERP.Domain.Security.AppPermissions.InventoryCostRead, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(normalizedCode, ERP.Domain.Security.AppPermissions.InventoryOpeningBalanceImport, StringComparison.OrdinalIgnoreCase))
             && !hasExplicitClaim)
         {
             return false;
@@ -122,5 +110,58 @@ public sealed class HttpCurrentUser(IHttpContextAccessor httpContextAccessor) : 
         return ERP.Domain.Security.AppPermissions
             .GetDefaultPermissionsForRole(effectiveRole)
             .Contains(normalizedCode, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private CachedRolePermissions LoadRolePermissionsFromDb(HttpContext httpContext, string effectiveRole)
+    {
+        var db = httpContext.RequestServices?.GetService<ErpKhoDbContext>();
+        if (db is null)
+        {
+            return new CachedRolePermissions(false, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        }
+
+        try
+        {
+            var roleId = 0;
+            if (int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) && uid > 0)
+            {
+                roleId = db.Users
+                    .IgnoreQueryFilters()
+                    .AsNoTracking()
+                    .Where(u => u.Id == uid && u.IsActive)
+                    .Select(u => u.RoleId)
+                    .FirstOrDefault();
+            }
+
+            if (roleId <= 0 && !string.IsNullOrWhiteSpace(effectiveRole))
+            {
+                roleId = db.Roles
+                    .IgnoreQueryFilters()
+                    .AsNoTracking()
+                    .Where(r => r.RoleName == effectiveRole)
+                    .Select(r => r.Id)
+                    .FirstOrDefault();
+            }
+
+            if (roleId <= 0 || !db.RolePermissions.IgnoreQueryFilters().AsNoTracking().Any())
+            {
+                return new CachedRolePermissions(false, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+            }
+
+            var codes = db.RolePermissions
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(rp => rp.RoleId == roleId && rp.Permission != null && rp.Permission.Code != null)
+                .Select(rp => rp.Permission.Code.Trim())
+                .ToList();
+
+            return new CachedRolePermissions(
+                true,
+                new HashSet<string>(codes, StringComparer.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            return new CachedRolePermissions(false, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        }
     }
 }

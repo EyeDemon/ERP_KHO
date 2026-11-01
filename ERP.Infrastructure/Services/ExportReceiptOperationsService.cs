@@ -69,6 +69,95 @@ public sealed class ExportReceiptOperationsService(
         return null;
     }
 
+    public async Task<WmsEndpointOutcome> GetPipelineSummaryAsync(
+        int? warehouseId = null,
+        IWarehouseAuthorizationService? warehouseAccessOverride = null,
+        CancellationToken cancellationToken = default)
+    {
+        var effectiveWhAccess = warehouseAccessOverride ?? _warehouseAccess;
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (effectiveWhAccess != null)
+        {
+            if (warehouseId.HasValue)
+                await effectiveWhAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await effectiveWhAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
+
+        var query = _db.ExportReceipts.AsNoTracking();
+        if (warehouseId.HasValue)
+            query = query.Where(r => r.WarehouseId == warehouseId.Value);
+        else if (accessibleIds is { Count: > 0 })
+            query = query.Where(r => accessibleIds.Contains(r.WarehouseId));
+
+        var grouped = await query
+            .GroupBy(r => r.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        var totalReceipts = grouped.Sum(x => x.Count);
+        var draftCount = grouped
+            .Where(x => x.Status == ReceiptStatus.Draft)
+            .Sum(x => x.Count);
+        var approvedReadyCount = grouped
+            .Where(x => x.Status == ReceiptStatus.Approved)
+            .Sum(x => x.Count);
+        var dispatchedCount = grouped
+            .Where(x => x.Status is ReceiptStatus.Dispatched or ReceiptStatus.Posted)
+            .Sum(x => x.Count);
+        var cancelledCount = grouped
+            .Where(x => x.Status == ReceiptStatus.Cancelled)
+            .Sum(x => x.Count);
+
+        var now = DateTime.UtcNow;
+        var twoHoursLater = now.AddHours(2);
+        var todayStart = now.Date;
+        var tomorrowStart = todayStart.AddDays(1);
+
+        var activePendingQuery = query.Where(r =>
+            r.Status != ReceiptStatus.Dispatched &&
+            r.Status != ReceiptStatus.Posted &&
+            r.Status != ReceiptStatus.Cancelled &&
+            r.Status != ReceiptStatus.CancelPendingPutback &&
+            r.MarketplaceShipByUtc.HasValue);
+
+        var slaOverdueCount = await activePendingQuery.CountAsync(
+            r => r.MarketplaceShipByUtc!.Value < now,
+            cancellationToken);
+        var slaAtRiskUnder2HoursCount = await activePendingQuery.CountAsync(
+            r => r.MarketplaceShipByUtc!.Value >= now && r.MarketplaceShipByUtc.Value <= twoHoursLater,
+            cancellationToken);
+        var slaDueTodayCount = await activePendingQuery.CountAsync(
+            r => r.MarketplaceShipByUtc!.Value > twoHoursLater &&
+                 r.MarketplaceShipByUtc.Value >= todayStart &&
+                 r.MarketplaceShipByUtc.Value < tomorrowStart,
+            cancellationToken);
+        var marketplacePrioritizedCount = await query.CountAsync(
+            r => (r.MarketplaceOrderId != null && r.MarketplaceOrderId != "") ||
+                 (r.TrackingNumber != null && r.TrackingNumber != ""),
+            cancellationToken);
+
+        var slaComplianceRatePct = totalReceipts == 0
+            ? 100m
+            : decimal.Round(((totalReceipts - slaOverdueCount) * 100m) / totalReceipts, 2);
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            totalReceipts,
+            draftCount,
+            approvedReadyCount,
+            dispatchedCount,
+            cancelledCount,
+            slaOverdueCount,
+            slaAtRiskUnder2HoursCount,
+            slaDueTodayCount,
+            slaComplianceRatePct,
+            marketplacePrioritizedCount,
+            status = "Đã tải tổng quan luồng phiếu xuất kho",
+            statusLabel = "Đã tải tổng quan luồng phiếu xuất kho & đồng hồ SLA giao hàng sàn TMĐT"
+        });
+    }
+
     public async Task<WmsEndpointOutcome> GetSlaQueueAsync(
         int? warehouseId,
         CancellationToken cancellationToken = default)
@@ -149,8 +238,35 @@ public sealed class ExportReceiptOperationsService(
     }
 
     public async Task IncrementSubscriptionOrderCountAsync(
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int? salesOrderId = null,
+        string? marketplaceOrderId = null)
     {
+        if (salesOrderId is > 0)
+        {
+            var hasSalesOrder = await _db.SalesOrders.AsNoTracking()
+                .AnyAsync(o => o.Id == salesOrderId.Value, cancellationToken);
+            var existingReceiptCount = await _db.ExportReceipts.AsNoTracking()
+                .CountAsync(r => r.SalesOrderId == salesOrderId.Value, cancellationToken);
+            if (hasSalesOrder || existingReceiptCount > 1)
+            {
+                return;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(marketplaceOrderId))
+        {
+            var normalizedMpId = marketplaceOrderId.Trim();
+            var hasMatchingSalesOrder = await _db.SalesOrders.AsNoTracking()
+                .AnyAsync(o => o.ExternalOrderId == normalizedMpId, cancellationToken);
+            var existingMpReceiptCount = await _db.ExportReceipts.AsNoTracking()
+                .CountAsync(r => r.MarketplaceOrderId == normalizedMpId, cancellationToken);
+            if (hasMatchingSalesOrder || existingMpReceiptCount > 1)
+            {
+                return;
+            }
+        }
+
         var tenantId = _db.CurrentTenantId;
         var sub = await _db.TenantSubscriptions.FirstOrDefaultAsync(s => s.TenantId == tenantId, cancellationToken);
         if (sub != null)

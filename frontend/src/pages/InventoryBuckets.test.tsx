@@ -33,8 +33,8 @@ const warehouses=[{id:1,name:'DC Hồ Chí Minh',isActive:true}];
 const reads=()=>{
   vi.mocked(apiClient.get).mockImplementation(async url=>{
     const value=String(url);
-    if(value==='/api/inventory/statuses')return {data:statuses} as never;
-    if(value.startsWith('/api/inventory/buckets?'))return {data:[bucket]} as never;
+    if(value==='/api/v1/inventory/statuses')return {data:statuses} as never;
+    if(value.startsWith('/api/v1/inventory/buckets?'))return {data:[bucket]} as never;
     return {data:[]} as never;
   });
 };
@@ -67,7 +67,7 @@ describe('InventoryBuckets',()=>{
     fireEvent.change(view.getByLabelText('Lọc số sê-ri'),{target:{value:'SER-1'}});
     fireEvent.click(view.getByText('Lọc nhóm tồn'));
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalledWith(
-      '/api/inventory/buckets?warehouseId=1&productId=10&status=AVAILABLE&lotNumber=LOT-A&serialNumber=SER-1'
+      '/api/v1/inventory/buckets?warehouseId=1&productId=10&status=AVAILABLE&lotNumber=LOT-A&serialNumber=SER-1'
     ));
   });
 
@@ -83,7 +83,7 @@ describe('InventoryBuckets',()=>{
     const submit=view.getByText('Xác nhận đổi trạng thái');
     fireEvent.click(submit);fireEvent.click(submit);
     await waitFor(()=>expect(apiClient.post).toHaveBeenCalledTimes(1));
-    expect(apiClient.post).toHaveBeenCalledWith('/api/inventory/status-changes',{
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/inventory/status-changes',{
       inventoryStockId:51,quantity:8,toStatus:'QUARANTINE',reason:'Bằng chứng giữ do chất lượng'
     },{headers:{'Idempotency-Key':'key:inventory-status-change-51'}});
     expect(completeIdempotentAction).toHaveBeenCalledWith('inventory-status-change-51');

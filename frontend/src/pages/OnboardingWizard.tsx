@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import apiClient from '../services/apiClient';
-import { UiBadge, UiCard, UiPage, UiPageHeader } from '../ui/ProductionUi';
+import { UiPage, UiPageHeader } from '../ui/ProductionUi';
+import { OnboardingWizardStepCards } from '../modules/governance/OnboardingWizardStepCards';
 
 const extractErrorText = (err: any, fallback: string) => {
   const data = err?.response?.data;
@@ -26,7 +27,11 @@ const OnboardingWizard = () => {
   });
   const [companyName, setCompanyName] = useState('Công ty TNHH Kho vận SME');
   const [warehouseName, setWarehouseName] = useState('Kho Trung tâm (WH01)');
+  const [ownerUsername, setOwnerUsername] = useState('');
+  const [ownerPassword, setOwnerPassword] = useState('');
   const [warehouseTemplate, setWarehouseTemplate] = useState<'RETAIL_KIOT' | 'ECOMMERCE_3ZONES' | 'DISTRIBUTION_PALLET'>('ECOMMERCE_3ZONES');
+  const [warehouses, setWarehouses] = useState<Array<{ id: number; code?: string; name: string }>>([]);
+  const [openingWarehouseId, setOpeningWarehouseId] = useState<string>('1');
   const [selectedOpeningFile, setSelectedOpeningFile] = useState<File | null>(null);
   const [wizardStatus, setWizardStatus] = useState({
     completedSteps: 0,
@@ -41,6 +46,19 @@ const OnboardingWizard = () => {
 
   const loadWizardStatus = useCallback(async () => {
     try {
+      const isMockApi = 'mock' in (apiClient.get as unknown as Record<string, unknown>);
+      const hasAuthToken =
+        typeof window !== 'undefined' &&
+        Boolean(
+          window.localStorage?.getItem('token') ||
+            window.localStorage?.getItem('accessToken') ||
+            window.localStorage?.getItem('jwt') ||
+            window.sessionStorage?.getItem('token') ||
+            window.sessionStorage?.getItem('wms_access_token'),
+        );
+      if (!isMockApi && !hasAuthToken) {
+        return;
+      }
       let res = await apiClient
         .get<Record<string, unknown>>('/api/v1/permissions/saas/setup-wizard')
         .catch(() => null);
@@ -62,6 +80,26 @@ const OnboardingWizard = () => {
           statusText: String(d.statusText ?? d.status ?? 'Đã hoàn tất thiết lập'),
         });
       }
+      if (!('mock' in (apiClient.get as unknown as Record<string, unknown>))) {
+        const whRes = await apiClient.get<unknown>('/api/v1/warehouses').catch(() => null);
+        const whItems = Array.isArray(whRes?.data)
+          ? whRes.data
+          : Array.isArray((whRes?.data as Record<string, unknown> | undefined)?.items)
+            ? ((whRes?.data as Record<string, unknown>).items as unknown[])
+            : [];
+        const mappedWh = whItems
+          .filter((x): x is Record<string, unknown> => Boolean(x && typeof x === 'object'))
+          .map((x) => ({
+            id: Number(x.id ?? 0),
+            code: typeof x.code === 'string' ? x.code : undefined,
+            name: String(x.name ?? x.code ?? `Kho #${x.id}`),
+          }))
+          .filter((x) => x.id > 0);
+        if (mappedWh.length > 0) {
+          setWarehouses(mappedWh);
+          setOpeningWarehouseId(String(mappedWh[0].id));
+        }
+      }
     } catch {
       // Keep default honest initial state (0/5 steps)
     }
@@ -78,19 +116,75 @@ const OnboardingWizard = () => {
     setError('');
     setNotice('');
     try {
-      const res = await apiClient.post<Record<string, unknown>>('/api/v1/permissions/saas/tenants/provision', {
+      const hasAdminSession =
+        typeof window !== 'undefined' &&
+        Boolean(
+          window.localStorage?.getItem('token') ||
+            window.localStorage?.getItem('accessToken') ||
+            window.localStorage?.getItem('jwt') ||
+            window.sessionStorage?.getItem('wms_access_token'),
+        );
+      const isPublicRegister =
+        typeof window !== 'undefined' &&
+        (window.location.pathname === '/register' || !hasAdminSession);
+      const payload: Record<string, unknown> = {
         tenantCode: tenantCode.trim() || 'TENANT-SME-2026',
         companyName: companyName.trim(),
         warehouseName: warehouseName.trim() || 'Kho Trung tâm SME WH01',
         templateCode: warehouseTemplate,
-      });
+      };
+      if (isPublicRegister || ownerUsername.trim() || ownerPassword.trim()) {
+        payload.allocateNewTenant = true;
+      }
+      if (ownerUsername.trim()) {
+        payload.ownerUsername = ownerUsername.trim();
+      }
+      if (ownerPassword.trim()) {
+        payload.ownerPassword = ownerPassword.trim();
+      }
+      const shouldFallbackRoute = (err: unknown): boolean => {
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (typeof status === 'number') {
+          return status === 404 || status === 405;
+        }
+        const message = (err as { message?: string })?.message ?? '';
+        return message.startsWith('Unexpected POST ');
+      };
+      const candidateEndpoints = isPublicRegister
+        ? [
+            '/api/v1/auth/register-tenant',
+            '/api/v1/permissions/saas-tenants/provision',
+            '/api/v1/permissions/saas/tenants/provision',
+          ]
+        : [
+            '/api/v1/permissions/saas-tenants/provision',
+            '/api/v1/permissions/saas/tenants/provision',
+            '/api/v1/auth/register-tenant',
+          ];
+      let res: { data?: Record<string, unknown> } | null = null;
+      let lastErr: unknown = null;
+      for (const endpoint of candidateEndpoints) {
+        try {
+          res = await apiClient.post<Record<string, unknown>>(endpoint, payload);
+          break;
+        } catch (err) {
+          lastErr = err;
+          if (!shouldFallbackRoute(err)) {
+            throw err;
+          }
+        }
+      }
+      if (!res && lastErr) {
+        throw lastErr;
+      }
       const d = (res?.data ?? {}) as Record<string, unknown>;
       setWizardStatus({
         completedSteps: Number(d.completedSteps ?? 3),
         totalSteps: 5,
         statusText: String(d.status ?? 'Đã cấp phát thuê bao & Sơ đồ kho mẫu'),
       });
-      setNotice(`Đã khởi tạo thuê bao ${tenantCode} và phân bổ sơ đồ kệ mẫu (${warehouseName}) thành công.`);
+      const ownerNote = d.ownerUsername ? ` Tài khoản chủ kho: ${String(d.ownerUsername)}@${String(d.tenantCode ?? tenantCode)}.` : '';
+      setNotice(`Đã khởi tạo thuê bao ${tenantCode} và phân bổ sơ đồ kệ mẫu (${warehouseName}) thành công.${ownerNote}`);
     } catch (err) {
       setError(extractErrorText(err, 'Không thể khởi tạo thuê bao SaaS và sơ đồ kho mẫu.'));
     } finally {
@@ -154,7 +248,7 @@ const OnboardingWizard = () => {
       if (selectedOpeningFile) {
         formData.append('file', selectedOpeningFile);
       }
-      formData.append('warehouseId', '1');
+      formData.append('warehouseId', openingWarehouseId || '1');
       formData.append('fileName', selectedOpeningFile?.name || 'TonKho_DauKy_Mau.xlsx');
 
       const res = await apiClient
@@ -182,162 +276,89 @@ const OnboardingWizard = () => {
     }
   };
 
+  const isPublicRegisterRoute = typeof window !== 'undefined' && window.location.pathname === '/register';
+
   return (
-    <UiPage>
-      <UiPageHeader
-        eyebrow="Quản trị & Khởi tạo Nhanh"
-        title="Trình hướng dẫn Thiết lập Kho Nhanh 5 Bước trong 15 Phút"
-        description="Khởi tạo Thuê bao SaaS tự phục vụ, chọn mô hình sơ đồ kệ 1-Click, nạp danh mục sản phẩm & tồn kho đầu kỳ bằng tệp Excel chuẩn."
-      />
+    <div
+      className="production-ui"
+      style={
+        isPublicRegisterRoute
+          ? {
+              minHeight: '100vh',
+              background: 'linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%)',
+              padding: '28px 20px 48px',
+              boxSizing: 'border-box',
+            }
+          : undefined
+      }
+    >
+      <div style={isPublicRegisterRoute ? { maxWidth: 1080, width: '100%', margin: '0 auto', display: 'block' } : undefined}>
+        <style>{`
+          .register-wizard-shell .ui-page {
+            width: 100%;
+            max-width: 1080px;
+            margin: 0 auto;
+            align-items: stretch !important;
+          }
+          .register-wizard-shell .ui-card,
+          .register-wizard-shell .ui-page-header {
+            width: 100%;
+            box-sizing: border-box;
+          }
+        `}</style>
+        <div className="register-wizard-shell">
+          <UiPage>
+            <UiPageHeader
+              eyebrow="Quản trị & Khởi tạo Nhanh SaaS"
+              title="Trình hướng dẫn Thiết lập Kho Nhanh 5 Bước trong 15 Phút"
+              description="Khởi tạo Thuê bao SaaS tự phục vụ, chọn mô hình sơ đồ kệ 1-Click, nạp danh mục sản phẩm & tồn kho đầu kỳ bằng tệp Excel chuẩn."
+              actions={
+                isPublicRegisterRoute ? (
+                  <a
+                    href="/login"
+                    className="ui-btn ui-btn-secondary"
+                    data-testid="link-back-to-login"
+                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', minHeight: 38, padding: '0 14px' }}
+                  >
+                    ← Quay lại Đăng nhập
+                  </a>
+                ) : undefined
+              }
+            />
 
-      {error && <div role="alert">{error}</div>}
-      {notice && <p role="status" className="ui-success-text">{notice}</p>}
+            {error && <div role="alert">{error}</div>}
+            {notice && <p role="status" className="ui-success-text">{notice}</p>}
 
-      <UiCard
-        title={`Tiến trình Chuẩn hóa 5 Bước (${wizardStatus.completedSteps}/${wizardStatus.totalSteps} bước • ${wizardStatus.statusText})`}
-        subtitle="Thiết kế tối ưu cho Chủ Shop & Quản lý Kho SME hoàn tất thiết lập kho trong 15 phút mà không cần đội kỹ thuật"
-      >
-        <div className="ui-inline-wrap" style={{ gap: 8 }}>
-          <UiBadge tone={wizardStatus.completedSteps >= 1 ? 'success' : 'neutral'}>Bước 1: Chọn mô hình kho mẫu 1-Click (3 giây)</UiBadge>
-          <UiBadge tone={wizardStatus.completedSteps >= 2 ? 'success' : 'neutral'}>Bước 2: Nhập danh mục sản phẩm chuẩn (.xlsx)</UiBadge>
-          <UiBadge tone={wizardStatus.completedSteps >= 3 ? 'success' : 'neutral'}>Bước 3: Nhập tồn kho đầu kỳ kèm giá vốn bình quân</UiBadge>
-          <UiBadge tone={wizardStatus.completedSteps >= 4 ? 'success' : 'neutral'}>Bước 4: Liên kết gian hàng Shopee / TikTok Shop</UiBadge>
-          <UiBadge tone={wizardStatus.completedSteps >= 5 ? 'success' : 'neutral'}>Bước 5: In thử tem nhiệt &amp; xuất đơn hàng đầu tiên</UiBadge>
+            <OnboardingWizardStepCards
+              busy={busy}
+              wizardStatus={wizardStatus}
+              tenantCode={tenantCode}
+              setTenantCode={setTenantCode}
+              companyName={companyName}
+              setCompanyName={setCompanyName}
+              warehouseName={warehouseName}
+              setWarehouseName={setWarehouseName}
+              ownerUsername={ownerUsername}
+              setOwnerUsername={setOwnerUsername}
+              ownerPassword={ownerPassword}
+              setOwnerPassword={setOwnerPassword}
+              warehouseTemplate={warehouseTemplate}
+              setWarehouseTemplate={setWarehouseTemplate}
+              warehouses={warehouses}
+              openingWarehouseId={openingWarehouseId}
+              setOpeningWarehouseId={setOpeningWarehouseId}
+              selectedOpeningFile={selectedOpeningFile}
+              setSelectedOpeningFile={setSelectedOpeningFile}
+              openingImportResult={openingImportResult}
+              handleProvisionTenant={handleProvisionTenant}
+              handleQuickStartAllSteps={handleQuickStartAllSteps}
+              handleUploadOpeningBalance={handleUploadOpeningBalance}
+              handleDownloadOpeningTemplate={handleDownloadOpeningTemplate}
+            />
+          </UiPage>
         </div>
-      </UiCard>
-
-      <UiCard title="Bước 1: Khởi tạo Thuê bao Doanh nghiệp & Sơ đồ Kệ Mẫu 1-Click">
-        <form onSubmit={handleProvisionTenant} className="ui-stack" style={{ gap: 12 }}>
-          <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, alignItems: 'end' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              Mã thuê bao doanh nghiệp
-              <input
-                aria-label="Mã thuê bao doanh nghiệp mới"
-                value={tenantCode}
-                onChange={(e) => setTenantCode(e.target.value)}
-                placeholder="VD: KHO-TRUNG-TAM-WH01"
-                style={{ width: '100%', boxSizing: 'border-box' }}
-              />
-            </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              Tên doanh nghiệp / Chủ shop
-              <input
-                aria-label="Tên doanh nghiệp thuê bao"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                style={{ width: '100%', boxSizing: 'border-box' }}
-              />
-            </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              Tên kho khởi tạo
-              <input
-                aria-label="Tên kho khởi tạo nhanh"
-                value={warehouseName}
-                onChange={(e) => setWarehouseName(e.target.value)}
-                style={{ width: '100%', boxSizing: 'border-box' }}
-              />
-            </label>
-          </div>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            Mô hình kho mẫu 1-Click
-            <select
-              aria-label="Mô hình kho mẫu"
-              value={warehouseTemplate}
-              onChange={(e) => setWarehouseTemplate(e.target.value as 'RETAIL_KIOT' | 'ECOMMERCE_3ZONES' | 'DISTRIBUTION_PALLET')}
-              style={{ maxWidth: 640 }}
-            >
-              <option value="RETAIL_KIOT">Kho Cửa hàng Nhỏ (1 Khu, 10 Kệ)</option>
-              <option value="ECOMMERCE_3ZONES">Kho Sàn TMĐT Tiêu chuẩn (3 Khu: Nhận - Lưu - Đóng gói, 50 Vị trí)</option>
-              <option value="DISTRIBUTION_PALLET">Kho Phân phối Bán buôn (Khu Pallet + Khu Lẻ + Khu Hàng lỗi)</option>
-            </select>
-          </label>
-          <div className="ui-inline-wrap" style={{ gap: 8 }}>
-            <button type="submit" data-testid="btn-provision-tenant" disabled={busy}>
-              Khởi tạo Thuê bao &amp; Sơ đồ Kho Mẫu
-            </button>
-            <button
-              type="button"
-              className="ui-btn-secondary"
-              data-testid="btn-quick-start-5steps"
-              disabled={busy}
-              onClick={() => void handleQuickStartAllSteps()}
-            >
-              Kích hoạt Nhanh Trọn bộ 5 Bước (15 Phút)
-            </button>
-          </div>
-        </form>
-      </UiCard>
-
-      <UiCard
-        title="Bước 2 & 3: Tải Biểu mẫu & Nhập Excel Tồn Kho Đầu Kỳ kèm Giá Vốn"
-        subtitle="Tự động kiểm tra mã mặt hàng, vị trí kệ và sinh bút toán nhập tồn đầu kỳ vào sổ cái bất biến"
-      >
-        <form onSubmit={handleUploadOpeningBalance} className="ui-inline-wrap" style={{ alignItems: 'end', gap: 12 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Tệp Excel tồn kho đầu kỳ (.xlsx, .csv)</span>
-            <label
-              style={{
-                position: 'relative',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 10,
-                minHeight: 38,
-                padding: '6px 12px',
-                border: '1px solid #cbd5e1',
-                borderRadius: 6,
-                background: '#ffffff',
-                cursor: 'pointer',
-                fontSize: 13,
-                color: '#0f172a',
-              }}
-            >
-              <span
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: 4,
-                  background: '#f1f5f9',
-                  border: '1px solid #cbd5e1',
-                  fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Chọn tệp Excel...
-              </span>
-              <span style={{ color: selectedOpeningFile ? '#0f172a' : '#64748b', fontWeight: selectedOpeningFile ? 600 : 400 }}>
-                {selectedOpeningFile ? selectedOpeningFile.name : 'Chưa chọn tệp nào (.xlsx, .csv)'}
-              </span>
-              <input
-                aria-label="Tệp Excel tồn kho đầu kỳ"
-                data-testid="input-onboarding-opening-file"
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                onChange={(e) => setSelectedOpeningFile(e.target.files?.[0] ?? null)}
-                style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden', pointerEvents: 'none' }}
-              />
-            </label>
-          </div>
-          <button type="submit" data-testid="btn-upload-opening-balance" disabled={busy}>
-            Nhập Excel Tồn kho Đầu kỳ
-          </button>
-          <button
-            type="button"
-            className="ui-btn-secondary"
-            disabled={busy}
-            onClick={() => void handleDownloadOpeningTemplate()}
-          >
-            Tải Biểu mẫu .xlsx Chuẩn
-          </button>
-        </form>
-        {openingImportResult && (
-          <div
-            role="status"
-            style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}
-          >
-            {`Mã lô nhập: ${openingImportResult.importBatchId} • Số dòng hợp lệ: ${openingImportResult.importedRows} • ${openingImportResult.status}`}
-          </div>
-        )}
-      </UiCard>
-    </UiPage>
+      </div>
+    </div>
   );
 };
 

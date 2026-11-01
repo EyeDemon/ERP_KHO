@@ -8,6 +8,7 @@ namespace ERP.Api.Controllers;
 
 [Authorize]
 [ApiController]
+[Route("api/[controller]")]
 [Route("api/product-categories")]
 [Route("api/v1/product-categories")]
 public sealed class ProductCategoriesController(
@@ -31,8 +32,7 @@ public sealed class ProductCategoriesController(
     }
 
     [HttpPost("verify-storage-policy")]
-    [HttpPost("/api/ProductCategories/verify-storage-policy")]
-    [PermissionAuthorize(AppPermissions.CategoryRead)]
+    [PermissionAuthorize(AppPermissions.CategoryManage)]
     public async Task<IActionResult> VerifyStoragePolicy(CancellationToken ct = default)
     {
         var checkedCategoriesCount = (await service.GetCategoriesAsync(ct)).Count;

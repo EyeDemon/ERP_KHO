@@ -16,32 +16,26 @@ namespace ERP.Api.Controllers;
 public class ImportReceiptsController : ControllerBase
 {
     private readonly IImportReceiptService _importReceiptService;
-    private readonly IReceivingDiscrepancyService? _discrepancies;
-    private readonly IImportReceiptOperationsService? _receiptOps;
-    private readonly IWarehouseAuthorizationService? _warehouseAccess;
+    private readonly IReceivingDiscrepancyService _discrepancies;
+    private readonly IImportReceiptOperationsService _receiptOps;
+    private readonly IWarehouseAuthorizationService _warehouseAccess;
 
-    private IReceivingDiscrepancyService Discrepancies => _discrepancies
-        ?? throw new InvalidOperationException("Receiving discrepancy service is not configured.");
+    private IReceivingDiscrepancyService Discrepancies => _discrepancies;
 
-    [ActivatorUtilitiesConstructor]
     public ImportReceiptsController(
         IImportReceiptService importReceiptService,
-        IReceivingDiscrepancyService? discrepancies = null,
-        IImportReceiptOperationsService receiptOps = null!,
-        IWarehouseAuthorizationService warehouseAccess = null!)
+        IReceivingDiscrepancyService discrepancies,
+        IImportReceiptOperationsService receiptOps,
+        IWarehouseAuthorizationService warehouseAccess)
     {
+        ArgumentNullException.ThrowIfNull(importReceiptService);
+        ArgumentNullException.ThrowIfNull(discrepancies);
+        ArgumentNullException.ThrowIfNull(receiptOps);
+        ArgumentNullException.ThrowIfNull(warehouseAccess);
         _importReceiptService = importReceiptService;
         _discrepancies = discrepancies;
         _receiptOps = receiptOps;
         _warehouseAccess = warehouseAccess;
-    }
-
-    public ImportReceiptsController(
-        IImportReceiptService importReceiptService,
-        IImportReceiptOperationsService receiptOps,
-        IWarehouseAuthorizationService warehouseAccess = null!)
-        : this(importReceiptService, null, receiptOps, warehouseAccess)
-    {
     }
 
     private bool TryGetUserId(out int userId)
@@ -109,41 +103,50 @@ public class ImportReceiptsController : ControllerBase
         return Ok(new { message = "Post phiếu nhập thành công" });
     }
 
+    public sealed record ExpressPostImportReceiptRequest(
+        int? TargetLocationId = null,
+        string? TargetLocationCode = null,
+        string? Note = null) : ExpressPostImportReceiptInput(TargetLocationId, TargetLocationCode, Note);
+
+    [HttpPost("{id:int}/express-post"), IdempotentCommand("ImportReceipt.ExpressPost"), PermissionAuthorize(AppPermissions.ReceiptReceive, AppPermissions.ReceiptPost)]
+    public async Task<IActionResult> ExpressPost(
+        int id,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExpressPostImportReceiptRequest? request = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!this.HasActionPermission(null, AppPermissions.ReceiptReceive, AppPermissions.ReceiptPost))
+            return Forbid();
+        return this.ToActionResult(await _receiptOps.ExpressPostAsync(id, request, GetActorUserId(), _warehouseAccess, cancellationToken));
+    }
+
     [HttpGet, PermissionAuthorize(AppPermissions.ReceiptRead)]
-    public async Task<IActionResult> GetAll([FromQuery] ERP.Domain.Enums.ReceiptStatus? status)
-        => Ok(await _importReceiptService.GetAllAsync(status));
+    public async Task<IActionResult> GetAll(
+        [FromQuery] ERP.Domain.Enums.ReceiptStatus? status = null,
+        [FromQuery] int? pageNumber = null,
+        [FromQuery] int? pageSize = null)
+    {
+        var items = await _importReceiptService.GetAllAsync(status);
+        if (pageNumber.HasValue || pageSize.HasValue)
+        {
+            var size = Math.Clamp(pageSize ?? 50, 1, 100);
+            var page = Math.Max(1, pageNumber ?? 1);
+            if (Response != null)
+            {
+                Response.Headers["X-Total-Count"] = items.Count().ToString();
+            }
+            return Ok(items.Skip((page - 1) * size).Take(size));
+        }
+
+        return Ok(items);
+    }
 
     [HttpGet("pipeline-summary"), PermissionAuthorize(AppPermissions.ReceiptRead)]
-    public async Task<IActionResult> GetPipelineSummary()
-    {
-        var items = (await _importReceiptService.GetAllAsync(null)).ToList();
-        return Ok(new
-        {
-            totalReceipts = items.Count,
-            draftOrReceivingCount = items.Count(x => x.Status is "Draft" or "Received" or "0" or "3" || x.Status.StartsWith("Discrepancy", StringComparison.OrdinalIgnoreCase)),
-            qcOrApprovalPendingCount = items.Count(x => x.Status is "QcPending" or "QcCompleted" or "ReadyToPost" or "4" or "5"),
-            postedCount = items.Count(x => x.Status is "Posted" or "Approved" or "1"),
-            cancelledCount = items.Count(x => x.Status is "Cancelled" or "2"),
-            status = "Đã tải tổng quan luồng phiếu nhập kho",
-            statusLabel = "Đã tải tổng quan luồng phiếu nhập kho"
-        });
-    }
+    public async Task<IActionResult> GetPipelineSummary([FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
+        => this.ToActionResult(await _receiptOps.GetPipelineSummaryAsync(warehouseId, _warehouseAccess, cancellationToken));
 
     [HttpGet("qc-and-rma-summary"), PermissionAuthorize(AppPermissions.ReceiptRead)]
-    public async Task<IActionResult> GetQcAndRmaSummary()
-    {
-        var items = (await _importReceiptService.GetAllAsync(null)).ToList();
-        return Ok(new
-        {
-            totalReceiptsInspected = items.Count,
-            pendingQcOrPostingCount = items.Count(x => x.Status is "Draft" or "Approved" or "Received" or "QcPending" or "QcCompleted" or "ReadyToPost" or "0" or "3" or "4" or "5" || x.Status.StartsWith("Discrepancy", StringComparison.OrdinalIgnoreCase)),
-            postedWithLotOrQcCount = items.Count(x => x.Status is "Posted" or "Approved" or "1"),
-            rmaEligibleReceiptsCount = items.Count(x => (!string.IsNullOrWhiteSpace(x.Note) && (x.Note.Contains("RMA", StringComparison.OrdinalIgnoreCase) || x.Note.Contains("RETURN", StringComparison.OrdinalIgnoreCase) || x.Note.Contains("trả", StringComparison.OrdinalIgnoreCase))) || x.Status.StartsWith("Discrepancy", StringComparison.OrdinalIgnoreCase)),
-            qcWorkCenterModes = new[] { "Kiểm định chất lượng đầu vào", "Kiểm định hàng trả về", "Rà soát hàng biệt trữ & hư hỏng" },
-            status = "Đã tải tổng quan trạm kiểm định chất lượng & tiếp nhận hàng trả về",
-            statusLabel = "Đã tải tổng quan trạm kiểm định chất lượng & tiếp nhận hàng trả về"
-        });
-    }
+    public async Task<IActionResult> GetQcAndRmaSummary([FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
+        => this.ToActionResult(await _receiptOps.GetQcAndRmaSummaryAsync(warehouseId, _warehouseAccess, cancellationToken));
 
     public sealed record RmaIntakeCheckRequest(
         string? ReturnReference = null, string? ReasonCode = null, int? WarehouseId = null, string? RmaReferenceCode = null,
@@ -152,38 +155,18 @@ public class ImportReceiptsController : ControllerBase
             ReturnReference, ReasonCode, WarehouseId, RmaReferenceCode, ProductId, ProductCode, LocationId, LocationCode, LotNumber, Quantity);
 
     [HttpPost("rma-intake-check"), HttpPost("initiate-rma-inspection")]
-    [IdempotentCommand("ImportReceipt.RmaIntakeCheck"), PermissionAuthorize(AppPermissions.ReceiptRead)]
+    [IdempotentCommand("ImportReceipt.RmaIntakeCheck"), PermissionAuthorize(AppPermissions.ReturnCreate, AppPermissions.ReturnReceive, AppPermissions.ReceiptReceive, AppPermissions.ReceiptUpdate)]
     public async Task<IActionResult> RmaIntakeCheck(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] RmaIntakeCheckRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (_receiptOps != null)
-            return this.ToActionResult(await _receiptOps.RmaIntakeCheckAsync(request, GetActorUserId(), _warehouseAccess, cancellationToken));
-
-        if (request?.WarehouseId.HasValue == true && _warehouseAccess != null)
-            await _warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
-        else if (_warehouseAccess != null)
-            await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
-
-        var now = DateTime.UtcNow;
-        return Ok(new
-        {
-            customerReturnId = (int?)null, rmaCode = $"RMA-{now:yyyyMMdd}-01", rmaInspectionCode = $"RMA-INSP-{now:yyyyMMdd-HHmm}",
-            rmaReferenceCode = string.IsNullOrWhiteSpace(request?.RmaReferenceCode) ? "RMA-AUTO" : request.RmaReferenceCode.Trim(),
-            returnReference = request?.ReturnReference ?? string.Empty, reasonCode = request?.ReasonCode ?? string.Empty,
-            quarantineBucketCount = 0, pendingQcOrRmaReceiptsCount = 0, openStocktakesCount = 0, activeCountFreezeLocksCount = 0,
-            ledgerTransactionId = (int?)null, quarantineStockQuantity = (decimal?)null,
-            targetBucket = "Khu vực biệt trữ chờ kiểm định", nextStep = "Chuyển trạm kiểm định chất lượng đầu vào",
-            dispositionSummary = "Đã tiếp nhận kiểm định hàng trả về (0 phiếu chờ kiểm định, 0 vị trí biệt trữ)",
-            status = "Đã khởi tạo phiếu kiểm định hàng trả về & định tuyến biệt trữ",
-            statusLabel = "Đã khởi tạo phiếu kiểm định hàng trả về & định tuyến biệt trữ", queuedAtUtc = now
-        });
+        if (!this.HasActionPermission(null, AppPermissions.ReturnCreate, AppPermissions.ReturnReceive, AppPermissions.ReceiptReceive, AppPermissions.ReceiptUpdate)) return Forbid();
+        return this.ToActionResult(await _receiptOps.RmaIntakeCheckAsync(request, GetActorUserId(), _warehouseAccess, cancellationToken));
     }
 
-    [HttpGet("customer-returns"), PermissionAuthorize(AppPermissions.ReceiptRead)]
+    [HttpGet("customer-returns"), PermissionAuthorize(AppPermissions.ReturnRead, AppPermissions.ReceiptRead)]
     public async Task<IActionResult> GetCustomerReturns([FromQuery] int? warehouseId = null, CancellationToken cancellationToken = default)
-        => _receiptOps == null ? Ok(Array.Empty<object>()) : this.ToActionResult(await _receiptOps.GetCustomerReturnsAsync(warehouseId, _warehouseAccess, cancellationToken));
+        => this.ToActionResult(await _receiptOps.GetCustomerReturnsAsync(warehouseId, _warehouseAccess, cancellationToken));
 
     public sealed record ExecuteRtvRefurbishRequest(
         int? WarehouseId = null, string? DispositionType = null, int? ProductId = null, int? LocationId = null,
@@ -192,70 +175,26 @@ public class ImportReceiptsController : ControllerBase
         int? CustomerReturnId = null, string? ReturnCode = null, string? TrackingNumber = null, string? Status = null)
         : ExecuteRtvRefurbishInput(WarehouseId, DispositionType, ProductId, LocationId, LotNumber, ExecuteStockMutation, ActionType, Quantity, ProductCode, LocationCode, ReasonCode, Note, CustomerReturnId, ReturnCode, TrackingNumber, Status);
 
-    [HttpPost("execute-rtv-refurbish"), IdempotentCommand("ImportReceipt.ExecuteRtvRefurbish"), PermissionAuthorize(AppPermissions.ReceiptRead)]
+    [HttpPost("execute-rtv-refurbish"), IdempotentCommand("ImportReceipt.ExecuteRtvRefurbish"), PermissionAuthorize(AppPermissions.ReturnDisposition, AppPermissions.ReturnPost, AppPermissions.ReceiptReceive, AppPermissions.ReceiptUpdate)]
     public async Task<IActionResult> ExecuteRtvRefurbish(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] ExecuteRtvRefurbishRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (_receiptOps != null)
-            return this.ToActionResult(await _receiptOps.ExecuteRtvRefurbishAsync(request, GetActorUserId(), _warehouseAccess, cancellationToken));
-
-        if (request?.WarehouseId.HasValue == true && _warehouseAccess != null)
-            await _warehouseAccess.EnsureWarehouseAccessAsync(request.WarehouseId.Value, cancellationToken);
-        else if (_warehouseAccess != null)
-            await _warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
-
-        var now = DateTime.UtcNow;
-        const string dispType = "Tân trang hàng trả về & chuyển về tồn khả dụng";
-        return Ok(new
-        {
-            customerReturnId = (int?)null, dispositionCode = $"DISP-RTV-{now:yyyyMMdd-HHmm}", warehouseId = request?.WarehouseId,
-            nonAvailableBucketsCount = 0, dispositionType = dispType, actionType = dispType,
-            dispositionSummary = $"{dispType} (0 vị trí biệt trữ và hư hỏng đã rà soát)",
-            status = "Đã thực thi & Ghi sổ kiểm toán", statusLabel = "Đã thực thi & Ghi sổ kiểm toán",
-            ledgerUpdated = false, executedStockMutation = false, mutatedQuantity = 0m,
-            ledgerTransactionId = (int?)null, resultingStockQuantity = (decimal?)null, resultingStatus = (string?)null,
-            refurbishRouting = "Chuyển tồn kho sau tân trang về khu vực hàng khả dụng",
-            rtvClaimStatus = "Đã ghi nhận giảm trừ tồn kho và sẵn sàng hoàn trả nhà cung cấp", executedAtUtc = now
-        });
+        if (!this.HasActionPermission(null, AppPermissions.ReturnDisposition, AppPermissions.ReturnPost, AppPermissions.ReceiptReceive, AppPermissions.ReceiptUpdate)) return Forbid();
+        return this.ToActionResult(await _receiptOps.ExecuteRtvRefurbishAsync(request, GetActorUserId(), _warehouseAccess, cancellationToken));
     }
 
     [HttpGet("{id}"), PermissionAuthorize(AppPermissions.ReceiptRead)]
     public async Task<IActionResult> GetById(int id) => Ok(await _importReceiptService.GetByIdAsync(id));
 
-    private bool CanReadInventoryCost()
-    {
-        if (User != null && User.Claims.Any())
-        {
-            if (User.Claims.Any(c =>
-                (string.Equals(c.Type, "permission", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(c.Type, "permissions", StringComparison.OrdinalIgnoreCase)) &&
-                string.Equals(c.Value, AppPermissions.InventoryCostRead, StringComparison.OrdinalIgnoreCase)))
-                return true;
-            if (User.IsInRole(AppRoles.WarehouseStaff) || User.IsInRole(AppRoles.Viewer))
-                return false;
-        }
-        return true;
-    }
+    private bool CanReadInventoryCost() =>
+        this.HasActionPermission(null, AppPermissions.InventoryCostRead);
 
     [HttpGet("{id:int}/mac-preview"), PermissionAuthorize(AppPermissions.ReceiptRead, AppPermissions.InventoryCostRead)]
     public async Task<IActionResult> GetMacPreview(int id, CancellationToken cancellationToken = default)
     {
         if (!CanReadInventoryCost())
             return StatusCode(403, new { code = "COST_READ_FORBIDDEN", errorCode = "COST_READ_FORBIDDEN", costHiddenByRbac = true, message = "Bạn không có quyền xem dữ liệu giá vốn bình quân gia quyền (inventory.cost.read)." });
-
-        if (_receiptOps == null)
-        {
-            var dto = await _importReceiptService.GetByIdAsync(id);
-            return Ok(new
-            {
-                importReceiptId = dto.Id, importReceiptCode = dto.Code, warehouseId = dto.WarehouseId, status = dto.Status,
-                formula = "(OldQty * OldMAC + IncomingQty * UnitCost) / (OldQty + IncomingQty)",
-                costHiddenByRbac = false, lines = Array.Empty<object>(), items = Array.Empty<object>(),
-                statusLabel = "Đã tính toán bản xem trước giá vốn bình quân gia quyền (MAC Preview)"
-            });
-        }
 
         return this.ToActionResult(await _receiptOps.GetMacPreviewAsync(id, _warehouseAccess, cancellationToken));
     }

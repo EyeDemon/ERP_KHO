@@ -37,7 +37,7 @@ describe('ImportReceipts shared production UI', () => {
     localStorage.setItem('role', 'Viewer');
     localStorage.setItem('permissions', '["receipt.read"]');
     get.mockImplementation(async (url) => {
-      if (url === '/api/importreceipts') return { data: [receipt] } as never;
+      if (url === '/api/v1/import-receipts') return { data: [receipt] } as never;
       return { data: [] } as never;
     });
   });
@@ -59,9 +59,9 @@ describe('ImportReceipts shared production UI', () => {
     const view = render(<ImportReceipts />);
     await view.findByText('IR-2026-0011');
 
-    expect(get).toHaveBeenCalledWith('/api/importreceipts');
-    expect(get).not.toHaveBeenCalledWith('/api/warehouses');
-    expect(get).not.toHaveBeenCalledWith('/api/products');
-    expect(get).not.toHaveBeenCalledWith('/api/business-partners', expect.anything());
+    expect(get).toHaveBeenCalledWith('/api/v1/import-receipts');
+    expect(get).not.toHaveBeenCalledWith('/api/v1/warehouses');
+    expect(get).not.toHaveBeenCalledWith('/api/v1/products');
+    expect(get).not.toHaveBeenCalledWith('/api/v1/business-partners', expect.anything());
   });
 });

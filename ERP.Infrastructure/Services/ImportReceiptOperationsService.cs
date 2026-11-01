@@ -863,4 +863,1755 @@ public sealed class ImportReceiptOperationsService(
             statusLabel = $"Đã tính toán bản xem trước giá vốn bình quân gia quyền (MAC) cho {lines.Count} dòng hàng"
         });
     }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(int TenantId, int ReturnId), SemaphoreSlim> _dispositionLocks = new();
+
+    private static string NormalizeDispositionCode(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return "RESTOCK_AVAILABLE";
+        var upper = raw.Trim().ToUpperInvariant();
+        if (upper.Contains("RESTOCK") || upper.Contains("AVAILABLE"))
+            return "RESTOCK_AVAILABLE";
+        if (upper.Contains("REFURBISH") || upper.Contains("REPACK"))
+            return "REFURBISH_REPACK";
+        if (upper.Contains("RTV") || upper.Contains("VENDOR"))
+            return "RTV_VENDOR";
+        if (upper.Contains("SCRAP") || upper.Contains("DISPOSAL"))
+            return "SCRAP_DISPOSAL";
+        return upper;
+    }
+
+    private static string NormalizeConditionCode(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return "GOOD";
+        var upper = raw.Trim().ToUpperInvariant();
+        if (upper is "GOOD" or "DAMAGED_BOX" or "DEFECTIVE")
+            return upper;
+        if (upper.Contains("DAMAGE") || upper.Contains("BOX"))
+            return "DAMAGED_BOX";
+        if (upper.Contains("DEFECT") || upper.Contains("BROKEN") || upper.Contains("BAD"))
+            return "DEFECTIVE";
+        return "GOOD";
+    }
+
+    private object MapCustomerReturnDto(
+        ERP.Domain.Entities.CustomerReturn r,
+        bool canReadCost,
+        IReadOnlyDictionary<int, (string Code, string Name)> productMap,
+        IReadOnlyDictionary<int, string> locationMap,
+        IReadOnlyDictionary<int, string>? warehouseMap = null,
+        string? inspectionVideoUrl = null)
+    {
+        var now = DateTime.UtcNow;
+        var returnAgingDays = Math.Max(0, (int)Math.Floor((now - r.CreatedAtUtc).TotalDays));
+        var isOverdueInTransit = !string.Equals(r.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase) &&
+                                 !string.Equals(r.Status, "PUTAWAY_COMPLETED", StringComparison.OrdinalIgnoreCase) &&
+                                 returnAgingDays > 7;
+        var overdueAlertLevel = isOverdueInTransit
+            ? "CRITICAL_OVERDUE_7D"
+            : (returnAgingDays >= 5 ? "WARNING_AGING" : "NORMAL");
+        var disputeDeadlineUtc = r.CreatedAtUtc.AddHours(48);
+        var disputeRemainingHours = Math.Round(Math.Max(0, (disputeDeadlineUtc - now).TotalHours), 1);
+        var disputeClaimStatus = !string.IsNullOrWhiteSpace(inspectionVideoUrl)
+            ? "EVIDENCE_ATTACHED_READY"
+            : (disputeRemainingHours <= 0 ? "DISPUTE_WINDOW_EXPIRED" : "PENDING_VIDEO_EVIDENCE");
+        var rowVersionBase64 = r.RowVersion is { Length: > 0 }
+            ? Convert.ToBase64String(r.RowVersion)
+            : string.Empty;
+
+        var orderedLines = r.Lines.OrderBy(l => l.Id).ToList();
+        var mappedLines = orderedLines.Select(l =>
+        {
+            productMap.TryGetValue(l.ProductId, out var prodInfo);
+            var qLocId = l.QuarantineLocationId ?? r.QuarantineLocationId;
+            var qLocCode = qLocId.HasValue && locationMap.TryGetValue(qLocId.Value, out var qCode) ? qCode : "QUARANTINE";
+            var rLocId = l.RestockLocationId ?? l.TargetLocationId;
+            var rLocCode = rLocId.HasValue && locationMap.TryGetValue(rLocId.Value, out var tCode) ? tCode : null;
+
+            return new
+            {
+                id = l.Id,
+                lineId = l.Id,
+                customerReturnId = l.CustomerReturnId,
+                productId = l.ProductId,
+                productCode = prodInfo.Code ?? $"SKU-{l.ProductId}",
+                productName = prodInfo.Name ?? $"Sản phẩm #{l.ProductId}",
+                lotId = l.LotId,
+                serialId = l.SerialId,
+                expiryDate = l.ExpiryDate,
+                baseUomId = l.BaseUomId,
+                baseUomCode = l.BaseUomCode,
+                transactionUomCode = l.TransactionUomCode,
+                conversionRateSnapshot = l.ConversionRateSnapshot,
+                quarantineLocationId = qLocId,
+                quarantineLocationCode = qLocCode,
+                targetLocationId = l.TargetLocationId,
+                restockLocationId = rLocId,
+                restockLocationCode = rLocCode,
+                quantity = l.Quantity,
+                unitCost = canReadCost ? (decimal?)l.UnitCost : null,
+                condition = l.Condition,
+                disposition = l.Disposition,
+                packagingProductId = l.PackagingProductId,
+                packagingQuantity = l.PackagingQuantity,
+                packagingConsumedQty = l.PackagingConsumedQty,
+                postedLedgerTransactionId = l.PostedLedgerTransactionId
+            };
+        }).ToList();
+
+        var firstLine = orderedLines.FirstOrDefault();
+        (string Code, string Name) firstProdInfo = default;
+        if (firstLine != null)
+        {
+            productMap.TryGetValue(firstLine.ProductId, out firstProdInfo);
+        }
+
+        var firstQLocId = firstLine?.QuarantineLocationId ?? r.QuarantineLocationId;
+        var primaryQuarantineLocationCode = firstQLocId.HasValue && locationMap.TryGetValue(firstQLocId.Value, out var primaryQCode)
+            ? primaryQCode
+            : "QUARANTINE";
+        var firstRLocId = firstLine?.RestockLocationId ?? firstLine?.TargetLocationId;
+        var primaryRestockLocationCode = firstRLocId.HasValue && locationMap.TryGetValue(firstRLocId.Value, out var primaryRCode)
+            ? primaryRCode
+            : null;
+        var warehouseName = warehouseMap != null && warehouseMap.TryGetValue(r.WarehouseId, out var whName) && !string.IsNullOrWhiteSpace(whName)
+            ? whName
+            : $"Kho #{r.WarehouseId}";
+        var salesOrderCode = !string.IsNullOrWhiteSpace(r.OrderNumber)
+            ? r.OrderNumber
+            : (r.SalesOrderId.HasValue ? $"SO-{r.SalesOrderId.Value}" : null);
+        var exportReceiptCode = r.ExportReceiptId.HasValue ? $"EXP-{r.ExportReceiptId.Value}" : null;
+
+        return new
+        {
+            id = r.Id,
+            returnCode = r.ReturnCode,
+            warehouseId = r.WarehouseId,
+            warehouseName,
+            salesOrderId = r.SalesOrderId,
+            salesOrderCode,
+            exportReceiptId = r.ExportReceiptId,
+            exportReceiptCode,
+            shipmentId = r.ShipmentId,
+            quarantineLocationId = firstQLocId,
+            quarantineLocationCode = primaryQuarantineLocationCode,
+            restockLocationId = firstRLocId,
+            restockLocationCode = primaryRestockLocationCode,
+            trackingNumber = r.TrackingNumber,
+            orderNumber = r.OrderNumber,
+            returnReason = NormalizeVietnameseDiacritics(r.ReturnReason),
+            status = r.Status,
+            productId = firstLine?.ProductId ?? 0,
+            productCode = firstProdInfo.Code ?? (firstLine != null ? $"SKU-{firstLine.ProductId}" : string.Empty),
+            productName = firstProdInfo.Name ?? (firstLine != null ? $"Sản phẩm #{firstLine.ProductId}" : string.Empty),
+            quantity = orderedLines.Count > 0 ? orderedLines.Sum(l => l.Quantity) : 0m,
+            unitCost = canReadCost ? (decimal?)(firstLine?.UnitCost ?? 0m) : null,
+            condition = firstLine?.Condition ?? "GOOD",
+            disposition = firstLine?.Disposition ?? (string.Equals(r.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase) ? "RESTOCK_AVAILABLE" : "PENDING"),
+            createdBy = r.CreatedBy,
+            createdAtUtc = r.CreatedAtUtc,
+            createdAt = r.CreatedAtUtc,
+            approvedBy = r.ApprovedBy,
+            approvedAtUtc = r.ApprovedAtUtc,
+            postedAtUtc = r.PostedAtUtc,
+            completedAtUtc = r.CompletedAtUtc,
+            rowVersion = rowVersionBase64,
+            costHiddenByRbac = !canReadCost,
+            inspectionVideoUrl,
+            returnAgingDays,
+            isOverdueInTransit,
+            overdueAlertLevel,
+            disputeDeadlineUtc,
+            disputeRemainingHours,
+            disputeClaimStatus,
+            lines = mappedLines
+        };
+    }
+
+    public async Task<WmsEndpointOutcome> QueryCustomerReturnsAsync(
+        CustomerReturnQueryFilter filter,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (db == null)
+        {
+            return WmsEndpointOutcome.Ok(new
+            {
+                items = Array.Empty<object>(),
+                totalCount = 0,
+                pageNumber = filter.PageNumber,
+                pageSize = filter.PageSize,
+                summary = new { quarantinedCount = 0, inspectedCount = 0, restockedCount = 0, refurbishRtvScrapCount = 0 },
+                costHiddenByRbac = !filter.CanReadCost
+            });
+        }
+
+        var effectiveAuth = warehouseAuth ?? warehouseAccess;
+        if (filter.WarehouseId.HasValue && effectiveAuth != null)
+            await effectiveAuth.EnsureWarehouseAccessAsync(filter.WarehouseId.Value, cancellationToken);
+
+        var query = db.CustomerReturns.AsNoTracking().Include(r => r.Lines).AsQueryable();
+        if (filter.WarehouseId.HasValue)
+            query = query.Where(r => r.WarehouseId == filter.WarehouseId.Value);
+        if (!string.IsNullOrWhiteSpace(filter.Status))
+        {
+            var st = filter.Status.Trim().ToUpperInvariant();
+            query = query.Where(r => r.Status == st);
+        }
+        if (!string.IsNullOrWhiteSpace(filter.Condition))
+        {
+            var cond = filter.Condition.Trim().ToUpperInvariant();
+            query = query.Where(r => r.Lines.Any(l => l.Condition == cond));
+        }
+        if (!string.IsNullOrWhiteSpace(filter.Disposition))
+        {
+            var disp = filter.Disposition.Trim().ToUpperInvariant();
+            query = query.Where(r => r.Lines.Any(l => l.Disposition == disp));
+        }
+        if (!string.IsNullOrWhiteSpace(filter.Keyword))
+        {
+            var kw = filter.Keyword.Trim();
+            query = query.Where(r =>
+                r.ReturnCode.Contains(kw) ||
+                (r.TrackingNumber != null && r.TrackingNumber.Contains(kw)) ||
+                (r.OrderNumber != null && r.OrderNumber.Contains(kw)) ||
+                r.ReturnReason.Contains(kw));
+        }
+
+        var pageNumber = Math.Max(1, filter.PageNumber);
+        var pageSize = Math.Clamp(filter.PageSize, 1, 100);
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var rawReturns = await query
+            .OrderByDescending(r => r.Id)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        var allReturnsForSummary = await db.CustomerReturns.AsNoTracking()
+            .Include(r => r.Lines)
+            .Where(r => !filter.WarehouseId.HasValue || r.WarehouseId == filter.WarehouseId.Value)
+            .ToListAsync(cancellationToken);
+
+        var quarantinedCount = allReturnsForSummary.Count(r => string.Equals(r.Status, "QUARANTINED", StringComparison.OrdinalIgnoreCase));
+        var inspectedCount = allReturnsForSummary.Count(r => string.Equals(r.Status, "INSPECTED", StringComparison.OrdinalIgnoreCase));
+        var restockedCount = allReturnsForSummary.SelectMany(r => r.Lines).Count(l => string.Equals(l.Disposition, "RESTOCK_AVAILABLE", StringComparison.OrdinalIgnoreCase));
+        var refurbishRtvScrapCount = allReturnsForSummary.SelectMany(r => r.Lines).Count(l =>
+            string.Equals(l.Disposition, "REFURBISH_REPACK", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(l.Disposition, "RTV_VENDOR", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(l.Disposition, "SCRAP_DISPOSAL", StringComparison.OrdinalIgnoreCase));
+
+        var productIds = rawReturns.SelectMany(r => r.Lines.Select(l => l.ProductId)).Distinct().ToList();
+        var productMap = productIds.Count > 0
+            ? await db.Products.AsNoTracking()
+                .Where(p => productIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => (p.Code.Trim(), p.Name.Trim()), cancellationToken)
+            : new Dictionary<int, (string Code, string Name)>();
+
+        var locIds = rawReturns
+            .SelectMany(r => r.Lines.SelectMany(l => new[] { l.QuarantineLocationId, l.TargetLocationId, l.RestockLocationId }).Append(r.QuarantineLocationId))
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
+        var locationMap = locIds.Count > 0
+            ? await db.WarehouseLocations.AsNoTracking()
+                .Where(l => locIds.Contains(l.Id))
+                .ToDictionaryAsync(l => l.Id, l => l.Code.Trim(), cancellationToken)
+            : new Dictionary<int, string>();
+
+        var whIds = rawReturns.Select(r => r.WarehouseId).Distinct().ToList();
+        var warehouseMap = whIds.Count > 0
+            ? await db.Warehouses.AsNoTracking()
+                .Where(w => whIds.Contains(w.Id))
+                .ToDictionaryAsync(w => w.Id, w => w.Name.Trim(), cancellationToken)
+            : new Dictionary<int, string>();
+
+        var items = rawReturns
+            .Select(r => MapCustomerReturnDto(r, filter.CanReadCost, productMap, locationMap, warehouseMap))
+            .ToList();
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            items,
+            totalCount,
+            pageNumber,
+            pageSize,
+            summary = new
+            {
+                quarantinedCount,
+                inspectedCount,
+                restockedCount,
+                refurbishRtvScrapCount
+            },
+            costHiddenByRbac = !filter.CanReadCost
+        });
+    }
+
+    public async Task<WmsEndpointOutcome> GetCustomerReturnByIdAsync(
+        int id,
+        bool canReadCost = true,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        var r = await db.CustomerReturns.AsNoTracking()
+            .Include(x => x.Lines)
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (r == null)
+        {
+            return WmsEndpointOutcome.NotFound(new
+            {
+                code = "RMA_NOT_FOUND",
+                errorCode = "RMA_NOT_FOUND",
+                message = $"Không tìm thấy phiếu hoàn trả #{id}."
+            });
+        }
+
+        var effectiveAuth = warehouseAuth ?? warehouseAccess;
+        if (effectiveAuth != null)
+            await effectiveAuth.EnsureWarehouseAccessAsync(r.WarehouseId, cancellationToken);
+
+        var productIds = r.Lines.Select(l => l.ProductId).Distinct().ToList();
+        var productMap = productIds.Count > 0
+            ? await db.Products.AsNoTracking()
+                .Where(p => productIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, p => (p.Code.Trim(), p.Name.Trim()), cancellationToken)
+            : new Dictionary<int, (string Code, string Name)>();
+
+        var locIds = r.Lines
+            .SelectMany(l => new[] { l.QuarantineLocationId, l.TargetLocationId, l.RestockLocationId })
+            .Append(r.QuarantineLocationId)
+            .Where(x => x.HasValue)
+            .Select(x => x!.Value)
+            .Distinct()
+            .ToList();
+        var locationMap = locIds.Count > 0
+            ? await db.WarehouseLocations.AsNoTracking()
+                .Where(l => locIds.Contains(l.Id))
+                .ToDictionaryAsync(l => l.Id, l => l.Code.Trim(), cancellationToken)
+            : new Dictionary<int, string>();
+
+        var warehouseMap = await db.Warehouses.AsNoTracking()
+            .Where(w => w.Id == r.WarehouseId)
+            .ToDictionaryAsync(w => w.Id, w => w.Name.Trim(), cancellationToken);
+
+        return WmsEndpointOutcome.Ok(MapCustomerReturnDto(r, canReadCost, productMap, locationMap, warehouseMap));
+    }
+
+    public async Task<WmsEndpointOutcome> IntakeCustomerReturnAsync(
+        CustomerReturnIntakeInput? request,
+        int? actorUserId = null,
+        bool canReadCost = true,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (request == null)
+        {
+            return WmsEndpointOutcome.BadRequest(new
+            {
+                code = "RMA_INTAKE_REQUIRED",
+                errorCode = "RMA_INTAKE_REQUIRED",
+                message = "Dữ liệu tiếp nhận hàng hoàn trả không được để trống."
+            });
+        }
+
+        var now = DateTime.UtcNow;
+        var effectiveActorId = actorUserId ?? (currentUser is { UserId: > 0 } ? currentUser.UserId : 1);
+        var effectiveAuth = warehouseAuth ?? warehouseAccess;
+
+        var trackingCandidate = (request.TrackingNumber ?? request.ReturnReference)?.Trim();
+        var exportCodeCandidate = (request.ExportReceiptCode ?? request.ReturnReference)?.Trim();
+        var soCodeCandidate = (request.SalesOrderCode ?? request.ReturnReference)?.Trim();
+
+        ERP.Domain.Entities.Shipment? matchedShipment = null;
+        if (request.ShipmentId.HasValue)
+        {
+            matchedShipment = await db.Shipments.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == request.ShipmentId.Value, cancellationToken);
+        }
+        else if (!string.IsNullOrWhiteSpace(trackingCandidate))
+        {
+            matchedShipment = await db.Shipments.AsNoTracking()
+                .FirstOrDefaultAsync(
+                    s => s.ShipmentCode == trackingCandidate || s.SealNumber == trackingCandidate,
+                    cancellationToken);
+        }
+
+        ERP.Domain.Entities.ExportReceipt? matchedExport = null;
+        var resolvedExportId = request.ExportReceiptId
+            ?? (matchedShipment is { SourceType: "ExportReceipt", SourceId: not null } ? matchedShipment.SourceId : null);
+        if (resolvedExportId.HasValue)
+        {
+            matchedExport = await db.ExportReceipts.AsNoTracking()
+                .Include(e => e.Details)
+                .FirstOrDefaultAsync(e => e.Id == resolvedExportId.Value, cancellationToken);
+        }
+        else if (matchedShipment != null)
+        {
+            matchedExport = await db.ExportReceipts.AsNoTracking()
+                .Include(e => e.Details)
+                .FirstOrDefaultAsync(e => e.ShipmentId == matchedShipment.Id, cancellationToken);
+        }
+        else if (!string.IsNullOrWhiteSpace(exportCodeCandidate))
+        {
+            matchedExport = await db.ExportReceipts.AsNoTracking()
+                .Include(e => e.Details)
+                .FirstOrDefaultAsync(e => e.Code == exportCodeCandidate, cancellationToken);
+        }
+
+        var resolvedSalesOrderId = request.SalesOrderId
+            ?? matchedExport?.SalesOrderId
+            ?? (matchedShipment is { SourceType: "SalesOrder", SourceId: not null } ? matchedShipment.SourceId : null);
+        if (!resolvedSalesOrderId.HasValue && !string.IsNullOrWhiteSpace(soCodeCandidate))
+        {
+            resolvedSalesOrderId = await db.SalesOrders.AsNoTracking()
+                .Where(s => s.OrderCode == soCodeCandidate || s.ExternalOrderId == soCodeCandidate)
+                .Select(s => (int?)s.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var targetWhId = request.WarehouseId
+            ?? matchedExport?.WarehouseId
+            ?? matchedShipment?.WarehouseId
+            ?? await db.Warehouses.AsNoTracking().OrderBy(w => w.Id).Select(w => w.Id).FirstOrDefaultAsync(cancellationToken);
+        if (targetWhId <= 0) targetWhId = 1;
+
+        if (effectiveAuth != null)
+            await effectiveAuth.EnsureWarehouseAccessAsync(targetWhId, cancellationToken);
+
+        int? resolvedQuarantineLocId = request.QuarantineLocationId;
+        if (!resolvedQuarantineLocId.HasValue && !string.IsNullOrWhiteSpace(request.QuarantineLocationCode))
+        {
+            var qCode = request.QuarantineLocationCode.Trim();
+            resolvedQuarantineLocId = await db.WarehouseLocations.AsNoTracking()
+                .Where(l => l.WarehouseId == targetWhId && l.Code == qCode)
+                .Select(l => (int?)l.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+        if (!resolvedQuarantineLocId.HasValue)
+        {
+            resolvedQuarantineLocId = await db.WarehouseLocations.AsNoTracking()
+                .Where(l => l.WarehouseId == targetWhId && l.IsActive)
+                .OrderBy(l => l.Code.Contains("QUAR") || l.Code.Contains("RMA") ? 0 : (l.LocationType == ERP.Domain.Enums.WarehouseLocationType.Receiving ? 1 : 2))
+                .ThenBy(l => l.Id)
+                .Select(l => (int?)l.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var rawLines = new List<CustomerReturnIntakeLineInput>();
+        if (request.Lines is { Count: > 0 })
+        {
+            rawLines.AddRange(request.Lines);
+        }
+        else if (request.ProductId.HasValue || !string.IsNullOrWhiteSpace(request.ProductCode))
+        {
+            rawLines.Add(new CustomerReturnIntakeLineInput(
+                ProductId: request.ProductId,
+                ProductCode: request.ProductCode,
+                Quantity: request.Quantity ?? 1m,
+                UnitCost: request.UnitCost,
+                LotId: request.LotId,
+                LotNumber: request.LotNumber,
+                SerialId: request.SerialId,
+                SerialNumber: request.SerialNumber,
+                QuarantineLocationId: resolvedQuarantineLocId,
+                Condition: request.Condition));
+        }
+        else if (matchedExport is { Details.Count: > 0 })
+        {
+            foreach (var d in matchedExport.Details.OrderBy(x => x.Id))
+            {
+                rawLines.Add(new CustomerReturnIntakeLineInput(
+                    ProductId: d.ProductId,
+                    Quantity: d.Quantity,
+                    UnitCost: d.UnitPrice,
+                    QuarantineLocationId: resolvedQuarantineLocId,
+                    Condition: request.Condition ?? "GOOD",
+                    BaseUomCode: d.BaseUomCodeSnapshot,
+                    TransactionUomCode: d.BaseUomCodeSnapshot,
+                    ConversionRateSnapshot: 1m));
+            }
+        }
+
+        if (rawLines.Count == 0)
+        {
+            return WmsEndpointOutcome.BadRequest(new
+            {
+                code = "RMA_LINES_REQUIRED",
+                errorCode = "RMA_LINES_REQUIRED",
+                message = "Cần chỉ định ít nhất 1 dòng sản phẩm hoàn trả hoặc mã vận đơn/phiếu xuất hợp lệ."
+            });
+        }
+
+        var resolvedLines = new List<(
+            int ProductId,
+            int? LotId,
+            int? SerialId,
+            DateTime? ExpiryDate,
+            int? BaseUomId,
+            string BaseUomCode,
+            string TransactionUomCode,
+            decimal ConversionRate,
+            int? QuarantineLocId,
+            decimal Quantity,
+            decimal UnitCost,
+            string Condition)>();
+
+        foreach (var rl in rawLines)
+        {
+            if (rl.Quantity <= 0m)
+            {
+                return WmsEndpointOutcome.UnprocessableEntity(new
+                {
+                    code = "RMA_INVALID_QUANTITY",
+                    errorCode = "RMA_INVALID_QUANTITY",
+                    message = "Số lượng tiếp nhận hoàn trả phải lớn hơn 0."
+                });
+            }
+
+            var prodId = rl.ProductId;
+            if (!prodId.HasValue && !string.IsNullOrWhiteSpace(rl.ProductCode))
+            {
+                var pCode = rl.ProductCode.Trim();
+                prodId = await db.Products.AsNoTracking()
+                    .Where(p => p.Code == pCode)
+                    .Select(p => (int?)p.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+            if (!prodId.HasValue)
+            {
+                return WmsEndpointOutcome.NotFound(new
+                {
+                    code = "PRODUCT_NOT_FOUND",
+                    errorCode = "PRODUCT_NOT_FOUND",
+                    message = "Không tìm thấy sản phẩm hoàn trả."
+                });
+            }
+
+            var product = await db.Products.AsNoTracking()
+                .Include(p => p.Unit)
+                .FirstOrDefaultAsync(p => p.Id == prodId.Value, cancellationToken);
+            if (product == null)
+            {
+                return WmsEndpointOutcome.NotFound(new
+                {
+                    code = "PRODUCT_NOT_FOUND",
+                    errorCode = "PRODUCT_NOT_FOUND",
+                    message = $"Không tìm thấy sản phẩm #{prodId.Value}."
+                });
+            }
+
+            var matchedDetail = matchedExport?.Details.FirstOrDefault(d => d.ProductId == product.Id);
+
+            var lotId = rl.LotId;
+            if (!lotId.HasValue && !string.IsNullOrWhiteSpace(rl.LotNumber))
+            {
+                var lNum = rl.LotNumber.Trim();
+                lotId = await db.InventoryLots.AsNoTracking()
+                    .Where(l => l.ProductId == product.Id && l.LotNumber == lNum)
+                    .Select(l => (int?)l.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+
+            var serialId = rl.SerialId;
+            if (!serialId.HasValue && !string.IsNullOrWhiteSpace(rl.SerialNumber))
+            {
+                var sNum = rl.SerialNumber.Trim();
+                serialId = await db.InventorySerials.AsNoTracking()
+                    .Where(s => s.ProductId == product.Id && s.SerialNumber == sNum)
+                    .Select(s => (int?)s.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+
+            var lineQId = rl.QuarantineLocationId ?? resolvedQuarantineLocId;
+            if (!rl.QuarantineLocationId.HasValue && !string.IsNullOrWhiteSpace(rl.QuarantineLocationCode))
+            {
+                var qlCode = rl.QuarantineLocationCode.Trim();
+                lineQId = await db.WarehouseLocations.AsNoTracking()
+                    .Where(l => l.WarehouseId == targetWhId && l.Code == qlCode)
+                    .Select(l => (int?)l.Id)
+                    .FirstOrDefaultAsync(cancellationToken) ?? resolvedQuarantineLocId;
+            }
+
+            var baseUomCode = !string.IsNullOrWhiteSpace(rl.BaseUomCode)
+                ? rl.BaseUomCode.Trim()
+                : (!string.IsNullOrWhiteSpace(product.Unit?.Code) ? product.Unit.Code.Trim() : "PCS");
+            var txUomCode = !string.IsNullOrWhiteSpace(rl.TransactionUomCode)
+                ? rl.TransactionUomCode.Trim()
+                : baseUomCode;
+            var convRate = rl.ConversionRateSnapshot is > 0m ? rl.ConversionRateSnapshot.Value : 1m;
+            var baseQty = decimal.Round(rl.Quantity * convRate, 4);
+            var unitCost = rl.UnitCost ?? matchedDetail?.UnitPrice ?? product.MovingAverageCost;
+            int? baseUomId = product.UnitId > 0 ? product.UnitId : (int?)null;
+
+            resolvedLines.Add((
+                product.Id,
+                lotId,
+                serialId,
+                rl.ExpiryDate,
+                baseUomId,
+                baseUomCode,
+                txUomCode,
+                convRate,
+                lineQId,
+                baseQty,
+                unitCost,
+                NormalizeConditionCode(rl.Condition ?? request.Condition)));
+        }
+
+        var isRelational = db.Database.IsRelational();
+        await using var tx = isRelational && db.Database.CurrentTransaction == null
+            ? await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, cancellationToken)
+            : null;
+
+        try
+        {
+            await db.AcquireInventoryAllocationLocksAsync(
+                targetWhId,
+                resolvedLines.Select(x => x.ProductId).Distinct().OrderBy(x => x),
+                cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(request.ReturnCode) || !string.IsNullOrWhiteSpace(trackingCandidate))
+            {
+                var rCode = request.ReturnCode?.Trim();
+                var existingReturn = await db.CustomerReturns.AsNoTracking()
+                    .FirstOrDefaultAsync(r =>
+                        r.WarehouseId == targetWhId &&
+                        ((!string.IsNullOrWhiteSpace(rCode) && r.ReturnCode == rCode) ||
+                         (!string.IsNullOrWhiteSpace(trackingCandidate) && r.TrackingNumber == trackingCandidate)),
+                        cancellationToken);
+                if (existingReturn != null)
+                {
+                    if (tx != null) await tx.RollbackAsync(cancellationToken);
+                    return await GetCustomerReturnByIdAsync(existingReturn.Id, canReadCost, effectiveAuth, cancellationToken);
+                }
+            }
+
+            var returnCode = !string.IsNullOrWhiteSpace(request.ReturnCode)
+                ? request.ReturnCode.Trim()
+                : $"RMA-{now:yyyyMMddHHmmss}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";
+
+            var customerReturn = new ERP.Domain.Entities.CustomerReturn
+            {
+                ReturnCode = returnCode,
+                WarehouseId = targetWhId,
+                SalesOrderId = resolvedSalesOrderId,
+                ExportReceiptId = matchedExport?.Id ?? request.ExportReceiptId,
+                ShipmentId = matchedShipment?.Id ?? request.ShipmentId,
+                QuarantineLocationId = resolvedQuarantineLocId,
+                TrackingNumber = trackingCandidate ?? matchedShipment?.ShipmentCode,
+                OrderNumber = request.SalesOrderCode ?? matchedExport?.Code ?? matchedShipment?.SourceCode,
+                ReturnReason = NormalizeVietnameseDiacritics(request.ReturnReason ?? request.ReasonCode ?? "Khách hoàn hàng (RMA)"),
+                Status = "QUARANTINED",
+                CreatedBy = effectiveActorId,
+                CreatedAtUtc = now
+            };
+            db.CustomerReturns.Add(customerReturn);
+            await db.SaveChangesAsync(cancellationToken);
+
+            foreach (var line in resolvedLines)
+            {
+                var qStock = await db.InventoryStocks.FirstOrDefaultAsync(
+                    s => s.WarehouseId == targetWhId &&
+                         s.ProductId == line.ProductId &&
+                         s.LocationId == line.QuarantineLocId &&
+                         s.LotId == line.LotId &&
+                         s.SerialId == line.SerialId &&
+                         s.Status == ERP.Domain.Enums.InventoryStatus.Quarantine,
+                    cancellationToken);
+
+                if (qStock == null)
+                {
+                    qStock = new ERP.Domain.Entities.InventoryStock
+                    {
+                        WarehouseId = targetWhId,
+                        ProductId = line.ProductId,
+                        LocationId = line.QuarantineLocId,
+                        LotId = line.LotId,
+                        SerialId = line.SerialId,
+                        Status = ERP.Domain.Enums.InventoryStatus.Quarantine,
+                        Quantity = line.Quantity,
+                        ReservedQuantity = 0m,
+                        MovingAverageCost = line.UnitCost,
+                        LastUpdated = now
+                    };
+                    db.InventoryStocks.Add(qStock);
+                }
+                else
+                {
+                    qStock.Quantity += line.Quantity;
+                    qStock.LastUpdated = now;
+                }
+
+                var intakeTx = new ERP.Domain.Entities.InventoryTransaction
+                {
+                    ProductId = line.ProductId,
+                    WarehouseId = targetWhId,
+                    LocationId = line.QuarantineLocId,
+                    ToLocationId = line.QuarantineLocId,
+                    LotId = line.LotId,
+                    SerialId = line.SerialId,
+                    InventoryStatus = ERP.Domain.Enums.InventoryStatus.Quarantine,
+                    ToInventoryStatus = ERP.Domain.Enums.InventoryStatus.Quarantine,
+                    TransactionType = ERP.Domain.Enums.TransactionType.Import,
+                    Quantity = line.Quantity,
+                    UnitCost = line.UnitCost,
+                    ReferenceId = customerReturn.Id,
+                    ReferenceType = "CustomerReturn",
+                    TransactionDate = now,
+                    CreatedBy = effectiveActorId,
+                    Note = $"{customerReturn.ReturnCode}: Tiếp nhận hàng hoàn trả vào khu biệt trữ"
+                };
+                db.InventoryTransactions.Add(intakeTx);
+
+                customerReturn.Lines.Add(new ERP.Domain.Entities.CustomerReturnLine
+                {
+                    CustomerReturnId = customerReturn.Id,
+                    ProductId = line.ProductId,
+                    LotId = line.LotId,
+                    SerialId = line.SerialId,
+                    ExpiryDate = line.ExpiryDate,
+                    BaseUomId = line.BaseUomId,
+                    BaseUomCode = line.BaseUomCode,
+                    TransactionUomCode = line.TransactionUomCode,
+                    ConversionRateSnapshot = line.ConversionRate,
+                    QuarantineLocationId = line.QuarantineLocId,
+                    TargetLocationId = line.QuarantineLocId,
+                    Quantity = line.Quantity,
+                    UnitCost = line.UnitCost,
+                    Condition = line.Condition,
+                    Disposition = "PENDING"
+                });
+            }
+
+            db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+            {
+                UserId = effectiveActorId,
+                WarehouseId = targetWhId,
+                EntityName = "CustomerReturn",
+                EntityId = customerReturn.Id,
+                Action = "CustomerReturn.Intake",
+                OldValues = "NONE",
+                NewValues = $"Status: QUARANTINED; ReturnCode: {customerReturn.ReturnCode}",
+                Reason = customerReturn.ReturnReason,
+                Result = "Success",
+                Timestamp = now
+            });
+
+            await db.SaveChangesAsync(cancellationToken);
+            if (tx != null) await tx.CommitAsync(cancellationToken);
+
+            return await GetCustomerReturnByIdAsync(customerReturn.Id, canReadCost, effectiveAuth, cancellationToken);
+        }
+        catch
+        {
+            if (tx != null) await tx.RollbackAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
+    public async Task<WmsEndpointOutcome> InspectCustomerReturnAsync(
+        int id,
+        CustomerReturnInspectInput? request,
+        int? actorUserId = null,
+        bool canReadCost = true,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        var customerReturn = await db.CustomerReturns
+            .Include(r => r.Lines)
+            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+        if (customerReturn == null)
+        {
+            return WmsEndpointOutcome.NotFound(new
+            {
+                code = "RMA_NOT_FOUND",
+                errorCode = "RMA_NOT_FOUND",
+                message = $"Không tìm thấy phiếu hoàn trả #{id}."
+            });
+        }
+
+        var effectiveAuth = warehouseAuth ?? warehouseAccess;
+        if (effectiveAuth != null)
+            await effectiveAuth.EnsureWarehouseAccessAsync(customerReturn.WarehouseId, cancellationToken);
+
+        if (string.Equals(customerReturn.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
+        {
+            return WmsEndpointOutcome.Conflict(new
+            {
+                code = "RMA_ALREADY_COMPLETED",
+                errorCode = "RMA_ALREADY_COMPLETED",
+                message = $"Phiếu hoàn trả '{customerReturn.ReturnCode}' đã hoàn tất định đoạt, không thể kiểm định lại."
+            });
+        }
+
+        var now = DateTime.UtcNow;
+        var effectiveActorId = actorUserId ?? (currentUser is { UserId: > 0 } ? currentUser.UserId : 1);
+
+        if (request?.Lines is { Count: > 0 })
+        {
+            foreach (var reqLine in request.Lines)
+            {
+                var targetLine = reqLine.LineId.HasValue
+                    ? customerReturn.Lines.FirstOrDefault(l => l.Id == reqLine.LineId.Value)
+                    : (reqLine.ProductId.HasValue
+                        ? customerReturn.Lines.FirstOrDefault(l => l.ProductId == reqLine.ProductId.Value)
+                        : customerReturn.Lines.FirstOrDefault());
+                if (targetLine == null) continue;
+
+                if (!string.IsNullOrWhiteSpace(reqLine.Condition))
+                    targetLine.Condition = NormalizeConditionCode(reqLine.Condition);
+                if (!string.IsNullOrWhiteSpace(reqLine.Disposition))
+                    targetLine.Disposition = NormalizeDispositionCode(reqLine.Disposition);
+                if (reqLine.RestockLocationId.HasValue)
+                    targetLine.RestockLocationId = reqLine.RestockLocationId.Value;
+                if (reqLine.TargetLocationId.HasValue)
+                    targetLine.TargetLocationId = reqLine.TargetLocationId.Value;
+                if (reqLine.PackagingProductId.HasValue)
+                    targetLine.PackagingProductId = reqLine.PackagingProductId.Value;
+                if (reqLine.PackagingQuantity.HasValue)
+                    targetLine.PackagingQuantity = reqLine.PackagingQuantity.Value;
+            }
+        }
+        else
+        {
+            foreach (var line in customerReturn.Lines)
+            {
+                if (!string.IsNullOrWhiteSpace(request?.Condition))
+                    line.Condition = NormalizeConditionCode(request.Condition);
+                if (!string.IsNullOrWhiteSpace(request?.Disposition))
+                    line.Disposition = NormalizeDispositionCode(request.Disposition);
+            }
+        }
+
+        customerReturn.Status = "INSPECTED";
+        if (!db.Database.IsSqlServer())
+            customerReturn.RowVersion = Guid.NewGuid().ToByteArray()[..8];
+
+        db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+        {
+            UserId = effectiveActorId,
+            WarehouseId = customerReturn.WarehouseId,
+            EntityName = "CustomerReturn",
+            EntityId = customerReturn.Id,
+            Action = "CustomerReturn.Inspected",
+            OldValues = "QUARANTINED",
+            NewValues = "Status: INSPECTED",
+            Reason = request?.Note ?? "Hoàn tất kiểm định chất lượng hàng hoàn trả",
+            Result = "Success",
+            Timestamp = now
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+        return await GetCustomerReturnByIdAsync(customerReturn.Id, canReadCost, effectiveAuth, cancellationToken);
+    }
+
+    public async Task<WmsEndpointOutcome> DisposeCustomerReturnAsync(
+        int id,
+        CustomerReturnDisposeInput? request,
+        int? actorUserId = null,
+        bool canReadCost = true,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        var tenantId = db.CurrentTenantId > 0 ? db.CurrentTenantId : 1;
+        var gate = _dispositionLocks.GetOrAdd((tenantId, id), _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            var isRelational = db.Database.IsRelational();
+            await using var tx = isRelational && db.Database.CurrentTransaction == null
+                ? await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken)
+                : null;
+
+            try
+            {
+                var customerReturn = await db.CustomerReturns
+                    .Include(r => r.Lines)
+                    .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+                if (customerReturn == null)
+                {
+                    if (tx != null) await tx.RollbackAsync(cancellationToken);
+                    return WmsEndpointOutcome.NotFound(new
+                    {
+                        code = "RMA_NOT_FOUND",
+                        errorCode = "RMA_NOT_FOUND",
+                        message = $"Không tìm thấy phiếu hoàn trả #{id}."
+                    });
+                }
+
+                var effectiveAuth = warehouseAuth ?? warehouseAccess;
+                if (effectiveAuth != null)
+                    await effectiveAuth.EnsureWarehouseAccessAsync(customerReturn.WarehouseId, cancellationToken);
+
+                if (string.Equals(customerReturn.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (tx != null) await tx.RollbackAsync(cancellationToken);
+                    return WmsEndpointOutcome.Conflict(new
+                    {
+                        code = "RMA_ALREADY_COMPLETED",
+                        errorCode = "RMA_ALREADY_COMPLETED",
+                        message = $"Phiếu hoàn trả '{customerReturn.ReturnCode}' đã được hoàn tất định đoạt trước đó."
+                    });
+                }
+
+                if (!string.IsNullOrWhiteSpace(request?.RowVersion) && customerReturn.RowVersion is { Length: > 0 })
+                {
+                    byte[] expectedVersion;
+                    try
+                    {
+                        expectedVersion = Convert.FromBase64String(request.RowVersion.Trim());
+                    }
+                    catch
+                    {
+                        if (tx != null) await tx.RollbackAsync(cancellationToken);
+                        return WmsEndpointOutcome.BadRequest(new
+                        {
+                            code = "INVALID_ROW_VERSION",
+                            errorCode = "INVALID_ROW_VERSION",
+                            message = "RowVersion không hợp lệ."
+                        });
+                    }
+
+                    if (!customerReturn.RowVersion.SequenceEqual(expectedVersion))
+                    {
+                        if (tx != null) await tx.RollbackAsync(cancellationToken);
+                        return WmsEndpointOutcome.Conflict(new
+                        {
+                            code = "CONCURRENCY_CONFLICT",
+                            errorCode = "CONCURRENCY_CONFLICT",
+                            message = "Dữ liệu phiếu hoàn trả đã bị thay đổi bởi người dùng khác. Vui lòng tải lại."
+                        });
+                    }
+                }
+
+                var splitsInput = request?.Splits ?? request?.Lines;
+                var lockProductIds = customerReturn.Lines.Select(l => l.ProductId)
+                    .Concat(customerReturn.Lines.Where(l => l.PackagingProductId.HasValue).Select(l => l.PackagingProductId!.Value))
+                    .Concat(splitsInput?.Where(s => s.ProductId.HasValue).Select(s => s.ProductId!.Value) ?? [])
+                    .Concat(splitsInput?.Where(s => s.PackagingProductId.HasValue).Select(s => s.PackagingProductId!.Value) ?? [])
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .ToList();
+
+                if (lockProductIds.Count > 0)
+                {
+                    await db.AcquireInventoryAllocationLocksAsync(customerReturn.WarehouseId, lockProductIds, cancellationToken);
+                }
+
+                async Task<int?> ResolveLocationIdAsync(int? locId, string? locCode, int? fallbackLocId)
+                {
+                    if (locId.HasValue) return locId.Value;
+                    if (!string.IsNullOrWhiteSpace(locCode))
+                    {
+                        var trimmedCode = locCode.Trim();
+                        var found = await db.WarehouseLocations.AsNoTracking()
+                            .Where(l => l.WarehouseId == customerReturn.WarehouseId && l.Code == trimmedCode)
+                            .Select(l => (int?)l.Id)
+                            .FirstOrDefaultAsync(cancellationToken);
+                        if (found.HasValue) return found.Value;
+                    }
+                    return fallbackLocId;
+                }
+
+                var topLevelRestockLocId = await ResolveLocationIdAsync(
+                    request?.RestockLocationId ?? request?.TargetLocationId,
+                    request?.RestockLocationCode,
+                    null);
+
+                if (splitsInput is { Count: > 0 })
+                {
+                    var existingLinesSnapshot = customerReturn.Lines.OrderBy(l => l.Id).ToList();
+                    var groupedBySourceLine = new Dictionary<int, List<CustomerReturnDispositionSplitInput>>();
+
+                    foreach (var split in splitsInput)
+                    {
+                        var matchedLine = split.LineId.HasValue
+                            ? existingLinesSnapshot.FirstOrDefault(l => l.Id == split.LineId.Value)
+                            : (split.ProductId.HasValue
+                                ? existingLinesSnapshot.FirstOrDefault(l => l.ProductId == split.ProductId.Value)
+                                : existingLinesSnapshot.FirstOrDefault());
+
+                        if (matchedLine == null)
+                        {
+                            if (tx != null) await tx.RollbackAsync(cancellationToken);
+                            return WmsEndpointOutcome.NotFound(new
+                            {
+                                code = "RMA_LINE_NOT_FOUND",
+                                errorCode = "RMA_LINE_NOT_FOUND",
+                                message = "Không tìm thấy dòng hàng hoàn trả tương ứng để tách định đoạt."
+                            });
+                        }
+
+                        if (!groupedBySourceLine.TryGetValue(matchedLine.Id, out var bucket))
+                        {
+                            bucket = [];
+                            groupedBySourceLine[matchedLine.Id] = bucket;
+                        }
+                        bucket.Add(split);
+                    }
+
+                    foreach (var (sourceLineId, splitGroup) in groupedBySourceLine)
+                    {
+                        var sourceLine = existingLinesSnapshot.Single(l => l.Id == sourceLineId);
+                        var totalSplitQty = splitGroup.Sum(s => s.Quantity);
+                        if (splitGroup.Any(s => s.Quantity <= 0m) || totalSplitQty != sourceLine.Quantity)
+                        {
+                            if (tx != null) await tx.RollbackAsync(cancellationToken);
+                            return WmsEndpointOutcome.UnprocessableEntity(new
+                            {
+                                code = "RMA_SPLIT_QUANTITY_MISMATCH",
+                                errorCode = "RMA_SPLIT_QUANTITY_MISMATCH",
+                                message = $"Tổng số lượng tách định đoạt ({totalSplitQty}) phải khớp chính xác với số lượng dòng gốc ({sourceLine.Quantity})."
+                            });
+                        }
+
+                        var originalQuarantineLocId = sourceLine.QuarantineLocationId ?? customerReturn.QuarantineLocationId;
+                        var first = splitGroup[0];
+                        var firstRestockLocId = await ResolveLocationIdAsync(
+                            first.RestockLocationId ?? first.TargetLocationId,
+                            first.RestockLocationCode,
+                            topLevelRestockLocId ?? sourceLine.RestockLocationId ?? sourceLine.TargetLocationId);
+
+                        sourceLine.Quantity = first.Quantity;
+                        sourceLine.Disposition = NormalizeDispositionCode(first.Disposition ?? request?.Disposition);
+                        if (!string.IsNullOrWhiteSpace(first.Condition))
+                            sourceLine.Condition = NormalizeConditionCode(first.Condition);
+                        sourceLine.RestockLocationId = firstRestockLocId;
+                        sourceLine.TargetLocationId = firstRestockLocId ?? originalQuarantineLocId;
+                        if (first.PackagingProductId.HasValue)
+                            sourceLine.PackagingProductId = first.PackagingProductId.Value;
+                        if (first.PackagingQuantity.HasValue)
+                            sourceLine.PackagingQuantity = first.PackagingQuantity.Value;
+
+                        for (var i = 1; i < splitGroup.Count; i++)
+                        {
+                            var extra = splitGroup[i];
+                            var extraRestockLocId = await ResolveLocationIdAsync(
+                                extra.RestockLocationId ?? extra.TargetLocationId,
+                                extra.RestockLocationCode,
+                                topLevelRestockLocId ?? sourceLine.RestockLocationId);
+
+                            var clonedLine = new ERP.Domain.Entities.CustomerReturnLine
+                            {
+                                CustomerReturnId = customerReturn.Id,
+                                ProductId = sourceLine.ProductId,
+                                LotId = extra.LotId ?? sourceLine.LotId,
+                                SerialId = extra.SerialId ?? sourceLine.SerialId,
+                                ExpiryDate = sourceLine.ExpiryDate,
+                                BaseUomId = sourceLine.BaseUomId,
+                                BaseUomCode = sourceLine.BaseUomCode,
+                                TransactionUomCode = sourceLine.TransactionUomCode,
+                                ConversionRateSnapshot = sourceLine.ConversionRateSnapshot,
+                                QuarantineLocationId = originalQuarantineLocId,
+                                TargetLocationId = extraRestockLocId ?? originalQuarantineLocId,
+                                RestockLocationId = extraRestockLocId,
+                                Quantity = extra.Quantity,
+                                UnitCost = sourceLine.UnitCost,
+                                Condition = NormalizeConditionCode(extra.Condition ?? sourceLine.Condition),
+                                Disposition = NormalizeDispositionCode(extra.Disposition ?? request?.Disposition),
+                                PackagingProductId = extra.PackagingProductId ?? sourceLine.PackagingProductId,
+                                PackagingQuantity = extra.PackagingQuantity ?? 0m
+                            };
+                            customerReturn.Lines.Add(clonedLine);
+                            db.CustomerReturnLines.Add(clonedLine);
+                        }
+                    }
+                }
+                else
+                {
+                    foreach (var line in customerReturn.Lines)
+                    {
+                        var effectiveDisp = !string.IsNullOrWhiteSpace(request?.Disposition)
+                            ? request.Disposition
+                            : (line.Disposition == "PENDING" ? "RESTOCK_AVAILABLE" : line.Disposition);
+                        line.Disposition = NormalizeDispositionCode(effectiveDisp);
+                        if (topLevelRestockLocId.HasValue)
+                        {
+                            line.RestockLocationId = topLevelRestockLocId.Value;
+                            line.TargetLocationId = topLevelRestockLocId.Value;
+                        }
+                        if (request?.PackagingProductId.HasValue == true)
+                            line.PackagingProductId = request.PackagingProductId.Value;
+                        if (request?.PackagingQuantity.HasValue == true)
+                            line.PackagingQuantity = request.PackagingQuantity.Value;
+                    }
+                }
+
+                var now = DateTime.UtcNow;
+                var effectiveActorId = actorUserId ?? (currentUser is { UserId: > 0 } ? currentUser.UserId : 1);
+
+                foreach (var line in customerReturn.Lines.ToList())
+                {
+                    var qLocId = line.QuarantineLocationId ?? customerReturn.QuarantineLocationId;
+                    var quarantineStock = await db.InventoryStocks.FirstOrDefaultAsync(
+                        s => s.WarehouseId == customerReturn.WarehouseId &&
+                             s.ProductId == line.ProductId &&
+                             (!qLocId.HasValue || s.LocationId == qLocId.Value) &&
+                             s.LotId == line.LotId &&
+                             s.SerialId == line.SerialId &&
+                             s.Status == ERP.Domain.Enums.InventoryStatus.Quarantine,
+                        cancellationToken)
+                        ?? await db.InventoryStocks.FirstOrDefaultAsync(
+                            s => s.WarehouseId == customerReturn.WarehouseId &&
+                                 s.ProductId == line.ProductId &&
+                                 s.Status == ERP.Domain.Enums.InventoryStatus.Quarantine &&
+                                 s.Quantity >= line.Quantity,
+                            cancellationToken);
+
+                    if (quarantineStock == null || quarantineStock.Quantity < line.Quantity)
+                    {
+                        if (tx != null) await tx.RollbackAsync(cancellationToken);
+                        return WmsEndpointOutcome.UnprocessableEntity(new
+                        {
+                            code = "INSUFFICIENT_QUARANTINE_STOCK",
+                            errorCode = "INSUFFICIENT_QUARANTINE_STOCK",
+                            message = $"Không đủ tồn kho biệt trữ (Quarantine) cho sản phẩm #{line.ProductId} (Cần: {line.Quantity}, Hiện có: {quarantineStock?.Quantity ?? 0m})."
+                        });
+                    }
+
+                    quarantineStock.Quantity -= line.Quantity;
+                    quarantineStock.LastUpdated = now;
+
+                    var disp = NormalizeDispositionCode(line.Disposition);
+                    line.Disposition = disp;
+
+                    if (disp is "RESTOCK_AVAILABLE" or "REFURBISH_REPACK")
+                    {
+                        var pkgId = line.PackagingProductId ?? request?.PackagingProductId;
+                        var pkgQty = line.PackagingQuantity > 0m ? line.PackagingQuantity : (request?.PackagingQuantity ?? 0m);
+                        if (disp == "REFURBISH_REPACK" && pkgId.HasValue && pkgQty > 0m)
+                        {
+                            var pkgStock = await db.InventoryStocks
+                                .Where(s => s.WarehouseId == customerReturn.WarehouseId &&
+                                            s.ProductId == pkgId.Value &&
+                                            s.Status == ERP.Domain.Enums.InventoryStatus.Available &&
+                                            s.Quantity - s.ReservedQuantity >= pkgQty)
+                                .OrderByDescending(s => s.Quantity - s.ReservedQuantity)
+                                .FirstOrDefaultAsync(cancellationToken);
+
+                            if (pkgStock == null)
+                            {
+                                if (tx != null) await tx.RollbackAsync(cancellationToken);
+                                return WmsEndpointOutcome.UnprocessableEntity(new
+                                {
+                                    code = "INSUFFICIENT_PACKAGING_STOCK",
+                                    errorCode = "INSUFFICIENT_PACKAGING_STOCK",
+                                    message = $"Không đủ tồn kho bao bì (#{pkgId.Value}) để đóng gói tân trang."
+                                });
+                            }
+
+                            pkgStock.Quantity -= pkgQty;
+                            pkgStock.LastUpdated = now;
+                            line.PackagingConsumedQty = pkgQty;
+
+                            db.InventoryTransactions.Add(new ERP.Domain.Entities.InventoryTransaction
+                            {
+                                ProductId = pkgId.Value,
+                                WarehouseId = customerReturn.WarehouseId,
+                                LocationId = pkgStock.LocationId,
+                                FromLocationId = pkgStock.LocationId,
+                                InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                                FromInventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                                TransactionType = ERP.Domain.Enums.TransactionType.AdjustmentDecrease,
+                                Quantity = pkgQty,
+                                ReferenceId = customerReturn.Id,
+                                ReferenceType = "CustomerReturnRefurbishPackaging",
+                                TransactionDate = now,
+                                CreatedBy = effectiveActorId,
+                                Note = $"{customerReturn.ReturnCode}: Tiêu hao vật tư bao bì tân trang"
+                            });
+                        }
+
+                        var restockLocId = line.RestockLocationId
+                            ?? line.TargetLocationId
+                            ?? topLevelRestockLocId;
+                        if (!restockLocId.HasValue || restockLocId == quarantineStock.LocationId)
+                        {
+                            var preferredStorageLocId = await db.WarehouseLocations.AsNoTracking()
+                                .Where(l => l.WarehouseId == customerReturn.WarehouseId &&
+                                            l.IsActive &&
+                                            !l.IsBlocked &&
+                                            l.Id != quarantineStock.LocationId)
+                                .OrderBy(l => l.LocationType == ERP.Domain.Enums.WarehouseLocationType.Storage && l.IsPickable ? 0 : 1)
+                                .ThenBy(l => l.Id)
+                                .Select(l => (int?)l.Id)
+                                .FirstOrDefaultAsync(cancellationToken);
+                            restockLocId ??= preferredStorageLocId ?? quarantineStock.LocationId;
+                        }
+
+                        line.RestockLocationId = restockLocId;
+                        line.TargetLocationId = restockLocId;
+
+                        var availableStock = await db.InventoryStocks.FirstOrDefaultAsync(
+                            s => s.WarehouseId == customerReturn.WarehouseId &&
+                                 s.ProductId == line.ProductId &&
+                                 s.LocationId == restockLocId &&
+                                 s.LotId == line.LotId &&
+                                 s.SerialId == line.SerialId &&
+                                 s.Status == ERP.Domain.Enums.InventoryStatus.Available,
+                            cancellationToken);
+
+                        if (availableStock == null)
+                        {
+                            availableStock = new ERP.Domain.Entities.InventoryStock
+                            {
+                                WarehouseId = customerReturn.WarehouseId,
+                                ProductId = line.ProductId,
+                                LocationId = restockLocId,
+                                LotId = line.LotId,
+                                SerialId = line.SerialId,
+                                Status = ERP.Domain.Enums.InventoryStatus.Available,
+                                Quantity = line.Quantity,
+                                ReservedQuantity = 0m,
+                                MovingAverageCost = line.UnitCost,
+                                LastUpdated = now
+                            };
+                            db.InventoryStocks.Add(availableStock);
+                        }
+                        else
+                        {
+                            availableStock.Quantity += line.Quantity;
+                            availableStock.LastUpdated = now;
+                        }
+
+                        var txOut = new ERP.Domain.Entities.InventoryTransaction
+                        {
+                            ProductId = line.ProductId,
+                            WarehouseId = customerReturn.WarehouseId,
+                            LocationId = quarantineStock.LocationId,
+                            FromLocationId = quarantineStock.LocationId,
+                            ToLocationId = restockLocId,
+                            LotId = line.LotId,
+                            SerialId = line.SerialId,
+                            InventoryStatus = ERP.Domain.Enums.InventoryStatus.Quarantine,
+                            FromInventoryStatus = ERP.Domain.Enums.InventoryStatus.Quarantine,
+                            ToInventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                            TransactionType = ERP.Domain.Enums.TransactionType.StatusChange,
+                            Quantity = -line.Quantity,
+                            UnitCost = line.UnitCost,
+                            ReferenceId = customerReturn.Id,
+                            ReferenceType = "CustomerReturn",
+                            TransactionDate = now,
+                            CreatedBy = effectiveActorId,
+                            Note = $"{customerReturn.ReturnCode}: Xuất khỏi khu biệt trữ chuyển về tồn khả dụng ({disp})"
+                        };
+                        var txIn = new ERP.Domain.Entities.InventoryTransaction
+                        {
+                            ProductId = line.ProductId,
+                            WarehouseId = customerReturn.WarehouseId,
+                            LocationId = restockLocId,
+                            FromLocationId = quarantineStock.LocationId,
+                            ToLocationId = restockLocId,
+                            LotId = line.LotId,
+                            SerialId = line.SerialId,
+                            InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                            FromInventoryStatus = ERP.Domain.Enums.InventoryStatus.Quarantine,
+                            ToInventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                            TransactionType = ERP.Domain.Enums.TransactionType.StatusChange,
+                            Quantity = line.Quantity,
+                            UnitCost = line.UnitCost,
+                            ReferenceId = customerReturn.Id,
+                            ReferenceType = "CustomerReturn",
+                            TransactionDate = now,
+                            CreatedBy = effectiveActorId,
+                            Note = $"{customerReturn.ReturnCode}: Nhập lại kệ hàng khả dụng ({disp})"
+                        };
+                        db.InventoryTransactions.Add(txOut);
+                        db.InventoryTransactions.Add(txIn);
+                        await db.SaveChangesAsync(cancellationToken);
+                        line.PostedLedgerTransactionId = txIn.Id;
+                    }
+                    else
+                    {
+                        var writeOffTx = new ERP.Domain.Entities.InventoryTransaction
+                        {
+                            ProductId = line.ProductId,
+                            WarehouseId = customerReturn.WarehouseId,
+                            LocationId = quarantineStock.LocationId,
+                            FromLocationId = quarantineStock.LocationId,
+                            LotId = line.LotId,
+                            SerialId = line.SerialId,
+                            InventoryStatus = ERP.Domain.Enums.InventoryStatus.Quarantine,
+                            FromInventoryStatus = ERP.Domain.Enums.InventoryStatus.Quarantine,
+                            TransactionType = ERP.Domain.Enums.TransactionType.AdjustmentDecrease,
+                            Quantity = line.Quantity,
+                            UnitCost = line.UnitCost,
+                            ReferenceId = customerReturn.Id,
+                            ReferenceType = disp == "RTV_VENDOR" ? "QualityDispositionRtv" : "QualityDispositionScrap",
+                            TransactionDate = now,
+                            CreatedBy = effectiveActorId,
+                            Note = $"{customerReturn.ReturnCode}: Xuất toán khỏi khu biệt trữ ({disp})"
+                        };
+                        db.InventoryTransactions.Add(writeOffTx);
+                        await db.SaveChangesAsync(cancellationToken);
+                        line.PostedLedgerTransactionId = writeOffTx.Id;
+                    }
+                }
+
+                customerReturn.Status = "COMPLETED";
+                customerReturn.ApprovedBy = effectiveActorId;
+                customerReturn.ApprovedAtUtc = now;
+                customerReturn.PostedAtUtc = now;
+                customerReturn.CompletedAtUtc = now;
+                if (!db.Database.IsSqlServer())
+                    customerReturn.RowVersion = Guid.NewGuid().ToByteArray()[..8];
+
+                db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+                {
+                    UserId = effectiveActorId,
+                    WarehouseId = customerReturn.WarehouseId,
+                    EntityName = "CustomerReturn",
+                    EntityId = customerReturn.Id,
+                    Action = "CustomerReturn.Disposed",
+                    OldValues = "INSPECTED",
+                    NewValues = $"Status: COMPLETED; Lines: {customerReturn.Lines.Count}",
+                    Reason = request?.Note ?? request?.ReasonCode ?? "Hoàn tất định đoạt & ghi sổ hàng hoàn trả",
+                    Result = "Success",
+                    Timestamp = now
+                });
+
+                await db.SaveChangesAsync(cancellationToken);
+                if (tx != null) await tx.CommitAsync(cancellationToken);
+
+                return await GetCustomerReturnByIdAsync(customerReturn.Id, canReadCost, effectiveAuth, cancellationToken);
+            }
+            catch
+            {
+                if (tx != null) await tx.RollbackAsync(CancellationToken.None);
+                throw;
+            }
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    public async Task<WmsEndpointOutcome> GetPipelineSummaryAsync(
+        int? warehouseId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        var effectiveAuth = warehouseAuth ?? warehouseAccess;
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (effectiveAuth != null)
+        {
+            if (warehouseId.HasValue)
+                await effectiveAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await effectiveAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
+
+        if (db == null)
+        {
+            return WmsEndpointOutcome.Ok(new
+            {
+                totalReceipts = 0,
+                draftOrReceivingCount = 0,
+                qcOrApprovalPendingCount = 0,
+                postedCount = 0,
+                cancelledCount = 0,
+                status = "Đã tải tổng quan luồng phiếu nhập kho",
+                statusLabel = "Đã tải tổng quan luồng phiếu nhập kho"
+            });
+        }
+
+        var query = db.ImportReceipts.AsNoTracking();
+        if (warehouseId.HasValue)
+            query = query.Where(r => r.WarehouseId == warehouseId.Value);
+        else if (accessibleIds is { Count: > 0 })
+            query = query.Where(r => accessibleIds.Contains(r.WarehouseId));
+
+        var grouped = await query
+            .GroupBy(r => r.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        var totalReceipts = grouped.Sum(x => x.Count);
+        var draftOrReceivingCount = grouped
+            .Where(x => x.Status is ERP.Domain.Enums.ReceiptStatus.Draft
+                or ERP.Domain.Enums.ReceiptStatus.Received
+                or ERP.Domain.Enums.ReceiptStatus.Dispatched
+                or ERP.Domain.Enums.ReceiptStatus.DiscrepancyPending
+                or ERP.Domain.Enums.ReceiptStatus.DiscrepancySubmitted
+                or ERP.Domain.Enums.ReceiptStatus.DiscrepancyPendingApproval
+                or ERP.Domain.Enums.ReceiptStatus.DiscrepancyResolved
+                or ERP.Domain.Enums.ReceiptStatus.DiscrepancyRejected)
+            .Sum(x => x.Count);
+        var qcOrApprovalPendingCount = grouped
+            .Where(x => x.Status is ERP.Domain.Enums.ReceiptStatus.QcPending
+                or ERP.Domain.Enums.ReceiptStatus.QcCompleted
+                or ERP.Domain.Enums.ReceiptStatus.ReadyToPost)
+            .Sum(x => x.Count);
+        var postedCount = grouped
+            .Where(x => x.Status is ERP.Domain.Enums.ReceiptStatus.Posted
+                or ERP.Domain.Enums.ReceiptStatus.Approved)
+            .Sum(x => x.Count);
+        var cancelledCount = grouped
+            .Where(x => x.Status is ERP.Domain.Enums.ReceiptStatus.Cancelled
+                or ERP.Domain.Enums.ReceiptStatus.CancelPendingPutback)
+            .Sum(x => x.Count);
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            totalReceipts,
+            draftOrReceivingCount,
+            qcOrApprovalPendingCount,
+            postedCount,
+            cancelledCount,
+            status = "Đã tải tổng quan luồng phiếu nhập kho",
+            statusLabel = "Đã tải tổng quan luồng phiếu nhập kho"
+        });
+    }
+
+    public async Task<WmsEndpointOutcome> GetQcAndRmaSummaryAsync(
+        int? warehouseId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        var effectiveAuth = warehouseAuth ?? warehouseAccess;
+        IReadOnlyCollection<int>? accessibleIds = null;
+        if (effectiveAuth != null)
+        {
+            if (warehouseId.HasValue)
+                await effectiveAuth.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+            else
+                accessibleIds = await effectiveAuth.GetAccessibleWarehouseIdsAsync(cancellationToken);
+        }
+
+        if (db == null)
+        {
+            return WmsEndpointOutcome.Ok(new
+            {
+                totalReceiptsInspected = 0,
+                pendingQcOrPostingCount = 0,
+                postedWithLotOrQcCount = 0,
+                rmaEligibleReceiptsCount = 0,
+                qcWorkCenterModes = new[] { "Kiểm định chất lượng đầu vào", "Kiểm định hàng trả về", "Rà soát hàng biệt trữ & hư hỏng" },
+                status = "Đã tải tổng quan trạm kiểm định chất lượng & tiếp nhận hàng trả về",
+                statusLabel = "Đã tải tổng quan trạm kiểm định chất lượng & tiếp nhận hàng trả về"
+            });
+        }
+
+        var query = db.ImportReceipts.AsNoTracking();
+        if (warehouseId.HasValue)
+            query = query.Where(r => r.WarehouseId == warehouseId.Value);
+        else if (accessibleIds is { Count: > 0 })
+            query = query.Where(r => accessibleIds.Contains(r.WarehouseId));
+
+        var grouped = await query
+            .GroupBy(r => r.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        var rmaEligibleReceiptsCount = await query.CountAsync(
+            r => (r.Note != null && (r.Note.Contains("RMA") || r.Note.Contains("RETURN") || r.Note.Contains("trả") || r.Note.Contains("Trả"))) ||
+                 r.Status == ERP.Domain.Enums.ReceiptStatus.DiscrepancyPending ||
+                 r.Status == ERP.Domain.Enums.ReceiptStatus.DiscrepancySubmitted ||
+                 r.Status == ERP.Domain.Enums.ReceiptStatus.DiscrepancyPendingApproval ||
+                 r.Status == ERP.Domain.Enums.ReceiptStatus.DiscrepancyResolved ||
+                 r.Status == ERP.Domain.Enums.ReceiptStatus.DiscrepancyRejected,
+            cancellationToken);
+
+        var totalReceiptsInspected = grouped.Sum(x => x.Count);
+        var pendingQcOrPostingCount = grouped
+            .Where(x => x.Status is ERP.Domain.Enums.ReceiptStatus.Draft
+                or ERP.Domain.Enums.ReceiptStatus.Approved
+                or ERP.Domain.Enums.ReceiptStatus.Received
+                or ERP.Domain.Enums.ReceiptStatus.Dispatched
+                or ERP.Domain.Enums.ReceiptStatus.QcPending
+                or ERP.Domain.Enums.ReceiptStatus.QcCompleted
+                or ERP.Domain.Enums.ReceiptStatus.ReadyToPost
+                or ERP.Domain.Enums.ReceiptStatus.DiscrepancyPending
+                or ERP.Domain.Enums.ReceiptStatus.DiscrepancySubmitted
+                or ERP.Domain.Enums.ReceiptStatus.DiscrepancyPendingApproval
+                or ERP.Domain.Enums.ReceiptStatus.DiscrepancyResolved
+                or ERP.Domain.Enums.ReceiptStatus.DiscrepancyRejected)
+            .Sum(x => x.Count);
+        var postedWithLotOrQcCount = grouped
+            .Where(x => x.Status is ERP.Domain.Enums.ReceiptStatus.Posted
+                or ERP.Domain.Enums.ReceiptStatus.Approved)
+            .Sum(x => x.Count);
+
+        return WmsEndpointOutcome.Ok(new
+        {
+            totalReceiptsInspected,
+            pendingQcOrPostingCount,
+            postedWithLotOrQcCount,
+            rmaEligibleReceiptsCount,
+            qcWorkCenterModes = new[] { "Kiểm định chất lượng đầu vào", "Kiểm định hàng trả về", "Rà soát hàng biệt trữ & hư hỏng" },
+            status = "Đã tải tổng quan trạm kiểm định chất lượng & tiếp nhận hàng trả về",
+            statusLabel = "Đã tải tổng quan trạm kiểm định chất lượng & tiếp nhận hàng trả về"
+        });
+    }
+
+    public async Task<WmsEndpointOutcome> ExpressPostAsync(
+        int id,
+        ExpressPostImportReceiptInput? request = null,
+        int? actorUserId = null,
+        IWarehouseAuthorizationService? warehouseAuth = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (db == null)
+        {
+            return WmsEndpointOutcome.NotFound(new
+            {
+                code = "RECEIPT_NOT_FOUND",
+                errorCode = "RECEIPT_NOT_FOUND",
+                message = $"Không tìm thấy phiếu nhập kho #{id}."
+            });
+        }
+
+        var receipt = await db.ImportReceipts
+            .Include(r => r.Details)
+                .ThenInclude(d => d.Product)
+            .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
+
+        if (receipt == null)
+        {
+            return WmsEndpointOutcome.NotFound(new
+            {
+                code = "RECEIPT_NOT_FOUND",
+                errorCode = "RECEIPT_NOT_FOUND",
+                message = $"Không tìm thấy phiếu nhập kho #{id}."
+            });
+        }
+
+        var effectiveAuth = warehouseAuth ?? warehouseAccess;
+        if (effectiveAuth != null)
+            await effectiveAuth.EnsureWarehouseAccessAsync(receipt.WarehouseId, cancellationToken);
+
+        if (receipt.Status == ERP.Domain.Enums.ReceiptStatus.Posted)
+        {
+            return WmsEndpointOutcome.Conflict(new
+            {
+                code = "RECEIPT_ALREADY_POSTED",
+                errorCode = "RECEIPT_ALREADY_POSTED",
+                message = "Phiếu nhập kho đã được ghi sổ tồn kho (Posted) trước đó."
+            });
+        }
+
+        if (receipt.Status == ERP.Domain.Enums.ReceiptStatus.Cancelled)
+        {
+            return WmsEndpointOutcome.Conflict(new
+            {
+                code = "RECEIPT_CANCELLED",
+                errorCode = "RECEIPT_CANCELLED",
+                message = "Phiếu nhập kho đã bị hủy, không thể thực hiện nhập nhanh 1 bước."
+            });
+        }
+
+        if (receipt.Details.Any(d => d.RequiresQc && d.QcState != ERP.Domain.Enums.ReceiptLineQcState.QcCompleted))
+        {
+            return WmsEndpointOutcome.UnprocessableEntity(new
+            {
+                code = "EXPRESS_POST_REQUIRES_QC_COMPLETION",
+                errorCode = "EXPRESS_POST_REQUIRES_QC_COMPLETION",
+                message = "Phiếu nhập có mặt hàng bắt buộc kiểm định QC; không thể nhập nhanh 1 bước khi chưa hoàn tất QC."
+            });
+        }
+
+        var targetLocationId = request?.TargetLocationId;
+        if (!targetLocationId.HasValue && !string.IsNullOrWhiteSpace(request?.TargetLocationCode))
+        {
+            var code = request.TargetLocationCode.Trim();
+            targetLocationId = await db.WarehouseLocations.AsNoTracking()
+                .Where(l => l.WarehouseId == receipt.WarehouseId && l.Code == code)
+                .Select(l => (int?)l.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        targetLocationId ??= await db.WarehouseLocations.AsNoTracking()
+            .Where(l => l.WarehouseId == receipt.WarehouseId && l.IsActive && !l.IsBlocked)
+            .OrderBy(l => l.LocationType == ERP.Domain.Enums.WarehouseLocationType.Storage ? 0 : (l.LocationType == ERP.Domain.Enums.WarehouseLocationType.Receiving ? 1 : 2))
+            .ThenBy(l => l.Id)
+            .Select(l => (int?)l.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var now = DateTime.UtcNow;
+        var effectiveActorId = actorUserId ?? (currentUser is { UserId: > 0 } ? currentUser.UserId : receipt.CreatedBy);
+        int? validAuditUserId = null;
+        if (effectiveActorId > 0)
+        {
+            if (await db.Users.AsNoTracking().AnyAsync(u => u.Id == effectiveActorId, cancellationToken) ||
+                (!db.Database.IsRelational() && !await db.Users.AsNoTracking().AnyAsync(cancellationToken)))
+            {
+                validAuditUserId = effectiveActorId;
+            }
+        }
+
+        var tenantId = db.CurrentTenantId > 0 ? db.CurrentTenantId : 1;
+        var gate = _dispositionLocks.GetOrAdd((tenantId, -id), _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var tx = db.Database.CurrentTransaction == null
+                ? await db.Database.BeginTransactionAsync(cancellationToken)
+                : null;
+            try
+            {
+                await db.AcquireInventoryAllocationLocksAsync(
+                    receipt.WarehouseId,
+                    receipt.Details.Select(d => d.ProductId),
+                    cancellationToken);
+
+                var totalBasePostedQuantity = 0m;
+                foreach (var detail in receipt.Details.OrderBy(d => d.ProductId).ThenBy(d => d.Id))
+                {
+                    var opQty = detail.AcceptedQuantity > 0m
+                        ? detail.AcceptedQuantity
+                        : (detail.ReceivedQuantity > 0m
+                            ? detail.ReceivedQuantity
+                            : (detail.ExpectedQuantity > 0m ? detail.ExpectedQuantity : detail.Quantity));
+                    var conv = detail.ConversionFactor > 0m ? detail.ConversionFactor : 1m;
+                    var baseQty = detail.BaseAcceptedQuantity > 0m
+                        ? detail.BaseAcceptedQuantity
+                        : (detail.BaseReceivedQuantity > 0m
+                            ? detail.BaseReceivedQuantity
+                            : (detail.BaseExpectedQuantity > 0m
+                                ? detail.BaseExpectedQuantity
+                                : Math.Round(opQty * conv, 4, MidpointRounding.AwayFromZero)));
+
+                    if (detail.ExpectedQuantity <= 0m) detail.ExpectedQuantity = opQty;
+                    if (detail.BaseExpectedQuantity <= 0m) detail.BaseExpectedQuantity = baseQty;
+                    if (detail.ReceivedQuantity <= 0m) detail.ReceivedQuantity = opQty;
+                    if (detail.AcceptedQuantity <= 0m) detail.AcceptedQuantity = opQty;
+                    detail.PostedQuantity = opQty;
+                    detail.FinalReceivedQuantity = opQty;
+                    if (detail.BaseReceivedQuantity <= 0m) detail.BaseReceivedQuantity = baseQty;
+                    if (detail.BaseAcceptedQuantity <= 0m) detail.BaseAcceptedQuantity = baseQty;
+                    detail.BasePostedQuantity = baseQty;
+                    detail.BaseFinalReceivedQuantity = baseQty;
+
+                    totalBasePostedQuantity += baseQty;
+
+                    var unitCost = detail.UnitPrice > 0m
+                        ? (conv > 0m ? Math.Round(detail.UnitPrice / conv, 4, MidpointRounding.AwayFromZero) : detail.UnitPrice)
+                        : (detail.Product?.MovingAverageCost ?? 0m);
+
+                    var stock = await db.InventoryStocks.FirstOrDefaultAsync(
+                        s => s.WarehouseId == receipt.WarehouseId &&
+                             s.ProductId == detail.ProductId &&
+                             s.LocationId == targetLocationId &&
+                             s.LotId == null &&
+                             s.SerialId == null &&
+                             s.HandlingUnitId == null &&
+                             s.OwnerId == null &&
+                             s.Status == ERP.Domain.Enums.InventoryStatus.Available,
+                        cancellationToken);
+
+                    if (stock == null)
+                    {
+                        stock = new ERP.Domain.Entities.InventoryStock
+                        {
+                            TenantId = receipt.TenantId,
+                            WarehouseId = receipt.WarehouseId,
+                            ProductId = detail.ProductId,
+                            LocationId = targetLocationId,
+                            Status = ERP.Domain.Enums.InventoryStatus.Available,
+                            Quantity = baseQty,
+                            ReservedQuantity = 0m,
+                            MovingAverageCost = unitCost,
+                            LastUpdated = now
+                        };
+                        stock.RefreshGrainHash();
+                        db.InventoryStocks.Add(stock);
+                    }
+                    else
+                    {
+                        var oldQty = Math.Max(0m, stock.Quantity);
+                        var newTotalQty = oldQty + baseQty;
+                        if (newTotalQty > 0m && unitCost > 0m)
+                        {
+                            stock.MovingAverageCost = Math.Round(
+                                ((oldQty * stock.MovingAverageCost) + (baseQty * unitCost)) / newTotalQty,
+                                4,
+                                MidpointRounding.AwayFromZero);
+                        }
+
+                        stock.Quantity += baseQty;
+                        stock.LastUpdated = now;
+                        stock.RefreshGrainHash();
+                    }
+
+                    if (detail.Product != null && stock.MovingAverageCost > 0m)
+                    {
+                        detail.Product.MovingAverageCost = stock.MovingAverageCost;
+                    }
+
+                    db.InventoryTransactions.Add(new ERP.Domain.Entities.InventoryTransaction
+                    {
+                        TenantId = receipt.TenantId,
+                        ProductId = detail.ProductId,
+                        WarehouseId = receipt.WarehouseId,
+                        LocationId = targetLocationId,
+                        ToLocationId = targetLocationId,
+                        InventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                        ToInventoryStatus = ERP.Domain.Enums.InventoryStatus.Available,
+                        TransactionType = ERP.Domain.Enums.TransactionType.Import,
+                        Quantity = baseQty,
+                        UnitCost = unitCost,
+                        ReferenceId = receipt.Id,
+                        ReferenceType = "ImportReceipt",
+                        SourceDocumentLineId = detail.Id,
+                        TransactionDate = now,
+                        CreatedBy = effectiveActorId > 0 ? effectiveActorId : 1,
+                        Note = string.IsNullOrWhiteSpace(request?.Note)
+                            ? $"{receipt.Code}: Nhập kho nhanh 1 bước (Express Inbound)"
+                            : request.Note.Trim()
+                    });
+                }
+
+                receipt.Status = ERP.Domain.Enums.ReceiptStatus.Posted;
+                receipt.ApprovedBy ??= effectiveActorId > 0 ? effectiveActorId : 1;
+                receipt.ApprovedAt ??= now;
+                if (!db.Database.IsSqlServer())
+                {
+                    receipt.RowVersion = Guid.NewGuid().ToByteArray()[..8];
+                }
+
+                db.AuditLogs.Add(new ERP.Domain.Entities.AuditLog
+                {
+                    UserId = validAuditUserId,
+                    WarehouseId = receipt.WarehouseId,
+                    EntityName = "ImportReceipt",
+                    EntityId = receipt.Id,
+                    Action = "ImportReceipt.ExpressPosted",
+                    NewValues = $"Status: Posted; ExpressMode: true; TargetLocationId: {targetLocationId}; TotalBaseQty: {totalBasePostedQuantity}",
+                    Reason = string.IsNullOrWhiteSpace(request?.Note)
+                        ? $"Nhập kho nhanh 1 bước cho phiếu nhập {receipt.Code}"
+                        : request.Note.Trim(),
+                    Result = "Success",
+                    Timestamp = now
+                });
+
+                await db.SaveChangesAsync(cancellationToken);
+                if (tx != null) await tx.CommitAsync(cancellationToken);
+
+                return WmsEndpointOutcome.Ok(new
+                {
+                    id = receipt.Id,
+                    code = receipt.Code,
+                    status = "Posted",
+                    expressMode = true,
+                    targetLocationId,
+                    postedLineCount = receipt.Details.Count,
+                    totalBasePostedQuantity,
+                    message = "Đã nhập kho nhanh 1 bước và ghi sổ tồn kho thành công."
+                });
+            }
+            catch
+            {
+                if (tx != null) await tx.RollbackAsync(CancellationToken.None);
+                throw;
+            }
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
 }

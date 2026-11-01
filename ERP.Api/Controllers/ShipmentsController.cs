@@ -13,8 +13,8 @@ namespace ERP.Api.Controllers;
 [Authorize]
 public sealed class ShipmentsController(
     IShipmentService service,
-    IShipmentOperationsService shipmentOps = null!,
-    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
+    IShipmentOperationsService shipmentOps,
+    IWarehouseAuthorizationService warehouseAccess) : ControllerBase
 {
     [HttpGet, PermissionAuthorize(AppPermissions.ShipmentRead)]
     public async Task<ActionResult<IReadOnlyList<ShipmentListDto>>> List(
@@ -57,48 +57,13 @@ public sealed class ShipmentsController(
         });
     }
 
-    [HttpPost("sync-tms-manifest"), IdempotentCommand("Shipment.SyncTmsManifest"), PermissionAuthorize(AppPermissions.ShipmentRead)]
+    [HttpPost("sync-tms-manifest"), IdempotentCommand("Shipment.SyncTmsManifest"), PermissionAuthorize(AppPermissions.ShipmentUpdate, AppPermissions.ShipmentDispatch)]
     public async Task<IActionResult> SyncTmsManifest(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] SyncTmsManifestRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (shipmentOps != null)
-            return this.ToActionResult(await shipmentOps.SyncTmsManifestAsync(request, GetActorUserId(), warehouseAccess, cancellationToken));
-
-        var warehouseId = request?.WarehouseId;
-        var targetWarehouseId = warehouseId ?? 1;
-        if (warehouseAccess != null)
-        {
-            if (warehouseId.HasValue)
-            {
-                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
-            }
-            else
-            {
-                var accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
-                if (accessibleIds.Count == 0) return Forbid();
-                targetWarehouseId = accessibleIds.First();
-            }
-        }
-
-        var list = await service.ListAsync(warehouseId, null, cancellationToken);
-        var now = DateTime.UtcNow;
-        return Ok(new
-        {
-            manifestId = $"TMS-MNF-{now:yyyyMMdd-HHmm}",
-            warehouseId = targetWarehouseId,
-            carrierCode = string.IsNullOrWhiteSpace(request?.CarrierCode) ? "VTP-EXPRESS" : request.CarrierCode.Trim(),
-            syncedShipmentCount = list.Count,
-            stagedOrLoadedCount = list.Count(x => x.Status is "Ready" or "Staging" or "Loading" or "Loaded" or "Dispatched" or "InTransit"),
-            totalHandlingUnitsCount = 0,
-            totalGrossWeightKg = 0m,
-            totalVolumeM3 = 0m,
-            ediStatus = "Đã đồng bộ bảng kê vận tải & ghép tải thành công",
-            status = "Đã đồng bộ bảng kê vận tải & ghép tải thành công",
-            statusLabel = "Đã đồng bộ bảng kê vận tải & ghép tải thành công",
-            syncedAtUtc = now,
-        });
+        if (!this.HasActionPermission(null, AppPermissions.ShipmentUpdate, AppPermissions.ShipmentDispatch)) return Forbid();
+        return this.ToActionResult(await shipmentOps.SyncTmsManifestAsync(request, GetActorUserId(), warehouseAccess, cancellationToken));
     }
 
     [HttpGet("fleet-assignments"), PermissionAuthorize(AppPermissions.ShipmentRead)]
@@ -106,38 +71,16 @@ public sealed class ShipmentsController(
         [FromQuery] int? warehouseId = null,
         CancellationToken cancellationToken = default)
     {
-        if (shipmentOps != null)
-            return this.ToActionResult(await shipmentOps.GetFleetAssignmentsAsync(warehouseId, warehouseAccess, cancellationToken));
-
-        if (warehouseId.HasValue && warehouseAccess != null)
-            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
-
-        var shipments = await service.ListAsync(warehouseId, null, cancellationToken);
-        return Ok(new
-        {
-            totalCount = shipments.Count,
-            items = shipments.Select(s => new
-            {
-                shipmentId = s.Id,
-                shipmentCode = s.ShipmentCode,
-                warehouseId = s.WarehouseId,
-                status = s.Status,
-                vehiclePlate = s.VehiclePlate,
-                sealNumber = s.SealNumber,
-                dockAppointmentId = s.DockAppointmentId
-            }),
-            manifests = Array.Empty<object>(),
-            statusLabel = "Đã tải danh sách phân công phương tiện & tài xế vận chuyển"
-        });
+        return this.ToActionResult(await shipmentOps.GetFleetAssignmentsAsync(warehouseId, warehouseAccess, cancellationToken));
     }
 
     [HttpPost("fleet-assignments"), IdempotentCommand("Shipment.AssignFleetVehicle")]
-    [PermissionAuthorize(AppPermissions.ShipmentLoad, AppPermissions.ShipmentDispatch, AppPermissions.ShipmentRead)]
+    [PermissionAuthorize(AppPermissions.ShipmentLoad, AppPermissions.ShipmentDispatch)]
     public async Task<IActionResult> AssignFleetVehicle(
         [FromBody] AssignFleetVehicleRequest? request,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
+        if (!this.HasActionPermission(null, AppPermissions.ShipmentLoad, AppPermissions.ShipmentDispatch)) return Forbid();
 
         if (request == null || string.IsNullOrWhiteSpace(request.VehiclePlate) || string.IsNullOrWhiteSpace(request.DriverName))
         {
@@ -148,9 +91,6 @@ public sealed class ShipmentsController(
                 message = "Bắt buộc nhập biển số xe (VehiclePlate) và họ tên tài xế/bưu tá (DriverName) khi phân công vận chuyển."
             });
         }
-
-        if (shipmentOps == null)
-            throw new InvalidOperationException("IShipmentOperationsService is required for fleet assignment persistence.");
 
         return this.ToActionResult(await shipmentOps.AssignFleetVehicleAsync(request, GetActorUserId(), warehouseAccess, cancellationToken));
     }
@@ -199,9 +139,18 @@ public sealed class ShipmentsController(
     public async Task<ActionResult<ShipmentDto>> RetryDelivery(int id, RetryShipmentDeliveryDto request, CancellationToken cancellationToken) =>
         Ok(await service.RetryDeliveryAsync(id, request, cancellationToken));
 
-    [HttpPost("{id:int}/return-initiate"), PermissionAuthorize(AppPermissions.ShipmentUpdate), IdempotentCommand("Shipment.ReturnInitiate")]
-    public async Task<ActionResult<ShipmentDto>> ReturnInitiate(int id, InitiateShipmentReturnDto request, CancellationToken cancellationToken) =>
-        Ok(await service.InitiateReturnAsync(id, request, cancellationToken));
+    [HttpPost("{id:int}/return-initiate")]
+    [HttpPost("{id:int}/return-to-warehouse")]
+    [PermissionAuthorize(AppPermissions.ShipmentUpdate)]
+    [IdempotentCommand("Shipment.ReturnInitiate")]
+    public async Task<ActionResult<ShipmentDto>> ReturnInitiate(
+        int id,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] InitiateShipmentReturnDto? request = null,
+        CancellationToken cancellationToken = default) =>
+        Ok(await service.InitiateReturnAsync(
+            id,
+            request ?? new InitiateShipmentReturnDto { ReasonCode = "DELIVERY_FAILED_RTS", RowVersion = string.Empty },
+            cancellationToken));
 
     [HttpPost("{id:int}/complete"), PermissionAuthorize(AppPermissions.ShipmentUpdate), IdempotentCommand("Shipment.Complete")]
     public async Task<ActionResult<ShipmentDto>> Complete(int id, ShipmentStateCommandDto request, CancellationToken cancellationToken) =>
@@ -211,72 +160,60 @@ public sealed class ShipmentsController(
     public async Task<IActionResult> CompleteRtsReturn(
         int id,
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CompleteShipmentRtsReturnRequest? request = null,
-        CancellationToken cancellationToken = default)
-    {
-        if (shipmentOps == null) return Ok(await service.GetAsync(id, cancellationToken));
-        return this.ToActionResult(await shipmentOps.CompleteRtsReturnAsync(id, request, GetActorUserId(), warehouseAccess, cancellationToken));
-    }
+        CancellationToken cancellationToken = default) =>
+        this.ToActionResult(await shipmentOps.CompleteRtsReturnAsync(id, request, GetActorUserId(), warehouseAccess, cancellationToken));
 
     [HttpGet("vn-administrative-units"), PermissionAuthorize(AppPermissions.ShipmentRead)]
     public async Task<IActionResult> GetVnAdministrativeUnits(
         [FromQuery] string? provinceCode = null,
         [FromQuery] string? districtCode = null,
         [FromQuery] string? search = null,
-        CancellationToken cancellationToken = default)
-    {
-        if (shipmentOps == null) return Ok(new { totalCount = 0, items = Array.Empty<object>() });
-        return this.ToActionResult(await shipmentOps.GetVnAdministrativeUnitsAsync(provinceCode, districtCode, search, cancellationToken));
-    }
+        CancellationToken cancellationToken = default) =>
+        this.ToActionResult(await shipmentOps.GetVnAdministrativeUnitsAsync(provinceCode, districtCode, search, cancellationToken));
 
-    [HttpPost("normalize-address"), HttpPost("normalize-vn-address"), PermissionAuthorize(AppPermissions.ShipmentRead)]
+    [HttpPost("normalize-address"), HttpPost("normalize-vn-address"), PermissionAuthorize(AppPermissions.ShipmentUpdate, AppPermissions.ShipmentDispatch)]
     public async Task<IActionResult> NormalizeVietnameseAddress(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] NormalizeVnAddressRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (shipmentOps == null) return Ok(new { normalized = false });
+        if (!this.HasActionPermission(null, AppPermissions.ShipmentUpdate, AppPermissions.ShipmentDispatch)) return Forbid();
         return this.ToActionResult(await shipmentOps.NormalizeVietnameseAddressAsync(request, cancellationToken));
     }
 
     [HttpGet("carrier-configs"), PermissionAuthorize(AppPermissions.ShipmentRead)]
     public async Task<IActionResult> GetCarrierConfigs(
         [FromQuery] int? warehouseId = null,
-        CancellationToken cancellationToken = default)
-    {
-        if (shipmentOps == null) return Ok(new { totalCount = 0, items = Array.Empty<object>() });
-        return this.ToActionResult(await shipmentOps.GetCarrierConfigsAsync(warehouseId, warehouseAccess, cancellationToken));
-    }
+        CancellationToken cancellationToken = default) =>
+        this.ToActionResult(await shipmentOps.GetCarrierConfigsAsync(warehouseId, warehouseAccess, cancellationToken));
 
     [HttpPost("carrier-configs"), IdempotentCommand("Shipment.UpsertCarrierConfig")]
-    [PermissionAuthorize(AppPermissions.ShipmentUpdate, AppPermissions.ShipmentDispatch, AppPermissions.ShipmentRead)]
+    [PermissionAuthorize(AppPermissions.ShipmentUpdate, AppPermissions.ShipmentDispatch)]
     public async Task<IActionResult> UpsertCarrierConfig(
         [FromBody] UpsertCarrierConfigInput? request,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (shipmentOps == null) return BadRequest(new { errorCode = "SERVICE_UNAVAILABLE" });
+        if (!this.HasActionPermission(null, AppPermissions.ShipmentUpdate, AppPermissions.ShipmentDispatch)) return Forbid();
         return this.ToActionResult(await shipmentOps.UpsertCarrierConfigAsync(request, GetActorUserId(), warehouseAccess, cancellationToken));
     }
 
     [HttpPost("book-carrier-waybill"), IdempotentCommand("Shipment.BookCarrierWaybill")]
-    [PermissionAuthorize(AppPermissions.ShipmentDispatch, AppPermissions.ShipmentUpdate, AppPermissions.ShipmentRead)]
+    [PermissionAuthorize(AppPermissions.ShipmentDispatch, AppPermissions.ShipmentUpdate)]
     public async Task<IActionResult> BookCarrierWaybill(
         [FromBody] CarrierWaybillBookingRequest? request,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true) return Forbid();
-        if (shipmentOps == null) return BadRequest(new { errorCode = "SERVICE_UNAVAILABLE" });
+        if (!this.HasActionPermission(null, AppPermissions.ShipmentDispatch, AppPermissions.ShipmentUpdate)) return Forbid();
         return this.ToActionResult(await shipmentOps.BookCarrierWaybillAsync(request, GetActorUserId(), warehouseAccess, cancellationToken));
     }
 
     [HttpPost("webhooks/carrier/{carrierCode}"), AllowAnonymous, IdempotentCommand("Shipment.CarrierWebhook")]
-    [PermissionAuthorize(AppPermissions.ShipmentUpdate, AppPermissions.ShipmentDispatch, AppPermissions.ShipmentRead)]
+    [PermissionAuthorize(AppPermissions.ShipmentUpdate, AppPermissions.ShipmentDispatch)]
     public async Task<IActionResult> CarrierWebhook(
         [FromRoute] string carrierCode,
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CarrierWebhookEventInput? request = null,
         [FromHeader(Name = "X-Carrier-Signature")] string? signatureHeader = null,
         CancellationToken cancellationToken = default)
     {
-        if (shipmentOps == null) return BadRequest(new { errorCode = "SERVICE_UNAVAILABLE" });
         var effectiveSignature = !string.IsNullOrWhiteSpace(signatureHeader)
             ? signatureHeader
             : (HttpContext?.Request?.Headers["X-Carrier-Signature"].FirstOrDefault()

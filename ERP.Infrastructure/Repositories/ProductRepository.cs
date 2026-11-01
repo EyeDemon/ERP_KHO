@@ -27,6 +27,22 @@ namespace ERP.Infrastructure.Repositories
             return await query.AnyAsync(cancellationToken);
         }
 
+        public async Task<bool> IsMaxSkusExceededAsync(CancellationToken cancellationToken = default)
+        {
+            var tenantId = _context.CurrentTenantId;
+            var sub = await _context.TenantSubscriptions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.TenantId == tenantId, cancellationToken);
+            if (sub == null)
+            {
+                return false;
+            }
+
+            var maxSkus = ERP.Application.Services.ProductService.ResolveMaxSkusForPlan(sub.PlanCode);
+            var activeCount = await _dbSet.CountAsync(p => p.IsActive, cancellationToken);
+            return activeCount >= maxSkus;
+        }
+
         public async Task<IEnumerable<Product>> GetProductsWithDetailsAsync(CancellationToken cancellationToken = default)
         {
             return await _dbSet

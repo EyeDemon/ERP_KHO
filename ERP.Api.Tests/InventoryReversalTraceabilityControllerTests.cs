@@ -24,7 +24,10 @@ public sealed class InventoryReversalTraceabilityControllerTests
         reversal.Setup(x => x.GetCandidatesAsync(2, 3, 10, 41, true, "ABC", It.IsAny<CancellationToken>()))
             .ReturnsAsync(page);
         var controller = new InventoryReversalTraceabilityController(
-            reversal.Object, Mock.Of<IInventoryTraceabilityQueryService>());
+            reversal.Object,
+            Mock.Of<IInventoryTraceabilityQueryService>(),
+            Mock.Of<IWmsGovernanceOperationsService>(),
+            Mock.Of<IWarehouseAuthorizationService>());
 
         var result = await controller.Candidates(2, 41, true, "ABC", 3, 10);
 
@@ -48,7 +51,10 @@ public sealed class InventoryReversalTraceabilityControllerTests
         reversal.Setup(x => x.GetReversalReasonsAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(items);
         var controller = new InventoryReversalTraceabilityController(
-            reversal.Object, Mock.Of<IInventoryTraceabilityQueryService>());
+            reversal.Object,
+            Mock.Of<IInventoryTraceabilityQueryService>(),
+            Mock.Of<IWmsGovernanceOperationsService>(),
+            Mock.Of<IWarehouseAuthorizationService>());
 
         var response = await controller.ReversalReasons();
         Assert.Same(items, Assert.IsType<OkObjectResult>(response.Result).Value);
@@ -67,7 +73,11 @@ public sealed class InventoryReversalTraceabilityControllerTests
         ];
         trace.Setup(x => x.GetAccessibleWarehousesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(permitted);
-        var controller = new InventoryReversalTraceabilityController(reversal.Object, trace.Object);
+        var controller = new InventoryReversalTraceabilityController(
+            reversal.Object,
+            trace.Object,
+            Mock.Of<IWmsGovernanceOperationsService>(),
+            Mock.Of<IWarehouseAuthorizationService>());
 
         var result = await controller.TraceabilityWarehouses();
         Assert.Same(permitted, Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -102,7 +112,11 @@ public sealed class InventoryReversalTraceabilityControllerTests
         };
         trace.Setup(x => x.TraceAsync(7, null, null, null, null, null, 50,
             It.IsAny<CancellationToken>(), 500, 0, null)).ReturnsAsync(response);
-        var controller = new InventoryReversalTraceabilityController(reversal.Object, trace.Object);
+        var controller = new InventoryReversalTraceabilityController(
+            reversal.Object,
+            trace.Object,
+            Mock.Of<IWmsGovernanceOperationsService>(),
+            Mock.Of<IWarehouseAuthorizationService>());
 
         var result = await controller.Trace(7, null, null, null, null, null, 50, 500);
         Assert.Same(response, Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -122,7 +136,11 @@ public sealed class InventoryReversalTraceabilityControllerTests
         var response = new InventoryTraceabilityResultDto();
         trace.Setup(x => x.TraceAsync(7, 9, "LOT-A", null, "StockTransfer", 42, 50,
             It.IsAny<CancellationToken>(), 0, 0, null)).ReturnsAsync(response);
-        var controller = new InventoryReversalTraceabilityController(reversal.Object, trace.Object);
+        var controller = new InventoryReversalTraceabilityController(
+            reversal.Object,
+            trace.Object,
+            Mock.Of<IWmsGovernanceOperationsService>(),
+            Mock.Of<IWarehouseAuthorizationService>());
 
         var result = await controller.Trace(7, 9, "LOT-A", null, "StockTransfer", 42, 50, 0);
 
@@ -141,7 +159,11 @@ public sealed class InventoryReversalTraceabilityControllerTests
         var response = new InventoryTraceabilityResultDto();
         trace.Setup(x => x.TraceAsync(7, 9, null, null, null, null, 50,
             It.IsAny<CancellationToken>(), 500, 100, 777)).ReturnsAsync(response);
-        var controller = new InventoryReversalTraceabilityController(reversal.Object, trace.Object);
+        var controller = new InventoryReversalTraceabilityController(
+            reversal.Object,
+            trace.Object,
+            Mock.Of<IWmsGovernanceOperationsService>(),
+            Mock.Of<IWarehouseAuthorizationService>());
 
         var result = await controller.Trace(7, 9, null, null, null, null, 50, 500, 100, 777);
 
@@ -275,7 +297,10 @@ public sealed class InventoryReversalTraceabilityControllerTests
         reversal.Setup(x => x.GetReversalWarehousesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(granted);
         var controller = new InventoryReversalTraceabilityController(
-            reversal.Object, Mock.Of<IInventoryTraceabilityQueryService>());
+            reversal.Object,
+            Mock.Of<IInventoryTraceabilityQueryService>(),
+            Mock.Of<IWmsGovernanceOperationsService>(),
+            Mock.Of<IWarehouseAuthorizationService>());
 
         var result = await controller.ReversalWarehouses();
 

@@ -99,7 +99,7 @@ export default function StockAllocations(){
     setFefoBusy(true);
     setError('');
     try{
-      const res=await apiClient.post('/api/inventory/allocations/verify-fefo-compliance',{});
+      const res=await apiClient.post('/api/v1/inventory/allocations/verify-fefo-compliance',{});
       if(res?.data?.verificationId){
         setFefoVerification({
           verificationId:String(res.data.verificationId),
@@ -125,7 +125,7 @@ export default function StockAllocations(){
   const loadPage=useCallback(async(page=1)=>{
     setLoading(true);setError('');
     try{
-      const response=await apiClient.get('/api/inventory/allocations',{params:{page,pageSize:20,status:status||undefined}});
+      const response=await apiClient.get('/api/v1/inventory/allocations',{params:{page,pageSize:20,status:status||undefined}});
       setData(response.data);
     }catch(failure){setError(messageOf(failure,'Không thể tải danh sách phân bổ vị trí.'))}
     finally{setLoading(false)}
@@ -134,7 +134,7 @@ export default function StockAllocations(){
   const loadReservations=useCallback(async()=>{
     setReferenceLoading(true);
     try{
-      const response=await apiClient.get('/api/inventory/allocations/reservations');
+      const response=await apiClient.get('/api/v1/inventory/allocations/reservations');
       const items=response.data as AllocatableReservation[];
       setReservations(items);
       setSelectedReservationId(current=>current&&items.some(item=>item.reservationId===current)?current:(items[0]?.reservationId??''));
@@ -147,7 +147,7 @@ export default function StockAllocations(){
   useEffect(()=>{
     if(!selectedReservationId){setCandidates([]);setLocationId('');setQuantity('');return}
     let active=true;setReferenceLoading(true);
-    apiClient.get('/api/inventory/allocations/candidates',{params:{reservationId:selectedReservationId}})
+    apiClient.get('/api/v1/inventory/allocations/candidates',{params:{reservationId:selectedReservationId}})
       .then(response=>{if(active){setCandidates(response.data);setLocationId('')}})
       .catch(failure=>{if(active)setError(messageOf(failure,'Không thể tải vị trí có thể phân bổ.'))})
       .finally(()=>{if(active)setReferenceLoading(false)});
@@ -167,7 +167,7 @@ export default function StockAllocations(){
     submitting.current=true;setBusy(true);setError('');
     const logical=`allocation:${manual?'manual':'auto'}:${selectedReservation.reservationId}:${parsed}:${manual?locationId:'auto'}`;
     try{
-      await apiClient.post(manual?'/api/inventory/allocations':'/api/inventory/allocations/auto',{
+      await apiClient.post(manual?'/api/v1/inventory/allocations':'/api/v1/inventory/allocations/auto',{
         reservationId:selectedReservation.reservationId,quantity:parsed,locationId:manual?locationId:null,
       },{headers:idempotencyHeaders(logical)});
       completeIdempotentAction(logical);await refresh();
@@ -179,7 +179,7 @@ export default function StockAllocations(){
     setError('');setReason('');setActionLocationId('');setActionCandidates([]);setAction({kind,allocation,trigger});
     if(kind==='reallocate'){
       try{
-        const response=await apiClient.get('/api/inventory/allocations/candidates',{params:{reservationId:allocation.reservationId}});
+        const response=await apiClient.get('/api/v1/inventory/allocations/candidates',{params:{reservationId:allocation.reservationId}});
         setActionCandidates((response.data as Candidate[]).filter(item=>item.locationId!==allocation.locationId));
       }catch(failure){setError(messageOf(failure,'Không thể tải vị trí để phân bổ lại.'))}
     }
@@ -192,9 +192,9 @@ export default function StockAllocations(){
     const logical=`allocation:${action.kind}:${action.allocation.id}:${action.kind==='reallocate'?(actionLocationId||'auto'):'release'}`;
     try{
       if(action.kind==='release'){
-        await apiClient.post(`/api/inventory/allocations/${action.allocation.id}/release`,{reason:cleaned},{headers:idempotencyHeaders(logical)});
+        await apiClient.post(`/api/v1/inventory/allocations/${action.allocation.id}/release`,{reason:cleaned},{headers:idempotencyHeaders(logical)});
       }else{
-        await apiClient.post(`/api/inventory/allocations/${action.allocation.id}/reallocate`,
+        await apiClient.post(`/api/v1/inventory/allocations/${action.allocation.id}/reallocate`,
           {locationId:actionLocationId||null,reason:cleaned},{headers:idempotencyHeaders(logical)});
       }
       completeIdempotentAction(logical);setAction(null);setReason('');setActionLocationId('');await refresh();

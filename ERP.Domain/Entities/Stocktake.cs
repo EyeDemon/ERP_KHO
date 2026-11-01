@@ -25,28 +25,39 @@ public class Stocktake : ITenantEntity
             (StocktakeStatus.Draft, StocktakeStatus.InProgress) => true,
             (StocktakeStatus.Draft, StocktakeStatus.CountCompleted) => true,
             (StocktakeStatus.Draft, StocktakeStatus.PendingApproval) => true,
-            (StocktakeStatus.Draft, StocktakeStatus.Approved) => true,
-            (StocktakeStatus.Draft, StocktakeStatus.Completed) => true,
             (StocktakeStatus.Draft, StocktakeStatus.Cancelled) => true,
             (StocktakeStatus.Draft, StocktakeStatus.Rejected) => true,
             (StocktakeStatus.InProgress, StocktakeStatus.CountCompleted) => true,
             (StocktakeStatus.InProgress, StocktakeStatus.PendingApproval) => true,
+            (StocktakeStatus.InProgress, StocktakeStatus.PendingRecount) => true,
             (StocktakeStatus.InProgress, StocktakeStatus.Approved) => true,
             (StocktakeStatus.InProgress, StocktakeStatus.Completed) => true,
             (StocktakeStatus.InProgress, StocktakeStatus.Cancelled) => true,
             (StocktakeStatus.InProgress, StocktakeStatus.Draft) => true,
             (StocktakeStatus.CountCompleted, StocktakeStatus.PendingApproval) => true,
+            (StocktakeStatus.CountCompleted, StocktakeStatus.PendingRecount) => true,
             (StocktakeStatus.CountCompleted, StocktakeStatus.Approved) => true,
             (StocktakeStatus.CountCompleted, StocktakeStatus.Completed) => true,
+            (StocktakeStatus.CountCompleted, StocktakeStatus.Posted) => true,
             (StocktakeStatus.CountCompleted, StocktakeStatus.InProgress) => true,
             (StocktakeStatus.CountCompleted, StocktakeStatus.Cancelled) => true,
             (StocktakeStatus.CountCompleted, StocktakeStatus.Rejected) => true,
             (StocktakeStatus.PendingApproval, StocktakeStatus.Approved) => true,
             (StocktakeStatus.PendingApproval, StocktakeStatus.Completed) => true,
+            (StocktakeStatus.PendingApproval, StocktakeStatus.Posted) => true,
+            (StocktakeStatus.PendingApproval, StocktakeStatus.PendingRecount) => true,
             (StocktakeStatus.PendingApproval, StocktakeStatus.Rejected) => true,
             (StocktakeStatus.PendingApproval, StocktakeStatus.InProgress) => true,
             (StocktakeStatus.PendingApproval, StocktakeStatus.Cancelled) => true,
+            (StocktakeStatus.PendingRecount, StocktakeStatus.InProgress) => true,
+            (StocktakeStatus.PendingRecount, StocktakeStatus.CountCompleted) => true,
+            (StocktakeStatus.PendingRecount, StocktakeStatus.PendingApproval) => true,
+            (StocktakeStatus.PendingRecount, StocktakeStatus.Approved) => true,
+            (StocktakeStatus.PendingRecount, StocktakeStatus.Cancelled) => true,
+            (StocktakeStatus.PendingRecount, StocktakeStatus.Rejected) => true,
             (StocktakeStatus.Approved, StocktakeStatus.Completed) => true,
+            (StocktakeStatus.Approved, StocktakeStatus.Posted) => true,
+            (StocktakeStatus.Completed, StocktakeStatus.Posted) => true,
             _ => false
         };
 
@@ -58,7 +69,7 @@ public class Stocktake : ITenantEntity
         }
 
         Status = targetStatus;
-        if (targetStatus is StocktakeStatus.Approved or StocktakeStatus.Completed)
+        if (targetStatus is StocktakeStatus.Approved or StocktakeStatus.Completed or StocktakeStatus.Posted)
         {
             if (actorUserId.HasValue)
             {

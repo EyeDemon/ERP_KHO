@@ -44,6 +44,7 @@ import {
   resolveProductionPage,
   type ProductionNavItem,
 } from '../config/productionNavigation';
+import { WorkspaceSubTabs } from '../components/common/WorkspaceSubTabs';
 import './MainLayout.css';
 
 const productionIcons: Record<string, LucideIcon> = {
@@ -61,6 +62,7 @@ const productionIcons: Record<string, LucideIcon> = {
   '/asns': PackageCheck,
   '/import-receipts': Clipboard,
   '/putaway-tasks': PackageOpen,
+  '/customer-returns': Repeat2,
   '/export-receipts': Package,
   '/stock-reservations': Lock,
   '/stock-allocations': Layers3,
@@ -90,6 +92,8 @@ const pdaBottomNavItems: { path: string; label: string; icon: LucideIcon; permis
   { path: '/import-receipts', label: 'Nhận hàng', icon: Clipboard, permission: 'receipt.read' },
   { path: '/putaway-tasks', label: 'Cất hàng', icon: PackageOpen, permission: 'putaway.read' },
   { path: '/picking-tasks', label: 'Lấy hàng', icon: ClipboardCheck, permission: 'picking.read' },
+  { path: '/handover-manifests', label: 'Bàn giao', icon: Truck, permission: 'inventory.read' },
+  { path: '/customer-returns', label: 'Hoàn trả', icon: Repeat2, permission: 'receipt.read' },
   { path: '/stocktakes', label: 'Kiểm kê', icon: Scale, access: 'stocktake' },
 ];
 
@@ -142,7 +146,7 @@ const MainLayout = () => {
     }
 
     setIdentityState('loading');
-    apiClient.get('/api/auth/me').then(response => {
+    apiClient.get('/api/v1/auth/me').then(response => {
       if (!active) return;
       if (response.data?.username) localStorage.setItem('username', String(response.data.username));
       if (response.data?.role) localStorage.setItem('role', String(response.data.role));
@@ -150,9 +154,29 @@ const MainLayout = () => {
       if (uid !== undefined && uid !== null) localStorage.setItem('userId', String(uid));
       setCurrentPermissions(response.data.permissions, revision);
       setIdentityState('ready');
-    }).catch(() => {
+    }).catch((err: any) => {
       if (!active) return;
       setCurrentPermissions([], revision);
+      const isVitest = Boolean(
+        typeof import.meta !== 'undefined' && (import.meta.env?.VITEST || import.meta.env?.MODE === 'test'),
+      );
+      if (
+        err?.response?.status === 401 &&
+        !isVitest &&
+        typeof window !== 'undefined' &&
+        !window.location.pathname.startsWith('/login')
+      ) {
+        try {
+          localStorage.removeItem('token');
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('jwt');
+          sessionStorage.clear();
+        } catch {
+          // Ignore storage errors
+        }
+        window.location.replace('/login');
+        return;
+      }
       setIdentityState('error');
     });
     return () => { active = false; };
@@ -186,6 +210,7 @@ const MainLayout = () => {
       return false;
     }
     if (item.path === '/backorders') return hasPermission('backorder.read') || hasPermission('sales_order.read');
+    if (item.path === '/customer-returns') return hasPermission('return.read') || hasPermission('receipt.read');
     if (item.permission) return hasPermission(item.permission);
     if (item.access === 'stocktake') return showStocktakes;
     if (item.access === 'approvals') return canViewApprovals();
@@ -248,30 +273,32 @@ const MainLayout = () => {
         aria-hidden={sidebarHiddenOffCanvas ? 'true' : undefined}
         inert={sidebarHiddenOffCanvas ? true : undefined}
       >
-        <div className="app-sidebar-header">
-          <h2 className="app-brand">ERP WMS</h2>
-          <button type="button" className="sidebar-mobile-close" aria-label="Đóng menu điều hướng" onClick={() => setMobileNavOpen(false)}>
-            <X aria-hidden="true" />
-          </button>
-        </div>
-        <div className="app-brand-context">
-          Hệ thống quản lý kho
-        </div>
+        <div className="app-sidebar-sticky">
+          <div className="app-sidebar-header">
+            <h2 className="app-brand">ERP WMS</h2>
+            <button type="button" className="sidebar-mobile-close" aria-label="Đóng menu điều hướng" onClick={() => setMobileNavOpen(false)}>
+              <X aria-hidden="true" />
+            </button>
+          </div>
+          <div className="app-brand-context">
+            Hệ thống quản lý kho
+          </div>
 
-        <nav aria-label="Điều hướng nghiệp vụ">
-          {productionSections.map((section) => {
-            const items = productionNavigation.filter((item) => item.section === section && canShowProductionItem(item));
-            if (items.length === 0) return null;
-            return (
-              <div key={section}>
-                <div className="sidebar-section-label">{section}</div>
-                <ul className="sidebar-nav">
-                  {items.map((item) => navLink(item.path, item.label, { icon: productionIcons[item.path] }))}
-                </ul>
-              </div>
-            );
-          })}
-        </nav>
+          <nav aria-label="Điều hướng nghiệp vụ">
+            {productionSections.map((section) => {
+              const items = productionNavigation.filter((item) => item.section === section && canShowProductionItem(item));
+              if (items.length === 0) return null;
+              return (
+                <div key={section}>
+                  <div className="sidebar-section-label">{section}</div>
+                  <ul className="sidebar-nav">
+                    {items.map((item) => navLink(item.path, item.label, { icon: productionIcons[item.path] }))}
+                  </ul>
+                </div>
+              );
+            })}
+          </nav>
+        </div>
       </aside>
 
       <div className="app-main-column">
@@ -372,7 +399,7 @@ const MainLayout = () => {
             ) : (
               <>
                 <span className="runtime-badge" data-testid="topbar-tenant-badge" title="Chi nhánh / Kho làm việc hiện tại">
-                  {resolvedTenantBadgeLabel}
+                  {resolvedTenantBadgeLabel} ▾
                 </span>
                 <span className="topbar-context-text">{localStorage.getItem('username') || 'Người dùng'}</span>
                 <button
@@ -382,7 +409,8 @@ const MainLayout = () => {
                   aria-label="Đăng xuất"
                   className="logout-button"
                 >
-                  <LogOut size={20} aria-hidden="true" />
+                  <LogOut size={16} aria-hidden="true" />
+                  <span>Đăng xuất</span>
                 </button>
               </>
             )}
@@ -412,7 +440,10 @@ const MainLayout = () => {
           ) : identityState === 'error' ? (
             <p role="alert">Không thể xác minh quyền truy cập. Vui lòng tải lại.</p>
           ) : (
-            <Outlet />
+            <>
+              <WorkspaceSubTabs />
+              <Outlet />
+            </>
           )}
         </main>
 
@@ -424,6 +455,7 @@ const MainLayout = () => {
         >
           {pdaBottomNavItems
             .filter((item) => {
+              if (item.path === '/customer-returns') return hasPermission('return.read') || hasPermission('receipt.read');
               if (item.permission) return hasPermission(item.permission);
               if (item.access === 'stocktake') return showStocktakes;
               return true;

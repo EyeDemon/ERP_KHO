@@ -801,4 +801,12 @@ export const demoPermissionCatalog = [
   { code: 'sales_order.close', description: 'Đóng Sales Order' },
   { code: 'backorder.read', description: 'Xem Backorder' },
   { code: 'backorder.manage', description: 'Quản lý Backorder' },
+  { code: 'inventory_opening_balance.import', description: 'Cho phép tải lên và ghi sổ tồn kho đầu kỳ từ tệp Excel/CSV vào kho.' },
+  { code: 'tenant.register', description: 'Đăng ký thuê bao doanh nghiệp mới (/api/v1/auth/register-tenant)' },
+  { code: 'return.read', description: 'Xem phiếu hàng hoàn và đổi trả (RMA)' },
+  { code: 'return.create', description: 'Tạo phiếu hàng hoàn trả (RMA)' },
+  { code: 'return.receive', description: 'Tiếp nhận kiện hoàn vào khu Biệt trữ (Quarantine)' },
+  { code: 'return.inspect', description: 'Kiểm định chất lượng hàng hoàn trả' },
+  { code: 'return.disposition', description: 'Định đoạt hướng xử lý hàng hoàn trả' },
+  { code: 'return.post', description: 'Ghi sổ Sổ cái định đoạt hàng hoàn trả' },
 ];

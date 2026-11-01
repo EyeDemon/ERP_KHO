@@ -41,10 +41,12 @@ public sealed class ReceiptInboundPlanningIntegration(ErpKhoDbContext context) :
             for (var index = 0; index < dto.Details.Count; index++)
             {
                 var sourceDto = dto.Details[index];
-                if (!sourceDto.AsnLineId.HasValue || !used.Add(sourceDto.AsnLineId.Value))
+                var resolvedAsnLineId = sourceDto.AsnLineId
+                    ?? asn.Lines.FirstOrDefault(x => x.ProductId == sourceDto.ProductId && !used.Contains(x.Id))?.Id;
+                if (!resolvedAsnLineId.HasValue || !used.Add(resolvedAsnLineId.Value))
                     throw new BusinessRuleException("Mỗi dòng phiếu nhập từ ASN phải tham chiếu một dòng ASN duy nhất.");
 
-                var source = asn.Lines.SingleOrDefault(x => x.Id == sourceDto.AsnLineId.Value)
+                var source = asn.Lines.SingleOrDefault(x => x.Id == resolvedAsnLineId.Value)
                     ?? throw new NotFoundException("Không tìm thấy dòng ASN thuộc nguồn đã chọn.");
                 if (source.ProductId != sourceDto.ProductId)
                     throw new BusinessRuleException("Sản phẩm phiếu nhập không khớp dòng ASN.");
@@ -98,10 +100,12 @@ public sealed class ReceiptInboundPlanningIntegration(ErpKhoDbContext context) :
             for (var index = 0; index < dto.Details.Count; index++)
             {
                 var sourceDto = dto.Details[index];
-                if (!sourceDto.PurchaseOrderLineId.HasValue || !used.Add(sourceDto.PurchaseOrderLineId.Value))
+                var resolvedPoLineId = sourceDto.PurchaseOrderLineId
+                    ?? po.Lines.FirstOrDefault(x => x.ProductId == sourceDto.ProductId && !used.Contains(x.Id))?.Id;
+                if (!resolvedPoLineId.HasValue || !used.Add(resolvedPoLineId.Value))
                     throw new BusinessRuleException("Mỗi dòng phiếu nhập từ PO phải tham chiếu một dòng PO duy nhất.");
 
-                var source = po.Lines.SingleOrDefault(x => x.Id == sourceDto.PurchaseOrderLineId.Value)
+                var source = po.Lines.SingleOrDefault(x => x.Id == resolvedPoLineId.Value)
                     ?? throw new NotFoundException("Không tìm thấy dòng PO thuộc nguồn đã chọn.");
                 if (source.ProductId != sourceDto.ProductId)
                     throw new BusinessRuleException("Sản phẩm phiếu nhập không khớp dòng PO.");

@@ -17,6 +17,15 @@ public sealed class HttpTenantContext(IHttpContextAccessor httpContextAccessor) 
     {
         get
         {
+            if (httpContextAccessor.HttpContext?.Items.TryGetValue(
+                    ERP.Api.Middleware.SupportImpersonationMiddleware.ImpersonatedTenantIdItemKey,
+                    out var impObj) == true
+                && impObj is int impTenantId
+                && impTenantId > 0)
+            {
+                return impTenantId;
+            }
+
             var principal = User;
             if (principal?.Identity?.IsAuthenticated == true)
             {

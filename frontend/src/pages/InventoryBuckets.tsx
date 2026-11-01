@@ -87,7 +87,7 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
     setError('');
     const parsedWarehouseId=filters.warehouseId?Number(filters.warehouseId):null;
     try{
-      const response=await apiClient.post<BucketInvariantsResult>('/api/inventory/verify-bucket-invariants',{warehouseId:parsedWarehouseId});
+      const response=await apiClient.post<BucketInvariantsResult>('/api/v1/inventory/verify-bucket-invariants',{warehouseId:parsedWarehouseId});
       if(response?.data?.verificationId){
         setInvariantVerification(response.data);
       }else{
@@ -117,8 +117,8 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
       if(filters.lotNumber.trim())params.set('lotNumber',filters.lotNumber.trim());
       if(filters.serialNumber.trim())params.set('serialNumber',filters.serialNumber.trim());
       const [statusResponse,bucketResponse]=await Promise.all([
-        apiClient.get('/api/inventory/statuses'),
-        apiClient.get('/api/inventory/buckets?'+params.toString()),
+        apiClient.get('/api/v1/inventory/statuses'),
+        apiClient.get('/api/v1/inventory/buckets?'+params.toString()),
       ]);
       setStatuses(statusResponse.data);
       setBuckets(bucketResponse.data);
@@ -152,7 +152,7 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
     const key=`inventory-status-change-${selected.inventoryStockId}`;
     lock.current=true;setBusy(true);setError('');
     try{
-      await apiClient.post('/api/inventory/status-changes',{
+      await apiClient.post('/api/v1/inventory/status-changes',{
         inventoryStockId:selected.inventoryStockId,
         quantity,
         toStatus:change.toStatus,
@@ -174,7 +174,7 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
     const key=`inventory-disposition-${dispositionBucket.inventoryStockId}-${disposition.action}`;
     lock.current=true;setBusy(true);setError('');
     try{
-      await apiClient.post('/api/inventory/disposition',{
+      await apiClient.post('/api/v1/inventory/disposition',{
         inventoryStockId:dispositionBucket.inventoryStockId,
         quantity,
         action:disposition.action,
@@ -211,10 +211,9 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
               {warehouses.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
             </select>
           </UiToolbarField>
-          <UiToolbarField label="ID sản phẩm">
+          <UiToolbarField label="Sản phẩm">
             <div style={{ display: 'flex', gap: 6 }}>
-              <input aria-label="ID sản phẩm nhóm tồn" type="number" min="1" placeholder="Nhập ID sản phẩm..." value={filters.productId} onChange={e=>setFilters(x=>({...x,productId:e.target.value}))}/>
-              <select aria-label="Chọn nhanh sản phẩm nhóm tồn" value={filters.productId} onChange={e=>setFilters(x=>({...x,productId:e.target.value}))}>
+              <select aria-label="ID sản phẩm nhóm tồn" value={filters.productId} onChange={e=>setFilters(x=>({...x,productId:e.target.value}))}>
                 <option value="">Tất cả sản phẩm</option>
                 {Array.from(new Map(buckets.map(b=>[b.productId,{id:b.productId,code:b.productCode,name:b.productName}])).values()).map(p=>(
                   <option key={p.id} value={String(p.id)}>{p.code} — {p.name}</option>

@@ -14,8 +14,8 @@ namespace ERP.Api.Controllers;
 [PermissionAuthorize(AppPermissions.HandlingUnitRead)]
 public sealed class HandlingUnitsController(
     IPackingService service,
-    IWmsGovernanceOperationsService govOps = null!,
-    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
+    IWmsGovernanceOperationsService govOps,
+    IWarehouseAuthorizationService warehouseAccess) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<HandlingUnitDto>>> List(
@@ -29,7 +29,7 @@ public sealed class HandlingUnitsController(
         [FromQuery] int? warehouseId = null,
         CancellationToken cancellationToken = default)
     {
-        if (warehouseAccess is not null && warehouseId.HasValue)
+        if (warehouseId.HasValue)
             await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var units = await service.ListHandlingUnitsAsync(warehouseId, cancellationToken);
@@ -52,40 +52,22 @@ public sealed class HandlingUnitsController(
     public sealed record VerifyInTransitSealRequest(string? TransferCode = null, int? WarehouseId = null);
 
     [HttpPost("verify-intransit-seal")]
-    [PermissionAuthorize(AppPermissions.HandlingUnitRead)]
+    [PermissionAuthorize(AppPermissions.HandlingUnitModify)]
     public async Task<IActionResult> VerifyInTransitSeal(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyInTransitSealRequest? request = null,
         CancellationToken cancellationToken = default)
     {
         var warehouseId = request?.WarehouseId;
         IReadOnlyCollection<int>? accessibleIds = null;
-        if (warehouseAccess is not null)
-        {
-            if (warehouseId.HasValue)
-                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
-            else
-                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
-        }
+        if (warehouseId.HasValue)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
+        else
+            accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(cancellationToken);
 
-        if (govOps is not null)
-        {
-            return this.ToActionResult(await govOps.VerifyInTransitSealAsync(
-                request?.TransferCode,
-                warehouseId,
-                accessibleIds,
-                cancellationToken));
-        }
-
-        var code = string.IsNullOrWhiteSpace(request?.TransferCode) ? "TRF-IN-TRANSIT" : request.TransferCode.Trim();
-        return Ok(new
-        {
-            sealVerificationId = $"HU-SEAL-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            transferCode = code,
-            activeInTransitTransfers = 0,
-            sealedHuCount = 0,
-            inTransitBalanceMatched = true,
-            sealStatus = "SEAL_INTACT_VERIFIED",
-            verifiedAtUtc = DateTime.UtcNow
-        });
+        return this.ToActionResult(await govOps.VerifyInTransitSealAsync(
+            request?.TransferCode,
+            warehouseId,
+            accessibleIds,
+            cancellationToken));
     }
 }

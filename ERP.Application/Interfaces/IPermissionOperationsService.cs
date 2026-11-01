@@ -14,7 +14,9 @@ public record ProvisionTenantInput(
     string? OwnerEmail = null,
     string? IndustryTemplate = null,
     string? PlanCode = null,
-    bool AllocateNewTenant = false);
+    bool AllocateNewTenant = false,
+    string? OwnerUsername = null,
+    string? OwnerPassword = null);
 
 public record SeedDemoDataInput(
     string? IndustryTemplate = null,

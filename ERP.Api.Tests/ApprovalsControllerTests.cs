@@ -18,7 +18,12 @@ public sealed class ApprovalsControllerTests
         var service = new Mock<IApprovalWorkflowService>();
         service.Setup(x => x.RejectAsync("ImportReceipt", 7, "Sai số lượng", It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ApprovalActionResult { DocumentType = "ImportReceipt", DocumentId = 7, DocumentCode = "IMP-7", CorrelationId = "corr" });
-        var result = await new ApprovalsController(service.Object).Reject("ImportReceipt", 7, new ApprovalRejectRequest { Reason = "Sai số lượng" }, default);
+        var result = await new ApprovalsController(
+            service.Object,
+            Mock.Of<IWmsGovernanceOperationsService>(),
+            Mock.Of<IWarehouseAuthorizationService>(),
+            Mock.Of<ICurrentUser>())
+            .Reject("ImportReceipt", 7, new ApprovalRejectRequest { Reason = "Sai số lượng" }, default);
         result.Should().BeOfType<OkObjectResult>();
         service.VerifyAll();
     }

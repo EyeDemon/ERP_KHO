@@ -41,16 +41,16 @@ describe('StockTransfers shared production UI', () => {
     localStorage.clear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     get.mockImplementation(async (url) => {
-      if (url === '/api/stock-transfers') {
+      if (url === '/api/v1/stock-transfers') {
         return { data: { items: [transfer], totalPages: 1 } } as never;
       }
-      if (url === '/api/warehouses') {
+      if (url === '/api/v1/warehouses') {
         return { data: [{ id: 1, name: 'Kho nguồn' }, { id: 2, name: 'Kho đích' }] } as never;
       }
-      if (url === '/api/products') {
+      if (url === '/api/v1/products') {
         return { data: [{ id: 10, code: 'SKU-10', name: 'Sản phẩm 10' }] } as never;
       }
-      if (url === '/api/stock-transfers/7') {
+      if (url === '/api/v1/stock-transfers/7') {
         return { data: transfer } as never;
       }
       return { data: [] } as never;
@@ -70,6 +70,9 @@ describe('StockTransfers shared production UI', () => {
 
     expect(await view.findByText('TRF-2026-0007')).toBeTruthy();
     expect(view.getByRole('table', { name: 'Danh sách phiếu điều chuyển' })).toBeTruthy();
+    expect(view.getByRole('note').textContent).toContain('Cam kết SLA điều chuyển nội bộ');
+    expect(view.getByText(/03\/10\/2026 \d{2}:\d{2}/)).toBeTruthy();
+    expect(view.getByText('Trang 1 / 1 • Tổng 1 phiếu điều chuyển')).toBeTruthy();
     expect(view.queryByRole('button', { name: /Tạo phiếu/ })).toBeNull();
 
     fireEvent.click(view.getByRole('button', { name: 'Xem chi tiết TRF-2026-0007' }));
@@ -89,7 +92,12 @@ describe('StockTransfers shared production UI', () => {
 
     const dialog = view.getByRole('dialog', { name: 'Tạo phiếu điều chuyển' });
     expect(dialog).toBeTruthy();
-    expect(within(dialog).getByLabelText('Kho nguồn')).toBeTruthy();
+    const sourceSelect = within(dialog).getByLabelText('Kho nguồn');
+    expect(sourceSelect).toBeTruthy();
+    expect((sourceSelect.closest('label') as HTMLElement).style.justifyContent).toBe('flex-start');
+    expect((sourceSelect.closest('.warehouse-pair') as HTMLElement).style.alignItems).toBe('start');
+    const noteTextarea = within(dialog).getByLabelText('Ghi chú điều chuyển');
+    expect((noteTextarea.closest('label') as HTMLElement).style.justifyContent).toBe('flex-start');
     expect(within(dialog).getByLabelText('Kho đích')).toBeTruthy();
     expect(within(dialog).getByLabelText('Sản phẩm dòng 1')).toBeTruthy();
     expect(within(dialog).getByLabelText('Số lượng dòng 1')).toBeTruthy();
@@ -109,7 +117,7 @@ describe('StockTransfers shared production UI', () => {
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     expect(post).toHaveBeenCalledWith(
-      '/api/stock-transfers/7/approve',
+      '/api/v1/stock-transfers/7/approve',
       undefined,
       { headers: expect.objectContaining({ 'Idempotency-Key': expect.any(String) }) }
     );

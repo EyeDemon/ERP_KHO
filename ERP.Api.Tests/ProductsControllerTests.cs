@@ -19,7 +19,11 @@ namespace ERP.Api.Tests
         public ProductsControllerTests()
         {
             _mockProductService = new Mock<IProductService>();
-            _controller = new ProductsController(_mockProductService.Object)
+            _controller = new ProductsController(
+                _mockProductService.Object,
+                Mock.Of<IProductCatalogService>(),
+                Mock.Of<IProductOperationsService>(),
+                Mock.Of<ICurrentUser>())
             {
                 ControllerContext = new ControllerContext
                 {

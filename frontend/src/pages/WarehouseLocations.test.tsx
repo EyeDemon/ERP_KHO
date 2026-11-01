@@ -30,9 +30,9 @@ describe('WarehouseLocations production UI', { timeout: 60000 }, () => {
     localStorage.setItem('role', 'Admin');
     localStorage.setItem('permissions', '["location.read","location.manage"]');
     get.mockImplementation(async (url) => {
-      if (url === '/api/putaway-tasks/location-warehouses') return { data: warehouses } as never;
-      if (url === '/api/putaway-tasks/locations') return { data: locations } as never;
-      if (url === '/api/putaway-tasks/location-capacity') return { data: capacities } as never;
+      if (url === '/api/v1/putaway-tasks/location-warehouses') return { data: warehouses } as never;
+      if (url === '/api/v1/putaway-tasks/locations') return { data: locations } as never;
+      if (url === '/api/v1/putaway-tasks/location-capacity') return { data: capacities } as never;
       return { data: [] } as never;
     });
     post.mockResolvedValue({ data: {} } as never);
@@ -55,8 +55,8 @@ describe('WarehouseLocations production UI', { timeout: 60000 }, () => {
     expect(view.getAllByText('RECEIVING').length).toBeGreaterThan(0);
     expect(view.getByRole('table', { name: 'Vị trí hệ thống thật' })).toBeTruthy();
 
-    expect(get).toHaveBeenCalledWith('/api/putaway-tasks/locations', { params: { warehouseId: 1 } });
-    expect(get).toHaveBeenCalledWith('/api/putaway-tasks/location-capacity', { params: { warehouseId: 1 } });
+    expect(get).toHaveBeenCalledWith('/api/v1/putaway-tasks/locations', { params: { warehouseId: 1 } });
+    expect(get).toHaveBeenCalledWith('/api/v1/putaway-tasks/location-capacity', { params: { warehouseId: 1 } });
   });
 
   it('normalizes and submits the five-level StructurePath on create via UiDrawer', async () => {
@@ -75,7 +75,7 @@ describe('WarehouseLocations production UI', { timeout: 60000 }, () => {
     fireEvent.change(view.getByLabelText('Giới hạn trọng lượng kg'), { target: { value: '1200' } });
     fireEvent.click(view.getByText('Lưu vị trí'));
 
-    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/putaway-tasks/locations', expect.objectContaining({
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/v1/putaway-tasks/locations', expect.objectContaining({
       warehouseId: 1,
       code: 'bin-10',
       structurePath: 'ZONE-B/A02/R03/L04/B10',
@@ -101,7 +101,7 @@ describe('WarehouseLocations production UI', { timeout: 60000 }, () => {
     fireEvent.change(view.getByLabelText('Bin'), { target: { value: '01' } });
     fireEvent.click(view.getByText('Lưu vị trí'));
 
-    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/putaway-tasks/locations', expect.objectContaining({
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/api/v1/putaway-tasks/locations', expect.objectContaining({
       warehouseId: 1,
       code: 'STG-OUT-01',
       locationType: 'Staging',
@@ -122,7 +122,7 @@ describe('WarehouseLocations production UI', { timeout: 60000 }, () => {
     expect(zone.disabled).toBe(true);
     fireEvent.change(view.getByLabelText('Tên vị trí'), { target: { value: 'Ô chính mới' } });
     fireEvent.click(view.getByText('Lưu vị trí'));
-    await waitFor(() => expect(put).toHaveBeenCalledWith('/api/putaway-tasks/locations/101', expect.objectContaining({
+    await waitFor(() => expect(put).toHaveBeenCalledWith('/api/v1/putaway-tasks/locations/101', expect.objectContaining({
       name: 'Ô chính mới',
       structurePath: 'ZONE-A/A01/R02/L03/B04',
       updateConstraints: false,
@@ -143,7 +143,7 @@ describe('WarehouseLocations production UI', { timeout: 60000 }, () => {
     fireEvent.change(view.getByLabelText('Giới hạn trọng lượng kg'), { target: { value: '1600' } });
     fireEvent.click(view.getByText('Lưu vị trí'));
 
-    await waitFor(() => expect(put).toHaveBeenCalledWith('/api/putaway-tasks/locations/101', expect.objectContaining({
+    await waitFor(() => expect(put).toHaveBeenCalledWith('/api/v1/putaway-tasks/locations/101', expect.objectContaining({
       updateConstraints: true,
       maxWeightKg: 1600,
       rowVersion: 'AQ==',
@@ -160,7 +160,7 @@ describe('WarehouseLocations production UI', { timeout: 60000 }, () => {
     fireEvent.change(view.getByLabelText('Giới hạn trọng lượng kg'), { target: { value: '500' } });
     fireEvent.click(view.getByText('Lưu vị trí'));
 
-    await waitFor(() => expect(put).toHaveBeenCalledWith('/api/putaway-tasks/locations/102', expect.objectContaining({
+    await waitFor(() => expect(put).toHaveBeenCalledWith('/api/v1/putaway-tasks/locations/102', expect.objectContaining({
       structurePath: null,
       updateConstraints: true,
       storageClass: 'AMBIENT',

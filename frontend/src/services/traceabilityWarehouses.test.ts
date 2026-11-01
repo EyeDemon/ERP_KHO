@@ -13,7 +13,7 @@ describe('Danh sách kho truy vết được cấp quyền',()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:choices} as never);
     expect(await getTraceabilityWarehouses()).toEqual(choices);
     expect(apiClient.get).toHaveBeenCalledTimes(1);
-    expect(apiClient.get).toHaveBeenCalledWith('/api/inventory/traceability-warehouses');
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/inventory/traceability-warehouses');
   });
 
   it.each([

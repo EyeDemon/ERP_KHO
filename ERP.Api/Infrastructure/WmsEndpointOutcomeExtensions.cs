@@ -46,4 +46,66 @@ public static class WmsEndpointOutcomeExtensions
     {
         return controller.ToActionResult(outcome);
     }
+
+    public static bool HasActionPermission(this ControllerBase controller, ERP.Application.Interfaces.ICurrentUser? currentUser, params string[] permissions)
+    {
+        if (permissions is not { Length: > 0 })
+        {
+            return true;
+        }
+
+        if (currentUser is ERP.Api.Authorization.HttpCurrentUser)
+        {
+            return permissions.Any(currentUser.HasPermission);
+        }
+
+        if (currentUser is { IsAuthenticated: true })
+        {
+            if (permissions.Any(currentUser.HasPermission) || currentUser.IsGlobalAdmin)
+            {
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(currentUser.Role))
+            {
+                var rolePerms = ERP.Domain.Security.AppPermissions.GetDefaultPermissionsForRole(currentUser.Role);
+                return permissions.Any(rolePerms.Contains);
+            }
+
+            if (controller.User?.Identity?.IsAuthenticated != true)
+            {
+                return false;
+            }
+        }
+
+        var user = controller.User;
+        if (user?.Identity?.IsAuthenticated == true)
+        {
+            var explicitPermissions = user.Claims
+                .Where(c => string.Equals(c.Type, "permission", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(c.Type, "permissions", StringComparison.OrdinalIgnoreCase))
+                .Select(c => c.Value)
+                .ToList();
+            if (explicitPermissions.Count > 0)
+            {
+                return permissions.Any(req => explicitPermissions.Any(p => string.Equals(p, req, StringComparison.OrdinalIgnoreCase)));
+            }
+
+            var roleClaims = user.Claims
+                .Where(c => c.Type == System.Security.Claims.ClaimTypes.Role || string.Equals(c.Type, "role", StringComparison.OrdinalIgnoreCase))
+                .Select(c => c.Value)
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .ToList();
+            if (roleClaims.Count > 0)
+            {
+                return roleClaims.Any(role =>
+                {
+                    var rolePerms = ERP.Domain.Security.AppPermissions.GetDefaultPermissionsForRole(role);
+                    return permissions.Any(rolePerms.Contains);
+                });
+            }
+        }
+
+        return true;
+    }
 }

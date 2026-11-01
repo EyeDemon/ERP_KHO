@@ -16,60 +16,37 @@ public sealed record EscalateOverdueApprovalsRequest(int? WarehouseId);
 [ApprovalAuthorize]
 public sealed class ApprovalsController(
     IApprovalWorkflowService service,
-    IWmsGovernanceOperationsService govOps = null!,
-    IWarehouseAuthorizationService warehouseAccess = null!,
-    ICurrentUser? currentUser = null) : ControllerBase
+    IWmsGovernanceOperationsService govOps,
+    IWarehouseAuthorizationService warehouseAccess,
+    ICurrentUser currentUser) : ControllerBase
 {
     [HttpPost("escalate-overdue")]
     [IdempotentCommand("Approval.EscalateOverdue")]
+    [PermissionAuthorize(AppPermissions.ReceiptComplete, AppPermissions.ReceiptPost, AppPermissions.ExportReceiptApprove, AppPermissions.DiscrepancyApprove, AppPermissions.QualityApprove, AppPermissions.ApprovalReject)]
     public async Task<IActionResult> EscalateOverdue(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EscalateOverdueApprovalsRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        if (User?.IsInRole(AppRoles.Viewer) == true)
+        if (!this.HasActionPermission(currentUser, AppPermissions.ReceiptComplete, AppPermissions.ReceiptPost, AppPermissions.ExportReceiptApprove, AppPermissions.DiscrepancyApprove, AppPermissions.QualityApprove, AppPermissions.ApprovalReject))
             return Forbid();
 
         var warehouseId = request?.WarehouseId;
-        if (warehouseId.HasValue && warehouseAccess != null)
+        if (warehouseId.HasValue)
             await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, cancellationToken);
 
         var (allItems, _) = await FetchAllQueueItemsAsync(warehouseId, cancellationToken);
         var overdueItems = allItems.Where(x => x.SlaStatus == "Overdue").ToList();
 
-        if (govOps != null)
-        {
-            var actorUserId = int.TryParse(
-                User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
-                out var uid) ? uid : currentUser is { IsAuthenticated: true, UserId: > 0 } ? currentUser.UserId : (int?)null;
+        var actorUserId = int.TryParse(
+            User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User?.FindFirst("Id")?.Value,
+            out var uid) ? uid : currentUser is { IsAuthenticated: true, UserId: > 0 } ? currentUser.UserId : (int?)null;
 
-            var outcome = await govOps.EscalateOverdueApprovalsAsync(
-                warehouseId,
-                overdueItems,
-                actorUserId,
-                cancellationToken);
-            return outcome.ToActionResult(this);
-        }
-
-        var overdueCount = overdueItems.Count;
-        var now = DateTime.UtcNow;
-        var escalationBatchId = $"ESC-SLA-{now:yyyyMMdd-HHmm}";
-        var statusText = overdueCount > 0
-            ? "Đã kích hoạt chuyển cấp phê duyệt các hồ sơ quá hạn SLA"
-            : "Không có hồ sơ phê duyệt quá hạn SLA cần chuyển cấp";
-
-        return Ok(new
-        {
-            escalationBatchId,
-            warehouseId = request?.WarehouseId,
-            overdueCount,
-            newlyEscalatedCount = overdueCount,
-            recentAuditCount = 0,
-            escalatedStatus = "Đã chuyển cấp quản lý phê duyệt khẩn",
-            status = statusText,
-            statusLabel = statusText,
-            targetSlaMinutes = 30,
-            escalatedAtUtc = now
-        });
+        var outcome = await govOps.EscalateOverdueApprovalsAsync(
+            warehouseId,
+            overdueItems,
+            actorUserId,
+            cancellationToken);
+        return outcome.ToActionResult(this);
     }
 
     [HttpGet("queue")]

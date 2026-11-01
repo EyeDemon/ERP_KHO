@@ -10,11 +10,12 @@ namespace ERP.Api.Controllers;
 [ApiController, Route("api/putaway-tasks"), Route("api/v1/putaway-tasks"), Authorize]
 public sealed class PutawayTasksController(
     IPutawayService service,
-    IWmsGovernanceOperationsService govOps = null!,
-    IWarehouseAuthorizationService warehouseAccess = null!) : ControllerBase
+    IWmsGovernanceOperationsService govOps,
+    IWarehouseAuthorizationService warehouseAccess) : ControllerBase
 {
     [HttpGet("location-warehouses"), PermissionAuthorize(AppPermissions.LocationRead)] public async Task<IActionResult> LocationWarehouses(CancellationToken ct) => Ok(await service.ListLocationWarehousesAsync(ct));
     [HttpGet("locations"), PermissionAuthorize(AppPermissions.LocationRead)] public async Task<IActionResult> Locations([FromQuery] int warehouseId, CancellationToken ct) => Ok(await service.ListLocationsAsync(warehouseId, ct));
+    [HttpGet("~/api/v1/warehouses/{warehouseId:int}/locations"), HttpGet("~/api/warehouses/{warehouseId:int}/locations"), PermissionAuthorize(AppPermissions.LocationRead)] public async Task<IActionResult> LocationsByWarehouse(int warehouseId, CancellationToken ct) => Ok(await service.ListLocationsAsync(warehouseId, ct));
     [HttpGet("location-capacity"), PermissionAuthorize(AppPermissions.LocationRead)] public async Task<IActionResult> LocationCapacity([FromQuery] int warehouseId, CancellationToken ct) => Ok(await service.ListLocationCapacitiesAsync(warehouseId, ct));
     [HttpGet("location-map"), PermissionAuthorize(AppPermissions.LocationRead)] public async Task<IActionResult> LocationMap([FromQuery] int warehouseId, CancellationToken ct) => Ok(await service.GetWarehouseMapAsync(warehouseId, ct));
     [HttpPost("locations"), IdempotentCommand("WarehouseLocation.Create"), PermissionAuthorize(AppPermissions.LocationManage)] public async Task<IActionResult> CreateLocation(CreateWarehouseLocationDto dto, CancellationToken ct) => Ok(await service.CreateLocationAsync(dto, ct));
@@ -38,90 +39,36 @@ public sealed class PutawayTasksController(
     public async Task<IActionResult> RuleEnginePolicy([FromQuery] int? warehouseId = null, CancellationToken ct = default)
     {
         IReadOnlyCollection<int>? accessibleIds = null;
-        if (warehouseAccess != null)
-        {
-            if (warehouseId.HasValue)
-                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, ct);
-            else
-                accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(ct);
-        }
+        if (warehouseId.HasValue)
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, ct);
+        else
+            accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(ct);
 
-        if (govOps != null)
-        {
-            var outcome = await govOps.GetPutawayRuleEnginePolicyAsync(warehouseId, accessibleIds, ct);
-            return outcome.ToActionResult(this);
-        }
-
-        return Ok(new
-        {
-            warehouseId,
-            openPutawayTasksCount = 0,
-            activeStorageLocationsCount = 0,
-            rankingFactors = new[]
-            {
-                "1. Ưu tiên ô kệ đang chứa cùng mặt hàng (SKU Affinity)",
-                "2. Tương thích phân vùng bảo quản & nhóm nhiệt độ (Storage Class)",
-                "3. Tối ưu sức chứa tải trọng / thể tích / số pallet còn trống",
-                "4. Khoảng cách gần khu vực lấy hàng xuất kho (Pick-Face Proximity)",
-                "5. Gom lô cùng hạn sử dụng chuẩn FEFO (Lot Consolidation)"
-            },
-            hardConstraints = new[]
-            {
-                "Chỉ chọn vị trí ô kệ đang hoạt động (Active Bin Only)",
-                "Loại trừ ô kệ đang bị khóa kiểm kê hoặc sự cố (Unblocked Bin Only)",
-                "Kiểm soát giới hạn tải trọng (Kg), thể tích (m³) và sức chứa Pallet"
-            },
-            rankingFactorsLabel = "5 tiêu chí chấm điểm ưu tiên vị trí cất hàng (SKU, Phân vùng, Sức chứa, Khoảng cách, FEFO)",
-            hardConstraintsLabel = "3 ràng buộc an toàn bắt buộc (Ô hoạt động, Không khóa, Đủ tải trọng/thể tích)",
-            status = "Đã tải bộ quy tắc đề xuất vị trí cất hàng thực tế",
-            statusLabel = "Đã tải bộ quy tắc đề xuất vị trí cất hàng thực tế"
-        });
+        var outcome = await govOps.GetPutawayRuleEnginePolicyAsync(warehouseId, accessibleIds, ct);
+        return outcome.ToActionResult(this);
     }
     public sealed record EvaluatePutawaySlottingRequest(int? WarehouseId = null);
-    [HttpPost("evaluate-slotting"), PermissionAuthorize(AppPermissions.PutawayRead)]
+    [HttpPost("evaluate-slotting"), PermissionAuthorize(AppPermissions.PutawayExecute)]
     public async Task<IActionResult> EvaluateSlotting(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] EvaluatePutawaySlottingRequest? request = null,
         CancellationToken ct = default)
     {
         var warehouseId = request?.WarehouseId;
         var targetWarehouseId = warehouseId ?? 1;
-        if (warehouseAccess != null)
+        if (warehouseId.HasValue)
         {
-            if (warehouseId.HasValue)
-            {
-                await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, ct);
-            }
-            else
-            {
-                var accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(ct);
-                if (accessibleIds.Count == 0)
-                    return Forbid();
-                targetWarehouseId = accessibleIds[0];
-            }
+            await warehouseAccess.EnsureWarehouseAccessAsync(warehouseId.Value, ct);
+        }
+        else
+        {
+            var accessibleIds = await warehouseAccess.GetAccessibleWarehouseIdsAsync(ct);
+            if (accessibleIds.Count == 0)
+                return Forbid();
+            targetWarehouseId = accessibleIds[0];
         }
 
-        if (govOps != null)
-        {
-            var outcome = await govOps.EvaluatePutawaySlottingAsync(targetWarehouseId, ct);
-            return outcome.ToActionResult(this);
-        }
-
-        return Ok(new
-        {
-            evaluationId = $"SLOT-EVAL-{DateTime.UtcNow:yyyyMMdd-HHmm}",
-            warehouseId = targetWarehouseId,
-            openPutawayTasksCount = 0,
-            candidateLocationsCount = 0,
-            availableCapacityLocationsCount = 0,
-            occupiedLocationsCount = 0,
-            storageClassBreakdown = Array.Empty<object>(),
-            optimalBinMatchRatePct = 100m,
-            fefoHazardCompliance = "Đạt chuẩn tương thích FEFO & phân vùng bảo quản",
-            slottingRecommendation = "Sẵn sàng 0/0 vị trí khả dụng (0 vị trí đang có hàng) cho 0 tác vụ cất hàng.",
-            status = "Đã chấm điểm tối ưu xếp dỡ & phân bổ ô kệ thực tế",
-            statusLabel = "Đã chấm điểm tối ưu xếp dỡ & phân bổ ô kệ thực tế",
-            evaluatedAtUtc = DateTime.UtcNow
-        });
+        var outcome = await govOps.EvaluatePutawaySlottingAsync(targetWarehouseId, ct);
+        return outcome.ToActionResult(this);
     }
 
     [HttpGet("{id:int}/directed-suggestion")]
@@ -132,33 +79,6 @@ public sealed class PutawayTasksController(
         [FromQuery] int? warehouseId = null,
         CancellationToken ct = default)
     {
-        if (govOps == null)
-        {
-            if (id is > 0)
-            {
-                var dto = await service.GetAsync(id.Value, ct);
-                return Ok(new
-                {
-                    putawayTaskId = dto.Id,
-                    warehouseId = dto.WarehouseId,
-                    status = dto.Status,
-                    primarySuggestedBinCode = "A-01-01",
-                    lineSuggestions = Array.Empty<object>(),
-                    items = Array.Empty<object>(),
-                    statusLabel = "Đã gợi ý vị trí kệ cất hàng thông minh (Directed Putaway)"
-                });
-            }
-            return Ok(new
-            {
-                putawayTaskId = (int?)null,
-                warehouseId = warehouseId ?? 1,
-                primarySuggestedBinCode = "A-01-01",
-                lineSuggestions = Array.Empty<object>(),
-                items = Array.Empty<object>(),
-                statusLabel = "Đã gợi ý vị trí kệ cất hàng thông minh (Directed Putaway)"
-            });
-        }
-
         var outcome = await govOps.GetDirectedPutawaySuggestionAsync(id, warehouseId, warehouseAccess, ct);
         return outcome.ToActionResult(this);
     }
@@ -194,7 +114,7 @@ public sealed class PutawayTasksController(
     [HttpPost("~/api/v1/warehouses/locations/barcode-sheet")]
     [HttpPost("~/api/warehouses/locations/barcode-sheet")]
     [HttpPost("location-barcode-sheet")]
-    [PermissionAuthorize(AppPermissions.PutawayRead)]
+    [PermissionAuthorize(AppPermissions.PutawayExecute)]
     public Task<IActionResult> PrintLocationBarcodeSheet(
         [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] LocationBarcodeSheetRequest? request = null,
         CancellationToken ct = default)

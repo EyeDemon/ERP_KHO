@@ -24,6 +24,17 @@
   white-space: nowrap;
 }
 
+.dock-yard-page .ui-form-grid {
+  align-items: start;
+}
+
+.dock-yard-page .ui-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: flex-start;
+}
+
 @media (max-width: 768px) {
   .dock-yard-page .ui-table-scroll {
     overflow-x: hidden;

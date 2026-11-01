@@ -19,7 +19,7 @@ public sealed class StockAllocationAuthorizationMetadataTests
             ["GetReservations"] = AppPermissions.AllocationRead,
             ["GetCandidates"] = AppPermissions.AllocationRead,
             ["GetSummary"] = AppPermissions.AllocationRead,
-            ["VerifyFefoCompliance"] = AppPermissions.AllocationRead,
+            ["VerifyFefoCompliance"] = AppPermissions.AllocationCreate,
             ["Create"] = AppPermissions.AllocationCreate,
             ["AutoAllocate"] = AppPermissions.AllocationCreate,
             ["Release"] = AppPermissions.AllocationRelease,
