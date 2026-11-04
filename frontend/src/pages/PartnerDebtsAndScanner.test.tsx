@@ -300,7 +300,7 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
     dispatchExtensionScan('STAGE-IN-01');
     expect(await view.findByTestId('scanner-last-scan-feedback')).toBeTruthy();
     expect(view.getByTestId('scanner-last-scan-feedback').textContent).toContain(
-      '✅ Đã nhận mã [Bước 1]: STAGE-IN-01 → Chuyển sang Bước 2',
+      'Đã nhận mã [Bước 1]: STAGE-IN-01 → Chuyển sang Bước 2',
     );
     expect(view.getByTestId('scanner-step-chip-1').textContent).toContain('STAGE-IN-01');
 
@@ -315,7 +315,7 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
     dispatchExtensionScan('BIN-A01');
     await waitFor(() => {
       expect(view.getByTestId('scanner-last-scan-feedback').textContent).toContain(
-        '✅ Đã nhận mã [Bước 3]: BIN-A01 → Hoàn tất chu trình 3 bước',
+        'Đã nhận mã [Bước 3]: BIN-A01 → Hoàn tất chu trình 3 bước',
       );
     });
     expect(view.getByTestId('scanner-step-chip-3').textContent).toContain('BIN-A01');
@@ -379,7 +379,7 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
 
     expect(await view.findByTestId('product-barcode-decoded-banner')).toBeTruthy();
     expect(view.getByTestId('product-barcode-decoded-banner').textContent).toBe(
-      '📦 Đã nhận diện Mã vạch Sản phẩm (EAN-13 / GTIN): 8934804025766 • Quốc gia: 893 (Việt Nam) • Đã tự động gán Kệ nguồn STAGE-IN-01 & chuyển sang Bước 3 (Quét Kệ đích)',
+      'Đã nhận diện Mã vạch Sản phẩm (EAN-13 / GTIN): 8934804025766 • Quốc gia: 893 (Việt Nam) • Đã tự động gán Kệ nguồn STAGE-IN-01 & chuyển sang Bước 3 (Quét Kệ đích)',
     );
     expect(view.getByTestId('scanner-step-chip-1').textContent).toContain('STAGE-IN-01');
     expect(view.getByTestId('scanner-step-chip-2').textContent).toContain('8934804025766');

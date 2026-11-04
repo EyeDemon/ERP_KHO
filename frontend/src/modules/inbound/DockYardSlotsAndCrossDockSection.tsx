@@ -160,7 +160,7 @@ export function DockYardSlotsAndCrossDockSection({
             <button
               type="button"
               disabled={crossDockBusy}
-              style={{ background: '#0284c7', color: '#ffffff', fontWeight: 600, border: '1px solid #0284c7' }}
+              style={{ background: '#1d4ed8', color: '#ffffff', fontWeight: 600, border: '1px solid #1d4ed8' }}
               onClick={() => {
                 if (crossDockBusy) return;
                 setCrossDockBusy(true);

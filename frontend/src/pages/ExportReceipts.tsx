@@ -312,16 +312,6 @@ const ExportReceipts = () => {
           setError={setError}
         />
 
-        {(activeSectionTab === 'ALL' || activeSectionTab === 'BATCH_AWB') && (
-          <ExportReceiptsBatchAwbCard
-            warehouseId={warehouseId}
-            receipts={receipts}
-            handoverTrackingInput={handoverTrackingInput}
-            setHandoverTrackingInput={setHandoverTrackingInput}
-            setError={setError}
-          />
-        )}
-
         {(activeSectionTab === 'ALL' || activeSectionTab === 'CREATE') && canCreate && (
           <ExportReceiptsCreateCard
             showCreateForm={showCreateForm}
@@ -336,6 +326,16 @@ const ExportReceipts = () => {
             setError={setError}
             setSuccessMsg={setSuccessMsg}
             fetchReceipts={fetchReceipts}
+          />
+        )}
+
+        {(activeSectionTab === 'ALL' || activeSectionTab === 'BATCH_AWB') && (
+          <ExportReceiptsBatchAwbCard
+            warehouseId={warehouseId}
+            receipts={receipts}
+            handoverTrackingInput={handoverTrackingInput}
+            setHandoverTrackingInput={setHandoverTrackingInput}
+            setError={setError}
           />
         )}
 

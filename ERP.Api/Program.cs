@@ -14,6 +14,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using ERP.Application.Common;
 using ERP.Api.Health;
 
+using Microsoft.AspNetCore.DataProtection;
 using Serilog;
 using Serilog.Events;
 
@@ -34,6 +35,13 @@ builder.Host.UseSerilog();
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient();
+var dpKeysDir = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtection-Keys");
+Directory.CreateDirectory(dpKeysDir);
+builder.Services.AddDataProtection()
+    .SetApplicationName("ERP_KHO")
+    .PersistKeysToFileSystem(new DirectoryInfo(dpKeysDir));
+
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 if (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing") && allowedOrigins.Length == 0)
     throw new InvalidOperationException("Cors:AllowedOrigins must be configured outside Development/Testing.");
@@ -45,7 +53,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("ConfiguredOrigins", policy =>
     {
         policy.WithOrigins(allowedOrigins)
-              .WithHeaders("Authorization", "Content-Type", "Accept", "Idempotency-Key")
+              .WithHeaders("Authorization", "Content-Type", "Accept", "Idempotency-Key", "X-Support-Impersonation-Token", "X-Support-Session-Code", "X-Portal-Scope", "X-Platform-Role-Preview", "X-Totp-Code", "X-Recovery-Code", "X-Correlation-Id")
               .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
               .AllowCredentials();
     });
@@ -226,15 +234,21 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IProductOperationsService,
 builder.Services.AddScoped<ERP.Application.Interfaces.IExportReceiptOperationsService, ERP.Infrastructure.Services.ExportReceiptOperationsService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.ISalesOrderOperationsService, ERP.Infrastructure.Services.SalesOrderOperationsService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IReportOperationsService, ERP.Infrastructure.Services.ReportOperationsService>();
+builder.Services.AddScoped<ERP.Infrastructure.Services.TotpLoginStepUpService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.ITotpLoginVerifier>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.TotpLoginStepUpService>());
 builder.Services.AddScoped<ERP.Infrastructure.Services.PutawayService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IPutawayService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PutawayService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IReceiptPutawayIntegration>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PutawayService>());
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddHostedService<ERP.Api.Hosting.BuyerPiiRetentionAnonymizerJob>();
-builder.Services.AddHostedService<ERP.Api.Hosting.IntegrationOutboxDispatcherJob>();
-builder.Services.AddHostedService<ERP.Api.Hosting.SoftReservationExpiryJob>();
-builder.Services.AddHostedService<ERP.Api.Hosting.DailyInventoryIntegrityJob>();
-builder.Services.AddHostedService<ERP.Api.Hosting.ThreePlDailySnapshotJob>();
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddHostedService<ERP.Api.Hosting.BuyerPiiRetentionAnonymizerJob>();
+    builder.Services.AddHostedService<ERP.Api.Hosting.IntegrationOutboxDispatcherJob>();
+    builder.Services.AddHostedService<ERP.Api.Hosting.SoftReservationExpiryJob>();
+    builder.Services.AddHostedService<ERP.Api.Hosting.DailyInventoryIntegrityJob>();
+    builder.Services.AddHostedService<ERP.Api.Hosting.ThreePlDailySnapshotJob>();
+    builder.Services.AddHostedService<ERP.Api.Hosting.DatabaseBackupHostedService>();
+}
 var approvalAgingOptions = builder.Configuration.GetSection("ApprovalAging").Get<ERP.Application.Options.ApprovalAgingOptions>() ?? new ERP.Application.Options.ApprovalAgingOptions();
 approvalAgingOptions.Validate();
 builder.Services.AddSingleton(approvalAgingOptions);
@@ -244,11 +258,21 @@ exportReceiptOptions.WriteEnabled = builder.Configuration.GetValue("ExportWorkfl
 _ = exportReceiptOptions.GetDefaultMode();
 builder.Services.AddSingleton(exportReceiptOptions);
 
-// Configure JWT Authentication (Fail-Fast: no fallback, reject placeholder/empty)
+// Configure JWT Authentication (Fail-Fast: no fallback, reject placeholder/empty outside Testing)
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["Secret"];
+if (builder.Environment.IsEnvironment("Testing")
+    && (string.IsNullOrWhiteSpace(secretKey)
+        || secretKey == "__SET_IN_USER_SECRETS_OR_ENV__"
+        || secretKey == "__EPHEMERAL_TESTING_JWT_SECRET__"))
+{
+    secretKey = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48));
+    builder.Configuration["JwtSettings:Secret"] = secretKey;
+}
 
-if (string.IsNullOrWhiteSpace(secretKey) || secretKey == "__SET_IN_USER_SECRETS_OR_ENV__")
+if (string.IsNullOrWhiteSpace(secretKey)
+    || secretKey == "__SET_IN_USER_SECRETS_OR_ENV__"
+    || secretKey == "__EPHEMERAL_TESTING_JWT_SECRET__")
 {
     throw new InvalidOperationException("JWT Secret is not configured. Application cannot start.");
 }
@@ -266,6 +290,7 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
+        ClockSkew = TimeSpan.Zero,
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
@@ -299,10 +324,28 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy(ERP.Api.Authorization.ApprovalPolicies.Checker,
-        policy => policy.RequireAuthenticatedUser().RequireRole(
-            ERP.Api.Authorization.AppRoles.Admin,
-            ERP.Api.Authorization.AppRoles.Manager));
+    options.AddPolicy(ERP.Api.Authorization.ApprovalPolicies.Checker, policy =>
+        policy.RequireAuthenticatedUser().RequireAssertion(ctx =>
+        {
+            if (ctx.Resource is HttpContext httpContext)
+            {
+                var currentUser = httpContext.RequestServices.GetService<ERP.Application.Interfaces.ICurrentUser>();
+                if (currentUser is not null)
+                {
+                    return currentUser.HasPermission(ERP.Api.Authorization.AppPermissions.ApprovalApprove)
+                        || currentUser.HasPermission(ERP.Api.Authorization.AppPermissions.ReceiptComplete)
+                        || currentUser.HasPermission(ERP.Api.Authorization.AppPermissions.ExportReceiptApprove)
+                        || currentUser.HasPermission(ERP.Api.Authorization.AppPermissions.StocktakeManage)
+                        || currentUser.HasPermission(ERP.Api.Authorization.AppPermissions.InventoryMovementCreate);
+                }
+            }
+
+            var role = ctx.User.FindFirstValue(ClaimTypes.Role);
+            return role is ERP.Api.Authorization.AppRoles.Admin
+                or ERP.Api.Authorization.AppRoles.Manager
+                or ERP.Api.Authorization.AppRoles.Supervisor
+                or ERP.Api.Authorization.AppRoles.SuperAdmin;
+        }));
 });
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -312,9 +355,32 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Global Exception Handling
-app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
 app.UseMiddleware<ERP.Api.Infrastructure.CorrelationIdMiddleware>();
+app.Use(async (ctx, next) =>
+{
+    ctx.Response.OnStarting(() =>
+    {
+        ctx.Response.Headers.TryAdd("X-Content-Type-Options", "nosniff");
+        ctx.Response.Headers.TryAdd("X-Frame-Options", "DENY");
+        ctx.Response.Headers.TryAdd("Referrer-Policy", "strict-origin-when-cross-origin");
+        ctx.Response.Headers.TryAdd("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+        return Task.CompletedTask;
+    });
+    await next();
+});
+app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+app.Use(async (ctx, next) =>
+{
+    if (ctx.Request.Path.Value?.Contains("webhook", StringComparison.OrdinalIgnoreCase) == true)
+    {
+        ctx.Request.EnableBuffering();
+    }
+    await next();
+});
 app.UseSerilogRequestLogging();
 
 app.UseRouting();
@@ -328,10 +394,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseForwardedHeaders(new ForwardedHeadersOptions
-{
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseMiddleware<ERP.Api.Middleware.SupportImpersonationMiddleware>();

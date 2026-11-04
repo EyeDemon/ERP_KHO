@@ -40,6 +40,7 @@ public sealed class PermissionAuthorizeAttribute : TypeFilterAttribute
 
 public sealed class PermissionAuthorizationFilter : IAsyncAuthorizationFilter, IOrderedFilter
 {
+    public const string CachedPermissionsKey = HttpCurrentUser.CachedPermissionsKey;
     private readonly ErpKhoDbContext db;
     private readonly string[] _permissions;
 
@@ -71,7 +72,8 @@ public sealed class PermissionAuthorizationFilter : IAsyncAuthorizationFilter, I
             {
                 if (!_permissions.Any(cachedPerms.Contains))
                 {
-                    context.Result = new ObjectResult(new { message = "Bạn không có quyền thực hiện thao tác này." }) { StatusCode = StatusCodes.Status403Forbidden };
+                    LogPermissionDenied(context, userId);
+                    context.Result = new ObjectResult(new { code = "PERMISSION_DENIED", errorCode = "PERMISSION_DENIED", message = "Bạn không có quyền thực hiện thao tác này." }) { StatusCode = StatusCodes.Status403Forbidden };
                 }
                 return;
             }
@@ -94,11 +96,32 @@ public sealed class PermissionAuthorizationFilter : IAsyncAuthorizationFilter, I
             context.HttpContext.Items[HttpCurrentUser.EffectiveRoleKey] = user.RoleName;
             context.HttpContext.Items[HttpCurrentUser.CachedPermissionsKey] = permSet;
             var allowed = _permissions.Any(permSet.Contains);
-            if(!allowed) context.Result=new ObjectResult(new { message="Bạn không có quyền thực hiện thao tác này." }){StatusCode=StatusCodes.Status403Forbidden};
+            if (!allowed)
+            {
+                LogPermissionDenied(context, userId);
+                context.Result = new ObjectResult(new { code = "PERMISSION_DENIED", errorCode = "PERMISSION_DENIED", message = "Bạn không có quyền thực hiện thao tác này." }) { StatusCode = StatusCodes.Status403Forbidden };
+            }
         }
         catch
         {
-            context.Result=new ObjectResult(new { message="Không thể xác minh quyền truy cập. Vui lòng thử lại." }){StatusCode=StatusCodes.Status503ServiceUnavailable};
+            context.Result = new ObjectResult(new { message = "Không thể xác minh quyền truy cập. Vui lòng thử lại." }) { StatusCode = StatusCodes.Status503ServiceUnavailable };
         }
+    }
+
+    private void LogPermissionDenied(AuthorizationFilterContext context, int userId)
+    {
+        var logger = context.HttpContext.RequestServices?.GetService<ILogger<PermissionAuthorizationFilter>>();
+        var correlationId = context.HttpContext.Response.Headers["X-Correlation-Id"].FirstOrDefault()
+            ?? context.HttpContext.Request.Headers["X-Correlation-Id"].FirstOrDefault()
+            ?? context.HttpContext.TraceIdentifier;
+        var tenantId = context.HttpContext.User.FindFirstValue(ERP.Application.Interfaces.TenantClaimTypes.TenantId) ?? "1";
+        logger?.LogWarning(
+            "SECURITY_RBAC_DENIED UserId={UserId} TenantId={TenantId} Path={Path} Method={Method} RequiredPermissions={Permissions} CorrelationId={CorrelationId}",
+            userId,
+            tenantId,
+            context.HttpContext.Request.Path.Value,
+            context.HttpContext.Request.Method,
+            string.Join(",", _permissions),
+            correlationId);
     }
 }

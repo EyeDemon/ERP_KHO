@@ -10,6 +10,7 @@ using ERP.Infrastructure.Services.Carriers;
 using ERP.Infrastructure.Services.Marketplaces;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace ERP.Application.Tests;
 
@@ -309,7 +310,15 @@ public sealed class SqlServerWave59RoadmapEpicsTests
 
             await using (var db = CreateContext())
             {
-                var shipmentOps = new ShipmentOperationsService(db);
+                const string testCarrierSecret = "test-w59-carrier-hmac-secret";
+                var carrierCfg = new ConfigurationBuilder()
+                    .AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["Webhooks:Carriers:DefaultSecret"] = testCarrierSecret,
+                        ["Carriers:TokenEncryptionKey"] = "test-w59-carrier-token-key"
+                    })
+                    .Build();
+                var shipmentOps = new ShipmentOperationsService(db, configuration: carrierCfg);
 
                 // 1. Verify all 4 carrier configs seeded & book waybill across GHN
                 var configsRes = await shipmentOps.GetCarrierConfigsAsync(fx.WarehouseId);
@@ -361,7 +370,7 @@ public sealed class SqlServerWave59RoadmapEpicsTests
                     PodPhotoUrl: "https://cdn.erp-kho.vn/epod/ghn-w59.jpg",
                     PodNote: "Giao thành công đúng hẹn");
                 var rawDeliveredJson = JsonSerializer.Serialize(deliveredInput);
-                var validSig = VietnamCarrierAdapterBase.ComputeHmacSha256Hex(rawDeliveredJson, ShipmentOperationsService.DefaultCarrierWebhookSecret);
+                var validSig = VietnamCarrierAdapterBase.ComputeHmacSha256Hex(rawDeliveredJson, testCarrierSecret);
 
                 var delivRes = await shipmentOps.IngestCarrierWebhookAsync(
                     "GHN",
@@ -396,7 +405,14 @@ public sealed class SqlServerWave59RoadmapEpicsTests
                     ExportReceiptId: exportReceiptId,
                     CarrierStatus: "DELIVERY_FAILED",
                     FailureReason: "Khách hẹn giao lại ca sau");
-                var rtsRes = await shipmentOps.IngestCarrierWebhookAsync("GHN", rtsInput, actorUserId: fx.UserId);
+                var rawRtsJson = JsonSerializer.Serialize(rtsInput);
+                var validRtsSig = VietnamCarrierAdapterBase.ComputeHmacSha256Hex(rawRtsJson, testCarrierSecret);
+                var rtsRes = await shipmentOps.IngestCarrierWebhookAsync(
+                    "GHN",
+                    rtsInput,
+                    rawBody: rawRtsJson,
+                    signatureHeader: validRtsSig,
+                    actorUserId: fx.UserId);
                 rtsRes.StatusCode.Should().Be(200);
                 using var rtsDoc = JsonSerializer.SerializeToDocument(rtsRes.Payload);
                 rtsDoc.RootElement.GetProperty("shipmentStatus").GetString().Should().Be("DeliveryFailed");
@@ -465,7 +481,15 @@ public sealed class SqlServerWave59RoadmapEpicsTests
                 await db.SaveChangesAsync();
                 customerId = customer.Id;
 
-                var salesOps = new SalesOrderOperationsService(db);
+                const string testMarketplaceSecret = "test-w59-marketplace-hmac-secret";
+                var mpCfg = new ConfigurationBuilder()
+                    .AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["Webhooks:Marketplaces:DefaultSecret"] = testMarketplaceSecret,
+                        ["Marketplaces:TokenEncryptionKey"] = "test-w59-marketplace-token-key"
+                    })
+                    .Build();
+                var salesOps = new SalesOrderOperationsService(db, configuration: mpCfg);
 
                 // 1. OAuth 2.0 Exchange & Refresh Token Rotation for SHOPEE
                 var oauthRes = await salesOps.ExchangeMarketplaceOAuthAsync(
@@ -475,7 +499,7 @@ public sealed class SqlServerWave59RoadmapEpicsTests
                         ShopName: "Gian hàng Shopee Chính hãng W59",
                         AuthCode: "AUTH_CODE_SHOPEE_2026",
                         DefaultWarehouseId: fx.WarehouseId,
-                        WebhookSecret: SalesOrderOperationsService.DefaultWebhookSecret));
+                        WebhookSecret: testMarketplaceSecret));
                 oauthRes.StatusCode.Should().Be(200);
                 using var oauthDoc = JsonSerializer.SerializeToDocument(oauthRes.Payload);
                 shopId = oauthDoc.RootElement.GetProperty("shopId").GetInt32();
@@ -551,7 +575,7 @@ public sealed class SqlServerWave59RoadmapEpicsTests
                 await db.SaveChangesAsync();
 
                 var rawCancelPayload = $"{{\"order_sn\":\"MP-PRE-{fx.Suffix}\",\"status\":\"CANCELLED\"}}";
-                var cancelSig = MarketplaceWebhookSignatureVerifier.ComputeHmacSha256Hex(rawCancelPayload, SalesOrderOperationsService.DefaultWebhookSecret);
+                var cancelSig = MarketplaceWebhookSignatureVerifier.ComputeHmacSha256Hex(rawCancelPayload, testMarketplaceSecret);
 
                 var preCancelRes = await salesOps.WebhookBuyerCancellationAsync(
                     "SHOPEE",
@@ -614,6 +638,8 @@ public sealed class SqlServerWave59RoadmapEpicsTests
                 postPickReceiptId = postReceipt.Id;
 
                 var eventIdPost = $"WHK-POST-{fx.Suffix}";
+                var rawPostCancelPayload = $"{{\"order_id\":\"{postPickOrder.ExternalOrderId}\",\"status\":\"CANCELLED\"}}";
+                var postCancelSig = MarketplaceWebhookSignatureVerifier.ComputeHmacSha256Hex(rawPostCancelPayload, testMarketplaceSecret);
                 var postCancelRes = await salesOps.WebhookBuyerCancellationAsync(
                     "TIKTOK_SHOP",
                     new BuyerCancellationWebhookInput(
@@ -623,6 +649,8 @@ public sealed class SqlServerWave59RoadmapEpicsTests
                         MarketplaceOrderId: postPickOrder.ExternalOrderId,
                         ChannelCode: "TIKTOK_SHOP",
                         EventId: eventIdPost,
+                        RawPayload: rawPostCancelPayload,
+                        HmacSignature: postCancelSig,
                         BuyerReason: "Khách hủy đơn sau khi đã nhặt hàng & dán tem AWB"),
                     fx.UserId);
                 postCancelRes.StatusCode.Should().Be(200);
@@ -638,7 +666,9 @@ public sealed class SqlServerWave59RoadmapEpicsTests
                         SalesOrderId: postPickOrderId,
                         ExportReceiptId: postPickReceiptId,
                         ChannelCode: "TIKTOK_SHOP",
-                        EventId: eventIdPost),
+                        EventId: eventIdPost,
+                        RawPayload: rawPostCancelPayload,
+                        HmacSignature: postCancelSig),
                     fx.UserId);
                 postCancelReplay.StatusCode.Should().Be(200);
                 using var postReplayDoc = JsonSerializer.SerializeToDocument(postCancelReplay.Payload);

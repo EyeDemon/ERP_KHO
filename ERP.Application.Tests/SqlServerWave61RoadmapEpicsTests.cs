@@ -242,6 +242,7 @@ public sealed class SqlServerWave61RoadmapEpicsTests
                 var svc = new InventoryControlOperationsService(db, new AllowAllWarehouseAuth(), new FakeUser(fx.UserId));
 
                 // Cross-Owner access attempt must throw ForbiddenException
+#pragma warning disable CS0618
                 var crossEx = await Assert.ThrowsAsync<ForbiddenException>(() =>
                     svc.GetThreePlDepositorPortalAsync(
                         new ThreePlDepositorPortalInput(
@@ -261,6 +262,7 @@ public sealed class SqlServerWave61RoadmapEpicsTests
                         BillingPeriod: "2026-10",
                         PersistSnapshotAndStatement: true),
                     fx.UserId);
+#pragma warning restore CS0618
 
                 resA.StatusCode.Should().Be(200);
                 using var docA = JsonSerializer.SerializeToDocument(resA.Payload);

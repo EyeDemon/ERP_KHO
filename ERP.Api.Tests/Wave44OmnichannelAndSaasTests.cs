@@ -10,6 +10,7 @@ using ERP.Infrastructure.Services;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Moq;
 using Xunit;
 
@@ -352,10 +353,18 @@ public class Wave44OmnichannelAndSaasTests
         );
         await db.SaveChangesAsync();
 
+        const string mpSecret = "TEST_WAVE44_SHOPEE_HMAC_SECRET";
+        var mpConfig = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Webhooks:Marketplaces:DefaultSecret"] = mpSecret,
+                ["Marketplaces:TokenEncryptionKey"] = "TEST_WAVE44_MP_TOKEN_KEY"
+            })
+            .Build();
         var soServiceMock = new Mock<ISalesOrderBackorderService>();
         var soController = new SalesOrdersController(
             soServiceMock.Object,
-            new SalesOrderOperationsService(db),
+            new SalesOrderOperationsService(db, configuration: mpConfig),
             Mock.Of<IWarehouseAuthorizationService>());
 
         var connectPrimary = await soController.ConnectMarketplaceShop(new SalesOrdersController.ConnectMarketplaceShopRequest(
@@ -423,18 +432,24 @@ public class Wave44OmnichannelAndSaasTests
         });
         await db.SaveChangesAsync();
 
-        var cancelUnpicked = await soController.WebhookBuyerCancellation("SHOPEE", new SalesOrdersController.BuyerCancellationWebhookRequest(SalesOrderId: 501, BuyerReason: "Đổi địa chỉ nhận hàng"), default);
+        var raw501 = "{\"salesOrderId\":501,\"status\":\"CANCELLED\"}";
+        var sig501 = ERP.Infrastructure.Services.Marketplaces.MarketplaceWebhookSignatureVerifier.ComputeHmacSha256Hex(raw501, mpSecret);
+        var cancelUnpicked = await soController.WebhookBuyerCancellation("SHOPEE", new SalesOrdersController.BuyerCancellationWebhookRequest(SalesOrderId: 501, BuyerReason: "Đổi địa chỉ nhận hàng", EventId: "EVT-W44-501", RawPayload: raw501, HmacSignature: sig501), default);
         using var docUnpicked = System.Text.Json.JsonSerializer.SerializeToDocument(cancelUnpicked.Should().BeOfType<OkObjectResult>().Subject.Value);
         docUnpicked.RootElement.GetProperty("decision").GetString().Should().Be("ACCEPT");
         docUnpicked.RootElement.GetProperty("orderStatus").GetString().Should().Be("Cancelled");
 
-        var cancelPicked = await soController.WebhookBuyerCancellation("SHOPEE", new SalesOrdersController.BuyerCancellationWebhookRequest(SalesOrderId: 502, BuyerReason: "Khách hủy khi đã nhặt hàng"), default);
+        var raw502 = "{\"salesOrderId\":502,\"status\":\"CANCELLED\"}";
+        var sig502 = ERP.Infrastructure.Services.Marketplaces.MarketplaceWebhookSignatureVerifier.ComputeHmacSha256Hex(raw502, mpSecret);
+        var cancelPicked = await soController.WebhookBuyerCancellation("SHOPEE", new SalesOrdersController.BuyerCancellationWebhookRequest(SalesOrderId: 502, BuyerReason: "Khách hủy khi đã nhặt hàng", EventId: "EVT-W44-502", RawPayload: raw502, HmacSignature: sig502), default);
         using var docPicked = System.Text.Json.JsonSerializer.SerializeToDocument(cancelPicked.Should().BeOfType<OkObjectResult>().Subject.Value);
         docPicked.RootElement.GetProperty("decision").GetString().Should().Be("ACCEPT_PENDING_PUTBACK");
         docPicked.RootElement.GetProperty("orderStatus").GetString().Should().Be("CancelPendingPutback");
         (await db.PutawayTasks.AnyAsync(t => t.TaskType == "Putback")).Should().BeTrue();
 
-        var cancelDispatched = await soController.WebhookBuyerCancellation("SHOPEE", new SalesOrdersController.BuyerCancellationWebhookRequest(SalesOrderId: 503, BuyerReason: "Khách bấm hủy muộn"), default);
+        var raw503 = "{\"salesOrderId\":503,\"status\":\"CANCELLED\"}";
+        var sig503 = ERP.Infrastructure.Services.Marketplaces.MarketplaceWebhookSignatureVerifier.ComputeHmacSha256Hex(raw503, mpSecret);
+        var cancelDispatched = await soController.WebhookBuyerCancellation("SHOPEE", new SalesOrdersController.BuyerCancellationWebhookRequest(SalesOrderId: 503, BuyerReason: "Khách bấm hủy muộn", EventId: "EVT-W44-503", RawPayload: raw503, HmacSignature: sig503), default);
         using var docDispatched = System.Text.Json.JsonSerializer.SerializeToDocument(cancelDispatched.Should().BeOfType<OkObjectResult>().Subject.Value);
         docDispatched.RootElement.GetProperty("decision").GetString().Should().Be("REJECT");
         docDispatched.RootElement.GetProperty("reasonCode").GetString().Should().Be("ALREADY_DISPATCHED_TO_CARRIER");
@@ -716,7 +731,8 @@ public class Wave44OmnichannelAndSaasTests
         piiDoc.RootElement.GetProperty("anonymizedCount").GetInt32().Should().Be(1);
 
         var anonymizedReceipt = await db.ExportReceipts.SingleAsync(r => r.Id == 801);
-        anonymizedReceipt.CustomerNameSnapshot.Should().StartWith("ANONYMIZED_PII_");
+        anonymizedReceipt.CustomerNameSnapshot.Should().Be("Nguyễn Thị Khách Mua Hàng");
+        anonymizedReceipt.Note.Should().Contain("PII_CONTACT_REDACTED_ND13_KEEP_ACCOUNTING_10Y");
     }
 
     [Fact]
@@ -1300,12 +1316,14 @@ public class Wave44OmnichannelAndSaasTests
         loginResp.TenantId.Should().Be(provisionedTenantId);
 
         // Verify SupportImpersonationMiddleware + HttpTenantContext switches TenantId to session.TenantId
+        var w62RawToken = "IMP-W62-TOKEN";
+        var w62TokenHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(w62RawToken)));
         db.SupportImpersonationSessions.Add(new ERP.Domain.Entities.SupportImpersonationSession
         {
             Id = 9001,
             TenantId = provisionedTenantId,
-            SessionCode = "IMP-W62-TOKEN",
-            TokenHash = "IMP-W62-TOKEN",
+            SessionCode = "IMP-SES-W62-9001",
+            TokenHash = w62TokenHash,
             SupportTicketCode = "SUP-W62-01",
             GrantedByUserId = ownerUser.Id,
             SupportAgentUserId = 1,
@@ -1317,9 +1335,17 @@ public class Wave44OmnichannelAndSaasTests
 
         var sp = new Mock<IServiceProvider>();
         sp.Setup(x => x.GetService(typeof(ERP.Infrastructure.Persistence.ErpKhoDbContext))).Returns(db);
-        var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+        {
+            User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+            [
+                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "1"),
+                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, "SupportAdmin"),
+                new System.Security.Claims.Claim(ERP.Application.Interfaces.TenantClaimTypes.SecurityDomain, "PLATFORM")
+            ], "TestAuth"))
+        };
         httpContext.Request.Method = "GET";
-        httpContext.Request.Headers["X-Support-Impersonation-Token"] = "IMP-W62-TOKEN";
+        httpContext.Request.Headers["X-Support-Impersonation-Token"] = w62RawToken;
         httpContext.RequestServices = sp.Object;
         var accessor = new Microsoft.AspNetCore.Http.HttpContextAccessor { HttpContext = httpContext };
         var tenantContext = new ERP.Api.Authorization.HttpTenantContext(accessor);
@@ -1625,10 +1651,10 @@ public class Wave44OmnichannelAndSaasTests
         saasRoot.GetProperty("bankCode").GetString().Should().Be("TPB");
         saasRoot.GetProperty("bankName").GetString().Should().Be("TPBank");
         saasRoot.GetProperty("bankBin").GetString().Should().Be("970423");
-        saasRoot.GetProperty("accountNo").GetString().Should().Be("000010002026");
+        saasRoot.GetProperty("accountNo").GetString().Should().Be("98418102005");
+        saasRoot.GetProperty("accountName").GetString().Should().Be("HUYNH PHI VAN");
         saasPayload.Should().Contain("0006970423");
-        saasPayload.Should().Contain("000010002026");
-        saasPayload.Should().NotContain("98418102005");
+        saasPayload.Should().Contain("98418102005");
         saasPayload.Should().NotContain("1903888999999");
 
         var dynamicCustomPayload = SaasBillingService.BuildVietQrPayload(1490000m, "INV-VQR-TEST", "970423", "1234567890123");
@@ -1637,9 +1663,8 @@ public class Wave44OmnichannelAndSaasTests
         var savedSaasInvoice = await db.SaasBillingInvoices
             .IgnoreQueryFilters()
             .SingleAsync(i => i.InvoiceCode == saasInvoiceCode);
-        savedSaasInvoice.QrPayload.Should().Contain("000010002026");
+        savedSaasInvoice.QrPayload.Should().Contain("98418102005");
         savedSaasInvoice.QrPayload.Should().Contain("0006970423");
-        savedSaasInvoice.QrPayload.Should().NotContain("98418102005");
 
         // 2. Verify PermissionOperationsService.CreateVietQrInvoiceAsync
         var permOutcome = await permService.CreateVietQrInvoiceAsync(
@@ -1654,17 +1679,16 @@ public class Wave44OmnichannelAndSaasTests
         permRoot.GetProperty("bankCode").GetString().Should().Be("TPB");
         permRoot.GetProperty("bankName").GetString().Should().Be("TPBank");
         permRoot.GetProperty("bankBin").GetString().Should().Be("970423");
-        permRoot.GetProperty("accountNo").GetString().Should().Be("000010002026");
+        permRoot.GetProperty("accountNo").GetString().Should().Be("98418102005");
+        permRoot.GetProperty("accountName").GetString().Should().Be("HUYNH PHI VAN");
         permPayload.Should().Contain("0006970423");
-        permPayload.Should().Contain("000010002026");
-        permPayload.Should().NotContain("98418102005");
+        permPayload.Should().Contain("98418102005");
 
         var savedPermInvoice = await db.SaasBillingInvoices
             .IgnoreQueryFilters()
             .SingleAsync(i => i.InvoiceCode == permInvoiceCode);
-        savedPermInvoice.QrPayload.Should().Contain("000010002026");
+        savedPermInvoice.QrPayload.Should().Contain("98418102005");
         savedPermInvoice.QrPayload.Should().Contain("0006970423");
-        savedPermInvoice.QrPayload.Should().NotContain("98418102005");
     }
 
     [Fact]
@@ -1707,7 +1731,7 @@ public class Wave44OmnichannelAndSaasTests
         var firstQrPayload = firstDoc.RootElement.GetProperty("vietQrPayload").GetString()!;
 
         firstDoc.RootElement.GetProperty("reusedPendingInvoice").GetBoolean().Should().BeFalse();
-        firstDoc.RootElement.GetProperty("accountName").GetString().Should().Be("ERP KHO WMS SAAS");
+        firstDoc.RootElement.GetProperty("accountName").GetString().Should().Be("HUYNH PHI VAN");
         firstTransferContent.Should().NotContain("-");
         firstTransferContent.Should().NotContain(" ");
         firstTransferContent.Should().StartWith("ERPKHO");
@@ -1793,9 +1817,12 @@ public class Wave44OmnichannelAndSaasTests
         confirmDoc.RootElement.GetProperty("status").GetString().Should().Be("ACTIVE");
         (await db.Users.AsNoTracking().SingleAsync(u => u.Id == 1)).TotpEnrollmentStatus.Should().Be("ACTIVE");
 
+        var nextWindowOtp = ERP.Api.Controllers.AccountSecurityController.ComputeTotpCode(
+            ERP.Api.Controllers.AccountSecurityController.DecodeBase32(enrolledSecret),
+            (DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30) - 1);
         var regenRes = await secController.RegenerateRecoveryCodes(
             1,
-            new ERP.Api.Controllers.AccountSecurityController.VerifyTotpRequest(Code: currentOtp),
+            new ERP.Api.Controllers.AccountSecurityController.VerifyTotpRequest(Code: nextWindowOtp),
             default);
         var regenOk = regenRes.Should().BeOfType<OkObjectResult>().Subject;
         using var regenDoc = System.Text.Json.JsonSerializer.SerializeToDocument(regenOk.Value);

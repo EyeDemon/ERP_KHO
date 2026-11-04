@@ -209,7 +209,7 @@ export const ProductListTabSection: React.FC<ProductListTabSectionProps> = ({
                     <td style={{ whiteSpace: 'nowrap' }}><strong>{product.code}</strong></td>
                     <td>
                       <div>{product.name}</div>
-                      {product.description && <small style={{ color: '#64748b' }}>{sanitizeProductDescription(product.description)}</small>}
+                      {product.description && <small style={{ color: '#475569' }}>{sanitizeProductDescription(product.description)}</small>}
                     </td>
                     <td>{product.categoryName || '—'}</td>
                     <td><strong>{product.unitName || product.unitId}</strong><br /><small>{product.uoms && product.uoms.length > 0 ? product.uoms.map(u => `${u.unitName || u.unitCode || u.unitId} (×${u.conversionFactor ?? u.conversionFactorToBase ?? 1})`).join(', ') : `ĐVT cơ sở (×1)${product.unitPalletEquivalent ? ` • ${Math.round(1 / product.unitPalletEquivalent)} ĐV/Pallet` : ''}`}</small></td>

@@ -73,12 +73,24 @@ export type HierarchyRow = {
 export type LocationViewTab = 'hierarchy' | 'capacity' | 'system';
 
 export const locationTypeLabels: Record<string, string> = {
-  Storage: 'Lưu trữ',
+  Storage: 'Kệ lưu trữ',
+  STORAGE: 'Kệ lưu trữ',
   Damaged: 'Hư hỏng',
+  DAMAGED: 'Hư hỏng',
   Rejected: 'Hàng bị từ chối',
+  REJECTED: 'Hàng bị từ chối',
   Staging: 'Khu tập kết xuất hàng',
-  Receiving: 'Nhận hàng',
+  STAGING: 'Khu tập kết xuất hàng',
+  Receiving: 'Khu tiếp nhận',
+  RECEIVING: 'Khu tiếp nhận',
+  Quarantine: 'Khu biệt trữ RMA',
+  QUARANTINE: 'Khu biệt trữ RMA',
+  QcHold: 'Khu tạm giữ QC',
+  QC_HOLD: 'Khu tạm giữ QC',
+  Packing: 'Khu đóng gói',
+  PACKING: 'Khu đóng gói',
   Legacy: 'Tương thích hệ thống',
+  LEGACY: 'Tương thích hệ thống',
 };
 
 export const locationStatus = (location: WarehouseLocation) => {

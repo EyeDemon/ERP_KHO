@@ -1,6 +1,7 @@
 import React from 'react';
 import { MobileBarcodeScannerBar } from '../../components/MobileBarcodeScannerBar';
-import { UiCard } from '../../ui/ProductionUi';
+import { UiCard, UiTabs } from '../../ui/ProductionUi';
+import { warehouseLocationTypeLabelVi } from '../../ui/vietnameseEnumLabels';
 import {
   type ImportReceipt,
   type Warehouse,
@@ -22,76 +23,30 @@ export const ImportReceiptWorkspaceTabs: React.FC<ImportReceiptWorkspaceTabsProp
   setReceivingWorkspaceNotice,
   setReceivingConfirmedSignature,
 }) => (
-  <div
-    className="no-print"
-    role="tablist"
-    aria-label="Chế độ làm việc Quản lý nhập kho"
-    data-testid="import-workspace-tabs"
-    style={{
-      display: 'flex',
-      flexWrap: 'wrap',
-      gap: 8,
-      padding: 6,
-      borderRadius: 12,
-      background: '#f1f5f9',
-      border: '1px solid #cbd5e1',
-    }}
-  >
-    <button
-      type="button"
-      role="tab"
-      aria-selected={activeWorkspaceTab === 'receipts'}
-      data-testid="tab-import-receipts"
-      onClick={() => setActiveWorkspaceTab('receipts')}
-      style={{
-        flex: '1 1 200px',
-        minHeight: 40,
-        fontWeight: 700,
-        background: activeWorkspaceTab === 'receipts' ? '#1e40af' : '#ffffff',
-        color: activeWorkspaceTab === 'receipts' ? '#ffffff' : '#0f172a',
-        borderColor: activeWorkspaceTab === 'receipts' ? '#1e40af' : '#cbd5e1',
+  <div className="no-print" data-testid="import-workspace-tabs">
+    <UiTabs<'receipts' | 'scanner' | 'rma'>
+      ariaLabel="Chế độ làm việc Quản lý nhập kho"
+      activeTab={activeWorkspaceTab}
+      onChange={(tab) => {
+        if (tab === 'scanner') {
+          setReceivingWorkspaceNotice('');
+          setReceivingConfirmedSignature('');
+        }
+        setActiveWorkspaceTab(tab);
       }}
-    >
-      1. Danh sách &amp; Tạo phiếu nhập ({receiptsCount})
-    </button>
-    <button
-      type="button"
-      role="tab"
-      aria-selected={activeWorkspaceTab === 'scanner'}
-      data-testid="tab-import-scanner"
-      onClick={() => {
-        setReceivingWorkspaceNotice('');
-        setReceivingConfirmedSignature('');
-        setActiveWorkspaceTab('scanner');
-      }}
-      style={{
-        flex: '1 1 200px',
-        minHeight: 40,
-        fontWeight: 700,
-        background: activeWorkspaceTab === 'scanner' ? '#1e40af' : '#ffffff',
-        color: activeWorkspaceTab === 'scanner' ? '#ffffff' : '#0f172a',
-        borderColor: activeWorkspaceTab === 'scanner' ? '#1e40af' : '#cbd5e1',
-      }}
-    >
-      2. Trạm quét nhận hàng (PDA)
-    </button>
-    <button
-      type="button"
-      role="tab"
-      aria-selected={activeWorkspaceTab === 'rma'}
-      data-testid="tab-import-rma"
-      onClick={() => setActiveWorkspaceTab('rma')}
-      style={{
-        flex: '1 1 200px',
-        minHeight: 40,
-        fontWeight: 700,
-        background: activeWorkspaceTab === 'rma' ? '#1e40af' : '#ffffff',
-        color: activeWorkspaceTab === 'rma' ? '#ffffff' : '#0f172a',
-        borderColor: activeWorkspaceTab === 'rma' ? '#1e40af' : '#cbd5e1',
-      }}
-    >
-      3. Kiểm định hàng hoàn (RMA &amp; QC)
-    </button>
+      tabs={[
+        {
+          id: 'receipts',
+          label: `Danh sách phiếu nhập (${receiptsCount})`,
+          testId: 'tab-import-receipts',
+        },
+        {
+          id: 'scanner',
+          label: 'Trạm quét nhận hàng',
+          testId: 'tab-import-scanner',
+        },
+      ]}
+    />
   </div>
 );
 
@@ -208,13 +163,13 @@ export const ImportReceiptScannerSection: React.FC<ImportReceiptScannerSectionPr
                 setReceivingConfirmedSignature('');
               }}
             >
-              <option value="">-- Chọn vị trí nguồn (Receiving / Staging) --</option>
-              {(warehouseLocations.filter(l => l.locationType === 'Receiving' || l.locationType === 'Staging').length > 0
-                ? warehouseLocations.filter(l => l.locationType === 'Receiving' || l.locationType === 'Staging')
+              <option value="">-- Chọn vị trí nguồn (Khu tiếp nhận / Tập kết) --</option>
+              {(warehouseLocations.filter(l => ['receiving', 'staging'].includes(l.locationType?.toLowerCase())).length > 0
+                ? warehouseLocations.filter(l => ['receiving', 'staging'].includes(l.locationType?.toLowerCase()))
                 : warehouseLocations
               ).map(loc => (
                 <option key={loc.id} value={String(loc.id)}>
-                  {loc.code} — {loc.name} ({loc.locationType})
+                  {loc.code} — {loc.name} ({warehouseLocationTypeLabelVi(loc.locationType)})
                 </option>
               ))}
             </select>
@@ -230,13 +185,13 @@ export const ImportReceiptScannerSection: React.FC<ImportReceiptScannerSectionPr
                 setReceivingConfirmedSignature('');
               }}
             >
-              <option value="">-- Chọn vị trí đích (Storage) --</option>
-              {(warehouseLocations.filter(l => l.locationType === 'Storage').length > 0
-                ? warehouseLocations.filter(l => l.locationType === 'Storage')
+              <option value="">-- Chọn vị trí đích (Kệ lưu trữ) --</option>
+              {(warehouseLocations.filter(l => l.locationType?.toLowerCase() === 'storage').length > 0
+                ? warehouseLocations.filter(l => l.locationType?.toLowerCase() === 'storage')
                 : warehouseLocations
               ).map(loc => (
                 <option key={loc.id} value={String(loc.id)}>
-                  {loc.code} — {loc.name} ({loc.locationType})
+                  {loc.code} — {loc.name} ({warehouseLocationTypeLabelVi(loc.locationType)})
                 </option>
               ))}
             </select>
@@ -264,9 +219,9 @@ export const ImportReceiptScannerSection: React.FC<ImportReceiptScannerSectionPr
             disabled={isReceivingAlreadyConfirmed}
             style={{
               minHeight: 44,
-              background: isReceivingAlreadyConfirmed ? '#64748b' : '#0284c7',
+              background: isReceivingAlreadyConfirmed ? '#64748b' : '#1d4ed8',
               color: '#ffffff',
-              borderColor: isReceivingAlreadyConfirmed ? '#64748b' : '#0284c7',
+              borderColor: isReceivingAlreadyConfirmed ? '#64748b' : '#1d4ed8',
               fontWeight: 600,
             }}
             onClick={() => {

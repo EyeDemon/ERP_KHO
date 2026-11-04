@@ -54,6 +54,8 @@ public static class WmsEndpointOutcomeExtensions
             return true;
         }
 
+        currentUser ??= controller.HttpContext?.RequestServices?.GetService<ERP.Application.Interfaces.ICurrentUser>();
+
         if (currentUser is ERP.Api.Authorization.HttpCurrentUser)
         {
             return permissions.Any(currentUser.HasPermission);
@@ -69,7 +71,7 @@ public static class WmsEndpointOutcomeExtensions
             if (!string.IsNullOrWhiteSpace(currentUser.Role))
             {
                 var rolePerms = ERP.Domain.Security.AppPermissions.GetDefaultPermissionsForRole(currentUser.Role);
-                return permissions.Any(rolePerms.Contains);
+                return permissions.Any(req => rolePerms.Contains(req, StringComparer.OrdinalIgnoreCase));
             }
 
             if (controller.User?.Identity?.IsAuthenticated != true)
@@ -101,11 +103,19 @@ public static class WmsEndpointOutcomeExtensions
                 return roleClaims.Any(role =>
                 {
                     var rolePerms = ERP.Domain.Security.AppPermissions.GetDefaultPermissionsForRole(role);
-                    return permissions.Any(rolePerms.Contains);
+                    return permissions.Any(req => rolePerms.Contains(req, StringComparer.OrdinalIgnoreCase));
                 });
             }
         }
 
-        return true;
+        if (controller.HttpContext is null &&
+            (currentUser is null ||
+             currentUser.IsGlobalAdmin ||
+             (!currentUser.IsAuthenticated && currentUser.UserId == 0 && string.IsNullOrWhiteSpace(currentUser.Role))))
+        {
+            return true;
+        }
+
+        return false;
     }
 }

@@ -15,6 +15,10 @@ public sealed class StockTransferConfiguration : IEntityTypeConfiguration<StockT
         builder.Property(x => x.Status).IsConcurrencyToken();
         builder.Property(x => x.DraftRevision).HasDefaultValue(1).IsConcurrencyToken();
         builder.Property(x => x.Note).HasMaxLength(500);
+        builder.Property(x => x.InternalTransferOrderNo).HasMaxLength(64);
+        builder.Property(x => x.TransporterName).HasMaxLength(200);
+        builder.Property(x => x.VehiclePlateNumber).HasMaxLength(32);
+        builder.Property(x => x.ElectronicPxkkvcnbNo).HasMaxLength(64);
         builder.Property(x => x.ReverseReasonCode).HasMaxLength(40);
         builder.Property(x => x.ReverseReason).HasMaxLength(400);
         builder.HasIndex(x => x.ReverseOfTransferId).IsUnique().HasDatabaseName("UX_StockTransfers_ReverseOfTransferId").HasFilter("[ReverseOfTransferId] IS NOT NULL");

@@ -132,7 +132,7 @@ export function DockAppointmentFormCard({
         )}
 
         <div className="ui-inline-actions">
-          <button type="submit" disabled={saving} style={{ background: '#0284c7', color: '#ffffff', fontWeight: 600, border: '1px solid #0284c7', padding: '8px 16px', borderRadius: 8 }}>
+          <button type="submit" disabled={saving} style={{ background: '#1d4ed8', color: '#ffffff', fontWeight: 600, border: '1px solid #1d4ed8', padding: '8px 16px', borderRadius: 8 }}>
             {saving ? 'Đang lưu...' : 'Lưu lịch hẹn'}
           </button>
           <button type="button" disabled={saving} onClick={() => setAppointmentForm(null)}>Hủy</button>

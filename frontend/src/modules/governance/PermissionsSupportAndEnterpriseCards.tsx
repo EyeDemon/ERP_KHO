@@ -23,15 +23,15 @@ export function PermissionsSaasBillingBanner({ billingSummary }: { billingSummar
           gap: 12,
           padding: '8px 12px',
           borderRadius: 8,
-          border: '1px solid #bae6fd',
-          background: '#f0f9ff',
+          border: '1px solid #bfdbfe',
+          background: '#eff6ff',
           fontSize: 13,
           color: '#0f172a',
           fontVariantNumeric: 'tabular-nums',
         }}
       >
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
-          <strong style={{ color: '#0369a1' }}>{billingSummary.planName}</strong>
+          <strong style={{ color: '#1e40af' }}>{billingSummary.planName}</strong>
           <span style={{ color: '#94a3b8' }}>•</span>
           <span>{`${billingSummary.activeWarehouses} / ${billingSummary.maxWarehouses} kho`}</span>
           <span style={{ color: '#94a3b8' }}>•</span>
@@ -44,7 +44,7 @@ export function PermissionsSaasBillingBanner({ billingSummary }: { billingSummar
         <Link
           to="/saas-billing"
           data-testid="link-open-saas-billing"
-          style={{ fontSize: 13, fontWeight: 700, color: '#0284c7', textDecoration: 'none', whiteSpace: 'nowrap' }}
+          style={{ fontSize: 13, fontWeight: 700, color: '#1d4ed8', textDecoration: 'none', whiteSpace: 'nowrap' }}
         >
           Mở trang Quản trị Gói dịch vụ &amp; Thanh toán VietQR →
         </Link>

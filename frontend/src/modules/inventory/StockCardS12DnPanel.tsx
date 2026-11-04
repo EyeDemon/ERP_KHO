@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import apiClient from '../../services/apiClient';
 import { UiBadge, UiCard, UiTableScroll } from '../../ui/ProductionUi';
+import { CANONICAL_WH01_LABEL, formatWarehouseLabel } from '../../utils/warehouseLabel';
 
 export interface StockCardLineDto {
   transactionId?: number;
@@ -141,9 +142,9 @@ export function StockCardS12DnPanel({
               value={resolvedWhId}
               onChange={e => setWarehouseId(Number(e.target.value))}
             >
-              {warehouses.length === 0 && <option value={1}>Kho trung tâm (#1)</option>}
+              {warehouses.length === 0 && <option value={1}>{CANONICAL_WH01_LABEL}</option>}
               {warehouses.map(w => (
-                <option key={w.id} value={w.id}>{w.name}</option>
+                <option key={w.id} value={w.id}>{formatWarehouseLabel(w.name, undefined, w.id)}</option>
               ))}
             </select>
           </label>
@@ -206,7 +207,7 @@ export function StockCardS12DnPanel({
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10, marginBottom: 10, fontSize: 13 }}>
               <div>
                 <UiBadge tone="success">{report.templateCode || 'Mẫu số S12-DN'}</UiBadge>{' '}
-                <strong>{report.productCode} — {report.productName}</strong> ({report.warehouseName || `Kho #${resolvedWhId}`})
+                <strong>{report.productCode} — {report.productName}</strong> ({formatWarehouseLabel(report.warehouseName, undefined, report.warehouseId ?? resolvedWhId) || `Kho #${resolvedWhId}`})
               </div>
               <div style={{ display: 'flex', gap: 14, fontVariantNumeric: 'tabular-nums' }}>
                 <span><strong>Số dư đầu kỳ:</strong> {report.openingBalance ?? 0}</span>

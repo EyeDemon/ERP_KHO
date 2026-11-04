@@ -1,4 +1,7 @@
 export const isReadOnlyDemoRuntime = (hostname?: string): boolean => {
+  if (import.meta.env?.PROD && !import.meta.env?.VITEST && import.meta.env?.MODE !== 'test') {
+    return false;
+  }
   const value = hostname ?? (typeof window !== 'undefined' ? window.location.hostname : '');
   return value.startsWith('erp-wms-') && value.includes('-demo') && value.endsWith('.vercel.app');
 };
@@ -38,7 +41,6 @@ export const readOnlyDemoPermissions = [
 ] as const;
 
 export const publicTenantOnboardingEndpoints = [
-  '/api/v1/auth/register-tenant',
   '/api/v1/auth/register-tenant',
 ] as const;
 

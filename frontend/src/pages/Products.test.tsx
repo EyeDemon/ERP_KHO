@@ -11,7 +11,7 @@ const product = { id: 1, code: 'P001', name: 'Sản phẩm', storageClass: 'AMBI
 describe('Products category and barcode UI (mocked API)', () => {
   afterEach(cleanup);
   beforeEach(() => {
-    vi.resetAllMocks(); localStorage.clear(); localStorage.setItem('role', 'Admin'); localStorage.setItem('permissions','["product.read","product.update","product.create","product.deactivate","product_category.read","product_category.manage","product_barcode.manage","uom.read"]');
+    vi.resetAllMocks(); localStorage.clear(); localStorage.setItem('role', 'Admin'); localStorage.setItem('permissions','["product.read","product.update","product.create","product.deactivate","product_category.read","product_category.manage","product_barcode.manage","uom.read","inventory.cost.read"]');
     vi.mocked(apiClient.get).mockImplementation(async (url) => ({ data: url === '/api/v1/products' ? [product] : url === '/api/v1/units' ? [{ id: 1, code: 'EA', name: 'Cái', isActive: true }] : url === '/api/v1/product-barcodes/lookup' ? product : [] }));
   });
 
@@ -178,5 +178,28 @@ describe('Products category and barcode UI (mocked API)', () => {
     await waitFor(() =>
       expect(apiClient.get).toHaveBeenCalledWith('/api/v1/sales-orders/promotion-gift-rules'),
     );
+  });
+
+  it('SEC-W17-013: enforces fail-closed inventory.cost.read RBAC on Kit rolled-up cost even when role is Admin', async () => {
+    localStorage.setItem('role', 'Admin');
+    localStorage.setItem('permissions', '["product.read"]');
+    vi.mocked(apiClient.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/products') return { data: [product] } as never;
+      if (url === '/api/v1/products/kit-work-orders') {
+        return { data: [{ id: 5, workOrderCode: 'KWO-2026-005', rolledUpUnitCost: 125000, status: 'Completed' }] } as never;
+      }
+      return { data: [] } as never;
+    });
+
+    const maskedView = render(<Products />);
+    const maskedCell = await maskedView.findByTestId('kit-wo-rolledup-cost');
+    expect(maskedCell.textContent).toBe('Ẩn theo quyền RBAC (inventory.cost.read)');
+    expect(maskedCell.textContent).not.toContain('125.000');
+    cleanup();
+
+    localStorage.setItem('permissions', '["product.read","inventory.cost.read"]');
+    const allowedView = render(<Products />);
+    const allowedCell = await allowedView.findByTestId('kit-wo-rolledup-cost');
+    expect(allowedCell.textContent).toContain('125.000 đ');
   });
 });

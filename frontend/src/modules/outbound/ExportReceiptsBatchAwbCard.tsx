@@ -1,24 +1,24 @@
 import { useState } from 'react';
 import apiClient from '../../services/apiClient';
-import { BarcodeSvg } from '../../components/BarcodeSvg';
-import { UiBadge, UiCard, UiTableScroll } from '../../ui/ProductionUi';
+import { UiCard, UiTableScroll } from '../../ui/ProductionUi';
 import type { AccountingEinvoiceData, AwbLabelItem, ExportReceipt } from './exportReceiptsTypes';
 import { safeRequestError } from './exportReceiptsTypes';
+import { ExportReceiptsAwbPreviewAndEinvoicePanel } from './ExportReceiptsAwbPreviewAndEinvoicePanel';
 
 interface ExportReceiptsBatchAwbCardProps {
-  warehouseId: number | '';
-  receipts: ExportReceipt[];
-  handoverTrackingInput: string;
-  setHandoverTrackingInput: React.Dispatch<React.SetStateAction<string>>;
-  setError: (msg: string) => void;
+  warehouseId?: number | '';
+  receipts?: ExportReceipt[];
+  handoverTrackingInput?: string;
+  setHandoverTrackingInput?: React.Dispatch<React.SetStateAction<string>>;
+  setError?: (msg: string) => void;
 }
 
 export function ExportReceiptsBatchAwbCard({
-  warehouseId,
-  receipts,
-  handoverTrackingInput,
-  setHandoverTrackingInput,
-  setError,
+  warehouseId = 1,
+  receipts = [],
+  handoverTrackingInput = '',
+  setHandoverTrackingInput = () => undefined,
+  setError = () => undefined,
 }: ExportReceiptsBatchAwbCardProps) {
   const [batchAwbNotice, setBatchAwbNotice] = useState<string | null>(null);
   const [handoverManifestNotice, setHandoverManifestNotice] = useState<string | null>(null);
@@ -26,14 +26,53 @@ export function ExportReceiptsBatchAwbCard({
   const [selectedHandoverReceiptIds, setSelectedHandoverReceiptIds] = useState<number[]>([]);
   const [awbLabels, setAwbLabels] = useState<AwbLabelItem[]>([]);
   const [accountingEinvoiceData, setAccountingEinvoiceData] = useState<AccountingEinvoiceData | null>(null);
+  const [einvoiceAction, setEinvoiceAction] = useState<'ISSUE' | 'ADJUSTMENT' | 'REPLACEMENT'>('ISSUE');
+  const [einvoiceExportReceiptId, setEinvoiceExportReceiptId] = useState<string>('');
+  const [agreementDocumentNo, setAgreementDocumentNo] = useState<string>('');
 
   return (
     <div className="no-print">
       <UiCard
         title="In Gộp Phiếu Gửi Hàng Nhiệt 100x150mm Theo Vị Trí Kệ & Biên Bản Bàn Giao Bưu Tá Điện Tử"
-        subtitle="Sắp xếp tem vận đơn theo thứ tự kệ nhặt (A → Z), chống giao nhầm đơn hủy trên sàn và kết xuất bảng kê chuẩn MISA / Hóa đơn điện tử Nghị định 70/2025"
+        subtitle="Sắp xếp tem vận đơn theo thứ tự kệ nhặt (A → Z), chống giao nhầm đơn hủy trên sàn và kết xuất bảng kê chuẩn MISA / Hóa đơn điện tử Nghị định 70/2025/NĐ-CP & Thông tư 32/2025/TT-BTC"
       >
         <div className="ui-stack" style={{ gap: 12 }}>
+          <div className="ui-inline-wrap" style={{ gap: 8, alignItems: 'end', padding: '8px 10px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 260 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>Nghiệp vụ HĐĐT (NĐ 70/2025/NĐ-CP &amp; TT 32/2025/TT-BTC)</span>
+              <select
+                aria-label="Nghiệp vụ Hóa đơn điện tử NĐ 70/2025"
+                data-testid="select-einvoice-action"
+                value={einvoiceAction}
+                onChange={(e) => setEinvoiceAction(e.target.value as 'ISSUE' | 'ADJUSTMENT' | 'REPLACEMENT')}
+              >
+                <option value="ISSUE">ISSUE — Phát hành hóa đơn GTGT từ Phiếu xuất kho</option>
+                <option value="ADJUSTMENT">ADJUSTMENT — Điều chỉnh hóa đơn (NĐ 70/2025/NĐ-CP)</option>
+                <option value="REPLACEMENT">REPLACEMENT — Thay thế hóa đơn (NĐ 70/2025/NĐ-CP)</option>
+              </select>
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 150 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>Mã Phiếu xuất (ID)</span>
+              <input
+                aria-label="Mã Phiếu xuất phát hành hóa đơn"
+                data-testid="input-einvoice-export-receipt-id"
+                value={einvoiceExportReceiptId}
+                onChange={(e) => setEinvoiceExportReceiptId(e.target.value)}
+                placeholder="VD: 1"
+              />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 280 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>Số biên bản thỏa thuận (NĐ 70/2025/NĐ-CP)</span>
+              <input
+                aria-label="Số biên bản thỏa thuận hai bên"
+                data-testid="input-einvoice-agreement-no"
+                required={einvoiceAction !== 'ISSUE'}
+                value={agreementDocumentNo}
+                onChange={(e) => setAgreementDocumentNo(e.target.value)}
+                placeholder="Số biên bản thỏa thuận hai bên (bắt buộc khi Điều chỉnh/Thay thế theo NĐ 70/2025/NĐ-CP)"
+              />
+            </label>
+          </div>
           <div className="ui-inline-wrap" style={{ gap: 8 }}>
             <button
               type="button"
@@ -120,9 +159,13 @@ export function ExportReceiptsBatchAwbCard({
               data-testid="btn-sync-accounting-einvoice"
               onClick={() => {
                 setError('');
+                const resolvedReceiptId = Number(einvoiceExportReceiptId) || selectedHandoverReceiptIds[0] || receipts[0]?.id || 1;
                 void Promise.resolve(
                   apiClient.post('/api/v1/export-receipts/export-misa-einvoice', {
                     standard: 'MISA_ND70_2025',
+                    action: einvoiceAction,
+                    exportReceiptId: resolvedReceiptId,
+                    agreementDocumentNo: agreementDocumentNo.trim() || undefined,
                   }),
                 )
                   .then(() => {
@@ -130,7 +173,7 @@ export function ExportReceiptsBatchAwbCard({
                     return Promise.resolve(
                       apiClient.get('/api/v1/export-receipts/accounting-einvoice/preview', {
                         params: {
-                          exportReceiptId: selectedHandoverReceiptIds[0] ?? receipts[0]?.id ?? 1,
+                          exportReceiptId: resolvedReceiptId,
                           accountingProvider: 'MISA_AMIS',
                           einvoiceProvider: 'VIETTEL_SINVOICE',
                         },
@@ -184,7 +227,7 @@ export function ExportReceiptsBatchAwbCard({
                 <tbody>
                   {receipts.length === 0 ? (
                     <tr>
-                      <td colSpan={4} style={{ textAlign: 'center', color: '#64748b' }}>
+                      <td colSpan={4} style={{ textAlign: 'center', color: '#475569' }}>
                         Chưa có phiếu xuất nào trong danh sách để chọn bàn giao.
                       </td>
                     </tr>
@@ -232,98 +275,14 @@ export function ExportReceiptsBatchAwbCard({
             </UiTableScroll>
           </div>
 
-          {awbLabels.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
-              {awbLabels.map((lbl, idx) => (
-                <div
-                  key={`${lbl.awbCode}-${idx}`}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: 8,
-                    border: '1px solid #cbd5e1',
-                    background: '#f8fafc',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 4,
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                    <strong>{lbl.awbCode} — {lbl.carrierName}</strong>
-                    <UiBadge tone={lbl.isReprint ? 'warning' : 'success'}>{lbl.printCountLabel}</UiBadge>
-                  </div>
-                  {lbl.watermarkText && (
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309' }}>{lbl.watermarkText}</div>
-                  )}
-                  <div style={{ fontSize: 12.5, color: '#475569' }}>Đơn sàn: <code>{lbl.marketplaceOrderId || '—'}</code> • Khổ nhiệt: 100x150mm</div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a' }}>{lbl.pickSequenceFooter}</div>
-                  <div style={{ marginTop: 4 }}>
-                    <BarcodeSvg value={lbl.awbCode} qrCaption="Mã QR vận đơn" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#ffffff', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            <div style={{ fontSize: 13 }}>
-              <strong>Biên bản Bàn giao Bưu tá Điện tử:</strong>{' '}
-              {awbLabels.length > 0
-                ? `Vận đơn bàn giao ${awbLabels.map((l) => l.awbCode).join(', ')}`
-                : handoverTrackingInput.trim()
-                  ? `Vận đơn bàn giao ${handoverTrackingInput.trim()}`
-                  : 'Chưa có vận đơn kết xuất'}{' '}
-              • Chặn cứng đơn hủy trên sàn trước khi xuất kho
-            </div>
-            <UiBadge tone="success">Viettel SInvoice • Mẫu 1/001 • C26TAA</UiBadge>
-          </div>
-
-          {batchAwbNotice && (
-            <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
-              {batchAwbNotice}
-            </div>
-          )}
-          {handoverManifestNotice && (
-            <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
-              {handoverManifestNotice}
-            </div>
-          )}
-          {misaEinvoiceNotice && (
-            <div role="status" style={{ padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}>
-              {misaEinvoiceNotice}
-            </div>
-          )}
-          {accountingEinvoiceData && (
-            <div
-              role="region"
-              aria-label="Đồng bộ Kế toán Thông tư 200 và Hóa đơn Điện tử Nghị định 70/2025"
-              data-testid="epic90-3-accounting-einvoice-panel"
-              style={{
-                padding: '10px 14px',
-                borderRadius: 8,
-                background: '#f0fdf4',
-                color: '#065f46',
-                border: '1px solid #86efac',
-                fontSize: 13,
-                lineHeight: 1.5,
-              }}
-            >
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>
-                Đồng bộ Kế toán Thông tư 200 ({accountingEinvoiceData.accountingProvider}) &amp; HĐĐT NĐ 70/2025 ({accountingEinvoiceData.einvoiceProvider} • {accountingEinvoiceData.invoiceTemplateCode} • {accountingEinvoiceData.invoiceSeries} #{accountingEinvoiceData.invoiceNumber})
-              </div>
-              <div style={{ marginBottom: 4 }}>{accountingEinvoiceData.statusLabel}</div>
-              {accountingEinvoiceData.circular200JournalEntries && accountingEinvoiceData.circular200JournalEntries.length > 0 && (
-                <div style={{ fontSize: 12.5 }}>
-                  <strong>Bút toán Kép Thông tư 200/2014/TT-BTC:</strong>{' '}
-                  {accountingEinvoiceData.circular200JournalEntries.map((j, idx) => (
-                    <span key={idx} style={{ display: 'inline-block', marginRight: 10 }}>
-                      [Nợ TK {j.debitAccount} / Có TK {j.creditAccount}: <strong>{(j.debitAmount ?? 0).toLocaleString('vi-VN')} đ</strong>]
-                    </span>
-                  ))}
-                  <span>• Cân đối Nợ/Có Δ = <strong>{accountingEinvoiceData.journalImbalanceDelta ?? 0}</strong></span>
-                </div>
-              )}
-            </div>
-          )}
+          <ExportReceiptsAwbPreviewAndEinvoicePanel
+            awbLabels={awbLabels}
+            handoverTrackingInput={handoverTrackingInput}
+            batchAwbNotice={batchAwbNotice}
+            handoverManifestNotice={handoverManifestNotice}
+            misaEinvoiceNotice={misaEinvoiceNotice}
+            accountingEinvoiceData={accountingEinvoiceData}
+          />
         </div>
       </UiCard>
     </div>

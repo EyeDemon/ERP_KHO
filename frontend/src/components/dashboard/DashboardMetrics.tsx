@@ -57,14 +57,14 @@ export const DashboardMetrics = ({
         <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
           <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Doanh thu đơn đã xuất (Doanh thu thuần)</div>
           <strong style={{ fontSize: 15, color: '#0f172a' }}>{formatCurrencyVnd(ownerFinance.netRevenue)}</strong>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Đã trừ đơn hoàn &amp; đơn hủy sàn</div>
+          <div style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>Đã trừ đơn hoàn &amp; đơn hủy sàn</div>
         </div>
         <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
           <div style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Giá vốn hàng bán bình quân</div>
           <strong style={{ fontSize: 15, color: '#0f172a' }}>
             {ownerFinance.costHiddenByRbac ? 'Ẩn giá vốn theo phân quyền RBAC' : formatCurrencyVnd(ownerFinance.cogsAmount)}
           </strong>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Bình quân gia quyền di động</div>
+          <div style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>Bình quân gia quyền di động</div>
         </div>
         <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', fontVariantNumeric: 'tabular-nums' }}>
           <div style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>Lợi nhuận gộp ước tính</div>

@@ -67,10 +67,17 @@ namespace ERP.Infrastructure.Repositories
         public async Task<IEnumerable<ImportReceipt>> GetAllWithDetailsAsync(ERP.Domain.Enums.ReceiptStatus? status)
         {
             var query = _dbSet
+                .AsNoTracking()
+                .AsSplitQuery()
                 .Include(i => i.Warehouse)
                 .Include(i => i.Supplier)
                 .Include(i => i.PurchaseOrder)
                 .Include(i => i.Asn)
+                .Include(i => i.Details)
+                    .ThenInclude(d => d.Product)
+                        .ThenInclude(p => p.Unit)
+                .Include(i => i.CreatedByUser)
+                .Include(i => i.ApprovedByUser)
                 .AsQueryable();
 
             if (_warehouseAuthorization is not null)
@@ -84,7 +91,7 @@ namespace ERP.Infrastructure.Repositories
                 query = query.Where(i => i.Status == status.Value);
             }
 
-            return await query.Include(i => i.CreatedByUser).Include(i => i.ApprovedByUser).OrderByDescending(i => i.CreatedAt).ToListAsync();
+            return await query.OrderByDescending(i => i.CreatedAt).ToListAsync();
         }
 
         public async Task<bool> ExistsByCodeAsync(string code, int? excludeId = null)

@@ -70,6 +70,16 @@ jobs:
     - name: Restore Backend
       run: dotnet restore ERP.slnx
 
+    - name: Audit Backend Dependencies
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $auditOutput = dotnet list ERP.slnx package --vulnerable --include-transitive | Out-String
+        Write-Output $auditOutput
+        if ($LASTEXITCODE -ne 0 -or $auditOutput -match 'has the following vulnerable packages') {
+          throw 'Vulnerable NuGet package(s) detected in ERP.slnx.'
+        }
+
     - name: Build Backend
       run: dotnet build ERP.slnx --configuration Release --no-restore
 

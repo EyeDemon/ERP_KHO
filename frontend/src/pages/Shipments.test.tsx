@@ -22,6 +22,7 @@ const appointment={id:1043,code:'APT-2026-1043',warehouseId:1,direction:1,status
 const grant=(...permissions:string[])=>{permissionState.granted.clear();permissions.forEach(p=>permissionState.granted.add(p));};
 const reads=(shipment:Record<string,unknown>=detail)=>vi.mocked(apiClient.get).mockImplementation(async (url)=>{
   if(url==='/api/v1/shipments') return {data:[summary]} as never;
+  if(url==='/api/v1/shipments/carrier-configs') return {data:[{carrierCode:'GHN',shopId:'235512',shopName:'0397354273',maskedApiToken:'0c06****12be',gatewayMode:'LIVE_GHN_DEV_SANDBOX',isSandbox:true,fromDistrictId:1454,fromDistrictName:'Quận 12, TP. Hồ Chí Minh',baseShippingFeeVnd:22000}]} as never;
   if(String(url).startsWith('/api/v1/dock-yard/appointments')) return {data:[appointment]} as never;
   return {data:shipment} as never;
 });
@@ -215,5 +216,42 @@ describe('Shipment staging & loading workbench',()=>{
     fireEvent.change(input,{target:{value:'OTHER-HU'}});
     fireEvent.click(view.getByText('Xác nhận HU đã load'));
     await waitFor(()=>expect(view.getByRole('alert').textContent).toContain('không thuộc Shipment'));
+  });
+
+  it('verifies GHN Open API v2 connection & address sync and calculates carrier fee with masked token',async()=>{
+    grant('shipment.read');
+    reads();
+    vi.mocked(apiClient.post).mockImplementation(async (url)=>{
+      if(url==='/api/v1/shipments/carrier-configs/ghn/verify-and-sync'){
+        return {data:{carrierCode:'GHN',gatewayMode:'LIVE_GHN_DEV_SANDBOX',isSandbox:true,shopId:'235512',shopName:'0397354273',maskedApiToken:'0c06****12be',fromDistrictId:1454,fromDistrictName:'Quận 12, TP. Hồ Chí Minh',fromWardName:'Phường Tân Chánh Hiệp',syncedProvincesCount:63,syncedDistrictsCount:24,syncedWardsCount:11}} as never;
+      }
+      if(url==='/api/v1/shipments/calculate-carrier-fee'){
+        return {data:{carrierCode:'GHN',gatewayMode:'LIVE_GHN_DEV_SANDBOX',shopId:'235512',totalFee:33000,serviceFee:33000,insuranceFee:0}} as never;
+      }
+      return {data:{}} as never;
+    });
+    const view=render(<Shipments/>);
+    await view.findByText('SHIP-2026-7701');
+    expect(view.getByText('235512')).toBeTruthy();
+    expect(view.getByText('0c06****12be')).toBeTruthy();
+
+    fireEvent.click(view.getByTestId('btn-ghn-verify-sync'));
+    const syncBanner=await view.findByTestId('ghn-sync-status-banner');
+    expect(syncBanner.textContent).toContain('235512');
+    expect(syncBanner.textContent).toContain('0c06****12be');
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/api/v1/shipments/carrier-configs/ghn/verify-and-sync',
+      {warehouseId:1},
+      expect.objectContaining({headers:expect.objectContaining({'Idempotency-Key':expect.any(String)})}),
+    );
+
+    fireEvent.click(view.getByTestId('btn-ghn-calc-fee'));
+    const feeBanner=await view.findByTestId('ghn-fee-result-banner');
+    expect(feeBanner.textContent).toContain('33.000');
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/api/v1/shipments/calculate-carrier-fee',
+      expect.objectContaining({warehouseId:1,shipmentId:7701,weightGrams:1000,toDistrictId:1442}),
+      expect.objectContaining({headers:expect.objectContaining({'Idempotency-Key':expect.any(String)})}),
+    );
   });
 });

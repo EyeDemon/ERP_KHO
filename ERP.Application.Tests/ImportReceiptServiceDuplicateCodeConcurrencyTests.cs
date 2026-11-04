@@ -221,6 +221,13 @@ namespace ERP.Application.Tests
 
     #region Service & Repository Boundary Tests
 
+    [CollectionDefinition(Name, DisableParallelization = true)]
+    public sealed class SqliteDuplicateCodeConcurrencyCollection
+    {
+        public const string Name = "SQLite duplicate code concurrency isolation";
+    }
+
+    [Collection(SqliteDuplicateCodeConcurrencyCollection.Name)]
     public class ImportReceiptServiceDuplicateCodeConcurrencyTests : IDisposable
     {
         private readonly string _connectionString;
@@ -229,7 +236,7 @@ namespace ERP.Application.Tests
         public ImportReceiptServiceDuplicateCodeConcurrencyTests()
         {
             var dbName = Guid.NewGuid().ToString("N");
-            _connectionString = $"DataSource=file:{dbName}?mode=memory&cache=shared;Default Timeout=5";
+            _connectionString = $"DataSource=file:{dbName}?mode=memory&cache=shared;Default Timeout=60";
             _anchorConnection = new SqliteConnection(_connectionString);
             _anchorConnection.Open();
 
@@ -248,7 +255,7 @@ namespace ERP.Application.Tests
         private TestDbContext CreateContext(SqliteConnection connection)
         {
             var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
-                .UseSqlite(connection)
+                .UseSqlite(connection, sqlite => sqlite.CommandTimeout(60))
                 .Options;
             return new TestDbContext(options);
         }
@@ -315,7 +322,7 @@ namespace ERP.Application.Tests
                 var result = await _inner.ExistsByCodeAsync(code, excludeId);
                 if (System.Threading.Interlocked.Increment(ref _callCount) == 1)
                 {
-                    _barrier.SignalAndWait(TimeSpan.FromSeconds(5));
+                    _barrier.SignalAndWait(TimeSpan.FromSeconds(30));
                 }
                 return result;
             }

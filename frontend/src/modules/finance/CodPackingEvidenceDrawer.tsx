@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ClipboardCopy } from 'lucide-react';
 import { UiBadge, UiCard } from '../../ui/ProductionUi';
 
 export interface CodReconciliationEvidenceItem {
@@ -97,7 +98,7 @@ export function CodPackingEvidenceDrawer({
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#0369a1', textTransform: 'uppercase' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#1e40af', textTransform: 'uppercase' }}>
               Bằng chứng Chống Đội Cước &amp; Gian lận Trọng lượng ĐVVC
             </div>
             <h3 style={{ margin: '4px 0 0', fontSize: 18, color: '#0f172a' }}>
@@ -162,7 +163,7 @@ export function CodPackingEvidenceDrawer({
                     textAlign: 'right',
                     fontVariantNumeric: 'tabular-nums',
                     fontWeight: 700,
-                    color: weightVariance > 0 ? '#dc2626' : '#059669',
+                    color: weightVariance > 0 ? '#dc2626' : '#047857',
                   }}
                 >
                   {weightVariance.toFixed(2)} kg
@@ -173,7 +174,7 @@ export function CodPackingEvidenceDrawer({
                 <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                   <strong>{item.expectedShippingFee.toLocaleString('vi-VN')} ₫</strong> vs{' '}
                   <strong>{item.actualShippingFee.toLocaleString('vi-VN')} ₫</strong> (Chênh lệch:{' '}
-                  <strong style={{ color: feeVariance > 0 ? '#dc2626' : '#059669' }}>
+                  <strong style={{ color: feeVariance > 0 ? '#dc2626' : '#047857' }}>
                     {feeVariance.toLocaleString('vi-VN')} ₫
                   </strong>
                   )
@@ -220,7 +221,7 @@ export function CodPackingEvidenceDrawer({
                 padding: '0 14px',
               }}
             >
-              📋 Sao chép Hồ sơ Khiếu nại Hãng vận chuyển
+              <ClipboardCopy size={14} strokeWidth={1.75} aria-hidden="true" style={{ marginRight: 6, verticalAlign: 'text-bottom' }} />Sao chép Hồ sơ Khiếu nại Hãng vận chuyển
             </button>
           </div>
         </UiCard>

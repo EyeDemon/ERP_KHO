@@ -1,3 +1,4 @@
+using System.Data;
 using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Infrastructure.Persistence;
@@ -6,8 +7,8 @@ using Microsoft.EntityFrameworkCore;
 namespace ERP.Api.Hosting;
 
 /// <summary>
-/// Background worker that periodically expires soft stock reservations whose ExpiresAtUtc has passed,
-/// releasing ReservedQty on the corresponding 9D InventoryStocks buckets.
+/// Background worker that periodically expires soft stock reservations whose ExpiresAt has passed,
+/// releasing ReservedQuantity on the corresponding 9D InventoryStocks buckets inside per-tenant transactions.
 /// </summary>
 public sealed class SoftReservationExpiryJob(
     IServiceScopeFactory scopeFactory,
@@ -42,27 +43,35 @@ public sealed class SoftReservationExpiryJob(
 
     public async Task<int> ExpireStaleSoftReservationsOnceAsync(CancellationToken cancellationToken = default)
     {
-        using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetService<ErpKhoDbContext>();
-        if (db is null)
-        {
-            return 0;
-        }
-
         var now = DateTime.UtcNow;
-        var expiredCandidates = await db.StockReservations
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .Where(r => (r.Status == StockReservationStatus.Active ||
-                         r.Status == StockReservationStatus.PartiallyConsumed ||
-                         r.Status == StockReservationStatus.PartiallyAllocated) &&
-                        r.ExpiresAt <= now)
-            .OrderBy(r => r.TenantId)
-            .ThenBy(r => r.ExpiresAt)
-            .ThenBy(r => r.Id)
-            .Take(100)
-            .Select(r => new { r.Id, r.TenantId, r.WarehouseId, r.ProductId })
-            .ToListAsync(cancellationToken);
+        List<(int Id, int TenantId, int WarehouseId, int ProductId)> expiredCandidates;
+
+        await using (var discoveryScope = scopeFactory.CreateAsyncScope())
+        {
+            var discoveryDb = discoveryScope.ServiceProvider.GetService<ErpKhoDbContext>();
+            if (discoveryDb is null)
+            {
+                return 0;
+            }
+
+            var rawCandidates = await discoveryDb.StockReservations
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(r => (r.Status == StockReservationStatus.Active ||
+                             r.Status == StockReservationStatus.PartiallyConsumed ||
+                             r.Status == StockReservationStatus.PartiallyAllocated) &&
+                            r.ExpiresAt <= now)
+                .OrderBy(r => r.TenantId)
+                .ThenBy(r => r.ExpiresAt)
+                .ThenBy(r => r.Id)
+                .Take(100)
+                .Select(r => new { r.Id, r.TenantId, r.WarehouseId, r.ProductId })
+                .ToListAsync(cancellationToken);
+
+            expiredCandidates = rawCandidates
+                .Select(r => (r.Id, r.TenantId > 0 ? r.TenantId : 1, r.WarehouseId, r.ProductId))
+                .ToList();
+        }
 
         if (expiredCandidates.Count == 0)
         {
@@ -70,18 +79,25 @@ public sealed class SoftReservationExpiryJob(
         }
 
         var expiredCount = 0;
-        var originalTenantId = db.CurrentTenantId > 0 ? db.CurrentTenantId : 1;
 
-        try
+        foreach (var tenantGroup in expiredCandidates.GroupBy(r => r.TenantId))
         {
-            foreach (var tenantGroup in expiredCandidates.GroupBy(r => r.TenantId > 0 ? r.TenantId : 1))
-            {
-                var tenantId = tenantGroup.Key;
-                var candidateIds = tenantGroup.Select(r => r.Id).ToList();
-                db.UseTenant(tenantId);
+            var tenantId = tenantGroup.Key;
+            var candidateIds = tenantGroup.Select(r => r.Id).ToList();
 
-                await using var tx = db.Database.IsRelational() && db.Database.CurrentTransaction is null
-                    ? await db.Database.BeginTransactionAsync(cancellationToken)
+            try
+            {
+                await using var tenantScope = scopeFactory.CreateAsyncScope();
+                var tenantDb = tenantScope.ServiceProvider.GetService<ErpKhoDbContext>();
+                if (tenantDb is null)
+                {
+                    continue;
+                }
+
+                tenantDb.UseTenant(tenantId);
+
+                await using var tx = tenantDb.Database.IsRelational() && tenantDb.Database.CurrentTransaction is null
+                    ? await tenantDb.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
                     : null;
 
                 var lockKeys = tenantGroup
@@ -91,51 +107,128 @@ public sealed class SoftReservationExpiryJob(
                     .ThenBy(k => k.ProductId)
                     .ToList();
 
-                await db.AcquireInventoryAllocationLocksAsync(lockKeys, cancellationToken);
+                await tenantDb.AcquireInventoryAllocationLocksAsync(lockKeys, cancellationToken);
 
-                var tenantReservations = await db.StockReservations
-                    .Where(r => candidateIds.Contains(r.Id) &&
+                var tenantReservations = await tenantDb.StockReservations
+                    .Include(r => r.Allocations)
+                    .Where(r => r.TenantId == tenantId &&
+                                candidateIds.Contains(r.Id) &&
                                 (r.Status == StockReservationStatus.Active ||
                                  r.Status == StockReservationStatus.PartiallyConsumed ||
                                  r.Status == StockReservationStatus.PartiallyAllocated) &&
-                                r.ExpiresAt <= now)
+                                r.ExpiresAt <= now &&
+                                !tenantDb.PickingTaskLines.Any(line =>
+                                    line.Allocation.ReservationId == r.Id &&
+                                    line.PickingTask.Status != PickingTaskStatus.Cancelled))
                     .OrderBy(r => r.WarehouseId)
                     .ThenBy(r => r.ProductId)
                     .ThenBy(r => r.Id)
                     .ToListAsync(cancellationToken);
 
+                if (tenantReservations.Count == 0)
+                {
+                    if (tx is not null)
+                    {
+                        await tx.CommitAsync(cancellationToken);
+                    }
+                    continue;
+                }
+
                 foreach (var reservation in tenantReservations)
                 {
-                    var remainingReserved = Math.Max(0m, reservation.Quantity - reservation.ConsumedQuantity - reservation.ReleasedQuantity);
-                    reservation.ReleasedQuantity += remainingReserved;
-                    reservation.ReleasedAt = now;
-                    reservation.ReleaseReason ??= "TTL_EXPIRED_BY_WORKER";
-                    reservation.Status = StockReservationStatus.Expired;
+                    var remainingReserved = Math.Max(
+                        0m,
+                        reservation.Quantity - reservation.ConsumedQuantity - reservation.ReleasedQuantity);
+                    var toRelease = remainingReserved;
 
-                    if (remainingReserved > 0m)
+                    var activeAllocations = reservation.Allocations
+                        .Where(a => a.Status == StockAllocationStatus.Active ||
+                                    a.Status == StockAllocationStatus.Picking ||
+                                    a.Status == StockAllocationStatus.Picked)
+                        .OrderBy(a => a.LocationId)
+                        .ThenBy(a => a.LotId)
+                        .ThenBy(a => a.Id)
+                        .ToList();
+
+                    foreach (var allocation in activeAllocations)
                     {
-                        var stockBuckets = await db.InventoryStocks
+                        var exactBucket = await tenantDb.InventoryStocks.FirstOrDefaultAsync(
+                            s => s.TenantId == tenantId &&
+                                 s.WarehouseId == reservation.WarehouseId &&
+                                 s.ProductId == reservation.ProductId &&
+                                 s.Status == allocation.InventoryStatus &&
+                                 s.LocationId == allocation.LocationId &&
+                                 s.LotId == allocation.LotId &&
+                                 s.SerialId == allocation.SerialId &&
+                                 s.HandlingUnitId == allocation.HandlingUnitId &&
+                                 s.OwnerId == allocation.OwnerId,
+                            cancellationToken);
+
+                        if (exactBucket is not null)
+                        {
+                            exactBucket.AllocatedQuantity = Math.Max(0m, exactBucket.AllocatedQuantity - allocation.Quantity);
+                            var allocDeduct = Math.Min(Math.Min(exactBucket.ReservedQuantity, allocation.Quantity), toRelease);
+                            exactBucket.ReservedQuantity = Math.Max(0m, exactBucket.ReservedQuantity - allocDeduct);
+                            exactBucket.LastUpdated = now;
+                            toRelease = Math.Max(0m, toRelease - allocDeduct);
+                        }
+
+                        allocation.Status = StockAllocationStatus.Released;
+                        allocation.ReleasedAt = now;
+                        allocation.ReleaseReason = "TTL_EXPIRED_BY_WORKER";
+                        allocation.Version++;
+                    }
+
+                    if (activeAllocations.Count > 0 || reservation.AllocatedQuantity > 0m)
+                    {
+                        reservation.AllocatedQuantity = 0m;
+                        reservation.AllocationVersion++;
+                    }
+
+                    if (toRelease > 0m)
+                    {
+                        var stockBuckets = await tenantDb.InventoryStocks
                             .Where(s => s.TenantId == tenantId &&
                                         s.WarehouseId == reservation.WarehouseId &&
                                         s.ProductId == reservation.ProductId &&
                                         s.Status == InventoryStatus.Available &&
                                         s.ReservedQuantity > 0m)
-                            .OrderByDescending(s => s.ReservedQuantity)
+                            .OrderByDescending(s => s.ReservedQuantity > s.AllocatedQuantity ? 1 : 0)
+                            .ThenBy(s => s.LocationId)
+                            .ThenBy(s => s.LotId)
+                            .ThenBy(s => s.SerialId)
+                            .ThenBy(s => s.HandlingUnitId)
+                            .ThenBy(s => s.OwnerId)
                             .ThenBy(s => s.Id)
                             .ToListAsync(cancellationToken);
 
-                        var toRelease = remainingReserved;
                         foreach (var bucket in stockBuckets)
                         {
-                            if (toRelease <= 0m) break;
-                            var deduct = Math.Min(bucket.ReservedQuantity, toRelease);
-                            bucket.ReservedQuantity -= deduct;
+                            if (toRelease <= 0m)
+                            {
+                                break;
+                            }
+
+                            var unallocatedReserved = Math.Max(0m, bucket.ReservedQuantity - bucket.AllocatedQuantity);
+                            var releasableInBucket = unallocatedReserved > 0m ? unallocatedReserved : bucket.ReservedQuantity;
+                            var deduct = Math.Min(releasableInBucket, toRelease);
+                            if (deduct <= 0m)
+                            {
+                                continue;
+                            }
+
+                            bucket.ReservedQuantity = Math.Max(0m, bucket.ReservedQuantity - deduct);
                             bucket.LastUpdated = now;
-                            toRelease -= deduct;
+                            toRelease = Math.Max(0m, toRelease - deduct);
                         }
                     }
 
-                    db.AuditLogs.Add(new AuditLog
+                    reservation.ReleasedQuantity += remainingReserved;
+                    reservation.ReleasedAt = now;
+                    reservation.ReleaseReason ??= "TTL_EXPIRED_BY_WORKER";
+                    reservation.Status = StockReservationStatus.Expired;
+
+                    tenantDb.AuditLogs.Add(new AuditLog
                     {
                         TenantId = tenantId,
                         WarehouseId = reservation.WarehouseId,
@@ -151,16 +244,16 @@ public sealed class SoftReservationExpiryJob(
                     expiredCount++;
                 }
 
-                await db.SaveChangesAsync(cancellationToken);
+                await tenantDb.SaveChangesAsync(cancellationToken);
                 if (tx is not null)
                 {
                     await tx.CommitAsync(cancellationToken);
                 }
             }
-        }
-        finally
-        {
-            db.UseTenant(originalTenantId);
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "SoftReservationExpiryJob failed for TenantId={TenantId}.", tenantId);
+            }
         }
 
         return expiredCount;

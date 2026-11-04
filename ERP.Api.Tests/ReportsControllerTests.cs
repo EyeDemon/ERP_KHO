@@ -5325,7 +5325,7 @@ namespace ERP.Api.Tests
             {
                 var root = doc.RootElement;
                 root.GetProperty("verified").GetBoolean().Should().BeTrue();
-                root.GetProperty("statusLabel").GetString().Should().Be($"Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số ({currentTotpCode}) và cấp 8 mã khôi phục dự phòng");
+                root.GetProperty("statusLabel").GetString().Should().Be("Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số (đã xác thực) và cấp 8 mã khôi phục dự phòng");
             }
 
             db.AuditLogs.Should().OnlyContain(a => a.Result == "Success" && a.Result.Length <= 32);
@@ -5759,7 +5759,7 @@ namespace ERP.Api.Tests
             {
                 var root = doc.RootElement;
                 root.GetProperty("verified").GetBoolean().Should().BeTrue();
-                root.GetProperty("statusLabel").GetString().Should().Be($"Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số ({currentTotpCode}) và cấp 8 mã khôi phục dự phòng");
+                root.GetProperty("statusLabel").GetString().Should().Be("Đã xác minh thành công mã bảo mật 2 lớp 6 chữ số (đã xác thực) và cấp 8 mã khôi phục dự phòng");
             }
         }
 

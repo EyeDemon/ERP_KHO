@@ -1,5 +1,59 @@
-export type Permission = { code: string; description: string };
-export type Role = { id: number; roleName: string; rowVersion: string; permissions: string[] };
+export type Permission = { code: string; description: string; securityDomain?: string };
+export type Role = { id: number; roleName: string; rowVersion: string; permissions: string[]; securityDomain?: string };
+
+const CUSTOMER_ROLE_DISPLAY_ORDER = ['Admin', 'Manager', 'Supervisor', 'Accountant', 'WarehouseStaff', 'Viewer'] as const;
+const FORBIDDEN_PLATFORM_ROLE_NAMES = new Set([
+  'SuperAdmin',
+  'BillingAdmin',
+  'SupportAdmin',
+  'SecurityAuditor',
+  'SupportReadOnly',
+]);
+const FORBIDDEN_PLATFORM_USERNAMES = new Set([
+  'qa_admin',
+  'qa_billing_admin',
+  'qa_support_admin',
+  'qa_security_auditor',
+]);
+
+export function isCustomerTenantPermission(code?: string | null, securityDomain?: string | null): boolean {
+  const clean = (code ?? '').trim();
+  if (!clean || clean.toLowerCase().startsWith('platform.')) return false;
+  if ((securityDomain ?? '').trim().toUpperCase() === 'PLATFORM') return false;
+  return true;
+}
+
+export function filterCustomerTenantCatalog(rawCatalog: Permission[]): Permission[] {
+  if (!Array.isArray(rawCatalog)) return [];
+  return rawCatalog.filter((p) => isCustomerTenantPermission(p.code, p.securityDomain));
+}
+
+export function isCustomerTenantRole(role?: Pick<Role, 'roleName' | 'securityDomain'> | null): boolean {
+  if (!role) return false;
+  const name = (role.roleName ?? '').trim();
+  if (!name) return false;
+  if (FORBIDDEN_PLATFORM_ROLE_NAMES.has(name) || name.startsWith('Platform')) return false;
+  if ((role.securityDomain ?? '').trim().toUpperCase() === 'PLATFORM') return false;
+  return true;
+}
+
+export function sanitizeAndSortCustomerRoles(rawRoles: Role[]): Role[] {
+  if (!Array.isArray(rawRoles)) return [];
+  const orderMap = new Map<string, number>(CUSTOMER_ROLE_DISPLAY_ORDER.map((r, idx) => [r, idx]));
+  return rawRoles
+    .filter((role) => isCustomerTenantRole(role))
+    .map((role) => ({
+      ...role,
+      permissions: Array.isArray(role.permissions)
+        ? role.permissions.filter((code) => isCustomerTenantPermission(code))
+        : [],
+    }))
+    .sort((a, b) => {
+      const ia = orderMap.get(a.roleName) ?? 999;
+      const ib = orderMap.get(b.roleName) ?? 999;
+      return ia !== ib ? ia - ib : a.roleName.localeCompare(b.roleName, 'vi');
+    });
+}
 
 export type UserSecurityStatus = {
   userId: number;
@@ -109,7 +163,7 @@ export function normalizeUserSecurity(uid: number, raw: Record<string, unknown>)
   const rawActiveSessions = raw.activeSessionCount ?? raw.activeSessions;
   return {
     userId: typeof raw.userId === 'number' ? raw.userId : uid,
-    username: typeof raw.username === 'string' && raw.username ? raw.username : 'qa_admin',
+    username: typeof raw.username === 'string' && raw.username ? raw.username : `user_${uid}`,
     roleName: typeof raw.roleName === 'string' && raw.roleName && raw.roleName !== 'User' ? raw.roleName : 'Admin',
     isActive: Boolean(raw.isActive ?? true),
     isTemporarilyLocked: Boolean(raw.isTemporarilyLocked ?? raw.isLocked ?? false),
@@ -142,56 +196,20 @@ export function normalizeUserWarehouses(
   }));
   return {
     userId: typeof raw.userId === 'number' ? raw.userId : uid,
-    username: typeof raw.username === 'string' && raw.username ? raw.username : 'qa_admin',
+    username: typeof raw.username === 'string' && raw.username ? raw.username : `user_${uid}`,
     fullName:
       typeof raw.fullName === 'string' && raw.fullName
         ? raw.fullName
         : typeof raw.username === 'string' && raw.username
           ? raw.username
           : fallbackSecurity && fallbackSecurity.userId === uid
-            ? `${fallbackSecurity.username} — Quản trị viên Hệ thống`
-            : 'qa_admin — Quản trị viên Hệ thống',
+            ? `${fallbackSecurity.username} — Quản trị viên công ty`
+            : `user_${uid} — Quản trị viên công ty`,
     roleName: typeof raw.roleName === 'string' && raw.roleName && raw.roleName !== 'User' ? raw.roleName : 'Admin',
     isActive: Boolean(raw.isActive ?? true),
     rowVersion: typeof raw.rowVersion === 'string' ? raw.rowVersion : null,
     warehouses,
   };
-}
-
-export function generateDynamicBase32Enrollment(): { secret: string; recoveryCodes: string[] } {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  const bytes = new Uint8Array(20);
-  if (typeof window !== 'undefined' && window.crypto?.getRandomValues) {
-    window.crypto.getRandomValues(bytes);
-  } else {
-    for (let i = 0; i < bytes.length; i += 1) {
-      bytes[i] = Math.floor(Math.random() * 256);
-    }
-  }
-  let secret = '';
-  let buffer = 0;
-  let bitsLeft = 0;
-  for (const b of bytes) {
-    buffer = (buffer << 8) | b;
-    bitsLeft += 8;
-    while (bitsLeft >= 5) {
-      secret += alphabet[(buffer >> (bitsLeft - 5)) & 0x1f];
-      bitsLeft -= 5;
-    }
-  }
-  if (bitsLeft > 0) {
-    secret += alphabet[(buffer << (5 - bitsLeft)) & 0x1f];
-  }
-  const recoveryCodes = Array.from({ length: 8 }, (_, idx) => {
-    const i1 = (idx * 2) % bytes.length;
-    const i2 = (idx * 2 + 1) % bytes.length;
-    const i3 = (idx * 2 + 5) % bytes.length;
-    const i4 = (idx * 2 + 9) % bytes.length;
-    const p1 = ((bytes[i1] << 8) | bytes[i2]).toString(16).toUpperCase().padStart(4, '0');
-    const p2 = ((bytes[i3] << 8) | bytes[i4]).toString(16).toUpperCase().padStart(4, '0');
-    return `${p1}-${p2}`;
-  });
-  return { secret, recoveryCodes };
 }
 
 export function formatBase32Groups(raw: string): string {
@@ -239,7 +257,7 @@ export function downloadRecoveryCodesTxtFile(recoveryCodes: string[]): void {
 
 export function normalizeBillingSummary(bd: Record<string, unknown>): PermissionsBillingSummary {
   const rawPlanName = typeof bd.planName === 'string' ? bd.planName.trim() : '';
-  const rawPlan = String(bd.planCode ?? rawPlanName ?? 'ENTERPRISE').toUpperCase();
+  const rawPlan = String(bd.planCode || rawPlanName || 'GROWTH').toUpperCase();
   const isFreeTrial = rawPlan.includes('FREE') || rawPlan.includes('TRIAL');
   const isStarter = rawPlan.includes('STARTER');
   const isEnterprise = rawPlan.includes('ENTERPRISE') || rawPlanName.includes('Doanh nghiệp');
@@ -287,13 +305,29 @@ export function parsePermissionsCatalogPayload(usersData: unknown, whData: unkno
   return {
     users: rawUsers
       .filter((u: unknown): u is Record<string, unknown> => Boolean(u && typeof u === 'object'))
+      .filter((u: Record<string, unknown>) => {
+        if (String(u.securityDomain ?? '').trim().toUpperCase() === 'PLATFORM') return false;
+        const uname = String(u.username ?? '').trim().toLowerCase();
+        if (FORBIDDEN_PLATFORM_USERNAMES.has(uname)) return false;
+        if (
+          typeof u.roleName === 'string' &&
+          u.roleName.trim() !== '' &&
+          !isCustomerTenantRole({
+            roleName: u.roleName,
+            securityDomain: typeof u.securityDomain === 'string' ? u.securityDomain : undefined,
+          })
+        ) {
+          return false;
+        }
+        return true;
+      })
       .map((u: Record<string, unknown>) => ({
         id: Number(u.id ?? u.userId ?? 0),
         username: String(u.username ?? ''),
         fullName: typeof u.fullName === 'string' ? u.fullName : undefined,
         roleName: typeof u.roleName === 'string' ? u.roleName : undefined,
       }))
-      .filter((u: { id: number }) => u.id > 0),
+      .filter((u: { id: number; username: string }) => u.id > 0 && u.username.trim().length > 0),
     warehouses: rawWhs
       .filter((w: unknown): w is Record<string, unknown> => Boolean(w && typeof w === 'object'))
       .map((w: Record<string, unknown>) => ({

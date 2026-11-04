@@ -19,7 +19,7 @@ describe('receipt mutation locks (mocked API)', () => {
   it('locks import create synchronously while the first request is pending', async () => {
     get.mockImplementation(async url => ({ data: url === '/api/v1/warehouses' ? [warehouse] : url === '/api/v1/products' ? [product] : url === '/api/v1/business-partners' ? { items: [partner] } : [] }) as never);
     const request = pending(); post.mockReturnValue(request.promise as never); const view = render(<ImportReceipts />);
-    await view.findByText('Chưa có phiếu nhập'); fireEvent.change(view.getAllByRole('textbox')[0], { target: { value: 'IMP-LOCK' } }); fireEvent.change(view.getAllByRole('combobox')[0], { target: { value: '1' } }); fireEvent.click(view.getByText('+ Thêm dòng'));
+    await view.findByText('Chưa có phiếu nhập'); fireEvent.click(view.getByTestId('btn-header-toggle-create-import')); fireEvent.change(view.getAllByRole('textbox')[0], { target: { value: 'IMP-LOCK' } }); fireEvent.change(view.getAllByRole('combobox')[0], { target: { value: '1' } }); fireEvent.click(view.getByText('+ Thêm dòng'));
     fireEvent.change(view.getAllByRole('combobox')[2], { target: { value: '2' } }); fireEvent.change(view.getAllByRole('spinbutton')[0], { target: { value: '1' } }); fireEvent.change(view.getAllByRole('spinbutton')[1], { target: { value: '1' } });
     const save = view.getByText('Lưu Phiếu Nháp'); fireEvent.click(save); fireEvent.click(save); expect(post).toHaveBeenCalledTimes(1); expect((view.getByText('Đang lưu...') as HTMLButtonElement).disabled).toBe(true); request.finish(); await waitFor(() => expect(view.queryByText('Đang lưu...')).toBeNull());
   });

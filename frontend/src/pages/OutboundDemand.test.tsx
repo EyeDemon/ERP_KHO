@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OutboundDemand from './OutboundDemand';
 import apiClient from '../services/apiClient';
@@ -178,7 +179,7 @@ describe('Outbound demand and backorder workbench',()=>{
     const domCard=view.getByTestId('smart-dom-order-splitting-card');
     expect(domCard.textContent).toContain('SO-QA-001');
     expect(domCard.textContent).toContain('QA-E2E-001');
-    expect(domCard.textContent).toContain('WH01 — Kho Chính TP.HCM');
+    expect(domCard.textContent).toContain('Kho Trung tâm (WH01)');
     expect(domCard.textContent).not.toContain('SO-2026-DOM-01');
     expect(domCard.textContent).not.toContain('DC Bình Dương');
 
@@ -186,7 +187,35 @@ describe('Outbound demand and backorder workbench',()=>{
     fireEvent.change(modeSelect,{target:{value:'MULTI_WAREHOUSE_SPLIT'}});
     expect(domCard.textContent).toContain('SO-QA-001-SUB1');
     expect(domCard.textContent).toContain('SO-QA-001-SUB2');
-    expect(domCard.textContent).toContain('WH01 — Kho Chính TP.HCM');
+    expect(domCard.textContent).toContain('Kho Trung tâm (WH01)');
     expect(domCard.textContent).toContain('WH02 — Kho Chi Nhánh Hà Nội');
+  });
+
+  it('Wave 15: preserves immutable SO-202610-001 order code verbatim and disables batch recovery when backorder list is empty',async()=>{
+    vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(url==='/api/v1/sales-orders')return {data:[{...summary,id:101,orderCode:'SO-202610-001',warehouseName:'Kho Trung tâm WH01',createdAt:'2026-10-15T08:00:00Z'}]} as never;
+      if(url==='/api/v1/backorders')return {data:[]} as never;
+      if(url==='/api/v1/business-partners')return {data:{items:[{id:2,code:'CUS-02',name:'Minh An',isCustomer:true,isActive:true}]}} as never;
+      if(url==='/api/v1/warehouses')return {data:[{id:1,code:'WH01',name:'Kho Trung tâm',isActive:true}]} as never;
+      if(url==='/api/v1/products')return {data:[{id:1,code:'SKU-1001',name:'Cà phê',isActive:true}]} as never;
+      return {data:[]} as never;
+    });
+
+    const soView=render(<MemoryRouter initialEntries={['/sales-orders']}><OutboundDemand/></MemoryRouter>);
+    expect(await soView.findByText('SO-202610-001')).toBeTruthy();
+    expect(soView.container.textContent).not.toContain('SO-202611-001');
+    expect(soView.container.textContent).toContain('Kho Trung tâm (WH01)');
+    const codeSortHeader=soView.getByRole('columnheader',{name:/Mã đơn bán/}) as HTMLElement;
+    const customerSortHeader=soView.getByRole('columnheader',{name:/Khách hàng \/ Kênh bán/}) as HTMLElement;
+    expect(codeSortHeader.style.paddingRight).toBe('14px');
+    expect(codeSortHeader.style.whiteSpace).toBe('nowrap');
+    expect(customerSortHeader.style.paddingRight).toBe('14px');
+    expect(customerSortHeader.style.whiteSpace).toBe('nowrap');
+    cleanup();
+
+    const boView=render(<MemoryRouter initialEntries={['/backorders']}><OutboundDemand/></MemoryRouter>);
+    const reasonEl=await boView.findByTestId('backorder-empty-disabled-reason');
+    expect(reasonEl.textContent).toContain('Không có đơn thiếu hàng cần xử lý');
+    expect((boView.getByTestId('btn-trigger-backorder-allocation') as HTMLButtonElement).disabled).toBe(true);
   });
 });

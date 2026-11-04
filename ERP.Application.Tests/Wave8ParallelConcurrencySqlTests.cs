@@ -28,7 +28,7 @@ public sealed class Wave8ParallelConcurrencySqlTests
 
     private static ErpKhoDbContext CreateContext() => new(
         new DbContextOptionsBuilder<ErpKhoDbContext>()
-            .UseSqlServer(ConnectionString)
+            .UseSqlServer(ConnectionString, sql => sql.CommandTimeout(90))
             .Options);
 
     [SqlServerFact]

@@ -6,17 +6,18 @@ import ReceiptPrintPreview from '../components/ReceiptPrintPreview';
 import { conflictErrorMessage, extractConflictCode, permissionError } from '../services/permissionPresentation';
 import { roundQty4 } from './productCatalog';
 import { UiPage, UiPageHeader } from '../ui/ProductionUi';
+import { formatWarehouseLabel } from '../utils/warehouseLabel';
 import {
   type AsnOption, type Discrepancy, type ImportReceipt, type ImportReceiptDetail, type MacPreviewLine,
   type Partner, type PoOption, type Product, type ReasonCode, type ReceiptDetailForm, type ReceiveLineForm,
   type ResolutionForm, type Warehouse, type WarehouseLocationItem,
-  buildWorkflowPayloadAndValidate, mapMacPreviewResponse, nextShortReceiptCode,
+  buildWorkflowPayloadAndValidate, nextShortReceiptCode,
 } from '../modules/inbound/ImportReceiptTypes';
 import { ImportReceiptScannerSection, ImportReceiptWorkspaceTabs } from '../modules/inbound/ImportReceiptScannerAndCreateSection';
 import { ImportReceiptCreateFormCard } from '../modules/inbound/ImportReceiptCreateFormCard';
 import { ImportReceiptKpiCard, ImportReceiptListCard } from '../modules/inbound/ImportReceiptListSection';
-import { ImportReceiptRmaCard } from '../modules/inbound/ImportReceiptRmaSection';
 import { ImportReceiptDetailViewCard } from '../modules/inbound/ImportReceiptDetailCard';
+import { useImportReceiptAuxiliaryActions } from '../modules/inbound/ImportReceiptDiscrepancySection';
 import './ImportReceipts.css';
 
 const ImportReceipts = () => {
@@ -60,7 +61,6 @@ const ImportReceipts = () => {
 
   const [code, setCode] = useState(''), [warehouseId, setWarehouseId] = useState<number | ''>(''), [note, setNote] = useState('');
   const [supplierId, setSupplierId] = useState<number | ''>(''), [purchaseOrderId, setPurchaseOrderId] = useState<string>(''), [asnId, setAsnId] = useState<string>('');
-  const [rmaLocationCode, setRmaLocationCode] = useState<string>('QC-HOLD-01');
   const [warehouseLocations, setWarehouseLocations] = useState<WarehouseLocationItem[]>([]);
   const [receivingReceiptId, setReceivingReceiptId] = useState<string>(''), [receivingFromLocationId, setReceivingFromLocationId] = useState<string>('');
   const [receivingToLocationId, setReceivingToLocationId] = useState<string>(''), [receivingMoveQty, setReceivingMoveQty] = useState<number>(10);
@@ -80,17 +80,6 @@ const ImportReceipts = () => {
     if (activeWorkspaceTab === 'scanner') focusScannerInput();
   }, [activeWorkspaceTab, focusScannerInput]);
 
-  const previewMacBeforePost = async (receipt: ImportReceipt) => {
-    setMacPreviewLoading(true); setError('');
-    try {
-      const res = await apiClient.get(`/api/v1/import-receipts/${receipt.id}/mac-preview`);
-      setMacPreviewLines(mapMacPreviewResponse(res?.data, receipt));
-    } catch (err) {
-      setError(permissionError(err, 'Không thể tải xem trước giá vốn bình quân (MAC) từ máy chủ.'));
-      setMacPreviewLines([]);
-    } finally { setMacPreviewLoading(false); }
-  };
-
   const fetchData = useCallback(async () => {
     const request = ++referenceRequest.current;
     try {
@@ -102,7 +91,11 @@ const ImportReceipts = () => {
         canReadAsns ? Promise.resolve(apiClient.get('/api/v1/asns')).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
       ]);
       if (request !== referenceRequest.current) return;
-      setWarehouses(hasPermission('warehouse.read') ? whRes.data : []);
+      setWarehouses(
+        hasPermission('warehouse.read')
+          ? (whRes.data as Warehouse[]).map(w => ({ ...w, name: formatWarehouseLabel(w.name, (w as { code?: string }).code, w.id) }))
+          : [],
+      );
       setProducts(hasPermission('product.read') ? prRes.data : []);
       setSuppliers(hasPermission('partner.read') ? bpRes.data.items : []);
       const poRaw = Array.isArray(poRes?.data) ? poRes.data : (Array.isArray(poRes?.data?.items) ? poRes.data.items : []);
@@ -157,10 +150,8 @@ const ImportReceipts = () => {
         if (rows.length > 0) {
           const fromLoc = rows.find(l => l.locationType === 'Receiving' || l.locationType === 'Staging') ?? rows[0];
           const toLoc = rows.find(l => l.locationType === 'Storage') ?? rows[rows.length - 1];
-          const rmaLoc = rows.find(l => /QC|HOLD|QUARANTINE|RETURN|DAMAGED/i.test(l.code) || l.locationType === 'Quarantine' || l.locationType === 'Returns') ?? fromLoc;
           setReceivingFromLocationId(prev => prev || String(fromLoc.id));
           setReceivingToLocationId(prev => prev || String(toLoc.id));
-          if (rmaLoc?.code) setRmaLocationCode(prev => prev || rmaLoc.code);
         }
       })
       .catch(() => { if (active) setWarehouseLocations([]); });
@@ -238,68 +229,16 @@ const ImportReceipts = () => {
     } finally { cancelInFlight.current = null; }
   };
 
-  const observeReceipt = async (id: number, receipt?: ImportReceipt) => {
-    if (!canObserve || workflowInFlight.current !== null) return;
-    workflowInFlight.current = id; setWorkflowId(id); setError('');
-    try {
-      const source = receipt || (await apiClient.get(`/api/v1/import-receipts/${id}`)).data as ImportReceipt;
-      const lines = (source.details || []).map(d => ({ lineId: d.id, observedQuantity: receiveLines[d.id]?.receivedQuantity ?? d.expectedQuantity, observedUnitId: d.operationUnitId, items: [] }));
-      if (lines.some(x => x.observedQuantity < 0)) throw new Error('Số lượng quan sát không được âm.');
-      const action = `import-discrepancy-observe:${id}`;
-      await apiClient.post(`/api/v1/import-receipts/${id}/discrepancies/observe`, { lines }, { headers: idempotencyHeaders(action) });
-      completeIdempotentAction(action); setSuccessMsg('Đã ghi nhận số lượng thực tế. Tồn kho chưa thay đổi.');
-      await fetchReceipts();
-      if (selectedReceipt?.id === id) await handleViewDetails(id);
-    } catch (err: any) {
-      if (err.response && selectedReceipt?.id === id && extractConflictCode(err) !== 'INSUFFICIENT_AVAILABLE_STOCK') setSelectedReceipt(null);
-      setError(err.response?.status === 409 ? conflictErrorMessage(err, 'Dữ liệu đã thay đổi. Vui lòng tải lại phiếu.') : permissionError(err) || err.message || 'Không thể ghi nhận số lượng.');
-    } finally { workflowInFlight.current = null; setWorkflowId(null); }
-  };
-
-  const submitResolution = async (d: Discrepancy) => {
-    if (!canSubmit || workflowInFlight.current !== null || !selectedReceipt) return;
-    workflowInFlight.current = selectedReceipt.id; setWorkflowId(selectedReceipt.id); setError('');
-    try {
-      const form = resolutionForms[d.id] || { action: 'ACCEPT_OBSERVED', doorRejectedQuantity: 0, reasonCode: '', responsibleParty: 'UNKNOWN', supplierClaimRequired: false, note: '', evidenceReference: '', confirmNormalizedObservation: false };
-      if (!form.reasonCode) throw new Error('Chọn mã lý do.');
-      if ((form.responsibleParty === 'UNKNOWN' || reasonCodes.find(x => x.code === form.reasonCode)?.requiresNote) && !form.note.trim()) throw new Error('Lý do hoặc bên chịu trách nhiệm này yêu cầu ghi chú.');
-      const action = `import-discrepancy-submit:${selectedReceipt.id}:${d.id}`;
-      await apiClient.post(`/api/v1/import-receipts/${selectedReceipt.id}/discrepancies/${d.id}/submit`, { ...form, rowVersion: d.rowVersion }, { headers: idempotencyHeaders(action) });
-      completeIdempotentAction(action); setSuccessMsg('Đã gửi phương án xử lý. Tồn kho chưa thay đổi.');
-      await fetchReceipts(); await handleViewDetails(selectedReceipt.id);
-    } catch (err: any) {
-      if (err.response) { setSelectedReceipt(null); setDiscrepancies([]); }
-      setError(err.response?.status === 409 ? conflictErrorMessage(err, 'Phương án xử lý đã thay đổi. Vui lòng tải lại phiếu.') : permissionError(err) || err.message || 'Không thể gửi phương án xử lý.');
-    } finally { workflowInFlight.current = null; setWorkflowId(null); }
-  };
-
-  const reviewResolution = async (d: Discrepancy, decision: 'approve' | 'reject') => {
-    if (decision === 'approve' ? !canApproveDiscrepancy : !canRejectDiscrepancy) return;
-    if (workflowInFlight.current !== null || !selectedReceipt) return;
-    workflowInFlight.current = selectedReceipt.id; setWorkflowId(selectedReceipt.id); setError('');
-    try {
-      const action = `import-discrepancy-${decision}:${selectedReceipt.id}:${d.id}`;
-      await apiClient.post(`/api/v1/import-receipts/${selectedReceipt.id}/discrepancies/${d.id}/${decision}`, d.rowVersion, { headers: idempotencyHeaders(action) });
-      completeIdempotentAction(action); await fetchReceipts(); await handleViewDetails(selectedReceipt.id);
-    } catch (err: any) {
-      if (err.response) { setSelectedReceipt(null); setDiscrepancies([]); }
-      setError(err.response?.status === 409 ? conflictErrorMessage(err, 'Phương án xử lý đã thay đổi. Vui lòng tải lại phiếu.') : permissionError(err) || 'Không thể duyệt phương án xử lý.');
-    } finally { workflowInFlight.current = null; setWorkflowId(null); }
-  };
-
-  const recountDiscrepancy = async (d: Discrepancy) => {
-    if (!canResolve || workflowInFlight.current !== null || !selectedReceipt) return;
-    workflowInFlight.current = selectedReceipt.id; setWorkflowId(selectedReceipt.id); setError('');
-    try {
-      const quantity = receiveLines[d.receiptLineId]?.receivedQuantity ?? d.observedQuantity;
-      const action = `import-discrepancy-recount:${selectedReceipt.id}:${d.id}:${quantity}`;
-      await apiClient.post(`/api/v1/import-receipts/${selectedReceipt.id}/discrepancies/${d.id}/recount`, { observedQuantity: quantity, observedUnitId: d.operationUnitId, voidedObservationItemIds: [], items: [], rowVersion: d.rowVersion }, { headers: idempotencyHeaders(action) });
-      completeIdempotentAction(action); await handleViewDetails(selectedReceipt.id);
-    } catch (err: any) {
-      if (err.response) { setSelectedReceipt(null); setDiscrepancies([]); }
-      setError(err.response?.status === 409 ? conflictErrorMessage(err, 'Số lượng quan sát đã thay đổi. Vui lòng tải lại phiếu.') : permissionError(err) || 'Không thể kiểm đếm lại.');
-    } finally { workflowInFlight.current = null; setWorkflowId(null); }
-  };
+  const {
+    previewMacBeforePost, observeReceipt, submitResolution, reviewResolution,
+    recountDiscrepancy, changeSupplier, openPrintPreview, closePrintPreview,
+  } = useImportReceiptAuxiliaryActions({
+    canObserve, canSubmit, canApproveDiscrepancy, canRejectDiscrepancy, canResolve, canUpdate, canReadPartners,
+    selectedReceipt, setSelectedReceipt, receiveLines, resolutionForms, reasonCodes, setDiscrepancies,
+    workflowInFlight, partnerMutationInFlight, printRequest, printTriggerRef, setWorkflowId, setPartnerUpdating,
+    setPrintReceipt, setPrintFetchedAt, setPrintLoadingId, setMacPreviewLines, setMacPreviewLoading,
+    setError, setSuccessMsg, fetchReceipts, handleViewDetails,
+  });
 
   const handleAddDetail = () => setDetails([...details, { productId: '', operationUnitId: '', expectedQuantity: '', unitPrice: '', note: '' }]);
   const handleRemoveDetail = (index: number) => setDetails(details.filter((_, i) => i !== index));
@@ -369,23 +308,6 @@ const ImportReceipts = () => {
     } finally { workflowInFlight.current = null; setWorkflowId(null); }
   };
 
-  const changeSupplier = async (value: number | null) => {
-    if (!canUpdate || !canReadPartners || !selectedReceipt || partnerMutationInFlight.current) return;
-    partnerMutationInFlight.current = true; setPartnerUpdating(true); setError('');
-    try { await apiClient.put(`/api/v1/import-receipts/${selectedReceipt.id}/supplier`, { partnerId: value }); await fetchReceipts(); await handleViewDetails(selectedReceipt.id); }
-    catch (x: any) { setError(permissionError(x) || 'Không đổi được nhà cung cấp.'); }
-    finally { partnerMutationInFlight.current = false; setPartnerUpdating(false); }
-  };
-
-  const openPrintPreview = async (id: number, trigger: HTMLButtonElement) => {
-    const request = ++printRequest.current;
-    printTriggerRef.current = trigger; setPrintReceipt(null); setPrintFetchedAt(null); setPrintLoadingId(id); setError('');
-    try { const res = await apiClient.get(`/api/v1/import-receipts/${id}`); if (request === printRequest.current && hasPermission('receipt.read')) { setPrintReceipt(res.data); setPrintFetchedAt(new Date()); } }
-    catch (x: any) { if (request === printRequest.current) setError(permissionError(x, 'Không tải được dữ liệu bản in.')); }
-    finally { if (request === printRequest.current) setPrintLoadingId(null); }
-  };
-  const closePrintPreview = () => { printRequest.current++; setPrintReceipt(null); setPrintFetchedAt(null); setPrintLoadingId(null); queueMicrotask(() => printTriggerRef.current?.focus()); };
-
   const selectedPoObj = purchaseOrders.find(po => String(po.id) === purchaseOrderId);
   const filteredAsns = purchaseOrderId
     ? asns.filter(asn => (asn.purchaseOrderId != null && String(asn.purchaseOrderId) === purchaseOrderId) || (selectedPoObj && asn.purchaseOrderCode && asn.purchaseOrderCode === selectedPoObj.code) || (asn.purchaseOrderId == null && !asn.purchaseOrderCode))
@@ -396,14 +318,14 @@ const ImportReceipts = () => {
 
   return (
     <UiPage>
-      <div className="import-receipts">
+      <div className="import-receipts" style={{ minWidth: 0, maxWidth: '100%' }}>
         <UiPageHeader
           eyebrow="Nhập kho"
           title="Quản lý nhập kho"
           description="Tạo và theo dõi phiếu nhập từ nhận hàng, xử lý sai lệch, kiểm tra chất lượng đến ghi nhận tồn kho."
           actions={
             canCreate && activeWorkspaceTab === 'receipts' ? (
-              <button type="button" className="ui-btn ui-btn-primary" onClick={() => { if (!showCreateForm && !code.trim()) setCode(nextShortReceiptCode(receipts)); setShowCreateForm(v => !v); }} style={{ background: '#0284c7', color: '#ffffff', borderColor: '#0284c7', fontWeight: 600 }}>
+              <button type="button" data-testid="btn-header-toggle-create-import" className="ui-btn ui-btn-primary" onClick={() => { if (!showCreateForm && !code.trim()) setCode(nextShortReceiptCode(receipts)); setShowCreateForm(v => !v); }} style={{ background: '#1d4ed8', color: '#ffffff', borderColor: '#1d4ed8', fontWeight: 600 }}>
                 {showCreateForm ? 'Thu gọn biểu mẫu' : '+ Tạo phiếu nhập'}
               </button>
             ) : undefined
@@ -445,11 +367,6 @@ const ImportReceipts = () => {
             handleCancel={handleCancel} handleApprove={handleApprove} runWorkflow={runWorkflow} fetchData={async () => { await fetchReceipts(); await fetchData(); }} setError={setError} setSuccessMsg={setSuccessMsg}
           />
         </div>
-
-        <ImportReceiptRmaCard
-          activeWorkspaceTab={activeWorkspaceTab} canRead={canRead} receipts={receipts} selectedReceipt={selectedReceipt} warehouseId={warehouseId} warehouses={warehouses}
-          products={products} warehouseLocations={warehouseLocations} rmaLocationCode={rmaLocationCode} setRmaLocationCode={setRmaLocationCode} successMsg={successMsg} setSuccessMsg={setSuccessMsg} setError={setError}
-        />
 
         {selectedReceipt && (
           <ImportReceiptDetailViewCard

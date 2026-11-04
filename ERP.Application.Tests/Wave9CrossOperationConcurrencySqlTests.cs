@@ -21,7 +21,7 @@ public sealed class Wave9CrossOperationConcurrencySqlTests
 
     private static ErpKhoDbContext CreateContext() => new(
         new DbContextOptionsBuilder<ErpKhoDbContext>()
-            .UseSqlServer(ConnectionString)
+            .UseSqlServer(ConnectionString, sql => sql.CommandTimeout(90))
             .Options);
 
     [SqlServerFact]
@@ -657,14 +657,22 @@ public sealed class Wave9CrossOperationConcurrencySqlTests
                 var current = new ScopedUser(userId, "Manager", IsGlobalAdmin: false);
                 var auth = new WarehouseAuthorizationService(workerDb, current);
                 var lockSvc = new InventoryLockService(workerDb, auth, current);
-                return await lockSvc.CreateAsync(new CreateInventoryLockDto
+                try
                 {
-                    WarehouseId = warehouseId,
-                    ProductId = productId,
-                    LotId = lotId,
-                    LockType = "QualityHold",
-                    Reason = "Khóa khẩn cấp LOT-X khi đang phân bổ/putaway"
-                });
+                    var created = await lockSvc.CreateAsync(new CreateInventoryLockDto
+                    {
+                        WarehouseId = warehouseId,
+                        ProductId = productId,
+                        LotId = lotId,
+                        LockType = "QualityHold",
+                        Reason = "Khóa khẩn cấp LOT-X khi đang phân bổ/putaway"
+                    });
+                    return (Succeeded: true, Lock: (InventoryLockDto?)created, Error: (Exception?)null);
+                }
+                catch (Exception ex)
+                {
+                    return (Succeeded: false, Lock: (InventoryLockDto?)null, Error: (Exception?)ex);
+                }
             });
 
             var soTasks = salesOrders.Select(so => Task.Run(async () =>
@@ -719,10 +727,13 @@ public sealed class Wave9CrossOperationConcurrencySqlTests
             })).ToArray();
 
             gate.Set();
-            var createdLock = await lockTask;
+            await Task.WhenAll([lockTask, .. soTasks, .. putawayTasks]);
+            var lockOutcome = await lockTask;
             var soResults = await Task.WhenAll(soTasks);
             var putawayResults = await Task.WhenAll(putawayTasks);
 
+            lockOutcome.Succeeded.Should().BeTrue($"InventoryLockService.CreateAsync must complete without timeout/deadlock, but got: {lockOutcome.Error}");
+            var createdLock = lockOutcome.Lock!;
             createdLock.Status.Should().Be("Active");
             soResults.Should().OnlyContain(r => r.Succeeded, "no ReleaseSalesOrderAsync thread may fail with a SQL 1205 deadlock");
             putawayResults.Where(r => !r.Succeeded).Select(r => r.Error).Should().OnlyContain(
@@ -772,7 +783,10 @@ public sealed class Wave9CrossOperationConcurrencySqlTests
         {
             await using var cleanDb = CreateContext();
             await cleanDb.AuditLogs.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
-            await cleanDb.InventoryLocationMovements.Where(x => x.WarehouseId == warehouseId).ExecuteDeleteAsync();
+            await cleanDb.InventoryLocationMovements
+                .Where(x => x.WarehouseId == warehouseId
+                    || (x.PutawayTaskItemId != null && cleanDb.PutawayTaskItems.Any(pti => pti.Id == x.PutawayTaskItemId && pti.PutawayTask.WarehouseId == warehouseId)))
+                .ExecuteDeleteAsync();
             await cleanDb.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
             try
             {
@@ -973,11 +987,19 @@ public sealed class Wave9CrossOperationConcurrencySqlTests
                     current,
                     new StockReservationOptions(),
                     new PickingTaskIntegration(workerDb));
-                await reservationSvc.ReleaseAsync(manualReservationId, new ReleaseStockReservationDto
+                try
                 {
-                    Quantity = 5m,
-                    Reason = "Giải phóng 5 đơn vị cho các luồng ReallocateBackorder"
-                });
+                    await reservationSvc.ReleaseAsync(manualReservationId, new ReleaseStockReservationDto
+                    {
+                        Quantity = 5m,
+                        Reason = "Giải phóng 5 đơn vị cho các luồng ReallocateBackorder"
+                    });
+                    return (Succeeded: true, Error: (Exception?)null);
+                }
+                catch (Exception ex)
+                {
+                    return (Succeeded: false, Error: (Exception?)ex);
+                }
             });
 
             var reallocateTasks = backorders.Select(bo => Task.Run(async () =>
@@ -1000,7 +1022,9 @@ public sealed class Wave9CrossOperationConcurrencySqlTests
             })).ToArray();
 
             gate.Set();
-            await releaseTask;
+            await Task.WhenAll([releaseTask, .. reallocateTasks]);
+            var releaseOutcome = await releaseTask;
+            releaseOutcome.Succeeded.Should().BeTrue($"StockReservationService.ReleaseAsync must complete without timeout/deadlock, but got: {releaseOutcome.Error}");
             var reallocateResults = await Task.WhenAll(reallocateTasks);
 
             // Every thread either succeeded (recovered 5 units) or failed cleanly with 409 BACKORDER_INSUFFICIENT_AVAILABLE (if ordered before ReleaseAsync)

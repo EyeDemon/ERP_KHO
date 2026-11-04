@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const resources: Record<string, string> = {
-  approval: 'phê duyệt phiếu nhập',
+  approval: 'phiếu nhập kho',
   receipt: 'phiếu nhập',
   quality_inspection: 'kiểm tra chất lượng',
   quality_disposition: 'kết quả kiểm tra chất lượng',
@@ -53,6 +53,10 @@ const resources: Record<string, string> = {
   stock_reservation: 'giữ hàng tồn kho',
   inventory_opening_balance: 'tồn kho đầu kỳ (Excel/CSV)',
   return: 'hàng hoàn và đổi trả (RMA)',
+  replenishment: 'đề xuất bổ sung hàng lên kệ nhặt',
+  report: 'báo cáo kho vận',
+  cod_reconciliation: 'đối soát thu hộ COD',
+  einvoice: 'hóa đơn điện tử GTGT',
 };
 
 const actions: Record<string, string> = {
@@ -93,18 +97,34 @@ const actions: Record<string, string> = {
   import: 'Nhập',
   inspect: 'Kiểm định chất lượng',
   disposition: 'Định đoạt xử lý',
+  generate: 'Khởi tạo',
+  export: 'Kết xuất',
+  issue: 'Phát hành',
 };
 
 
 export const PERMISSION_DESCRIPTIONS: Record<string, string> = {
+  'approval.approve': 'Cho phép phê duyệt phiếu nhập kho và các yêu cầu phê duyệt chứng từ kho.',
+  'approval.reject': 'Cho phép từ chối yêu cầu phê duyệt phiếu nhập kho.',
   'inventory.cost.read': 'Cho phép xem đơn giá mua/bán, giá vốn bình quân (MAC) và giá trị chênh lệch kiểm kê trên các chứng từ và báo cáo kho.',
   'inventory_opening_balance.import': 'Cho phép tải lên và ghi sổ tồn kho đầu kỳ từ tệp Excel/CSV vào kho.',
+  'export_receipt.reprint_awb': 'Cho phép in lại tem vận đơn nhiệt AWB 100x150mm trên phiếu xuất kho đã xác nhận.',
   'return.read': 'Cho phép xem danh sách phiếu hàng hoàn & đổi trả (RMA), trạng thái biệt trữ và kết quả định đoạt.',
   'return.create': 'Cho phép tạo phiếu tiếp nhận hàng hoàn trả (RMA) mới từ vận đơn AWB hoặc đơn hàng gốc.',
   'return.receive': 'Cho phép quét tiếp nhận kiện hàng hoàn trả vào khu vực Biệt trữ (Quarantine).',
   'return.inspect': 'Cho phép kiểm định tình trạng vật lý kiện hoàn (Nguyên vẹn / Hỏng vỏ hộp / Lỗi kỹ thuật).',
   'return.disposition': 'Cho phép chọn hướng định đoạt hàng hoàn (Nhập lại kệ, Tân trang thay hộp, Xuất trả NCC, Thanh hủy).',
   'return.post': 'Cho phép thực thi định đoạt hàng hoàn và ghi sổ Sổ cái tồn kho.',
+  'platform.dashboard.read': 'Cho phép xem bảng điều khiển toàn nền tảng SaaS (tổng quan doanh nghiệp, gói cước và trạng thái vận hành).',
+  'platform.tenant.read': 'Cho phép tra cứu danh sách doanh nghiệp thuê kho (Tenant), hạn mức kho và cấu hình gói dịch vụ.',
+  'platform.tenant.provision': 'Cho phép khởi tạo mới doanh nghiệp thuê kho (Tenant) trên nền tảng SaaS.',
+  'platform.tenant.suspend': 'Cho phép tạm ngưng hoặc khôi phục trạng thái hoạt động của doanh nghiệp thuê kho.',
+  'platform.billing.manage': 'Cho phép quản lý chu kỳ cước SaaS, phát hành hóa đơn và theo dõi công nợ thuê bao.',
+  'platform.billing.reconcile': 'Cho phép xác nhận gạch nợ thủ công hóa đơn SaaS kèm mã giao dịch ngân hàng (UNC/FT).',
+  'platform.quota.override': 'Cho phép điều chỉnh hạn mức số kho, người dùng và sản phẩm cho từng doanh nghiệp.',
+  'platform.support.impersonate': 'Cho phép khởi tạo phiên hỗ trợ kỹ thuật có kiểm soát (Impersonation) kèm nhật ký kiểm toán.',
+  'platform.audit.read': 'Cho phép tra cứu nhật ký kiểm toán bảo mật và bằng chứng tuân thủ cấp nền tảng.',
+  'platform.integration.manage': 'Cho phép quản trị cấu hình tích hợp cổng thanh toán, vận chuyển và webhook cấp nền tảng.',
 };
 
 export const CONFLICT_ERROR_MESSAGES: Record<string, string> = {
@@ -130,17 +150,174 @@ export const conflictErrorMessage = (
 
 };
 
+const PLATFORM_PERMISSION_LABELS: Record<string, string> = {
+  'platform.dashboard.read': 'Xem bảng điều khiển nền tảng SaaS',
+  'platform.tenant.read': 'Xem danh sách doanh nghiệp (Tenant)',
+  'platform.tenant.provision': 'Khởi tạo doanh nghiệp thuê kho mới',
+  'platform.tenant.suspend': 'Tạm ngưng / khôi phục doanh nghiệp',
+  'platform.billing.manage': 'Quản lý hóa đơn & gói cước SaaS',
+  'platform.billing.reconcile': 'Đối soát & gạch nợ hóa đơn SaaS',
+  'platform.quota.override': 'Điều chỉnh hạn mức tài nguyên Tenant',
+  'platform.support.impersonate': 'Hỗ trợ kỹ thuật qua phiên Impersonation',
+  'platform.audit.read': 'Xem nhật ký kiểm toán nền tảng',
+  'platform.integration.manage': 'Quản lý tích hợp cấp nền tảng',
+};
+
 export const permissionDescription = (code: string, fallbackDescription?: string): string =>
   PERMISSION_DESCRIPTIONS[code] || fallbackDescription || 'Quyền truy cập hệ thống';
 
 export const permissionLabel = (code: string): string => {
+  if (PLATFORM_PERMISSION_LABELS[code]) return PLATFORM_PERMISSION_LABELS[code];
+  if (code === 'approval.approve') return 'Phê duyệt phiếu nhập kho';
+  if (code === 'approval.reject') return 'Từ chối phê duyệt phiếu nhập kho';
   if (code === 'permission.assign') return 'Cấp và thu hồi quyền truy cập';
   if (code === 'inventory.cost.read') return 'Xem đơn giá, giá vốn và giá trị tồn kho';
+  if (code === 'export_receipt.reprint_awb') return 'In lại tem vận đơn nhiệt AWB';
   if (code === 'inventory_opening_balance.import') return 'Nhập tồn kho đầu kỳ (Excel/CSV)';
   const [resource, action] = code.split('.');
   return resources[resource] && actions[action] ? `${actions[action]} ${resources[resource]}` : 'Quyền chưa có diễn giải';
 };
-export const roleLabel = (name: string) => ({ Admin: 'Quản trị viên', Manager: 'Quản lý', Viewer: 'Người xem', WarehouseStaff: 'Nhân viên kho' }[name] || 'Vai trò khác');
+export const PERMISSION_MODULE_GROUPS = [
+  'Nhập kho',
+  'Xuất kho',
+  'Giao vận & Hàng hoàn',
+  'Tồn kho',
+  'Sản phẩm & Danh mục',
+  'Tài chính & Giá vốn',
+  'Cấu trúc kho',
+  'Quản trị & Bảo mật',
+] as const;
+
+export type PermissionModuleGroup = (typeof PERMISSION_MODULE_GROUPS)[number];
+
+const MODULE_BY_RESOURCE: Record<string, PermissionModuleGroup> = {
+  purchase_order: 'Nhập kho',
+  asn: 'Nhập kho',
+  dock: 'Nhập kho',
+  dock_appointment: 'Nhập kho',
+  yard: 'Nhập kho',
+  receipt: 'Nhập kho',
+  approval: 'Nhập kho',
+  receiving_discrepancy: 'Nhập kho',
+  receiving_tolerance_policy: 'Nhập kho',
+  quality_inspection: 'Nhập kho',
+  quality_disposition: 'Nhập kho',
+  quality: 'Nhập kho',
+  quality_policy: 'Nhập kho',
+  putaway: 'Nhập kho',
+  sales_order: 'Xuất kho',
+  backorder: 'Xuất kho',
+  allocation: 'Xuất kho',
+  picking: 'Xuất kho',
+  packing: 'Xuất kho',
+  handling_unit: 'Xuất kho',
+  export_receipt: 'Xuất kho',
+  shipment: 'Giao vận & Hàng hoàn',
+  loading: 'Giao vận & Hàng hoàn',
+  return: 'Giao vận & Hàng hoàn',
+  inventory: 'Tồn kho',
+  inventory_availability: 'Tồn kho',
+  inventory_ledger: 'Tồn kho',
+  inventory_traceability: 'Tồn kho',
+  inventory_status_change: 'Tồn kho',
+  inventory_lock: 'Tồn kho',
+  inventory_movement: 'Tồn kho',
+  inventory_reversal: 'Tồn kho',
+  inventory_opening_balance: 'Tồn kho',
+  stock_transfer: 'Tồn kho',
+  stocktake: 'Tồn kho',
+  stock_reservation: 'Tồn kho',
+  replenishment: 'Tồn kho',
+  report: 'Tài chính & Giá vốn',
+  cod_reconciliation: 'Tài chính & Giá vốn',
+  einvoice: 'Tài chính & Giá vốn',
+  product: 'Sản phẩm & Danh mục',
+  product_category: 'Sản phẩm & Danh mục',
+  category: 'Sản phẩm & Danh mục',
+  product_barcode: 'Sản phẩm & Danh mục',
+  product_uom: 'Sản phẩm & Danh mục',
+  uom: 'Sản phẩm & Danh mục',
+  partner: 'Sản phẩm & Danh mục',
+  reason_code: 'Sản phẩm & Danh mục',
+  warehouse: 'Cấu trúc kho',
+  warehouse_zone: 'Cấu trúc kho',
+  warehouse_calendar: 'Cấu trúc kho',
+  location: 'Cấu trúc kho',
+  permission: 'Quản trị & Bảo mật',
+  role: 'Quản trị & Bảo mật',
+  user: 'Quản trị & Bảo mật',
+  user_warehouse: 'Quản trị & Bảo mật',
+};
+
+export const permissionModuleGroup = (code: string): PermissionModuleGroup => {
+  if (code === 'inventory.cost.read' || code.startsWith('finance.') || code.startsWith('billing.') || code.startsWith('accounting.')) {
+    return 'Tài chính & Giá vốn';
+  }
+  const [resource] = code.split('.');
+  return MODULE_BY_RESOURCE[resource] || 'Quản trị & Bảo mật';
+};
+
+export const PLATFORM_ROLE_NAMES = [
+  'SuperAdmin',
+  'BillingAdmin',
+  'SupportAdmin',
+  'SecurityAuditor',
+] as const;
+
+export const CUSTOMER_TENANT_ROLE_NAMES = [
+  'Admin',
+  'Manager',
+  'Supervisor',
+  'Accountant',
+  'WarehouseStaff',
+  'Viewer',
+] as const;
+
+export const isPlatformRoleName = (roleName?: string | null): boolean => {
+  const trimmed = (roleName ?? '').trim();
+  if (!trimmed) return false;
+  return (
+    (PLATFORM_ROLE_NAMES as readonly string[]).includes(trimmed) ||
+    trimmed === 'SupportReadOnly' ||
+    trimmed.startsWith('Platform')
+  );
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  SuperAdmin: 'Chủ nền tảng SaaS',
+  BillingAdmin: 'Quản trị Thanh toán SaaS',
+  SupportAdmin: 'Quản trị Hỗ trợ Kỹ thuật',
+  SecurityAuditor: 'Kiểm toán Bảo mật',
+  Admin: 'Quản trị viên công ty',
+  Manager: 'Quản lý kho',
+  WarehouseStaff: 'Nhân viên kho',
+  Accountant: 'Kế toán kho',
+  Supervisor: 'Giám sát & QC',
+  Receiver: 'Nhân viên nhận hàng',
+  PickerPacker: 'Nhân viên lấy/đóng gói',
+  Viewer: 'Chỉ xem / Kiểm toán',
+};
+
+export const roleLabel = (name: string): string => ROLE_LABELS[name] || `Vai trò ${name}`;
+
+export const roleChipLabel = (roleName: string, count: number): string => {
+  const chipNames: Record<string, string> = {
+    SuperAdmin: 'Chủ nền tảng SaaS',
+    BillingAdmin: 'Quản trị Thanh toán SaaS',
+    SupportAdmin: 'Quản trị Hỗ trợ Kỹ thuật',
+    SecurityAuditor: 'Kiểm toán Bảo mật',
+    Admin: 'Quản trị viên công ty',
+    Manager: 'Quản lý kho',
+    Supervisor: 'Giám sát & QC',
+    Accountant: 'Kế toán kho',
+    WarehouseStaff: 'Nhân viên kho',
+    Viewer: 'Chỉ xem / Kiểm toán',
+    Receiver: 'Nhân viên nhận hàng',
+    PickerPacker: 'Nhân viên lấy/đóng gói',
+  };
+  const label = chipNames[roleName] || roleLabel(roleName);
+  return `${label} (${roleName} · ${count})`;
+};
 export const permissionError = (error: unknown, fallback = 'Không thể xử lý yêu cầu. Vui lòng thử lại.') => {
   const status = axios.isAxiosError(error) ? error.response?.status : (error as { response?: { status?: number } })?.response?.status;
   if (status === 409) {

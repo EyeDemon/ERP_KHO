@@ -209,7 +209,7 @@ export default function PutawayTasks() {
     <UiPage>
       <UiPageHeader
         eyebrow="Nhập kho"
-        title="Cất hàng"
+        title="Cất hàng vào kệ"
         description="Theo dõi nhiệm vụ cất hàng từ vị trí nhận hàng tới vị trí đích, gồm trạng thái, tiến độ và xử lý ngoại lệ."
       />
 
@@ -269,12 +269,12 @@ export default function PutawayTasks() {
             <div className="putaway-actions" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', margin: '8px 0' }}>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 {canAssign && selected.status === 'Open' && (
-                  <button disabled={!!busy} style={{ background: '#0284c7', color: '#ffffff', fontWeight: 600, border: '1px solid #0284c7', minHeight: 44, padding: '8px 16px', borderRadius: 8 }} onClick={() => void mutate(`assign-${selected.id}`, `/api/v1/putaway-tasks/${selected.id}/assign`, { assignedUserId: currentUserId(), rowVersion: selected.rowVersion })}>
+                  <button disabled={!!busy} style={{ background: '#1d4ed8', color: '#ffffff', fontWeight: 600, border: '1px solid #1d4ed8', minHeight: 44, padding: '8px 16px', borderRadius: 8 }} onClick={() => void mutate(`assign-${selected.id}`, `/api/v1/putaway-tasks/${selected.id}/assign`, { assignedUserId: currentUserId(), rowVersion: selected.rowVersion })}>
                     {busy ? 'Đang lưu...' : 'Nhận nhiệm vụ'}
                   </button>
                 )}
                 {canExecute && selected.status === 'Assigned' && (
-                  <button disabled={!!busy} style={{ background: '#0284c7', color: '#ffffff', fontWeight: 600, border: '1px solid #0284c7', minHeight: 44, padding: '8px 16px', borderRadius: 8 }} onClick={() => void mutate(`start-${selected.id}`, `/api/v1/putaway-tasks/${selected.id}/start`, { rowVersion: selected.rowVersion })}>
+                  <button disabled={!!busy} style={{ background: '#1d4ed8', color: '#ffffff', fontWeight: 600, border: '1px solid #1d4ed8', minHeight: 44, padding: '8px 16px', borderRadius: 8 }} onClick={() => void mutate(`start-${selected.id}`, `/api/v1/putaway-tasks/${selected.id}/start`, { rowVersion: selected.rowVersion })}>
                     {busy ? 'Đang lưu...' : 'Bắt đầu cất hàng'}
                   </button>
                 )}
@@ -290,7 +290,7 @@ export default function PutawayTasks() {
                   </>
                 )}
                 {canExecute && selected.status === 'Exception' && (
-                  <button disabled={!!busy} style={{ background: '#0284c7', color: '#ffffff', fontWeight: 600, border: '1px solid #0284c7', minHeight: 44, padding: '8px 16px', borderRadius: 8 }} onClick={() => void mutate(`resume-${selected.id}`, `/api/v1/putaway-tasks/${selected.id}/resume`, { rowVersion: selected.rowVersion })}>
+                  <button disabled={!!busy} style={{ background: '#1d4ed8', color: '#ffffff', fontWeight: 600, border: '1px solid #1d4ed8', minHeight: 44, padding: '8px 16px', borderRadius: 8 }} onClick={() => void mutate(`resume-${selected.id}`, `/api/v1/putaway-tasks/${selected.id}/resume`, { rowVersion: selected.rowVersion })}>
                     Tiếp tục cất hàng
                   </button>
                 )}
@@ -342,7 +342,7 @@ export default function PutawayTasks() {
                           <span>Số lượng</span>
                           <input style={{ minHeight: 44 }} aria-label={`Số lượng cất ${item.productCode}`} inputMode="decimal" role="spinbutton" min="0.0001" step="0.0001" value={quantity[item.id] ?? ''} onChange={e => setQuantity(value => ({ ...value, [item.id]: e.target.value === '' ? '' : roundQty4(Number(e.target.value)) }))} />
                         </label>
-                        <button style={{ minHeight: 44, background: '#0284c7', color: '#ffffff', fontWeight: 600, border: '1px solid #0284c7', padding: '8px 16px', borderRadius: 8 }} disabled={!!busy || !destination[item.id] || !(Number(quantity[item.id]) > 0)} onClick={() => void mutate(`move-${selected.id}-${item.id}`, `/api/v1/putaway-tasks/${selected.id}/move`, { itemId: item.id, destinationLocationId: destination[item.id], quantity: roundQty4(Number(quantity[item.id])), unitCode: item.operationUnitCode, rowVersion: selected.rowVersion, ...(scannedBin[item.id] ? { destinationLocationBarcode: scannedBin[item.id] } : {}), ...(scannedProduct[item.id] ? { productBarcode: scannedProduct[item.id] } : {}) })}>
+                        <button style={{ minHeight: 44, background: '#1d4ed8', color: '#ffffff', fontWeight: 600, border: '1px solid #1d4ed8', padding: '8px 16px', borderRadius: 8 }} disabled={!!busy || !destination[item.id] || !(Number(quantity[item.id]) > 0)} onClick={() => void mutate(`move-${selected.id}-${item.id}`, `/api/v1/putaway-tasks/${selected.id}/move`, { itemId: item.id, destinationLocationId: destination[item.id], quantity: roundQty4(Number(quantity[item.id])), unitCode: item.operationUnitCode, rowVersion: selected.rowVersion, ...(scannedBin[item.id] ? { destinationLocationBarcode: scannedBin[item.id] } : {}), ...(scannedProduct[item.id] ? { productBarcode: scannedProduct[item.id] } : {}) })}>
                           {busy === `move-${selected.id}-${item.id}` ? 'Đang hoàn thành...' : 'Xác nhận số lượng'}
                         </button>
                       </div>

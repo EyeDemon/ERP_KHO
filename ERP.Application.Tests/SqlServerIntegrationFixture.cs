@@ -21,8 +21,8 @@ public sealed class SqlServerIntegrationFixture : IAsyncLifetime
         var runId = Environment.GetEnvironmentVariable(SqlServerFactAttribute.RunIdVariable);
         if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(runId))
         {
-            const string defaultLocalDbSource = "Server=(localdb)\\MSSQLLocalDB;Database=ERP_KHO;Integrated Security=True;TrustServerCertificate=True";
-            _selfOwnedDatabase = await OwnedTemporaryMigrationDatabase.CreateAsync(defaultLocalDbSource);
+            var resolvedSource = await ResolveDefaultAdminSourceAsync();
+            _selfOwnedDatabase = await OwnedTemporaryMigrationDatabase.CreateAsync(resolvedSource);
             connectionString = _selfOwnedDatabase.DatabaseConnection;
             runId = _selfOwnedDatabase.RunId;
             Environment.SetEnvironmentVariable(SqlServerFactAttribute.ConnectionVariable, connectionString);
@@ -52,6 +52,31 @@ public sealed class SqlServerIntegrationFixture : IAsyncLifetime
 
     private OwnedTemporaryMigrationDatabase? _selfOwnedDatabase;
     public async Task DisposeAsync() { if (_selfOwnedDatabase is not null) { await _selfOwnedDatabase.DisposeAsync(); _selfOwnedDatabase = null; } }
+
+    private static async Task<string> ResolveDefaultAdminSourceAsync()
+    {
+        var configured = Environment.GetEnvironmentVariable("ERP_KHO_SQLSERVER_ADMIN_CONNECTION");
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return configured;
+        }
+
+        const string localhostSource = "Server=localhost;Database=ERP_KHO;Integrated Security=True;TrustServerCertificate=True";
+        const string defaultLocalDbSource = "Server=(localdb)\\MSSQLLocalDB;Database=ERP_KHO;Integrated Security=True;TrustServerCertificate=True";
+
+        try
+        {
+            var probeBuilder = OwnedDatabasePolicy.MasterConnection(localhostSource);
+            probeBuilder.ConnectTimeout = 3;
+            await using var probe = new SqlConnection(probeBuilder.ConnectionString);
+            await probe.OpenAsync();
+            return localhostSource;
+        }
+        catch
+        {
+            return defaultLocalDbSource;
+        }
+    }
 }
 
 public sealed class OwnedDatabasePolicyTests

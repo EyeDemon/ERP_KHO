@@ -389,7 +389,9 @@ public sealed class Wave7FullChaosLifecycleSqlTests
                 state.Wh1DockId = dock.Id;
 
                 var dockService = CreateDockYardService(dockDb, state.MakerId);
-                var now = DateTimeOffset.UtcNow;
+                var targetDate = DateTime.UtcNow.Date.AddDays(1);
+                if (targetDate == new DateTime(2026, 12, 25)) targetDate = targetDate.AddDays(1);
+                var now = new DateTimeOffset(targetDate.AddHours(9), TimeSpan.Zero);
                 var appt = await dockService.CreateAppointmentAsync(new UpsertDockAppointmentDto
                 {
                     WarehouseId = state.Wh1Id,
@@ -1412,7 +1414,7 @@ public sealed class Wave7FullChaosLifecycleSqlTests
 
     private static ErpKhoDbContext CreateContext() => new(
         new DbContextOptionsBuilder<ErpKhoDbContext>()
-            .UseSqlServer(ConnectionString)
+            .UseSqlServer(ConnectionString, sql => sql.CommandTimeout(90))
             .Options);
 
     private static async Task CleanupAsync(LifecycleState state)

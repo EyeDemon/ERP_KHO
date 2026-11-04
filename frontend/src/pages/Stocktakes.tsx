@@ -7,12 +7,18 @@ import { UiPage, UiPageHeader } from '../ui/ProductionUi';
 import type {
   LocationOption, StocktakeAutoApprovalItem, StocktakeDetailRow,
   StocktakeResponse, StocktakeSummary, Warehouse,
-} from '../modules/inventory-pages/stocktakesShared';
+} from '../modules/inventory/stocktakesShared';
 import {
-  PAGE_SIZE, getStatusBadgeStyle, getStatusText, mapAutoApprovalRows, normalizeStatusCode,
-} from '../modules/inventory-pages/stocktakesShared';
-import { StocktakesListAndPolicySection } from '../modules/inventory-pages/StocktakesListAndPolicySection';
-import { StocktakesCreateSection, StocktakesDetailSection } from '../modules/inventory-pages/StocktakesCreateAndDetailSection';
+  PAGE_SIZE, getStatusBadgeStyle, getStatusText, normalizeStatusCode,
+} from '../modules/inventory/stocktakesShared';
+import { StocktakesListAndPolicySection } from '../modules/inventory/StocktakesListAndPolicySection';
+import { StocktakesCreateSection, StocktakesDetailSection } from '../modules/inventory/StocktakesCreateAndDetailSection';
+import {
+  createStocktakeCountFreeze,
+  fetchCountAttemptsAndAutoApproval,
+  runEvaluateAutoApproval,
+  submitQuickAdjustmentProposal,
+} from '../modules/inventory/stocktakesGovernanceActions';
 import './Stocktakes.css';
 
 export { getStatusText, getStatusBadgeStyle };
@@ -63,25 +69,7 @@ const Stocktakes = () => {
 
   const loadCountAttemptsAndAutoApproval = useCallback(
     async (stocktakeId: number, fallbackDetails?: StocktakeDetailRow[], isBlind?: boolean) => {
-      try {
-        const res = await apiClient
-          .get<Record<string, unknown> | unknown[]>(`/api/v1/stocktakes/${stocktakeId}/count-attempts-and-auto-approval`)
-          .catch(() => ({ data: [] as unknown[] }));
-        const data = res?.data;
-        const dRec = data as Record<string, unknown>;
-        const rawList = Array.isArray(data)
-          ? data
-          : Array.isArray(dRec?.items)
-            ? (dRec.items as unknown[])
-            : Array.isArray(dRec?.attempts)
-              ? (dRec.attempts as unknown[])
-              : Array.isArray(dRec?.lines)
-                ? (dRec.lines as unknown[])
-                : [];
-        setAutoApprovalRows(mapAutoApprovalRows(rawList, fallbackDetails, isBlind));
-      } catch {
-        setAutoApprovalRows(mapAutoApprovalRows([], fallbackDetails, isBlind));
-      }
+      setAutoApprovalRows(await fetchCountAttemptsAndAutoApproval(stocktakeId, fallbackDetails, isBlind));
     },
     [],
   );
@@ -165,28 +153,14 @@ const Stocktakes = () => {
     setAutoApprovalBusy(true);
     setError('');
     try {
-      let resolvedId = currentDetail?.id ?? stocktakes[0]?.id;
-      if (!resolvedId) {
-        const listRes = await apiClient.get('/api/v1/stocktakes').catch(() => ({ data: [] as StocktakeSummary[] }));
-        const list = Array.isArray(listRes.data) ? listRes.data : [];
-        if (list.length > 0) {
-          setStocktakes(list);
-          resolvedId = list[0].id;
-        }
-      }
-      const effectiveId = resolvedId ?? targetStocktakeId;
-      const res = await apiClient.post<Record<string, unknown>>(`/api/v1/stocktakes/${effectiveId}/evaluate-auto-approval`, {
-        stocktakeId: effectiveId, maxVariancePct: 1.0, maxVarianceValueVnd: 500000,
+      const { mapped, banner } = await runEvaluateAutoApproval({
+        currentDetail,
+        stocktakes,
+        targetStocktakeId,
+        onUpdateStocktakes: setStocktakes,
       });
-      const d = (res?.data ?? {}) as Record<string, unknown>;
-      const rawList = Array.isArray(d.items) ? d.items : Array.isArray(d.lines) ? d.lines : Array.isArray(d.evaluations) ? d.evaluations : [];
-      const mapped = mapAutoApprovalRows(rawList, currentDetail?.details, Boolean(currentDetail?.isBlindCount));
       setAutoApprovalRows(mapped);
-      const autoCount = Number(d.autoApprovedCount ?? mapped.filter((r) => r.autoApproved).length);
-      const manualCount = Number(d.manualApprovalRequiredCount ?? mapped.filter((r) => !r.autoApproved).length);
-      setAutoApprovalBanner(
-        String(d.message ?? `Đã đánh giá tự động duyệt phiếu #${targetStocktakeId}: ${autoCount} dòng đủ điều kiện Tự động duyệt (<1% & ≤500k), ${manualCount} dòng Cần Giám đốc kho duyệt.`),
-      );
+      setAutoApprovalBanner(banner);
       await fetchStocktakes();
       if (currentDetail) await loadDetail(currentDetail.id, true);
     } catch (err: any) {
@@ -202,16 +176,15 @@ const Stocktakes = () => {
     const targetWh = warehouses[0]?.id ?? stocktakes[0]?.warehouseId ?? undefined;
     setError('');
     try {
-      const res = await apiClient.post('/api/v1/stocktakes/adjustment-proposals', {
+      const status = await submitQuickAdjustmentProposal({
         warehouseId: targetWh,
-        productCode: proposalProductCode || 'QA-E2E-001',
-        locationCode: proposalLocationCode || 'BIN-A01-01',
-        deltaQuantity: Number(proposalDeltaQty) || -1,
-        reasonCode: proposalReasonCode || 'COUNT_VARIANCE',
-        note: 'Đề xuất điều chỉnh chênh lệch kiểm kê qua cổng phê duyệt độc lập',
+        productCode: proposalProductCode,
+        locationCode: proposalLocationCode,
+        deltaQty: proposalDeltaQty,
+        reasonCode: proposalReasonCode,
       });
-      if (res?.data?.status) {
-        setProposalStatus(res.data.status);
+      if (status) {
+        setProposalStatus(status);
       } else {
         setProposalStatus('');
         setError('Không thể tạo đề xuất điều chỉnh qua cổng phê duyệt độc lập: dữ liệu phản hồi không hợp lệ.');
@@ -276,15 +249,7 @@ const Stocktakes = () => {
     if (!currentDetail || freezeLoading) return;
     setFreezeLoading(true); setError(''); setSuccessMsg('');
     try {
-      const distinctLocations = Array.from(new Set(currentDetail.details.map((d) => d.locationId).filter((x): x is number => typeof x === 'number')));
-      const locationId = distinctLocations.length === 1 ? distinctLocations[0] : undefined;
-      const key = `stocktake-count-freeze:${currentDetail.id}`;
-      await apiClient.post(
-        '/api/v1/inventory/locks',
-        { lockType: 'CountFreeze', warehouseId: currentDetail.warehouseId, ...(locationId ? { locationId } : {}), reason: `Đóng băng kiểm kê cho phiếu ${currentDetail.code}` },
-        { headers: idempotencyHeaders(key) },
-      );
-      completeIdempotentAction(key);
+      await createStocktakeCountFreeze(currentDetail);
       setSuccessMsg(`Đã tạo khóa đóng băng kiểm kê cho phiếu ${currentDetail.code}.`);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Không thể tạo khóa đóng băng kiểm kê.');

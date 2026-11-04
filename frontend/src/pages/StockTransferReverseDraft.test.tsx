@@ -51,6 +51,7 @@ describe('Native reverse transfer after receipt', () => {
     fireEvent.click(await view.findByRole('button', { name: 'Xem chi tiết TRF-91' }));
     const button = await view.findByRole('button', { name: 'Tạo phiếu điều chuyển ngược' });
     expect((button as HTMLButtonElement).disabled).toBe(true);
+    await view.findByRole('option', { name: 'Sai tuyến điều chuyển' });
     fireEvent.change(await view.findByLabelText('Mã lý do điều chuyển ngược'),
       { target: { value: 'TRANSFER_ROUTE_ERROR' } });
     fireEvent.change(view.getByLabelText('Diễn giải điều chuyển ngược'),

@@ -14,15 +14,15 @@ export interface OutboundPipelineStep {
 const EXPRESS_STEPS: OutboundPipelineStep[] = [
   {
     stepNumber: 1,
-    label: 'Đơn bán hàng & Phân bổ',
-    subtitle: 'Tạo SO & giữ tồn FEFO',
+    label: 'Đơn bán hàng và phân bổ',
+    subtitle: 'Tạo đơn bán và giữ tồn FEFO',
     path: '/outbound-demand',
-    matchPaths: ['/outbound-demand', '/stock-reservations', '/stock-allocations', '/backorders'],
+    matchPaths: ['/outbound-demand', '/sales-orders', '/stock-reservations', '/stock-allocations', '/backorders'],
   },
   {
     stepNumber: 2,
-    label: 'Duyệt & Xuất kho nhanh',
-    subtitle: 'Trừ tồn 1 bước & ghi sổ cái',
+    label: 'Duyệt và xuất kho nhanh',
+    subtitle: 'Trừ tồn 1 chặng và ghi sổ cái',
     path: '/export-receipts',
     matchPaths: ['/export-receipts', '/shipments', '/handover-manifests'],
   },
@@ -31,36 +31,36 @@ const EXPRESS_STEPS: OutboundPipelineStep[] = [
 const FULL_WMS_STEPS: OutboundPipelineStep[] = [
   {
     stepNumber: 1,
-    label: 'Đơn hàng & Wave',
-    subtitle: 'Phân bổ & Gom cụm lấy hàng',
+    label: 'Đơn bán hàng và đợt lấy',
+    subtitle: 'Phân bổ và gom cụm lấy hàng',
     path: '/outbound-demand',
-    matchPaths: ['/outbound-demand', '/stock-reservations', '/stock-allocations', '/backorders'],
+    matchPaths: ['/outbound-demand', '/sales-orders', '/stock-reservations', '/stock-allocations', '/backorders'],
   },
   {
     stepNumber: 2,
-    label: 'Tác vụ Lấy hàng (Pick)',
-    subtitle: 'Quét kệ Bin & lấy theo FEFO',
+    label: 'Lấy hàng tại kệ',
+    subtitle: 'Quét vị trí kệ và lấy theo FEFO',
     path: '/picking-tasks',
     matchPaths: ['/picking-tasks'],
   },
   {
     stepNumber: 3,
-    label: 'Đóng gói & Soát lỗi (Pack)',
-    subtitle: 'Quét kiểm SKU & đóng kiện',
+    label: 'Đóng gói đơn hàng',
+    subtitle: 'Quét kiểm mã hàng và đóng kiện',
     path: '/packing-sessions',
     matchPaths: ['/packing-sessions'],
   },
   {
     stepNumber: 4,
-    label: 'Phiếu xuất & In tem AWB',
-    subtitle: 'Hạch toán xuất & tạo vận đơn',
+    label: 'Phiếu xuất và vận đơn',
+    subtitle: 'Hạch toán xuất và tạo vận đơn',
     path: '/export-receipts',
     matchPaths: ['/export-receipts', '/shipments'],
   },
   {
     stepNumber: 5,
-    label: 'Bàn giao Bưu cục (Manifest)',
-    subtitle: 'Niêm phong tải & ký nhận 3PL',
+    label: 'Bàn giao vận đơn',
+    subtitle: 'Niêm phong tải và ký nhận ĐVVC',
     path: '/handover-manifests',
     matchPaths: ['/handover-manifests'],
   },
@@ -95,22 +95,28 @@ const OutboundPipelineStepperCore: React.FC<StepperCoreProps> = ({ pathname, onN
     0,
     steps.findIndex((s) => s.matchPaths.some((mp) => pathname === mp || pathname.startsWith(mp + '/'))),
   );
+  const currentStep = steps[activeIndex] ?? steps[0];
 
   return (
     <section
+      className="outbound-pipeline-stepper outbound-pipeline-stepper-mobile-hide"
       data-testid="outbound-pipeline-stepper"
       aria-label="Tiến trình nghiệp vụ xuất kho"
       style={{ background: 'var(--surface-card, #ffffff)', border: '1px solid var(--border-subtle, #e2e8f0)', borderRadius: 10, padding: '12px 16px', marginBottom: 14 }}
     >
-      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+      <div className="outbound-stepper-mobile-compact" data-testid="outbound-stepper-mobile-compact">
+        <span className="tabular-nums">{`Chặng ${activeIndex + 1}/${steps.length} • ${currentStep?.label ?? ''}`}</span>
+      </div>
+
+      <div className="outbound-stepper-desktop-header" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 10 }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
-            Chuỗi điều phối Xuất kho & Giao vận (Outbound Pipeline)
+            Chuỗi điều phối xuất kho và giao vận
           </div>
           <div style={{ fontSize: 12, color: '#475569' }}>
             {flowMode === 'EXPRESS_2_STEP'
-              ? 'Chế độ 1 — Xuất Kho Nhanh 2 Bước (Express B2B/Bán lẻ): Rút gọn thao tác lấy/đóng gói cho đơn xuất sỉ.'
-              : 'Chế độ 2 — Xuất Kho Sàn TMĐT 5 Bước (Full WMS): Kiểm soát chặt Wave -> Pick -> Pack -> AWB -> Manifest.'}
+              ? 'Chế độ 1 — Xuất kho nhanh 2 chặng: Rút gọn thao tác lấy và đóng gói cho đơn xuất sỉ.'
+              : 'Chế độ 2 — Xuất kho tiêu chuẩn 5 chặng: Kiểm soát chặt từ gom đợt, lấy hàng, đóng gói, lập phiếu xuất đến bàn giao vận đơn.'}
           </div>
         </div>
 
@@ -122,7 +128,7 @@ const OutboundPipelineStepperCore: React.FC<StepperCoreProps> = ({ pathname, onN
             onClick={() => handleToggleMode('EXPRESS_2_STEP')}
             style={{ fontSize: 12, padding: '5px 10px', borderRadius: 6, border: flowMode === 'EXPRESS_2_STEP' ? '1px solid #0f172a' : '1px solid #cbd5e1', background: flowMode === 'EXPRESS_2_STEP' ? '#0f172a' : '#ffffff', color: flowMode === 'EXPRESS_2_STEP' ? '#ffffff' : '#1e293b', fontWeight: flowMode === 'EXPRESS_2_STEP' ? 600 : 500, cursor: 'pointer' }}
           >
-            ⚡ Xuất Kho Nhanh 2 Bước (Express B2B/Bán lẻ)
+            Xuất kho nhanh 2 chặng
           </button>
           <button
             type="button"
@@ -131,12 +137,12 @@ const OutboundPipelineStepperCore: React.FC<StepperCoreProps> = ({ pathname, onN
             onClick={() => handleToggleMode('FULL_5_STEP')}
             style={{ fontSize: 12, padding: '5px 10px', borderRadius: 6, border: flowMode === 'FULL_5_STEP' ? '1px solid #0f172a' : '1px solid #cbd5e1', background: flowMode === 'FULL_5_STEP' ? '#0f172a' : '#ffffff', color: flowMode === 'FULL_5_STEP' ? '#ffffff' : '#1e293b', fontWeight: flowMode === 'FULL_5_STEP' ? 600 : 500, cursor: 'pointer' }}
           >
-            🏭 Xuất Kho Sàn TMĐT 5 Bước (Full WMS)
+            Xuất kho tiêu chuẩn 5 chặng
           </button>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${steps.length}, minmax(150px, 1fr))`, gap: 8, overflowX: 'auto' }}>
+      <div className="outbound-stepper-desktop-list" style={{ display: 'grid', gridTemplateColumns: `repeat(${steps.length}, minmax(150px, 1fr))`, gap: 8, overflowX: 'auto' }}>
         {steps.map((step, idx) => {
           const isCurrent = idx === activeIndex;
           const isCompleted = idx < activeIndex;
@@ -160,11 +166,11 @@ const OutboundPipelineStepperCore: React.FC<StepperCoreProps> = ({ pathname, onN
                 cursor: 'pointer',
               }}
             >
-              <span className="tabular-nums" style={{ fontSize: 11, fontWeight: 700, color: isCurrent ? '#93c5fd' : isCompleted ? '#15803d' : '#64748b' }}>
-                BƯỚC {step.stepNumber}/{steps.length} {isCompleted ? '• ĐÃ QUA' : isCurrent ? '• ĐANG MỞ' : ''}
+              <span className="tabular-nums" style={{ fontSize: 11, fontWeight: 700, color: isCurrent ? '#93c5fd' : isCompleted ? '#15803d' : '#475569' }}>
+                CHẶNG {step.stepNumber}/{steps.length} {isCompleted ? '• ĐÃ QUA' : isCurrent ? '• ĐANG MỞ' : ''}
               </span>
               <span style={{ fontSize: 12.5, fontWeight: 600, marginTop: 2 }}>{step.label}</span>
-              <span style={{ fontSize: 11, color: isCurrent ? '#cbd5e1' : '#64748b', marginTop: 2 }}>{step.subtitle}</span>
+              <span style={{ fontSize: 11, color: isCurrent ? '#cbd5e1' : '#475569', marginTop: 2 }}>{step.subtitle}</span>
             </button>
           );
         })}

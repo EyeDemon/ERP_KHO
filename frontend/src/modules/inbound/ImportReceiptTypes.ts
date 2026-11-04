@@ -142,7 +142,7 @@ export const statusLabel = (status: string) =>
     QcCompleted: 'Kiểm tra chất lượng đã hoàn tất — chờ duyệt',
     ReadyToPost: 'Sẵn sàng ghi nhận tồn kho',
     Posted: 'Đã ghi nhận tồn kho',
-    Approved: 'Đã duyệt (dữ liệu cũ)',
+    Approved: 'Đã duyệt',
     Cancelled: 'Đã hủy',
   }[status] || 'Trạng thái chưa xác định');
 

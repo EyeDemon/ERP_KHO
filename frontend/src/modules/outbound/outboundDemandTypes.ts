@@ -1,3 +1,5 @@
+import { CANONICAL_WH01_LABEL, formatWarehouseLabel } from '../../utils/warehouseLabel';
+
 export type OrderLine = {
   id: number;
   externalLineId: string;
@@ -176,15 +178,17 @@ export const buildDefaultDomAllocations = (
   const cleanOrder = orderCode.trim() || 'SO-QA-001';
   const cleanProduct = productCode.trim() || 'QA-E2E-001';
   const totalQty = Math.max(1, qty);
+  const wh1Label = CANONICAL_WH01_LABEL;
+  const wh2Label = formatWarehouseLabel('WH02 — Kho Chi Nhánh Hà Nội', 'WH02', 2);
   if (mode === 'SINGLE_WAREHOUSE_MATCH') {
     return [
       {
         orderCode: cleanOrder,
         productCode: cleanProduct,
-        warehouseName: 'WH01 — Kho Chính TP.HCM',
+        warehouseName: wh1Label,
         allocatedQuantity: totalQty,
         estimatedPackagesCount: 1,
-        routingStrategyLabel: `Đủ tồn 1 kho • WH01 — Kho Chính TP.HCM (${totalQty} ĐV)`,
+        routingStrategyLabel: `Đủ tồn 1 kho • ${wh1Label} (${totalQty} ĐV)`,
       },
     ];
   }
@@ -194,7 +198,7 @@ export const buildDefaultDomAllocations = (
     {
       orderCode: `${cleanOrder}-SUB1`,
       productCode: cleanProduct,
-      warehouseName: 'WH01 — Kho Chính TP.HCM',
+      warehouseName: wh1Label,
       allocatedQuantity: wh1Qty,
       estimatedPackagesCount: 1,
       routingStrategyLabel: 'Tách đơn đa kho (Chặng 1/2) • Ưu tiên tồn khả dụng & khoảng cách',
@@ -202,7 +206,7 @@ export const buildDefaultDomAllocations = (
     {
       orderCode: `${cleanOrder}-SUB2`,
       productCode: cleanProduct,
-      warehouseName: 'WH02 — Kho Chi Nhánh Hà Nội',
+      warehouseName: wh2Label,
       allocatedQuantity: wh2Qty,
       estimatedPackagesCount: 1,
       routingStrategyLabel: 'Tách đơn đa kho (Chặng 2/2) • Kho chi nhánh hỗ trợ hoàn tất đơn',

@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, useInRouterContext, useLocation } from 'react-router-dom';
+import { useInRouterContext, useLocation } from 'react-router-dom';
 import apiClient from '../services/apiClient';
 import { getTraceabilityWarehouses, type TraceabilityWarehouse } from '../services/traceabilityWarehouses';
-import { UiCard, UiPage, UiPageHeader, UiToolbarField } from '../ui/ProductionUi';
+import { UiPage, UiPageHeader } from '../ui/ProductionUi';
+import {
+  InventoryTraceabilityFilterCard,
+  ReconciliationTraceabilityTabsBar,
+  type TraceabilityFilterFormState,
+} from '../modules/inventory/InventoryTraceabilityFilterCard';
 import {
   InventoryTraceabilityResults,
   TraceabilityRecallOverviewCard,
-} from '../modules/inventory-pages/InventoryTraceabilityResults';
+} from '../modules/inventory/InventoryTraceabilityResults';
 import {
   errorMessage,
   validPositiveId,
   type RecallTreeSimulationResult,
   type Result,
-} from '../modules/inventory-pages/inventoryTraceabilityShared';
+} from '../modules/inventory/inventoryTraceabilityShared';
 
 export default function InventoryTraceability() {
   const inRouter = useInRouterContext();
@@ -30,7 +35,7 @@ export default function InventoryTraceability() {
     linkedReferenceType !== null &&
     /^[1-9]\d*$/.test(initialReferenceId) &&
     Number.isSafeInteger(Number(initialReferenceId));
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<TraceabilityFilterFormState>({
     warehouseId: '',
     productId: '',
     lotNumber: '',
@@ -110,8 +115,6 @@ export default function InventoryTraceability() {
     setBucketOffset(0);
     setEventOffset(0);
     if (!linkedDocument) {
-      // A route transition back to an unfiltered trace view must not leave
-      // the previous document or warehouse filters visible as current data.
       setForm({ warehouseId: '', productId: '', lotNumber: '', serialNumber: '', referenceType: '', referenceId: '' });
       setEventLimit(200);
       setResult(null);
@@ -129,7 +132,6 @@ export default function InventoryTraceability() {
       referenceType: linkedReferenceType ?? '',
       referenceId: initialReferenceId,
     });
-    // Linked searches use the default 200-event window; keep the UI in sync.
     setEventLimit(200);
     setValidationError('');
     setRequestError('');
@@ -161,8 +163,6 @@ export default function InventoryTraceability() {
   );
 
   const invalidateResults = () => {
-    // Changing filters invalidates the old results and pending responses;
-    // paging must never reuse stale query conditions.
     requestSequence.current += 1;
     setBucketOffset(0);
     setEventOffset(0);
@@ -170,7 +170,7 @@ export default function InventoryTraceability() {
     setLoading(false);
   };
 
-  const updateField = (field: keyof typeof form, value: string) => {
+  const updateField = (field: keyof TraceabilityFilterFormState, value: string) => {
     setForm((x) => ({ ...x, [field]: value }));
     invalidateResults();
     if (validationError) setValidationError('');
@@ -233,8 +233,6 @@ export default function InventoryTraceability() {
       params.set('limit', String(eventLimit));
       if (offset > 0) params.set('bucketOffset', String(offset));
       if (nextEventOffset > 0) params.set('eventOffset', String(nextEventOffset));
-      // Keep the same ledger ID fence across event AND stock paging.
-      // A new search explicitly requests a fresh fence instead.
       if (!resetAnchor && result?.eventAnchorId != null) params.set('eventAnchorId', String(result.eventAnchorId));
       const response = await apiClient.get<Result>('/api/v1/inventory/traceability?' + params.toString());
       if (sequence === requestSequence.current) setResult(response.data);
@@ -247,10 +245,12 @@ export default function InventoryTraceability() {
       if (sequence === requestSequence.current) setLoading(false);
     }
   };
+
   const search = (e: FormEvent) => {
     e.preventDefault();
     void requestTrace(0, 0, true);
   };
+
   const clearFilters = () => {
     setForm({ warehouseId: '', productId: '', lotNumber: '', serialNumber: '', referenceType: '', referenceId: '' });
     setEventLimit(200);
@@ -276,167 +276,31 @@ export default function InventoryTraceability() {
         title="Truy vết & phả hệ tồn kho"
         description="Xem toàn bộ nhóm tồn của một kho được phép, hoặc truy theo sản phẩm, lô, sê-ri và chứng từ. Dòng thời gian sổ cái giữ nguyên lịch sử bất biến."
       />
-      <div
-        data-testid="reconciliation-traceability-tabs"
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 8,
-          marginBottom: 12,
-          padding: 6,
-          borderRadius: 10,
-          background: '#f1f5f9',
-          border: '1px solid #cbd5e1',
-        }}
-      >
-        {[
-          { to: '/inventory-reconciliation', label: 'Đối chiếu Tồn kho & Hàng đợi Đồng bộ Sổ cái', testId: 'tab-inventory-reconciliation', active: false },
-          { to: '/inventory-traceability', label: 'Truy vết & Phả hệ Lô / Sê-ri', testId: 'tab-inventory-traceability', active: true },
-        ].map((tab) => {
-          const style: React.CSSProperties = {
-            padding: '8px 14px',
-            borderRadius: 8,
-            fontWeight: 700,
-            fontSize: 13,
-            textDecoration: 'none',
-            background: tab.active ? '#0f172a' : '#ffffff',
-            color: tab.active ? '#ffffff' : '#334155',
-            border: tab.active ? '1px solid #0f172a' : '1px solid #cbd5e1',
-          };
-          return inRouter ? (
-            <Link key={tab.to} to={tab.to} data-testid={tab.testId} aria-current={tab.active ? 'page' : undefined} style={style}>
-              {tab.label}
-            </Link>
-          ) : (
-            <a key={tab.to} href={tab.to} data-testid={tab.testId} aria-current={tab.active ? 'page' : undefined} style={style}>
-              {tab.label}
-            </a>
-          );
-        })}
-      </div>
+      <ReconciliationTraceabilityTabsBar inRouter={inRouter} activeRoute="traceability" />
       {requestError && <p role="alert">{requestError}</p>}
-      <UiCard title="Điều kiện truy vết">
-        <form
-          onSubmit={search}
-          noValidate
-          className="ui-form-grid"
-          style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, alignItems: 'end', maxWidth: '100%' }}
-          aria-busy={loading}
-        >
-          <UiToolbarField label="Kho truy vết">
-            <select
-              aria-label="Kho truy vết"
-              value={form.warehouseId}
-              disabled={warehousesLoading || Boolean(warehousesError) || warehouses.length === 0}
-              aria-describedby="traceability-warehouse-help"
-              onChange={(e) => updateField('warehouseId', e.target.value)}
-            >
-              <option value="">Tất cả kho được phân quyền (cần thêm bộ lọc)</option>
-              {warehouses.map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.code} — {x.name}
-                </option>
-              ))}
-            </select>
-          </UiToolbarField>
-          <UiToolbarField label="ID sản phẩm">
-            <input
-              ref={productIdRef}
-              type="text"
-              value={form.productId}
-              onChange={(e) => updateField('productId', e.target.value)}
-              inputMode="numeric"
-              placeholder="Chọn hoặc nhập mã định danh SP"
-            />
-          </UiToolbarField>
-          <UiToolbarField label="Mã lô">
-            <input value={form.lotNumber} onChange={(e) => updateField('lotNumber', e.target.value)} autoComplete="off" />
-          </UiToolbarField>
-          <UiToolbarField label="Số sê-ri">
-            <input value={form.serialNumber} onChange={(e) => updateField('serialNumber', e.target.value)} autoComplete="off" />
-          </UiToolbarField>
-          <UiToolbarField label="Loại tham chiếu">
-            <input
-              ref={referenceTypeRef}
-              value={form.referenceType}
-              onChange={(e) => updateField('referenceType', e.target.value)}
-              aria-invalid={referencePairErrorActive || undefined}
-              aria-describedby={referencePairErrorActive ? 'traceability-reference-help traceability-validation-error' : 'traceability-reference-help'}
-              autoComplete="off"
-            />
-          </UiToolbarField>
-          <UiToolbarField label="ID tham chiếu">
-            <input
-              ref={referenceIdRef}
-              type="text"
-              min="1"
-              value={form.referenceId}
-              onChange={(e) => updateField('referenceId', e.target.value)}
-              aria-invalid={referencePairErrorActive || undefined}
-              aria-describedby={referencePairErrorActive ? 'traceability-reference-help traceability-validation-error' : 'traceability-reference-help'}
-              inputMode="numeric"
-            />
-          </UiToolbarField>
-          <UiToolbarField label="Giới hạn sự kiện">
-            <select
-              aria-label="Giới hạn sự kiện truy vết"
-              value={eventLimit}
-              disabled={loading}
-              onChange={(e) => {
-                setEventLimit(Number(e.target.value) as 50 | 100 | 200 | 500);
-                invalidateResults();
-              }}
-            >
-              <option value={50}>50 sự kiện</option>
-              <option value={100}>100 sự kiện</option>
-              <option value={200}>200 sự kiện</option>
-              <option value={500}>500 sự kiện</option>
-            </select>
-          </UiToolbarField>
-          <div className="ui-inline-actions" style={{ alignSelf: 'end', height: 38, alignItems: 'center' }}>
-            <button type="submit" className="ui-primary-button" style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }} disabled={loading}>
-              {loading ? 'Đang truy vết...' : 'Truy vết'}
-            </button>
-            <button type="button" style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }} disabled={loading} onClick={clearFilters}>
-              Xóa bộ lọc
-            </button>
-          </div>
-          <p id="traceability-warehouse-help" className="ui-muted-text" style={{ gridColumn: '1 / -1', margin: 0 }}>
-            Chọn một kho để xem toàn bộ tồn hiện tại và sự kiện gần nhất; 500 nhóm tồn mỗi trang. Để truy vết nhiều kho, cần nhập thêm sản phẩm, lô, sê-ri hoặc chứng từ.
-          </p>
-          {warehousesLoading && (
-            <p role="status" className="ui-muted-text" style={{ gridColumn: '1 / -1', margin: 0 }}>
-              Đang tải kho được cấp quyền...
-            </p>
-          )}
-          {warehousesError && (
-            <div className="ui-stack" style={{ gridColumn: '1 / -1' }}>
-              <p role="alert">{warehousesError}</p>
-              <button type="button" onClick={() => void loadWarehouses()}>
-                Tải lại danh sách kho
-              </button>
-            </div>
-          )}
-          {!warehousesLoading && !warehousesError && warehouses.length === 0 && (
-            <p role="status" className="ui-muted-text" style={{ gridColumn: '1 / -1', margin: 0 }}>
-              Chưa có kho được cấp quyền truy vết. Liên hệ quản trị để kiểm tra quyền truy cập.
-            </p>
-          )}
-          <p id="traceability-reference-help" className="ui-muted-text" style={{ gridColumn: '1 / -1', margin: 0 }}>
-            Loại tham chiếu và ID tham chiếu là một cặp; nhập cả hai khi truy theo chứng từ. Kết hợp chứng từ với bộ lọc khác chỉ lấy nhóm tồn liên quan đến chứng từ đó, kể cả khi giới hạn sự kiện thấp.
-          </p>
-          {validationError && (
-            <p id="traceability-validation-error" role="alert" style={{ gridColumn: '1 / -1', margin: 0 }}>
-              {validationError}
-            </p>
-          )}
-          {resultStatus && (
-            <p role="status" aria-live="polite" className="ui-muted-text" style={{ gridColumn: '1 / -1', margin: 0 }}>
-              {resultStatus}
-            </p>
-          )}
-        </form>
-      </UiCard>
+
+      <InventoryTraceabilityFilterCard
+        form={form}
+        updateField={updateField}
+        warehouses={warehouses}
+        warehousesLoading={warehousesLoading}
+        warehousesError={warehousesError}
+        onReloadWarehouses={() => void loadWarehouses()}
+        eventLimit={eventLimit}
+        onChangeEventLimit={(limit) => {
+          setEventLimit(limit);
+          invalidateResults();
+        }}
+        loading={loading}
+        referencePairErrorActive={referencePairErrorActive}
+        validationError={validationError}
+        resultStatus={resultStatus}
+        productIdRef={productIdRef}
+        referenceTypeRef={referenceTypeRef}
+        referenceIdRef={referenceIdRef}
+        onSearch={search}
+        onClearFilters={clearFilters}
+      />
 
       <TraceabilityRecallOverviewCard
         result={result}

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PackingSessions from './PackingSessions';
 import apiClient from '../services/apiClient';
@@ -210,5 +211,58 @@ describe('Packing workbench',()=>{
     expect(suggestionBox.textContent).toContain('Thùng trung M (35×25×20 cm)');
     expect(suggestionBox.textContent).toContain('Kích thước thùng: 35×25×20 cm');
     expect(suggestionBox.textContent).toContain('2.92 kg');
+  });
+
+  it('Wave 15: locks historical unit & total cost snapshot on COMPLETED KWO-2026-001 while updating OPEN KWO-2026-002 and using pure UoM Cái',async()=>{
+    grant('packing.read','inventory.cost.read');
+    vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(url==='/api/v1/packing-sessions')return {data:[summary]} as never;
+      if(url==='/api/v1/products/kit-work-orders')return {data:[{rolledUpUnitCost:620000,earliestComponentExpiryDate:'2026-12-31T00:00:00Z'}]} as never;
+      return {data:[]} as never;
+    });
+
+    const view=render(
+      <MemoryRouter initialEntries={['/kit-work-orders']}>
+        <PackingSessions/>
+      </MemoryRouter>
+    );
+
+    const openRow=await view.findByTestId('kit-wo-row-2');
+    await waitFor(()=>expect(openRow.textContent).toContain('620.000 ₫'));
+    expect(openRow.textContent).toContain('9.300.000 ₫');
+
+    const completedRow=view.getByTestId('kit-wo-row-1');
+    expect(completedRow.textContent).toContain('KWO-2026-001');
+    expect(completedRow.textContent).toContain('500.000 ₫');
+    expect(completedRow.textContent).toContain('10.000.000 ₫');
+    expect(completedRow.textContent).not.toContain('620.000 ₫');
+
+    const bomTable=view.getByTestId('kit-bom-components-table');
+    expect(bomTable.textContent).toContain('Cái');
+    expect(bomTable.textContent).not.toContain('Vỏ hộp (Cái)');
+  });
+
+  it('SEC-W17-013: masks Kit BOM and work order costs fail-closed when inventory.cost.read is not granted',async()=>{
+    grant('packing.read');
+    vi.mocked(apiClient.get).mockImplementation(async url=>{
+      if(url==='/api/v1/packing-sessions')return {data:[summary]} as never;
+      if(url==='/api/v1/products/kit-work-orders')return {data:[{rolledUpUnitCost:620000,earliestComponentExpiryDate:'2026-12-31T00:00:00Z'}]} as never;
+      return {data:[]} as never;
+    });
+
+    const view=render(
+      <MemoryRouter initialEntries={['/kit-work-orders']}>
+        <PackingSessions/>
+      </MemoryRouter>
+    );
+
+    const completedRow=await view.findByTestId('kit-wo-row-1');
+    const openRow=view.getByTestId('kit-wo-row-2');
+    expect(completedRow.textContent).toContain('Ẩn theo phân quyền');
+    expect(completedRow.textContent).not.toContain('500.000 ₫');
+    expect(completedRow.textContent).not.toContain('10.000.000 ₫');
+    expect(openRow.textContent).toContain('Ẩn theo phân quyền');
+    expect(openRow.textContent).not.toContain('620.000 ₫');
+    expect(view.container.textContent).toContain('Ẩn theo RBAC');
   });
 });

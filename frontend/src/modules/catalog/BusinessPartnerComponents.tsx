@@ -4,6 +4,8 @@ import { UiBadge, UiCard, UiDrawer, UiTableScroll } from '../../ui/ProductionUi'
 export interface BusinessPartner {
   id: number; code: string; name: string; isSupplier: boolean; isCustomer: boolean;
   isActive: boolean; phone?: string; email?: string; address?: string;
+  taxCode?: string; taxpayerType?: 'ENTERPRISE' | 'HOUSEHOLD_INDIVIDUAL' | 'INDIVIDUAL_CONSUMER';
+  bankAccountNumber?: string; bankName?: string;
   creditLimit?: number; paymentTermDays?: number; payableBalance?: number; receivableBalance?: number;
   rowVersion: string;
 }
@@ -29,7 +31,8 @@ export type BillingSummary = {
 
 export const emptyPartnerForm: Partial<BusinessPartner> = {
   code: '', name: '', isSupplier: true, isCustomer: false, isActive: true,
-  phone: '', email: '', address: '', creditLimit: 0, paymentTermDays: 30, rowVersion: '',
+  phone: '', email: '', address: '', taxCode: '', taxpayerType: 'ENTERPRISE',
+  bankAccountNumber: '', bankName: '', creditLimit: 0, paymentTermDays: 30, rowVersion: '',
 };
 
 export function PartnerDeleteConfirmModal(props: {
@@ -104,9 +107,33 @@ export function PartnerFormDrawer(props: {
         </div>
         <label>Điện thoại<input aria-label="Điện thoại đối tác" value={form.phone || ''} maxLength={50} onChange={event => field('phone', event.target.value)} /></label>
         <label>Email<input aria-label="Email đối tác" value={form.email || ''} maxLength={254} onChange={event => field('email', event.target.value)} /></label>
+        <label style={{ gridColumn: '1 / -1' }}>
+          Mã số thuế (10/13 số) hoặc Mã định danh CCCD (12 số - TT 86/2024/TT-BTC)
+          <input aria-label="Mã số thuế hoặc CCCD đối tác" data-testid="input-partner-tax-code" value={form.taxCode || ''} maxLength={20} placeholder="VD: 0318889999 hoặc 079200012345" onChange={event => field('taxCode', event.target.value)} />
+        </label>
+        <label>
+          Phân loại người nộp thuế (TT 86/2024/TT-BTC)
+          <select aria-label="Phân loại người nộp thuế đối tác" data-testid="select-partner-taxpayer-type" value={form.taxpayerType || 'ENTERPRISE'} onChange={event => field('taxpayerType', event.target.value)}>
+            <option value="ENTERPRISE">Doanh nghiệp / Tổ chức (MST 10 hoặc 13 số)</option>
+            <option value="HOUSEHOLD_INDIVIDUAL">Hộ / Cá nhân kinh doanh (CCCD 12 số)</option>
+            <option value="INDIVIDUAL_CONSUMER">Cá nhân tiêu dùng</option>
+          </select>
+        </label>
+        <label>
+          Số tài khoản ngân hàng
+          <input aria-label="Số tài khoản ngân hàng đối tác" data-testid="input-partner-bank-account" value={form.bankAccountNumber || ''} maxLength={50} placeholder="Số TK thanh toán không tiền mặt" onChange={event => field('bankAccountNumber', event.target.value)} />
+        </label>
+        <label>
+          Ngân hàng thụ hưởng
+          <input aria-label="Ngân hàng thụ hưởng đối tác" data-testid="input-partner-bank-name" value={form.bankName || ''} maxLength={120} placeholder="VD: Vietcombank, TPBank..." onChange={event => field('bankName', event.target.value)} />
+        </label>
         <label>Hạn mức tín dụng (VND)<input aria-label="Hạn mức tín dụng đối tác" type="number" min="0" step="1000" value={form.creditLimit ?? 0} onChange={event => field('creditLimit', event.target.value === '' ? 0 : Number(event.target.value))} /></label>
         <label>Kỳ hạn thanh toán (ngày)<input aria-label="Kỳ hạn thanh toán đối tác" type="number" min="0" max="3650" value={form.paymentTermDays ?? 30} onChange={event => field('paymentTermDays', event.target.value === '' ? 0 : Number(event.target.value))} /></label>
         <label style={{ gridColumn: '1 / -1' }}>Địa chỉ<textarea aria-label="Địa chỉ đối tác" value={form.address || ''} maxLength={500} rows={2} onChange={event => field('address', event.target.value)} /></label>
+        <div style={{ gridColumn: '1 / -1', padding: '8px 12px', borderRadius: 8, background: '#f0fdf4', border: '1px solid #86efac', color: '#065f46', fontSize: 12.5 }}>
+          <UiBadge tone="success">Tuân thủ Luật Thuế GTGT 48/2024/QH15 &amp; NĐ 181/2025/NĐ-CP</UiBadge>{' '}
+          Bắt buộc chứng từ thanh toán không dùng tiền mặt đối với giao dịch mua hàng hóa, dịch vụ từ <strong>&gt;= 5.000.000 VNĐ</strong> để khấu trừ thuế GTGT đầu vào.
+        </div>
         <div className="ui-inline-actions" style={{ gridColumn: '1 / -1', justifyContent: 'flex-end', marginTop: 8 }}>
           <button type="button" className="ui-btn ui-btn-secondary" disabled={loading} onClick={onClose}>Hủy</button>
           <button type="submit" className="ui-btn ui-btn-primary ui-primary-button" disabled={loading}>{loading ? 'Đang lưu...' : 'Lưu'}</button>
@@ -163,17 +190,17 @@ export function PartnerSlaAnd3PlCards(props: {
           <div style={kpiBoxStyle}>
             <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Phí lưu kho trong kỳ</span>
             <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.storageFeeAmount.toLocaleString('vi-VN')} đ</strong>
-            <small style={{ color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.storageUnits} Thùng × 15.000 đ</small>
+            <small style={{ color: '#475569', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.storageUnits} Thùng × 15.000 đ</small>
           </div>
           <div style={kpiBoxStyle}>
             <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Phí tác nghiệp Nhập &amp; Cất hàng</span>
             <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.inboundHandlingFeeAmount.toLocaleString('vi-VN')} đ</strong>
-            <small style={{ color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.inboundUnits} Thùng × 8.000 đ</small>
+            <small style={{ color: '#475569', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.inboundUnits} Thùng × 8.000 đ</small>
           </div>
           <div style={kpiBoxStyle}>
             <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Phí tác nghiệp Xuất &amp; Đóng gói</span>
             <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.outboundHandlingFeeAmount.toLocaleString('vi-VN')} đ</strong>
-            <small style={{ color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.outboundUnits} Thùng × 9.000 đ</small>
+            <small style={{ color: '#475569', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.outboundUnits} Thùng × 9.000 đ</small>
           </div>
           <div style={{ ...kpiBoxStyle, border: '1px solid #86efac', background: '#ecfdf5' }}>
             <span style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>Tổng cộng Bảng kê 3PL (Gồm VAT 10%)</span>

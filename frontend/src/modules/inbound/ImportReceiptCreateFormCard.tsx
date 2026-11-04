@@ -1,15 +1,10 @@
 import React from 'react';
 import { UiCard } from '../../ui/ProductionUi';
 import { roundQty4 } from '../../pages/productCatalog';
+import { formatWarehouseLabel } from '../../utils/warehouseLabel';
 import {
-  type AsnOption,
-  type ImportReceipt,
-  type Partner,
-  type PoOption,
-  type Product,
-  type ReceiptDetailForm,
-  type Warehouse,
-  nextShortReceiptCode,
+  type AsnOption, type ImportReceipt, type Partner, type PoOption,
+  type Product, type ReceiptDetailForm, type Warehouse,
 } from './ImportReceiptTypes';
 
 export interface ImportReceiptCreateFormCardProps {
@@ -44,75 +39,41 @@ export interface ImportReceiptCreateFormCardProps {
 }
 
 export const ImportReceiptCreateFormCard: React.FC<ImportReceiptCreateFormCardProps> = ({
-  showCreateForm,
-  setShowCreateForm,
-  code,
-  setCode,
-  warehouseId,
-  setWarehouseId,
-  note,
-  setNote,
-  supplierId,
-  setSupplierId,
-  purchaseOrderId,
-  setPurchaseOrderId,
-  asnId,
-  setAsnId,
-  details,
-  setDetails,
-  receipts,
-  warehouses,
-  suppliers,
-  products,
-  purchaseOrders,
-  asns,
-  filteredAsns,
-  creating,
-  handleCreate,
-  handleAddDetail,
-  handleRemoveDetail,
-  handleDetailChange,
-}) => (
-  <div style={{ order: 3 }}>
-    <UiCard
-      title="Tạo Phiếu Nhập (Nháp)"
-      subtitle="Khởi tạo phiếu nhập kho nháp liên kết đồng bộ Đơn mua hàng (PO) và Thông báo giao hàng (ASN)"
-    >
-      <div className="ui-inline-actions" style={{ marginBottom: showCreateForm ? 12 : 0 }}>
-        <button
-          type="button"
-          onClick={() => {
-            if (!showCreateForm && !code.trim()) setCode(nextShortReceiptCode(receipts));
-            setShowCreateForm(v => !v);
-          }}
-          style={{ background: '#0284c7', color: '#ffffff', borderColor: '#0284c7', fontWeight: 600 }}
-        >
-          {showCreateForm ? 'Thu gọn biểu mẫu' : 'Mở biểu mẫu tạo mới'}
-        </button>
-      </div>
-      <div style={showCreateForm ? undefined : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }}>
+  showCreateForm, code, setCode, warehouseId, setWarehouseId, note, setNote,
+  supplierId, setSupplierId, purchaseOrderId, setPurchaseOrderId, asnId, setAsnId,
+  details, setDetails, warehouses, suppliers, products, purchaseOrders, asns,
+  filteredAsns, creating, handleCreate, handleAddDetail, handleRemoveDetail, handleDetailChange,
+}) => {
+  if (!showCreateForm) return null;
+
+  return (
+    <div style={{ order: 1, minWidth: 0, maxWidth: '100%' }}>
+      <UiCard
+        title="Tạo phiếu nhập kho"
+        subtitle="Khởi tạo phiếu nhập kho nháp liên kết đồng bộ Đơn mua hàng (PO) và Thông báo giao hàng (ASN)"
+      >
         <form onSubmit={handleCreate} className="import-form">
           <div style={{ padding: 12, borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', marginBottom: 8 }}>
             <strong style={{ display: 'block', fontSize: 13, color: '#0f172a', marginBottom: 10 }}>1. Thông tin chung &amp; Nhà cung cấp</strong>
             <div className="import-form-grid">
-              <label className="ui-stack">
+              <label className="ui-stack" style={{ minWidth: 0 }}>
                 <span>Mã phiếu</span>
-                <input aria-label="Mã phiếu" placeholder="VD: PN-2026-0004" value={code} onChange={e => setCode(e.target.value)} required style={{ maxWidth: 320 }} />
+                <input aria-label="Mã phiếu" placeholder="VD: PN-2026-0004" value={code} onChange={e => setCode(e.target.value)} required style={{ width: '100%', maxWidth: 320 }} />
               </label>
-              <label className="ui-stack">
+              <label className="ui-stack" style={{ minWidth: 0 }}>
                 <span>Kho</span>
-                <select aria-label="Kho" value={warehouseId} onChange={e => setWarehouseId(e.target.value ? Number(e.target.value) : '')} required style={{ maxWidth: 320 }}>
+                <select aria-label="Kho" value={warehouseId} onChange={e => setWarehouseId(e.target.value ? Number(e.target.value) : '')} required style={{ width: '100%', maxWidth: 320 }}>
                   <option value="">-- Chọn kho --</option>
-                  {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  {warehouses.map(w => <option key={w.id} value={w.id}>{formatWarehouseLabel(w.name, (w as { code?: string }).code, w.id)}</option>)}
                 </select>
               </label>
-              <label className="ui-stack">
+              <label className="ui-stack" style={{ minWidth: 0 }}>
                 <span>Ghi chú phiếu</span>
-                <input aria-label="Ghi chú phiếu" value={note} onChange={e => setNote(e.target.value)} />
+                <input aria-label="Ghi chú phiếu" value={note} onChange={e => setNote(e.target.value)} style={{ width: '100%' }} />
               </label>
-              <label className="ui-stack">
+              <label className="ui-stack" style={{ minWidth: 0 }}>
                 <span>Nhà cung cấp</span>
-                <select aria-label="Nhà cung cấp" value={supplierId} onChange={e => setSupplierId(e.target.value ? Number(e.target.value) : '')} style={{ maxWidth: 320 }}>
+                <select aria-label="Nhà cung cấp" value={supplierId} onChange={e => setSupplierId(e.target.value ? Number(e.target.value) : '')} style={{ width: '100%', maxWidth: 320 }}>
                   <option value="">-- Không chọn --</option>
                   {suppliers.filter(x => x.isActive).map(x => <option key={x.id} value={x.id}>{x.code} - {x.name}</option>)}
                 </select>
@@ -231,7 +192,7 @@ export const ImportReceiptCreateFormCard: React.FC<ImportReceiptCreateFormCardPr
               </div>
             </div>
             <button type="button" onClick={handleAddDetail}>+ Thêm dòng</button>
-            <button type="submit" disabled={creating} style={{ background: '#0284c7', color: '#ffffff', borderColor: '#0284c7', fontWeight: 600 }}>
+            <button type="submit" disabled={creating} style={{ background: '#1d4ed8', color: '#ffffff', borderColor: '#1d4ed8', fontWeight: 600 }}>
               {creating ? 'Đang lưu...' : (
                 <>
                   <span>Lưu phiếu nháp</span>
@@ -241,7 +202,7 @@ export const ImportReceiptCreateFormCard: React.FC<ImportReceiptCreateFormCardPr
             </button>
           </div>
         </form>
-      </div>
-    </UiCard>
-  </div>
-);
+      </UiCard>
+    </div>
+  );
+};

@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AxiosError } from 'axios';
 import apiClient from '../services/apiClient';
+import { encodeQrMatrix } from '../components/qr/qrMatrixEncoder';
 import { setCurrentPermissions } from '../services/authorization';
 import Permissions from './Permissions';
 
@@ -61,15 +62,25 @@ describe('quản trị quyền truy cập', () => {
   });
 
   it('thu hồi quyền đọc xóa dữ liệu quản trị đang hiển thị', async () => {
-    const view = render(<Permissions />); await view.findByText('Quản lý');
+    const view = render(<Permissions />); await view.findByText('Quản lý kho');
     act(() => setCurrentPermissions([]));
-    await waitFor(() => expect(view.queryByText('Quản lý')).toBeNull());
+    await waitFor(() => expect(view.queryByText('Quản lý kho')).toBeNull());
   });
 
   it('hiển thị đúng trạng thái Đang khóa tạm thời sau khi khóa tài khoản và đọc sodPolicyStatus từ backend', async () => {
+    setCurrentPermissions([...grants, 'user.read']);
     get.mockImplementation(async url => {
       if (url === '/api/v1/permissions') return { data: catalog } as never;
-      if (url === '/api/v1/auth/me') return { data: { permissions: grants } } as never;
+      if (url === '/api/v1/auth/me') return { data: { permissions: [...grants, 'user.read'] } } as never;
+      if (url === '/api/v1/permissions/users') {
+        return {
+          data: [
+            { id: 1, username: 'qa_admin', fullName: 'Quản trị viên Hệ thống', roleName: 'SuperAdmin', securityDomain: 'PLATFORM' },
+            { id: 9, username: 'qa_billing_admin', fullName: 'Quản trị Đối soát', roleName: 'BillingAdmin', securityDomain: 'PLATFORM' },
+            { id: 2, username: 'staff01', fullName: 'Nhân viên kho 01', roleName: 'WarehouseStaff' },
+          ],
+        } as never;
+      }
       if (url === '/api/v1/users/2/security') {
         return {
           data: {
@@ -106,7 +117,12 @@ describe('quản trị quyền truy cập', () => {
     expect(await view.findByText(/ZERO_PRIVILEGE_ESCALATION_VERIFIED/)).toBeTruthy();
 
     fireEvent.click(view.getByText('Cấu trúc vai trò & Phạm vi kho'));
-    fireEvent.change(view.getByLabelText('ID người dùng cần kiểm tra bảo mật'), { target: { value: '2' } });
+    const userSelect = view.getByLabelText('ID người dùng cần kiểm tra bảo mật') as HTMLSelectElement;
+    await waitFor(() => expect(userSelect.querySelectorAll('option').length).toBe(2));
+    expect(userSelect.textContent).not.toContain('qa_admin');
+    expect(userSelect.textContent).not.toContain('Quản trị viên Hệ thống');
+    expect(userSelect.textContent).toContain('staff01 (Nhân viên kho 01)');
+    fireEvent.change(userSelect, { target: { value: '2' } });
     fireEvent.click(view.getByText('Tra cứu bảo mật'));
 
     expect(await view.findByText('Đang khóa tạm thời')).toBeTruthy();
@@ -271,6 +287,7 @@ describe('quản trị quyền truy cập', () => {
     expect(view.getByTestId('toggle-totp-secret-visibility').textContent).toBe('Ẩn khóa nhập tay');
     expect(view.getByTestId('btn-copy-totp-secret').textContent).toBe('Sao chép khóa');
     expect(view.getByText('Mã QR TOTP')).toBeTruthy();
+    expect(view.getByTestId('barcode-qr-svg').getAttribute('data-qr-size')).toBe('37');
     expect(view.queryByTestId('totp-recovery-codes')).toBeNull();
     expect(post).toHaveBeenCalledWith('/api/v1/account-security/1/totp/setup');
 
@@ -305,7 +322,12 @@ describe('quản trị quyền truy cập', () => {
     expect(view.getByTestId('totp-recovery-codes').textContent).toContain('A1B2-C3D4');
     expect(view.getByTestId('btn-copy-recovery-codes').textContent).toContain('Sao chép 8 mã khôi phục');
     expect(view.getByTestId('btn-download-recovery-codes').textContent).toContain('Tải tệp .txt');
-    expect(post).toHaveBeenCalledWith('/api/v1/account-security/1/totp/verify', expect.objectContaining({ code: '654321' }));
+    expect(post).toHaveBeenCalledWith('/api/v1/account-security/1/totp/verify', { code: '654321' });
+    const verifyCalls = post.mock.calls.filter(([url]) => url === '/api/v1/account-security/1/totp/verify');
+    for (const [, verifyPayload] of verifyCalls) {
+      expect(verifyPayload).not.toHaveProperty('secretKey');
+      expect(verifyPayload).not.toHaveProperty('base32Secret');
+    }
 
     // Confirm saving 8 recovery codes to complete enrollment -> transitions to VERIFIED
     const completeBtn = view.getByTestId('btn-complete-totp-enrollment') as HTMLButtonElement;
@@ -377,5 +399,136 @@ describe('quản trị quyền truy cập', () => {
       '/api/v1/security/support-impersonation/501/revoke',
       expect.objectContaining({ reason: 'Chủ shop thu hồi phiên hỗ trợ kỹ thuật' }),
     );
+  });
+
+  it('ẩn 4 tab đa năng, thẻ gói thuê bao và khối kiểm toán rườm rà khi mở trực tiếp /permissions trên trình duyệt thật', async () => {
+    vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 Chrome/130.0.0.0');
+    const view = rtlRender(
+      <MemoryRouter initialEntries={['/permissions']}>
+        <Permissions />
+      </MemoryRouter>,
+    );
+    expect(await view.findByTestId('permissions-role-tabs')).toBeTruthy();
+    expect(view.getByText('Cấp quyền')).toBeTruthy();
+    expect(view.getByText('Quyền trong danh mục')).toBeTruthy();
+    expect(view.queryByTestId('tab-permissions-matrix')).toBeNull();
+    expect(view.queryByText('Tóm tắt gói dịch vụ thuê bao hiện tại')).toBeNull();
+    expect(view.queryByText('Gói Doanh nghiệp')).toBeNull();
+    expect(view.queryByText(/Kiểm toán Cô lập Phạm vi Kho/i)).toBeNull();
+    expect(view.queryByText('Quản trị bảo mật, phạm vi kho & kiểm toán')).toBeNull();
+  });
+
+  it('SEC-W17-004: từ chối sinh khóa giả ở trình duyệt khi /totp/setup rỗng và mã hóa ma trận QR ISO/IEC 18004 chuẩn V1..V10', async () => {
+    post.mockImplementation(async url => {
+      if (url === '/api/v1/account-security/1/totp/setup') {
+        return { data: {} } as never;
+      }
+      return { data: {} } as never;
+    });
+
+    const view = render(<Permissions />);
+    await view.findByRole('tab', { name: 'Xác thực 2 lớp' });
+    fireEvent.click(view.getByRole('tab', { name: 'Xác thực 2 lớp' }));
+    fireEvent.click(view.getByTestId('btn-setup-totp'));
+
+    const alert = await view.findByRole('alert');
+    expect(alert.textContent).toContain('Máy chủ không trả về thông tin khởi tạo xác thực 2 lớp');
+    expect(view.queryByTestId('totp-enrolling-secret-box')).toBeNull();
+    expect(view.queryByTestId('barcode-qr-svg')).toBeNull();
+
+    const v1 = encodeQrMatrix('WH01-A01');
+    expect(v1.size).toBe(21);
+    expect(v1.modules[0][0]).toBe(true);
+    expect(v1.modules[3][3]).toBe(true);
+    expect(v1.modules[7][0]).toBe(false);
+    expect(v1.modules[21 - 8][8]).toBe(true);
+
+    const v5 = encodeQrMatrix('otpauth://totp/ERPKHO:user-1?secret=K5X2M9P4Q7R8T3V6W2Y4Z6A8C3E5G7H9&issuer=ERPKHO');
+    expect(v5.size).toBe(37);
+    expect(v5.modules[0][36]).toBe(true);
+    expect(v5.modules[36][0]).toBe(true);
+    expect(v5.modules[37 - 8][8]).toBe(true);
+
+    const v10 = encodeQrMatrix('00020101021238570010A00000072701270006970422011301234567890120208QRIBFTTA5303704540729900005802VN62340830THANH TOAN GOI DICH VU ERP KHO6304ABCD-EXTRA-PADDING-FOR-VERSION-10-INTERLEAVING-CHECK-01234567890123456789012345678901234567890123456789');
+    expect(v10.size).toBe(57);
+    expect(v10.modules[57 - 8][8]).toBe(true);
+  });
+
+  it('QA-W17-R1-003: cổng kiểm tra quyền user.read và warehouse.read chặn gọi nhầm /api/v1/permissions/users với vai trò Manager', async () => {
+    const calledUrls: string[] = [];
+    const originalGet = apiClient.get;
+    const managerPerms = ['permission.read', 'warehouse.read'];
+    setCurrentPermissions(managerPerms);
+    (apiClient as unknown as { get: (url: string) => Promise<{ data: unknown }> }).get = async (url: string) => {
+      calledUrls.push(url);
+      if (url === '/api/v1/permissions') return { data: catalog };
+      if (url === '/api/v1/warehouses') return { data: [{ id: 1, code: 'WH01', name: 'Kho Trung tâm' }] };
+      if (url === '/api/v1/permissions/saas/subscription-billing') return { data: { planCode: 'GROWTH', subscriptionStatus: 'ACTIVE' } };
+      return { data: [] };
+    };
+    try {
+      const view = render(<Permissions />);
+      expect(await view.findByRole('table', { name: 'Danh mục quyền truy cập' })).toBeTruthy();
+      await waitFor(() => expect(calledUrls).toContain('/api/v1/warehouses'));
+      expect(calledUrls).not.toContain('/api/v1/permissions/users');
+    } finally {
+      apiClient.get = originalGet;
+    }
+  });
+
+  it('FND-W18-02: loại bỏ triệt để vai trò và mã quyền Platform khỏi /permissions của khách hàng và hiển thị đúng 6 vai trò kho theo thứ tự chuẩn', async () => {
+    get.mockImplementation(async url => {
+      if (url === '/api/v1/permissions') {
+        return {
+          data: [
+            { code: 'receipt.read', description: 'Xem phiếu nhập' },
+            { code: 'inventory.cost.read', description: 'Xem giá vốn' },
+            { code: 'platform.dashboard.read', description: 'Quyền nền tảng' },
+            { code: 'platform.tenant.read', description: 'Quyền quản trị thuê bao' },
+          ],
+        } as never;
+      }
+      if (url === '/api/v1/permissions/roles') {
+        return {
+          data: [
+            { id: 100, roleName: 'SuperAdmin', securityDomain: 'PLATFORM', rowVersion: 'v1', permissions: ['platform.dashboard.read', 'receipt.read'] },
+            { id: 101, roleName: 'BillingAdmin', securityDomain: 'PLATFORM', rowVersion: 'v1', permissions: ['platform.tenant.read'] },
+            { id: 102, roleName: 'SupportAdmin', securityDomain: 'PLATFORM', rowVersion: 'v1', permissions: ['platform.tenant.read'] },
+            { id: 103, roleName: 'SecurityAuditor', securityDomain: 'PLATFORM', rowVersion: 'v1', permissions: ['platform.dashboard.read'] },
+            { id: 6, roleName: 'Viewer', rowVersion: 'v1', permissions: ['receipt.read'] },
+            { id: 2, roleName: 'Manager', rowVersion: 'v1', permissions: ['receipt.read', 'inventory.cost.read'] },
+            { id: 1, roleName: 'Admin', rowVersion: 'v1', permissions: ['receipt.read', 'inventory.cost.read', 'platform.dashboard.read'] },
+            { id: 5, roleName: 'WarehouseStaff', rowVersion: 'v1', permissions: ['receipt.read'] },
+            { id: 4, roleName: 'Supervisor', rowVersion: 'v1', permissions: ['receipt.read'] },
+            { id: 3, roleName: 'Accountant', rowVersion: 'v1', permissions: ['inventory.cost.read'] },
+          ],
+        } as never;
+      }
+      if (url === '/api/v1/auth/me') return { data: { permissions: grants } } as never;
+      return { data: [] } as never;
+    });
+
+    const view = render(<Permissions />);
+    const roleTabs = await view.findByTestId('permissions-role-tabs');
+    const labels = Array.from(roleTabs.querySelectorAll('button[role="tab"]')).map(btn => btn.textContent);
+    expect(labels).toEqual([
+      'Quản trị viên công ty (Admin · 2)',
+      'Quản lý kho (Manager · 2)',
+      'Giám sát & QC (Supervisor · 1)',
+      'Kế toán kho (Accountant · 1)',
+      'Nhân viên kho (WarehouseStaff · 1)',
+      'Chỉ xem / Kiểm toán (Viewer · 1)',
+    ]);
+    expect(view.container.textContent).not.toContain('SuperAdmin');
+    expect(view.container.textContent).not.toContain('BillingAdmin');
+    expect(view.container.textContent).not.toContain('SupportAdmin');
+    expect(view.container.textContent).not.toContain('SecurityAuditor');
+    expect(view.container.textContent).not.toContain('platform.dashboard.read');
+    const matrixScrollRegion = view.getByRole('region', { name: /Vùng cuộn danh sách quyền của Quản trị viên công ty/i });
+    expect(matrixScrollRegion.getAttribute('tabindex')).toBe('0');
+    fireEvent.click(view.getByText('Cấu trúc vai trò & Phạm vi kho'));
+    const emptyUserSelect = view.getByLabelText('ID người dùng cần kiểm tra bảo mật') as HTMLSelectElement;
+    expect(emptyUserSelect.querySelectorAll('option').length).toBe(1);
+    expect(emptyUserSelect.textContent).not.toContain('qa_admin');
   });
 });

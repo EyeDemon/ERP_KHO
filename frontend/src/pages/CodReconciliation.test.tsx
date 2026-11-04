@@ -184,10 +184,10 @@ describe('CodReconciliation Page', () => {
 
     expect(
       await screen.findByText(
-        /Khấu trừ Thuế Sàn TMĐT Tại Nguồn 1,5% \(Nghị định 70\/2025\/NĐ-CP\) & Phí Hạ tầng Đơn hàng Cố định/i,
+        /Khấu trừ thuế Sàn TMĐT \(Nghị định 117\/2025\/NĐ-CP\) & Phí Hạ tầng Đơn hàng Cố định/i,
       ),
     ).toBeTruthy();
-    expect(screen.getByText('Thuế sàn khấu trừ tại nguồn (1,5% - NĐ 70/2025)')).toBeTruthy();
+    expect(screen.getByText(/Thuế sàn khấu trừ tại nguồn \(1,5% - NĐ 117\/2025\/NĐ-CP\)/i)).toBeTruthy();
     expect(screen.getByText('Phí hạ tầng xử lý đơn cố định (3.000đ/đơn)')).toBeTruthy();
     expect(screen.getByText('Thuế khấu trừ 1,5% & Phí cố định')).toBeTruthy();
     expect(screen.getAllByText('30.000 đ').length).toBeGreaterThanOrEqual(1);

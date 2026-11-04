@@ -24,23 +24,23 @@ describe('Wave-03 OutboundPipelineStepper & WorkspaceSubTabs', () => {
     const stepper = screen.getByTestId('outbound-pipeline-stepper');
     expect(stepper).toBeTruthy();
     expect(screen.getByTestId('outbound-mode-toggle')).toBeTruthy();
-    expect(screen.getByTestId('outbound-step-1').textContent).toContain('Đơn hàng & Wave');
-    expect(screen.getByTestId('outbound-step-2').textContent).toContain('Tác vụ Lấy hàng (Pick)');
+    expect(screen.getByTestId('outbound-step-1').textContent).toContain('Đơn bán hàng và đợt lấy');
+    expect(screen.getByTestId('outbound-step-2').textContent).toContain('Lấy hàng tại kệ');
     expect(screen.getByTestId('outbound-step-2').getAttribute('aria-current')).toBe('step');
-    expect(screen.getByTestId('outbound-step-5').textContent).toContain('Bàn giao Bưu cục (Manifest)');
+    expect(screen.getByTestId('outbound-step-5').textContent).toContain('Bàn giao vận đơn');
 
     const expressBtn = screen.getByTestId('outbound-mode-express');
     fireEvent.click(expressBtn);
 
-    expect(screen.getByTestId('outbound-step-1').textContent).toContain('Đơn bán hàng & Phân bổ');
-    expect(screen.getByTestId('outbound-step-2').textContent).toContain('Duyệt & Xuất kho nhanh');
+    expect(screen.getByTestId('outbound-step-1').textContent).toContain('Đơn bán hàng và phân bổ');
+    expect(screen.getByTestId('outbound-step-2').textContent).toContain('Duyệt và xuất kho nhanh');
     expect(screen.queryByTestId('outbound-step-3')).toBeNull();
   });
 
   it('renders OutboundPipelineStepper safely even outside a Router context', () => {
     render(<OutboundPipelineStepper defaultMode="EXPRESS_2_STEP" />);
     expect(screen.getByTestId('outbound-pipeline-stepper')).toBeTruthy();
-    expect(screen.getByTestId('outbound-step-1').textContent).toContain('Đơn bán hàng & Phân bổ');
+    expect(screen.getByTestId('outbound-step-1').textContent).toContain('Đơn bán hàng và phân bổ');
   });
 
   it('renders WorkspaceSubTabs for Inbound, Outbound, and Inventory routes and hides on Dashboard root', () => {

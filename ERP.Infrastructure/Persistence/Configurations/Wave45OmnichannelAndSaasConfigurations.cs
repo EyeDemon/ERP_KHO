@@ -98,6 +98,32 @@ public sealed class HandoverManifestLineConfiguration : IEntityTypeConfiguration
     }
 }
 
+public sealed class SaasTenantConfiguration : IEntityTypeConfiguration<SaasTenant>
+{
+    public void Configure(EntityTypeBuilder<SaasTenant> builder)
+    {
+        builder.ToTable("SaasTenants");
+        builder.HasKey(x => x.Id);
+        builder.Property(x => x.TenantCode).HasMaxLength(64).IsRequired();
+        builder.Property(x => x.CompanyName).HasMaxLength(256).IsRequired();
+        builder.Property(x => x.TaxCode).HasMaxLength(32);
+        builder.Property(x => x.TaxpayerType).HasMaxLength(32).IsRequired().HasDefaultValue("ENTERPRISE");
+        builder.Property(x => x.OwnerEmail).HasMaxLength(200);
+        builder.Property(x => x.ContactPhone).HasMaxLength(50);
+        builder.Property(x => x.LegalRegisteredAddress).HasMaxLength(500);
+        builder.Property(x => x.LifecycleStatus).HasMaxLength(32).IsRequired().HasDefaultValue("ACTIVE");
+        builder.Property(x => x.SuspensionReason).HasMaxLength(500);
+        builder.Property(x => x.AllowSupportAccess).HasDefaultValue(true);
+        builder.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken();
+        builder.HasIndex(x => x.TenantId)
+               .IsUnique()
+               .HasDatabaseName("UX_SaasTenants_TenantId");
+        builder.HasIndex(x => x.TenantCode)
+               .IsUnique()
+               .HasDatabaseName("UX_SaasTenants_TenantCode");
+    }
+}
+
 public sealed class SaasPlanConfiguration : IEntityTypeConfiguration<SaasPlan>
 {
     public void Configure(EntityTypeBuilder<SaasPlan> builder)
@@ -135,7 +161,12 @@ public sealed class SaasBillingInvoiceConfiguration : IEntityTypeConfiguration<S
         builder.HasKey(x => x.Id);
         builder.Property(x => x.InvoiceCode).HasMaxLength(64).IsRequired();
         builder.Property(x => x.PlanCode).HasMaxLength(32).IsRequired();
+        builder.Property(x => x.SubTotalVnd).HasPrecision(19, 4).HasDefaultValue(0m);
+        builder.Property(x => x.VatRatePercent).HasPrecision(5, 2).HasDefaultValue(10.00m);
+        builder.Property(x => x.VatAmountVnd).HasPrecision(19, 4).HasDefaultValue(0m);
         builder.Property(x => x.AmountVnd).HasPrecision(19, 4);
+        builder.Property(x => x.BuyerTaxCode).HasMaxLength(32);
+        builder.Property(x => x.BuyerLegalName).HasMaxLength(256);
         builder.Property(x => x.PaymentProvider).HasMaxLength(32).IsRequired();
         builder.Property(x => x.Status).HasMaxLength(32).IsRequired();
         builder.Property(x => x.QrPayload).HasMaxLength(500);

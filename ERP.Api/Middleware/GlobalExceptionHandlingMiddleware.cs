@@ -51,6 +51,7 @@ public class GlobalExceptionHandlingMiddleware
             UnprocessableDomainException => (int)HttpStatusCode.UnprocessableEntity,
             ServiceUnavailableException => (int)HttpStatusCode.ServiceUnavailable,
             NotFoundException => (int)HttpStatusCode.NotFound,
+            KeyNotFoundException => (int)HttpStatusCode.NotFound,
             ForbiddenException => (int)HttpStatusCode.Forbidden,
             UnauthorizedAccessException => (int)HttpStatusCode.Unauthorized,
             ConcurrencyException => (int)HttpStatusCode.Conflict,

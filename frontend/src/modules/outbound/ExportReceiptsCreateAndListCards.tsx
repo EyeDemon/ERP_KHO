@@ -3,6 +3,7 @@ import apiClient from '../../services/apiClient';
 import { completeIdempotentAction, idempotencyHeaders } from '../../services/idempotency';
 import { roundQty4, sanitizeScannerCode } from '../../pages/productCatalog';
 import { UiBadge, UiCard, UiTableScroll } from '../../ui/ProductionUi';
+import { formatWarehouseLabel } from '../../utils/warehouseLabel';
 import type { ExportReceipt, ExportStatusQuickFilter, Partner, Product, ReceiptDetailForm, Warehouse } from './exportReceiptsTypes';
 import { safeRequestError, statusLabel, statusTone } from './exportReceiptsTypes';
 
@@ -168,7 +169,7 @@ export function ExportReceiptsCreateCard({
                 <span>Kho</span>
                 <select aria-label="Kho" value={warehouseId} onChange={e => setWarehouseId(e.target.value ? Number(e.target.value) : '')} required>
                   <option value="">-- Chọn kho --</option>
-                  {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                  {warehouses.map(w => <option key={w.id} value={w.id}>{formatWarehouseLabel(w.name, (w as { code?: string }).code, w.id)}</option>)}
                 </select>
               </label>
               <label className="ui-stack"><span>Ghi chú phiếu</span><input aria-label="Ghi chú phiếu" value={note} onChange={e => setNote(e.target.value)} /></label>
@@ -280,7 +281,7 @@ export function ExportReceiptsListCard({
               {pagedReceipts.map(r => (
                 <tr key={r.id}>
                   <td style={{ whiteSpace: 'nowrap' }}><strong>{r.code}</strong></td>
-                  <td>{r.warehouseName}</td>
+                  <td>{formatWarehouseLabel(r.warehouseName)}</td>
                   <td>{r.customerCode ? r.customerCode + ' - ' + r.customerName : '—'}</td>
                   <td>{r.marketplaceOrderId || r.trackingNumber ? `${r.marketplaceOrderId ?? '—'} • ${r.carrierCode ?? '—'} • ${r.trackingNumber ?? '—'}` : '—'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}><UiBadge tone={statusTone(r.status)}>{statusLabel(r.status)}</UiBadge></td>

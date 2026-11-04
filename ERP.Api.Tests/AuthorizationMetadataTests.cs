@@ -21,7 +21,9 @@ namespace ERP.Api.Tests
             var catalog = typeof(AppPermissions).GetFields(BindingFlags.Public | BindingFlags.Static)
                 .Where(f => f.IsLiteral && f.FieldType == typeof(string)).Select(f => (string)f.GetRawConstantValue()!).ToHashSet();
             foreach (var controller in controllers)
-            foreach (var action in controller.GetMethods().Where(m => m.GetCustomAttributes<Microsoft.AspNetCore.Mvc.Routing.HttpMethodAttribute>().Any()))
+            foreach (var action in controller.GetMethods().Where(m =>
+                m.GetCustomAttributes<Microsoft.AspNetCore.Mvc.Routing.HttpMethodAttribute>().Any() &&
+                !m.GetCustomAttributes<AllowAnonymousAttribute>().Any()))
             {
                 var grants = controller.GetCustomAttributes<PermissionAuthorizeAttribute>()
                     .Concat(action.GetCustomAttributes<PermissionAuthorizeAttribute>()).Select(p => p.Permission).ToArray();
@@ -357,30 +359,39 @@ namespace ERP.Api.Tests
         public void ReportsController_Get_RequiresAdminManagerOrViewer()
         {
             var classAttr = typeof(ReportsController).GetCustomAttribute<AuthorizeAttribute>();
-            classAttr!.Roles.Should().Be(AppRoles.AllRoles);
+            classAttr.Should().NotBeNull();
+            classAttr!.Roles.Should().BeNull();
+            typeof(ReportsController).GetCustomAttribute<PermissionAuthorizeAttribute>()!
+                .Permission.Should().Be(AppPermissions.InventoryRead);
         }
 
         [Fact]
         public void InventoryStocksController_Get_RequiresAllRoles()
         {
             var classAttr = typeof(InventoryStocksController).GetCustomAttribute<AuthorizeAttribute>();
-            classAttr!.Roles.Should().Be(AppRoles.AllRoles);
+            classAttr.Should().NotBeNull();
+            classAttr!.Roles.Should().BeNull();
+            typeof(InventoryStocksController).GetCustomAttribute<PermissionAuthorizeAttribute>()!
+                .Permission.Should().Be(AppPermissions.InventoryRead);
         }
 
         [Fact]
         public void InventoryTransactionsController_Get_RequiresAllRoles()
         {
             var classAttr = typeof(InventoryTransactionsController).GetCustomAttribute<AuthorizeAttribute>();
-            classAttr!.Roles.Should().Be(AppRoles.AllRoles);
+            classAttr.Should().NotBeNull();
+            classAttr!.Roles.Should().BeNull();
+            typeof(InventoryTransactionsController).GetCustomAttribute<PermissionAuthorizeAttribute>()!
+                .Permission.Should().Be(AppPermissions.InventoryLedgerRead);
         }
 
         [Fact]
         public void StockReservationsController_Expire_RequiresAdminManagerOrStaff()
         {
             var method = typeof(StockReservationsController).GetMethod("Expire");
-
-            method!.GetCustomAttribute<AuthorizeAttribute>()!.Roles
-                .Should().Be(AppRoles.AdminManagerOrStaff);
+            method!.GetCustomAttribute<AuthorizeAttribute>().Should().BeNull();
+            method!.GetCustomAttribute<PermissionAuthorizeAttribute>()!
+                .Permission.Should().Be(AppPermissions.AllocationRelease);
             AppRoles.AdminManagerOrStaff.Should().NotContain(AppRoles.Viewer);
         }
 

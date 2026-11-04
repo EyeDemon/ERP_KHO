@@ -74,7 +74,12 @@
 
   --text-primary: var(--erp-color-slate-900);
   --text-secondary: var(--erp-color-slate-700);
-  --text-muted: var(--erp-color-slate-500);
+  --text-muted: var(--erp-color-slate-600);
+
+  --color-primary: #1D4ED8;
+  --color-primary-hover: #1E40AF;
+  --color-primary-active: #1E3A8A;
+  --color-primary-foreground: #FFFFFF;
 
   --border-subtle: var(--erp-color-slate-200);
   --border-focus: var(--erp-color-blue-600);
@@ -116,6 +121,7 @@ th[data-numeric="true"],
 .kpi-value,
 .stat-value,
 .ui-stat-value,
+.ui-metric-value,
 .ui-badge {
   font-variant-numeric: tabular-nums;
 }

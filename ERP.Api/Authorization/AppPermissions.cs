@@ -5,6 +5,15 @@ namespace ERP.Api.Authorization;
 public static class AppPermissions
 {
     public const string ApprovalReject = DomainPermissions.ApprovalReject;
+    public const string ApprovalApprove = DomainPermissions.ApprovalApprove;
+    public const string StocktakeRead = DomainPermissions.StocktakeRead;
+    public const string StocktakeManage = DomainPermissions.StocktakeManage;
+    public const string ReplenishmentRead = DomainPermissions.ReplenishmentRead;
+    public const string ReplenishmentGenerate = DomainPermissions.ReplenishmentGenerate;
+    public const string ReplenishmentExecute = DomainPermissions.ReplenishmentExecute;
+    public const string ReportExport = DomainPermissions.ReportExport;
+    public const string CodReconciliationManage = DomainPermissions.CodReconciliationManage;
+    public const string EinvoiceIssue = DomainPermissions.EinvoiceIssue;
     public const string AllocationRead = DomainPermissions.AllocationRead;
     public const string AllocationCreate = DomainPermissions.AllocationCreate;
     public const string AllocationRelease = DomainPermissions.AllocationRelease;
@@ -139,6 +148,20 @@ public static class AppPermissions
     public const string UserWarehouseManage = DomainPermissions.UserWarehouseManage;
     public const string UsersManage = UserManage;
     public const string RolesManage = RoleManage;
+
+    public const string PlatformDashboardRead = DomainPermissions.PlatformDashboardRead;
+    public const string PlatformTenantRead = DomainPermissions.PlatformTenantRead;
+    public const string PlatformTenantProvision = DomainPermissions.PlatformTenantProvision;
+    public const string PlatformTenantSuspend = DomainPermissions.PlatformTenantSuspend;
+    public const string PlatformTenantWrite = DomainPermissions.PlatformTenantWrite;
+    public const string PlatformBillingManage = DomainPermissions.PlatformBillingManage;
+    public const string PlatformBillingWrite = DomainPermissions.PlatformBillingWrite;
+    public const string PlatformBillingReconcile = DomainPermissions.PlatformBillingReconcile;
+    public const string PlatformQuotaOverride = DomainPermissions.PlatformQuotaOverride;
+    public const string PlatformQuotaWrite = DomainPermissions.PlatformQuotaWrite;
+    public const string PlatformIntegrationManage = DomainPermissions.PlatformIntegrationManage;
+    public const string PlatformAuditRead = DomainPermissions.PlatformAuditRead;
+    public const string PlatformSupportImpersonate = DomainPermissions.PlatformSupportImpersonate;
 
     public static readonly string[] Catalog = DomainPermissions.All;
 }

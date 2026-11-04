@@ -1,8 +1,10 @@
 import React from 'react';
+import { CheckCircle2, Download, QrCode, X } from 'lucide-react';
 import { BarcodeSvg } from '../../components/BarcodeSvg';
 import { UiBadge } from '../../ui/ProductionUi';
 import {
   buildClientVietQrPayload,
+  downloadPaidInvoicePdf,
   formatCountdownMmSs,
   secondaryBtnStyle,
   type BillingState,
@@ -12,6 +14,9 @@ export interface SaasBillingVietQrPanelProps {
   billing: BillingState;
   busy: boolean;
   checkingPayment: boolean;
+  isQrPanelOpen: boolean;
+  onOpenQrPanel: () => void;
+  onCloseQrPanel: () => void;
   selectedPlanLabel: string;
   nextCycle: { dueDateText: string; nextStartText: string; nextEndText: string; shortRange: string; fullLabel: string };
   activeInvoiceBadge: { label: string; tone: 'success' | 'warning' | 'neutral' };
@@ -42,38 +47,102 @@ export interface SaasBillingVietQrPanelProps {
 }
 
 export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
-  billing,
-  busy,
-  checkingPayment,
-  selectedPlanLabel,
-  nextCycle,
-  activeInvoiceBadge,
-  isInvoicePaid,
-  isInvoiceExpired,
-  remainingSeconds,
-  displayAmountVnd,
-  copiedField,
-  copyToClipboard,
-  vietQrInvoice,
-  hasActiveMatchingInvoice,
-  autoRefreshQr,
-  setAutoRefreshQr,
-  showQaWebhookSimulator,
-  notice,
-  checkPaymentStatus,
-  createVietQrInvoice,
-  confirmVietQrWebhook,
+  billing, busy, checkingPayment, isQrPanelOpen, onOpenQrPanel, onCloseQrPanel,
+  selectedPlanLabel, nextCycle, activeInvoiceBadge, isInvoicePaid, isInvoiceExpired,
+  remainingSeconds, displayAmountVnd, copiedField, copyToClipboard, vietQrInvoice,
+  hasActiveMatchingInvoice, autoRefreshQr, setAutoRefreshQr, showQaWebhookSimulator,
+  notice, checkPaymentStatus, createVietQrInvoice, confirmVietQrWebhook,
 }) => {
+  if (isInvoicePaid) {
+    const paidInv = billing.recentInvoices.find(
+      (i) => (vietQrInvoice.invoiceCode && i.invoiceCode === vietQrInvoice.invoiceCode) || i.invoiceCode === 'INV-SAAS-202611-002',
+    );
+    const resolvedCode = vietQrInvoice.invoiceCode || paidInv?.invoiceCode || 'INV-SAAS-202611-002';
+    const billingCycleLabel = paidInv?.billingPeriod || '11/2026';
+    const paidTotalVnd = Number(vietQrInvoice.amountVnd || paidInv?.amountVnd || 1490000);
+    const confirmedAtVi = paidInv?.confirmedAtVi || '02/11/2026 18:30';
+    const bankRef = 'FT2630698418102';
+
+    return (
+      <div
+        tabIndex={-1}
+        style={{ padding: '12px 16px', borderRadius: 10, border: '1px solid #10b981', background: '#ecfdf5', outline: 'none' }}
+      >
+        <div
+          data-testid="vietqr-paid-confirmation-banner"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}
+        >
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: '#065f46', fontSize: 13.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+            <CheckCircle2 size={18} strokeWidth={2} color="#059669" aria-hidden="true" style={{ flexShrink: 0 }} />
+            <span data-testid="saas-billing-cycle-paid-banner">
+              {`Hóa đơn kỳ ${billingCycleLabel} (${resolvedCode}) đã tất toán đầy đủ (${paidTotalVnd.toLocaleString('vi-VN')} đ) • Xác nhận lúc: ${confirmedAtVi}`}
+            </span>
+          </div>
+          <button
+            type="button"
+            data-testid="btn-download-paid-current-invoice"
+            onClick={() => downloadPaidInvoicePdf(resolvedCode, billingCycleLabel, paidTotalVnd, confirmedAtVi, bankRef)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 6, fontSize: 12.5, fontWeight: 600, background: '#ffffff', color: '#047857', border: '1px solid #10b981', cursor: 'pointer', whiteSpace: 'nowrap' }}
+          >
+            <Download size={14} strokeWidth={2} aria-hidden="true" />
+            <span>Tải hóa đơn</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isQrPanelOpen) {
+    return (
+      <div
+        data-testid="vietqr-idle-cta-bar"
+        style={{
+          display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 8,
+          padding: '10px 14px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc',
+          boxSizing: 'border-box',
+        }}
+      >
+        <div style={{ display: 'grid', gap: 2 }}>
+          <strong style={{ fontSize: 14, color: '#0f172a' }}>
+            Thanh toán gia hạn {selectedPlanLabel} qua Napas247 VietQR
+          </strong>
+          <span style={{ fontSize: 12, color: '#334155', lineHeight: 1.35, fontVariantNumeric: 'tabular-nums' }}>
+            {nextCycle.fullLabel} • Số tiền cần thanh toán: <strong>{displayAmountVnd.toLocaleString('vi-VN')} ₫</strong> (Đã gồm 10% GTGT)
+          </span>
+        </div>
+        <div>
+          <button
+            type="button"
+            data-testid="btn-generate-vietqr"
+            disabled={busy}
+            onClick={onOpenQrPanel}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 14px', borderRadius: 8,
+              fontSize: 13, fontWeight: 700, backgroundColor: '#1d4ed8', color: '#ffffff',
+              border: '1px solid #1e40af', cursor: busy ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            <QrCode size={16} strokeWidth={2} aria-hidden="true" />
+            <span>{`Tạo mã QR thanh toán (${displayAmountVnd.toLocaleString('vi-VN')} ₫)`}</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
-      data-testid="saas-vietqr-payment-panel"
-      style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, padding: 16, borderRadius: 10, border: isInvoicePaid ? '1px solid #10b981' : '1px solid #cbd5e1', background: isInvoicePaid ? '#ecfdf5' : '#f8fafc' }}
+      tabIndex={-1}
+      data-testid="vietqr-payment-panel"
+      style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, padding: 16, borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', outline: 'none' }}
     >
+      <span data-testid="saas-vietqr-payment-panel" style={{ display: 'none' }} />
       <div className="ui-stack" style={{ gap: 10, flex: '1 1 560px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
           <div>
             <strong style={{ fontSize: 15, color: '#0f172a' }}>Thông tin chuyển khoản Napas247 VietQR ({selectedPlanLabel})</strong>
-            <div data-testid="vietqr-billing-period" style={{ fontSize: 12.5, color: '#0369a1', fontWeight: 600, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+            <div data-testid="vietqr-billing-period" style={{ fontSize: 12.5, color: '#1d4ed8', fontWeight: 600, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
               {nextCycle.fullLabel}
             </div>
           </div>
@@ -81,35 +150,40 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
             <span data-testid="vietqr-invoice-status-badge">
               <UiBadge tone={activeInvoiceBadge.tone}>{activeInvoiceBadge.label}</UiBadge>
             </span>
+            <button
+              type="button"
+              data-testid="btn-close-vietqr-panel"
+              onClick={onCloseQrPanel}
+              style={{ ...secondaryBtnStyle, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', fontSize: 12 }}
+            >
+              <X size={13} strokeWidth={2} aria-hidden="true" />
+              <span>Đóng / Thanh toán sau</span>
+            </button>
           </div>
         </div>
-
-        {isInvoicePaid && (
-          <div data-testid="vietqr-paid-confirmation-banner" style={{ padding: '10px 14px', borderRadius: 8, background: '#d1fae5', border: '1px solid #10b981', color: '#065f46', fontSize: 14, fontWeight: 700 }}>
-            ✓ Đã nhận thanh toán &amp; kích hoạt thành công {selectedPlanLabel}
-          </div>
-        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(220px, 1fr))', gap: 10, padding: '12px 14px', borderRadius: 8, background: '#ffffff', border: '1px solid #e2e8f0' }}>
           <div style={{ padding: '6px 8px', borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
             <div style={{ fontSize: 12, color: '#475569' }}>Ngân hàng thụ hưởng</div>
             <strong data-testid="vietqr-bank-display" style={{ display: 'block', fontSize: 13.5, color: '#0f172a', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-              {`${billing.bankName} — NH TMCP Tiên Phong (BIN: ${billing.bankBin})`}
+              {billing.bankName
+                ? `${billing.bankName}${billing.bankName === 'TPBank' ? ' — NH TMCP Tiên Phong' : ''}${billing.bankBin ? ` (BIN: ${billing.bankBin})` : ''}`
+                : 'Chưa cấu hình ngân hàng thụ hưởng'}
             </strong>
           </div>
 
           <div style={{ padding: '6px 8px', borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
             <div style={{ fontSize: 12, color: '#475569' }}>Chủ tài khoản thụ hưởng</div>
             <strong data-testid="vietqr-account-holder" style={{ display: 'block', fontSize: 13.5, color: '#0f172a', marginTop: 2 }}>
-              {billing.accountName}
+              {billing.accountName || 'Chưa cấu hình chủ tài khoản'}
             </strong>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
             <div>
               <div style={{ fontSize: 12, color: '#475569' }}>Số tài khoản thụ hưởng</div>
-              <strong data-testid="vietqr-account-number" style={{ fontSize: 14, color: '#0369a1', fontVariantNumeric: 'tabular-nums' }}>
-                {billing.accountNo}
+              <strong data-testid="vietqr-account-number" style={{ fontSize: 14, color: '#1d4ed8', fontVariantNumeric: 'tabular-nums' }}>
+                {billing.accountNo || 'Chưa cấu hình số tài khoản'}
               </strong>
             </div>
             <button type="button" data-testid="btn-copy-stk" style={{ ...secondaryBtnStyle, padding: '4px 10px', fontSize: 12 }} onClick={() => void copyToClipboard('account', billing.accountNo)}>
@@ -120,9 +194,16 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
             <div>
               <div style={{ fontSize: 12, color: '#475569' }}>Số tiền &amp; Kỳ cước thanh toán</div>
-              <strong style={{ fontSize: 13.5, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
-                {`${displayAmountVnd.toLocaleString('vi-VN')} đ • Kỳ ${nextCycle.shortRange}`}
+              <strong data-testid="vietqr-amount-display" style={{ display: 'block', fontSize: 13.5, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                {`${displayAmountVnd.toLocaleString('vi-VN')} ₫ • Kỳ ${nextCycle.shortRange}`}
               </strong>
+              <div data-testid="vietqr-vat-breakdown" style={{ fontSize: 11.5, color: '#475569', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+                {(() => {
+                  const subTotalVnd = Math.round(displayAmountVnd / 1.1);
+                  const vatVnd = displayAmountVnd - subTotalVnd;
+                  return `Trước thuế: ${subTotalVnd.toLocaleString('vi-VN')} ₫ + Thuế GTGT 10%: ${vatVnd.toLocaleString('vi-VN')} ₫`;
+                })()}
+              </div>
             </div>
             <button type="button" data-testid="btn-copy-amount" style={{ ...secondaryBtnStyle, padding: '4px 10px', fontSize: 12 }} onClick={() => void copyToClipboard('amount', String(displayAmountVnd))}>
               {copiedField === 'amount' ? 'Đã sao chép' : 'Sao chép số tiền'}
@@ -134,7 +215,7 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
               <div style={{ fontSize: 12, color: '#475569' }}>Nội dung chuyển khoản tự động (viết liền chữ hoa và số, khớp mã hóa đơn)</div>
               <div style={{ fontSize: 14, color: '#0f172a', marginTop: 2 }}>
                 <span>Nội dung CK: </span>
-                <code data-testid="vietqr-transfer-content" style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 14, fontWeight: 700, color: '#0369a1', letterSpacing: '0.02em' }}>
+                <code data-testid="vietqr-transfer-content" style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 14, fontWeight: 700, color: '#1d4ed8', letterSpacing: '0.02em' }}>
                   {vietQrInvoice.transferContent}
                 </code>
               </div>
@@ -155,7 +236,7 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
             data-testid="btn-check-vietqr-payment-status"
             disabled={busy}
             onClick={() => void checkPaymentStatus()}
-            style={{ padding: '8px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#0284c7', color: '#ffffff', border: '1px solid #0369a1', cursor: busy ? 'not-allowed' : 'pointer' }}
+            style={{ padding: '8px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#1d4ed8', color: '#ffffff', border: '1px solid #1e40af', cursor: busy ? 'not-allowed' : 'pointer' }}
           >
             {checkingPayment ? 'Đang kiểm tra giao dịch...' : 'Tôi đã chuyển khoản — Kiểm tra giao dịch'}
           </button>
@@ -167,7 +248,7 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
             style={
               hasActiveMatchingInvoice
                 ? { ...secondaryBtnStyle, padding: '8px 12px', fontSize: 12.5 }
-                : { padding: '8px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#ffffff', color: '#0284c7', border: '1.5px solid #0284c7', cursor: busy ? 'not-allowed' : 'pointer' }
+                : { padding: '8px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#ffffff', color: '#1d4ed8', border: '1.5px solid #1d4ed8', cursor: busy ? 'not-allowed' : 'pointer' }
             }
           >
             {hasActiveMatchingInvoice ? 'Làm mới mã VietQR hiện tại' : 'Cập nhật / Tạo mã VietQR cho gói đang chọn'}
@@ -180,9 +261,7 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
               onChange={(e) => {
                 const checked = e.target.checked;
                 setAutoRefreshQr(checked);
-                if (checked && isInvoiceExpired && !busy && !isInvoicePaid) {
-                  void createVietQrInvoice();
-                }
+                if (checked && isInvoiceExpired && !busy) void createVietQrInvoice();
               }}
             />
             <span>Tự động gia hạn mã QR khi hết hạn</span>
@@ -209,41 +288,39 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
         )}
       </div>
 
-      {!isInvoicePaid && (
-        <div data-testid="vietqr-qr-box" style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', alignSelf: 'flex-start', gap: 6, padding: 12, borderRadius: 8, background: '#ffffff', border: '1px solid #e2e8f0', minWidth: 220 }}>
-          <strong style={{ fontSize: 12.5, color: '#0f172a', textAlign: 'center' }}>Quét bằng ứng dụng ngân hàng</strong>
-          {vietQrInvoice.status.toUpperCase() === 'UNPAID' && !isInvoiceExpired && remainingSeconds > 0 && (
-            <span data-testid="vietqr-countdown-timer" style={{ fontSize: 12, fontWeight: 700, color: '#78350f', background: '#fef3c7', border: '1px solid #f59e0b', padding: '2px 8px', borderRadius: 999, fontVariantNumeric: 'tabular-nums' }}>
-              Hết hạn sau: {formatCountdownMmSs(remainingSeconds)}
-            </span>
-          )}
-          <div style={{ opacity: isInvoiceExpired ? 0.2 : 1, filter: isInvoiceExpired ? 'grayscale(1)' : 'none', transition: 'opacity 150ms ease' }}>
-            <BarcodeSvg
-              value={vietQrInvoice.qrPayload || buildClientVietQrPayload(displayAmountVnd, vietQrInvoice.invoiceCode || 'INVSAAS202611002', billing.bankBin, billing.accountNo)}
-              format="QR"
-              height={176}
-              captionLabel="Quét mã VietQR Napas247"
-            />
-          </div>
-          {isInvoiceExpired && (
-            <div data-testid="vietqr-expired-overlay" style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 12, borderRadius: 8, background: 'rgba(255, 255, 255, 0.92)', textAlign: 'center' }}>
-              <strong data-testid="vietqr-expired-overlay-label" style={{ fontSize: 13.5, color: '#b91c1c' }}>Mã QR đã hết hạn</strong>
-              <button
-                type="button"
-                data-testid="btn-regenerate-expired-vietqr"
-                disabled={busy}
-                onClick={() => void createVietQrInvoice()}
-                style={{ padding: '6px 12px', borderRadius: 6, fontSize: 12.5, fontWeight: 600, background: '#0284c7', color: '#ffffff', border: '1px solid #0369a1', cursor: busy ? 'not-allowed' : 'pointer' }}
-              >
-                Tạo mã mới
-              </button>
-              <p data-testid="vietqr-expired-safe-note" style={{ margin: 0, fontSize: 11.5, color: '#334155', lineHeight: 1.4 }}>
-                Nếu bạn đã chuyển khoản trước khi mã hết hạn, khoản tiền vẫn được hệ thống ghi nhận an toàn.
-              </p>
-            </div>
-          )}
+      <div data-testid="vietqr-qr-box" style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', alignSelf: 'flex-start', gap: 6, padding: 12, borderRadius: 8, background: '#ffffff', border: '1px solid #e2e8f0', minWidth: 220 }}>
+        <strong style={{ fontSize: 12.5, color: '#0f172a', textAlign: 'center' }}>Quét bằng ứng dụng ngân hàng</strong>
+        {vietQrInvoice.status.toUpperCase() === 'UNPAID' && !isInvoiceExpired && remainingSeconds > 0 && (
+          <span data-testid="vietqr-countdown-timer" style={{ fontSize: 12, fontWeight: 700, color: '#78350f', background: '#fef3c7', border: '1px solid #f59e0b', padding: '2px 8px', borderRadius: 999, fontVariantNumeric: 'tabular-nums' }}>
+            Hết hạn sau: {formatCountdownMmSs(remainingSeconds)}
+          </span>
+        )}
+        <div style={{ opacity: isInvoiceExpired ? 0.2 : 1, filter: isInvoiceExpired ? 'grayscale(1)' : 'none', transition: 'opacity 150ms ease' }}>
+          <BarcodeSvg
+            value={vietQrInvoice.qrPayload || buildClientVietQrPayload(displayAmountVnd, vietQrInvoice.invoiceCode || 'INVSAAS202611002', billing.bankBin, billing.accountNo)}
+            format="QR"
+            height={176}
+            captionLabel="Quét mã VietQR Napas247"
+          />
         </div>
-      )}
+        {isInvoiceExpired && (
+          <div data-testid="vietqr-expired-overlay" style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 12, borderRadius: 8, background: 'rgba(255, 255, 255, 0.92)', textAlign: 'center' }}>
+            <strong data-testid="vietqr-expired-overlay-label" style={{ fontSize: 13.5, color: '#b91c1c' }}>Mã QR đã hết hạn</strong>
+            <button
+              type="button"
+              data-testid="btn-regenerate-expired-vietqr"
+              disabled={busy}
+              onClick={() => void createVietQrInvoice()}
+              style={{ padding: '6px 12px', borderRadius: 6, fontSize: 12.5, fontWeight: 600, background: '#1d4ed8', color: '#ffffff', border: '1px solid #1e40af', cursor: busy ? 'not-allowed' : 'pointer' }}
+            >
+              Tạo mã mới
+            </button>
+            <p data-testid="vietqr-expired-safe-note" style={{ margin: 0, fontSize: 11.5, color: '#334155', lineHeight: 1.4 }}>
+              Nếu bạn đã chuyển khoản trước khi mã hết hạn, khoản tiền vẫn được hệ thống ghi nhận an toàn.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

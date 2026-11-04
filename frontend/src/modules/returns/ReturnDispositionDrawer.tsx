@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import apiClient from '../../services/apiClient';
 import { UiBadge } from '../../ui/ProductionUi';
+import { useDialogFocusTrap } from '../../ui/useDialogFocusTrap';
+import { rmaDispositionLabelVi, warehouseLocationLabelVi } from '../../ui/vietnameseEnumLabels';
 
 export const createRmaIdempotencyKey = (): string =>
   globalThis.crypto?.randomUUID?.() ?? `rma-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -9,7 +11,13 @@ export const normalizeCustomerReturnDto = (row: CustomerReturnDto): CustomerRetu
   const firstLine = row.lines?.[0];
   const rawCond = String(row.condition || firstLine?.condition || firstLine?.conditionNote || 'GOOD').toUpperCase();
   const normalizedCondition =
-    rawCond.includes('DAMAGED') ? 'DAMAGED_BOX' : rawCond.includes('DEFECT') ? 'DEFECTIVE' : 'GOOD';
+    rawCond === 'REPACK_REQUIRED'
+      ? 'REPACK_REQUIRED'
+      : rawCond.includes('DAMAGED') || rawCond.includes('REPACK')
+        ? 'DAMAGED_BOX'
+        : rawCond.includes('DEFECT')
+          ? 'DEFECTIVE'
+          : 'GOOD';
   const rawDisp = String(row.disposition || firstLine?.disposition || firstLine?.dispositionAction || 'PENDING').toUpperCase();
   return {
     ...row,
@@ -78,8 +86,8 @@ export interface ReturnDispositionDrawerProps {
 
 const BUSINESS_ERROR_GUIDANCE: Record<string, string> = {
   INV_INSUFFICIENT_AVAILABLE_STOCK: 'Tồn kho vật tư bao bì hoặc hàng biệt trữ không đủ để thực hiện định đoạt.',
-  RMA_RESTOCK_BIN_REQUIRED: 'Vui lòng nhập Vị trí kệ đích (Restock Bin) hợp lệ trước khi nhập lại kho.',
-  RMA_PACKAGING_REQUIRED: 'Luồng Tân trang / Thay vỏ hộp yêu cầu chọn Mã vật tư bao bì và Số lượng tiêu hao > 0.',
+  RMA_RESTOCK_BIN_REQUIRED: 'Vui lòng nhập Vị trí kệ đích hợp lệ trước khi nhập lại kho.',
+  RMA_PACKAGING_REQUIRED: 'Luồng Tân trang & Đóng gói lại yêu cầu chọn Mã vật tư bao bì và Số lượng tiêu hao > 0.',
   DOC_INVALID_STATE_TRANSITION: 'Phiếu hoàn trả đã hoàn tất hoặc không ở trạng thái cho phép định đoạt.',
 };
 
@@ -102,15 +110,26 @@ export function ReturnDispositionDrawer({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorState, setErrorState] = useState<{ status?: number; errorCode?: string; message: string } | null>(null);
 
+  const drawerPanelRef = useRef<HTMLDivElement | null>(null);
   const disposeIdempotencyKeyRef = useRef<string>(createRmaIdempotencyKey());
   const inspectIdempotencyKeyRef = useRef<string>(createRmaIdempotencyKey());
+
+  useDialogFocusTrap(drawerPanelRef, {
+    open: Boolean(open && item),
+    onEscape: onClose,
+    escapeDisabled: isSubmitting,
+  });
 
   useEffect(() => {
     if (!item) return;
     const firstLine = item.lines?.[0];
     const initCond = String(item.condition || firstLine?.condition || firstLine?.conditionNote || 'GOOD').toUpperCase();
     setCondition(
-      initCond.includes('DAMAGED') ? 'DAMAGED_BOX' : initCond.includes('DEFECT') ? 'DEFECTIVE' : 'GOOD',
+      initCond.includes('DAMAGED') || initCond.includes('REPACK')
+        ? 'DAMAGED_BOX'
+        : initCond.includes('DEFECT')
+          ? 'DEFECTIVE'
+          : 'GOOD',
     );
     const initDisp = String(item.disposition || firstLine?.disposition || firstLine?.dispositionAction || '').toUpperCase();
     if (
@@ -205,7 +224,7 @@ export function ReturnDispositionDrawer({
         { headers: { 'Idempotency-Key': disposeIdempotencyKeyRef.current } },
       );
       disposeIdempotencyKeyRef.current = createRmaIdempotencyKey();
-      onCompleted(`Đã thực thi định đoạt (${disposition}) và ghi sổ Sổ cái cho phiếu ${item.returnCode}.`);
+      onCompleted(`Đã thực thi định đoạt (${rmaDispositionLabelVi(disposition)}) và ghi sổ Sổ cái cho phiếu ${item.returnCode}.`);
     } catch (err) {
       setErrorState(extractApiError(err, 'Không thể thực thi định đoạt hàng hoàn trả.'));
     } finally {
@@ -217,21 +236,26 @@ export function ReturnDispositionDrawer({
     <div
       role="dialog"
       aria-modal="true"
+      aria-labelledby="return-disposition-drawer-title"
       aria-label={`Kiểm định và định đoạt phiếu hoàn ${item.returnCode}`}
       data-testid="return-disposition-drawer"
       style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(15, 23, 42, 0.48)', display: 'flex', justifyContent: 'flex-end' }}
     >
-      <div style={{ width: 'min(540px, 100vw)', height: '100%', background: '#ffffff', boxShadow: '-8px 0 28px rgba(15, 23, 42, 0.18)', padding: '20px 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14, boxSizing: 'border-box' }}>
+      <div
+        ref={drawerPanelRef}
+        tabIndex={-1}
+        style={{ width: 'min(540px, 100vw)', height: '100%', background: '#ffffff', boxShadow: '-8px 0 28px rgba(15, 23, 42, 0.18)', padding: '20px 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14, boxSizing: 'border-box' }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <div>
             <UiBadge tone="warning">Kiểm định &amp; Định đoạt 4 Luồng (RMA)</UiBadge>
-            <h3 style={{ margin: '6px 0 0', fontSize: 17, color: '#0f172a' }}>Phiếu hoàn {item.returnCode} • {effectiveProductCode}</h3>
+            <h2 id="return-disposition-drawer-title" style={{ margin: '6px 0 0', fontSize: 17, color: '#0f172a' }}>Phiếu hoàn {item.returnCode} • {effectiveProductCode}</h2>
           </div>
           <button type="button" className="ui-btn ui-btn-secondary" onClick={onClose} disabled={isSubmitting}>Đóng</button>
         </div>
 
         <div style={{ padding: '10px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: 13 }}>
-          <div><strong>Kho / Vị trí Biệt trữ:</strong> {item.warehouseName} ({effectiveQuarantineBin})</div>
+          <div><strong>Kho / Vị trí Biệt trữ:</strong> {item.warehouseName} • {warehouseLocationLabelVi(effectiveQuarantineBin)}</div>
           <div><strong>Sản phẩm:</strong> {effectiveProductCode} — {effectiveProductName} • <strong>SL:</strong> {effectiveQty}</div>
           <div><strong>Vận đơn / Đơn gốc:</strong> {item.trackingNumber || '—'} / {item.exportReceiptCode || item.salesOrderCode || '—'}</div>
         </div>
@@ -260,26 +284,26 @@ export function ReturnDispositionDrawer({
         <form onSubmit={handleExecuteDisposition} className="ui-stack" style={{ gap: 12 }}>
           <label className="ui-field">
             <span>Tình trạng vật lý sau kiểm định</span>
-            <select aria-label="Tình trạng vật lý sau kiểm định" data-testid="select-rma-condition" value={condition} onChange={e => { setCondition(e.target.value as 'GOOD' | 'DAMAGED_BOX' | 'DEFECTIVE'); disposeIdempotencyKeyRef.current = createRmaIdempotencyKey(); }}>
-              <option value="GOOD">Nguyên vẹn / Đạt chuẩn (GOOD)</option>
-              <option value="DAMAGED_BOX">Móp hộp / Hỏng bao bì ngoài (DAMAGED_BOX)</option>
-              <option value="DEFECTIVE">Lỗi kỹ thuật / Hư hỏng ruột hàng (DEFECTIVE)</option>
+            <select aria-label="Tình trạng vật lý sau kiểm định" data-initiator="true" data-initial-focus="true" data-testid="select-rma-condition" value={condition} onChange={e => { setCondition(e.target.value as 'GOOD' | 'DAMAGED_BOX' | 'DEFECTIVE'); disposeIdempotencyKeyRef.current = createRmaIdempotencyKey(); }}>
+              <option value="GOOD">Nguyên vẹn</option>
+              <option value="DAMAGED_BOX">Móp vỏ hộp (Cần thay vỏ)</option>
+              <option value="DEFECTIVE">Lỗi kỹ thuật / Hư hỏng</option>
             </select>
           </label>
 
           <label className="ui-field">
             <span>Hướng định đoạt tồn kho (4 luồng chuẩn Sổ cái)</span>
             <select aria-label="Hướng định đoạt tồn kho" data-testid="select-rma-disposition" value={disposition} onChange={e => { setDisposition(e.target.value as typeof disposition); disposeIdempotencyKeyRef.current = createRmaIdempotencyKey(); }}>
-              <option value="RESTOCK_AVAILABLE">1. Nhập lại kệ hàng khả dụng (RESTOCK_AVAILABLE)</option>
-              <option value="REFURBISH_REPACK">2. Tân trang / Thay vỏ hộp &amp; Nhập lại kho (REFURBISH_REPACK)</option>
-              <option value="RTV_VENDOR">3. Xuất trả Nhà cung cấp (RTV_VENDOR)</option>
-              <option value="SCRAP_DISPOSAL" disabled={!canExecuteScrap}>4. Thanh hủy hàng hỏng (SCRAP_DISPOSAL){!canExecuteScrap ? ' — Cần quyền phê duyệt hủy' : ''}</option>
+              <option value="RESTOCK_AVAILABLE">1. Nhập lại tồn khả dụng</option>
+              <option value="REFURBISH_REPACK">2. Tân trang &amp; Đóng gói lại</option>
+              <option value="RTV_VENDOR">3. Xuất trả NCC (RTV)</option>
+              <option value="SCRAP_DISPOSAL" disabled={!canExecuteScrap}>4. Xuất hủy{!canExecuteScrap ? ' — Cần quyền phê duyệt hủy' : ''}</option>
             </select>
           </label>
 
           {(disposition === 'RESTOCK_AVAILABLE' || disposition === 'REFURBISH_REPACK') && (
             <label className="ui-field">
-              <span>Vị trí kệ đích (Restock Bin, VD: A-01-01)</span>
+              <span>Vị trí kệ đích (VD: A-01-01)</span>
               <input aria-label="Vị trí kệ đích" data-testid="input-rma-restock-bin" value={restockLocationCode} onChange={e => setRestockLocationCode(e.target.value)} placeholder="VD: A-01-01" />
             </label>
           )}
@@ -304,7 +328,7 @@ export function ReturnDispositionDrawer({
 
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6, flexWrap: 'wrap' }}>
             <button type="button" data-testid="btn-submit-rma-inspect" className="ui-btn ui-btn-secondary" disabled={isSubmitting} onClick={() => void handleInspectOnly()}>
-              {isSubmitting ? 'Đang xử lý...' : 'Lưu Kiểm định (Inspect)'}
+              {isSubmitting ? 'Đang xử lý...' : 'Lưu kết quả kiểm định'}
             </button>
             <button type="submit" data-testid="btn-submit-rma-disposition" className="ui-btn ui-btn-primary ui-primary-button" disabled={isSubmitting}>
               {isSubmitting ? 'Đang ghi sổ...' : 'Thực thi & Ghi sổ Sổ cái'}

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import apiClient from '../services/apiClient';
 import { hasPermission } from '../services/authorization';
 import { UiPage, UiPageHeader } from '../ui/ProductionUi';
 import StockCardS12DnPanel from '../modules/inventory/StockCardS12DnPanel';
@@ -14,32 +13,29 @@ import type {
   PagedResult,
   WarehouseOption,
   WhatIfSimulationResult,
-} from '../modules/inventory-pages/inventoryShared';
-import { parseAnalyticsSummaryResponse } from '../modules/inventory-pages/inventoryShared';
-import { InventoryHistoryTab, InventoryStockTab } from '../modules/inventory-pages/InventoryStockAndHistoryTabs';
-import { InventoryExpiryTab, InventoryInOutTab } from '../modules/inventory-pages/InventoryInOutAndExpiryTabs';
-import { InventoryAnalyticsTab } from '../modules/inventory-pages/InventoryAnalyticsTab';
+} from '../modules/inventory/inventoryShared';
+import { InventoryHistoryTab, InventoryStockTab } from '../modules/inventory/InventoryStockAndHistoryTabs';
+import { InventoryExpiryTab, InventoryInOutTab } from '../modules/inventory/InventoryInOutAndExpiryTabs';
+import { InventoryAnalyticsTab } from '../modules/inventory/InventoryAnalyticsTab';
+import {
+  downloadOpeningBalanceTemplate,
+  exportInOutExcel,
+  exportStockExcel,
+  fetchAuthorizedWarehouses,
+  fetchInventoryAnalyticsSummary,
+  fetchInventoryExpiryAging,
+  fetchInventoryHistory,
+  fetchInventoryInOut,
+  fetchInventoryStocks,
+  importOpeningBalanceExcel,
+  INVENTORY_TABS,
+  tabButtonStyle,
+  type InventoryTabId,
+} from '../modules/inventory/inventoryPageActions';
 import './Inventory.css';
 
-const tabButtonStyle = (active: boolean): React.CSSProperties =>
-  active
-    ? { background: '#0f172a', backgroundColor: '#0f172a', color: '#ffffff', borderColor: '#0f172a', fontWeight: 600 }
-    : { background: '#ffffff', backgroundColor: '#ffffff', color: '#1e293b', borderColor: '#cbd5e1', fontWeight: 500 };
-
-const downloadBlobFile = (blobData: BlobPart, fileName: string) => {
-  if (typeof window !== 'undefined' && window.URL?.createObjectURL) {
-    const url = window.URL.createObjectURL(new Blob([blobData]));
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', fileName);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  }
-};
-
 const Inventory = () => {
-  const [activeTab, setActiveTab] = useState<'stock' | 'buckets' | 'history' | 'inout' | 'expiry' | 'analytics'>('stock');
+  const [activeTab, setActiveTab] = useState<InventoryTabId>('stock');
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
 
   const [stocks, setStocks] = useState<InventoryStockDto[]>([]);
@@ -58,9 +54,8 @@ const Inventory = () => {
       setWarehouses([]);
       return;
     }
-    apiClient
-      .get('/api/v1/warehouses')
-      .then((response) => setWarehouses(response.data.filter((warehouse: WarehouseOption) => warehouse.isActive)))
+    fetchAuthorizedWarehouses()
+      .then(setWarehouses)
       .catch(() => {
         setWarehouses([]);
         setStockError('Không thể tải danh sách kho được phân quyền.');
@@ -108,12 +103,7 @@ const Inventory = () => {
     setStockLoading(true);
     setStockError('');
     try {
-      const params = new URLSearchParams();
-      if (stockFilter.warehouseId) params.append('warehouseId', stockFilter.warehouseId);
-      if (stockFilter.productId) params.append('productId', stockFilter.productId);
-      if (stockFilter.keyword) params.append('keyword', stockFilter.keyword);
-      const res = await apiClient.get('/api/v1/inventory-stocks/current?' + params.toString());
-      setStocks(res.data);
+      setStocks(await fetchInventoryStocks(stockFilter));
     } catch {
       setStockError('Lỗi khi tải dữ liệu tồn kho.');
     } finally {
@@ -125,17 +115,7 @@ const Inventory = () => {
     setHistoryLoading(true);
     setHistoryError('');
     try {
-      const params = new URLSearchParams();
-      if (historyFilter.fromDate) params.append('fromDate', historyFilter.fromDate);
-      if (historyFilter.toDate) params.append('toDate', historyFilter.toDate);
-      if (historyFilter.transactionType) params.append('transactionType', historyFilter.transactionType);
-      if (historyFilter.warehouseId) params.append('warehouseId', historyFilter.warehouseId);
-      if (historyFilter.productId) params.append('productId', historyFilter.productId);
-      if (historyFilter.keyword) params.append('keyword', historyFilter.keyword);
-      params.append('page', historyFilter.page.toString());
-      params.append('pageSize', historyFilter.pageSize.toString());
-      const res = await apiClient.get('/api/v1/inventory-transactions?' + params.toString());
-      setHistory(res.data);
+      setHistory(await fetchInventoryHistory(historyFilter));
     } catch {
       setHistoryError('Lỗi khi tải lịch sử giao dịch.');
     } finally {
@@ -152,13 +132,7 @@ const Inventory = () => {
     setInoutLoading(true);
     setInoutError('');
     try {
-      const params = new URLSearchParams();
-      if (inoutFilter.fromDate) params.append('fromDate', inoutFilter.fromDate);
-      if (inoutFilter.toDate) params.append('toDate', inoutFilter.toDate);
-      if (inoutFilter.warehouseId) params.append('warehouseId', inoutFilter.warehouseId);
-      if (inoutFilter.productId) params.append('productId', inoutFilter.productId);
-      const res = await apiClient.get('/api/v1/reports/inventory-in-out-stock?' + params.toString());
-      setInoutReport(res.data);
+      setInoutReport(await fetchInventoryInOut(inoutFilter));
     } catch {
       setInoutError('Lỗi khi tải báo cáo xuất nhập tồn.');
       setInoutReport(null);
@@ -171,13 +145,7 @@ const Inventory = () => {
     setExpiryLoading(true);
     setExpiryError('');
     try {
-      const params = new URLSearchParams();
-      if (expiryFilter.warehouseId) params.append('warehouseId', expiryFilter.warehouseId);
-      if (expiryFilter.productId) params.append('productId', expiryFilter.productId);
-      if (expiryFilter.nearExpiryDays) params.append('nearExpiryDays', expiryFilter.nearExpiryDays);
-      if (expiryFilter.onlyLots) params.append('onlyLots', 'true');
-      const res = await apiClient.get('/api/v1/reports/expiry-aging?' + params.toString());
-      setExpiryReport(Array.isArray(res.data) ? res.data : []);
+      setExpiryReport(await fetchInventoryExpiryAging(expiryFilter));
     } catch {
       setExpiryError('Lỗi khi tải báo cáo hạn dùng và tuổi tồn.');
       setExpiryReport([]);
@@ -190,11 +158,7 @@ const Inventory = () => {
     setAnalyticsLoading(true);
     setAnalyticsError('');
     try {
-      const params = new URLSearchParams();
-      if (analyticsFilter.warehouseId) params.append('warehouseId', analyticsFilter.warehouseId);
-      if (analyticsFilter.days) params.append('days', analyticsFilter.days);
-      const res = await apiClient.get('/api/v1/reports/analytics-summary?' + params.toString());
-      setAnalyticsReport(parseAnalyticsSummaryResponse(res.data as Record<string, unknown> | null | undefined, analyticsFilter.days));
+      setAnalyticsReport(await fetchInventoryAnalyticsSummary(analyticsFilter));
     } catch {
       setAnalyticsError('Lỗi khi tải báo cáo hiệu suất và vòng quay tồn kho.');
       setAnalyticsReport(null);
@@ -217,11 +181,7 @@ const Inventory = () => {
 
   const handleExportStock = async () => {
     try {
-      const params = new URLSearchParams();
-      if (stockFilter.warehouseId) params.append('warehouseId', stockFilter.warehouseId);
-      if (stockFilter.productId) params.append('productId', stockFilter.productId);
-      const res = await apiClient.get('/api/v1/reports/inventory/export?' + params.toString(), { responseType: 'blob' });
-      downloadBlobFile(res.data, 'BaoCaoTonKho.xlsx');
+      await exportStockExcel(stockFilter);
     } catch {
       setStockError('Lỗi khi xuất Excel tồn kho');
     }
@@ -233,13 +193,7 @@ const Inventory = () => {
       return;
     }
     try {
-      const params = new URLSearchParams();
-      if (inoutFilter.fromDate) params.append('fromDate', inoutFilter.fromDate);
-      if (inoutFilter.toDate) params.append('toDate', inoutFilter.toDate);
-      if (inoutFilter.warehouseId) params.append('warehouseId', inoutFilter.warehouseId);
-      if (inoutFilter.productId) params.append('productId', inoutFilter.productId);
-      const res = await apiClient.get('/api/v1/reports/inventory-in-out-stock/export?' + params.toString(), { responseType: 'blob' });
-      downloadBlobFile(res.data, 'BaoCaoXuatNhapTon.xlsx');
+      await exportInOutExcel(inoutFilter);
     } catch {
       setInoutError('Lỗi khi xuất Excel xuất nhập tồn');
     }
@@ -249,8 +203,7 @@ const Inventory = () => {
     setStockError('');
     setOpeningBalanceNotice('');
     try {
-      const res = await apiClient.get('/api/v1/import-templates/opening-balance', { responseType: 'blob' });
-      if (res?.data) downloadBlobFile(res.data, 'Mau_Nhap_Ton_Kho_Dau_Ky.xlsx');
+      await downloadOpeningBalanceTemplate();
       setOpeningBalanceNotice('Đã tải tệp mẫu Excel tồn kho đầu kỳ (.xlsx).');
     } catch {
       setStockError('Không thể tải tệp mẫu Excel tồn kho đầu kỳ.');
@@ -262,20 +215,13 @@ const Inventory = () => {
     setStockError('');
     setOpeningBalanceNotice('');
     try {
-      const resolvedWarehouseId = stockFilter.warehouseId ? Number(stockFilter.warehouseId) : (warehouses[0]?.id ?? 1);
-      const formData = new FormData();
-      if (selectedOpeningFile) formData.append('file', selectedOpeningFile);
-      formData.append('warehouseId', String(resolvedWarehouseId));
-      formData.append('fileName', openingBalanceFileName);
-      const res = await apiClient.post('/api/v1/inventory/opening-balances/import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      const result = await importOpeningBalanceExcel({
+        warehouseId: stockFilter.warehouseId,
+        warehouses,
+        selectedOpeningFile,
+        openingBalanceFileName,
       });
-      const d = (res?.data ?? {}) as Record<string, unknown>;
-      setOpeningBalanceResult({
-        importBatchId: String(d.importBatchId ?? d.batchId ?? 'OB-IMP-001'),
-        importedRows: Number(d.importedRows ?? d.totalRows ?? 12),
-        status: String(d.status ?? 'Đã hạch toán tồn kho đầu kỳ thành công'),
-      });
+      setOpeningBalanceResult(result);
       setOpeningBalanceNotice(`Đã nhập Excel tồn kho đầu kỳ từ tệp ${openingBalanceFileName}.`);
       await fetchStocks();
     } catch {
@@ -294,14 +240,7 @@ const Inventory = () => {
         />
 
         <div className="inventory-tabs" role="tablist" aria-label="Chế độ báo cáo tồn kho">
-          {[
-            { id: 'stock' as const, label: 'Tồn kho hiện tại', panel: 'inventory-stock-panel' },
-            { id: 'buckets' as const, label: 'Nhóm tồn / Lô / Sê-ri', panel: 'inventory-buckets-panel' },
-            { id: 'history' as const, label: 'Lịch sử giao dịch', panel: 'inventory-history-panel' },
-            { id: 'inout' as const, label: 'Xuất nhập tồn', panel: 'inventory-inout-panel' },
-            { id: 'expiry' as const, label: 'Hạn dùng & Tuổi tồn', panel: 'inventory-expiry-panel' },
-            { id: 'analytics' as const, label: 'Hiệu suất & Vòng quay', panel: 'inventory-analytics-panel' },
-          ].map((tab) => (
+          {INVENTORY_TABS.map((tab) => (
             <button
               key={tab.id}
               type="button"

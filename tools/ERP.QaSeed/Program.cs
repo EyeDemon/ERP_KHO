@@ -105,52 +105,113 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
 {
     await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
 
-    var roleNames = new[] { "Admin", "Manager", "Accountant", "WarehouseStaff", "Viewer" };
-    var roles = new Dictionary<string, Role>(StringComparer.Ordinal);
-    foreach (var roleName in roleNames)
+    var roleSpecs = new (string Name, string Domain, string Description)[]
     {
-        var matches = await context.Roles.IgnoreQueryFilters().Where(role => role.RoleName == roleName).ToListAsync();
-        var role = matches.FirstOrDefault() ?? new Role { RoleName = roleName, Description = $"Local QA role: {roleName}" };
+        ("SuperAdmin", "PLATFORM", "Chủ dự án / Quản trị viên Tối cao Nền tảng"),
+        ("BillingAdmin", "PLATFORM", "Quản trị viên Đối soát & Thanh toán Nền tảng"),
+        ("SupportAdmin", "PLATFORM", "Chuyên viên Hỗ trợ Kỹ thuật Nền tảng"),
+        ("SecurityAuditor", "PLATFORM", "Kiểm toán viên An ninh Nền tảng"),
+        ("Admin", "CUSTOMER_TENANT", "Quản trị viên Doanh nghiệp thuê kho"),
+        ("Manager", "CUSTOMER_TENANT", "Quản lý Vận hành Kho"),
+        ("Supervisor", "CUSTOMER_TENANT", "Giám sát Tầng Kho & Kiểm định QC"),
+        ("Accountant", "CUSTOMER_TENANT", "Kế toán Kho & Công nợ"),
+        ("WarehouseStaff", "CUSTOMER_TENANT", "Nhân viên Vận hành Kho"),
+        ("Viewer", "CUSTOMER_TENANT", "Người xem Báo cáo & Tra cứu Kho")
+    };
+    var roles = new Dictionary<string, Role>(StringComparer.Ordinal);
+    foreach (var spec in roleSpecs)
+    {
+        var matches = await context.Roles.IgnoreQueryFilters().Where(r => r.RoleName == spec.Name).ToListAsync();
+        var role = matches.FirstOrDefault() ?? new Role { RoleName = spec.Name };
+        role.Description = spec.Description;
+        role.SecurityDomain = spec.Domain;
         if (role.Id == 0) context.Roles.Add(role);
-        roles.Add(roleName, role);
+        roles.Add(spec.Name, role);
     }
     await context.SaveChangesAsync();
 
-    var costReadPerm = await context.Permissions.IgnoreQueryFilters()
-        .FirstOrDefaultAsync(p => p.Code == "inventory.cost.read");
-    if (costReadPerm is null)
+    var existingPermissions = await context.Permissions.IgnoreQueryFilters().ToListAsync();
+    var permissionsByCode = existingPermissions.ToDictionary(p => p.Code, StringComparer.OrdinalIgnoreCase);
+    foreach (var code in ERP.Domain.Security.AppPermissions.All)
     {
-        costReadPerm = new Permission("inventory.cost.read", "Xem đơn giá, giá vốn bình quân và giá trị tồn kho");
-        context.Permissions.Add(costReadPerm);
-        await context.SaveChangesAsync();
+        var description = string.Equals(code, "inventory.cost.read", StringComparison.OrdinalIgnoreCase)
+            ? "Xem đơn giá, giá vốn bình quân và giá trị tồn kho"
+            : $"Quyền hệ thống {code}";
+        if (!permissionsByCode.TryGetValue(code, out var perm))
+        {
+            perm = new Permission(code, description);
+            context.Permissions.Add(perm);
+            permissionsByCode[code] = perm;
+        }
+        else if (string.IsNullOrWhiteSpace(perm.Description) || string.Equals(code, "inventory.cost.read", StringComparison.OrdinalIgnoreCase))
+        {
+            perm.Description = description;
+        }
     }
-    else
-    {
-        costReadPerm.Description = "Xem đơn giá, giá vốn bình quân và giá trị tồn kho";
-        await context.SaveChangesAsync();
-    }
+    await context.SaveChangesAsync();
 
-    foreach (var costRoleName in new[] { "Admin", "Manager", "Accountant" })
+    var allRolePerms = await context.RolePermissions.IgnoreQueryFilters().ToListAsync();
+    foreach (var spec in roleSpecs)
     {
-        var targetRole = roles[costRoleName];
-        if (!await context.RolePermissions.IgnoreQueryFilters()
-                .AnyAsync(rp => rp.RoleId == targetRole.Id && rp.PermissionId == costReadPerm.Id))
+        var targetRole = roles[spec.Name];
+        var expectedIds = ERP.Domain.Security.AppPermissions.GetDefaultPermissionsForRole(spec.Name)
+            .Where(code => permissionsByCode.ContainsKey(code))
+            .Select(code => permissionsByCode[code].Id)
+            .ToHashSet();
+
+        var existingForRole = allRolePerms.Where(rp => rp.RoleId == targetRole.Id).ToList();
+        var toRemove = existingForRole.Where(rp => !expectedIds.Contains(rp.PermissionId)).ToList();
+        if (toRemove.Count > 0)
+        {
+            context.RolePermissions.RemoveRange(toRemove);
+        }
+
+        var existingIds = existingForRole.Select(rp => rp.PermissionId).ToHashSet();
+        var addedAny = false;
+        foreach (var permId in expectedIds.Where(id => !existingIds.Contains(id)))
         {
             context.RolePermissions.Add(new RolePermission
             {
                 RoleId = targetRole.Id,
-                PermissionId = costReadPerm.Id,
+                PermissionId = permId,
                 GrantedAt = DateTime.UtcNow
             });
+            addedAny = true;
+        }
+
+        if (toRemove.Count > 0 || addedAny)
+        {
+            targetRole.GrantRevision++;
         }
     }
-    var restrictedRoleIds = new[] { roles["WarehouseStaff"].Id, roles["Viewer"].Id };
-    var forbiddenCostRolePerms = await context.RolePermissions.IgnoreQueryFilters()
-        .Where(rp => restrictedRoleIds.Contains(rp.RoleId) && rp.PermissionId == costReadPerm.Id)
-        .ToListAsync();
-    if (forbiddenCostRolePerms.Count > 0)
+    await context.SaveChangesAsync();
+
+    var tenantOne = await context.SaasTenants.IgnoreQueryFilters().FirstOrDefaultAsync(t => t.TenantId == 1);
+    if (tenantOne is null)
     {
-        context.RolePermissions.RemoveRange(forbiddenCostRolePerms);
+        tenantOne = new SaasTenant
+        {
+            TenantId = 1,
+            TenantCode = "TENANT-001",
+            CompanyName = "CÔNG TY TNHH THƯƠNG MẠI & DỊCH VỤ KHO VẬN ĐẠI PHÁT",
+            TaxCode = "0312345678",
+            TaxpayerType = "ENTERPRISE",
+            OwnerEmail = "admin@daiphat-logistics.vn",
+            ContactPhone = "0909123456",
+            LegalRegisteredAddress = "Quận 7, TP. Hồ Chí Minh",
+            LifecycleStatus = "ACTIVE",
+            SuspensionReason = null,
+            AllowSupportAccess = true
+        };
+        context.SaasTenants.Add(tenantOne);
+    }
+    else
+    {
+        tenantOne.TenantCode = "TENANT-001";
+        tenantOne.LifecycleStatus = "ACTIVE";
+        tenantOne.SuspensionReason = null;
+        tenantOne.AllowSupportAccess = true;
+        tenantOne.UpdatedAtUtc = DateTime.UtcNow;
     }
     await context.SaveChangesAsync();
 
@@ -162,7 +223,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         primaryWarehouse = new Warehouse
         {
             Code = "WH01",
-            Name = "Kho Chính TP.HCM",
+            Name = "Kho Trung tâm (WH01)",
             Address = "Quận 7, TP.HCM",
             IsActive = true
         };
@@ -174,13 +235,13 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     {
         primaryWarehouse.Code = "WH01";
     }
-    primaryWarehouse.Name = "Kho Chính TP.HCM";
+    primaryWarehouse.Name = "Kho Trung tâm (WH01)";
     primaryWarehouse.Address = "Quận 7, TP.HCM";
     primaryWarehouse.IsActive = true;
     await context.SaveChangesAsync();
 
     var wh01 = await context.Warehouses.IgnoreQueryFilters().FirstOrDefaultAsync(warehouse => warehouse.Code == "WH01") ?? primaryWarehouse;
-    wh01.Name = "Kho Chính TP.HCM";
+    wh01.Name = "Kho Trung tâm (WH01)";
     wh01.Address = "Quận 7, TP.HCM";
     wh01.IsActive = true;
 
@@ -192,7 +253,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             Code = "WH02",
             Name = "Kho Chi Nhánh Hà Nội",
             Address = "Quận Cầu Giấy, Hà Nội",
-            IsActive = true
+            IsActive = false
         };
         context.Warehouses.Add(wh02);
         await context.SaveChangesAsync();
@@ -205,7 +266,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         }
         wh02.Name = "Kho Chi Nhánh Hà Nội";
         wh02.Address = "Quận Cầu Giấy, Hà Nội";
-        wh02.IsActive = true;
+        wh02.IsActive = false;
         await context.SaveChangesAsync();
     }
 
@@ -218,13 +279,18 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         qaAdmin = new User
         {
             TenantId = 1,
+            SecurityDomain = "PLATFORM",
             Username = "qa_admin",
             FullName = "Quản trị viên Hệ thống",
-            Role = roles["Admin"],
+            Role = roles["SuperAdmin"],
             PasswordHash = hasher.HashPassword("QaAdmin@123456!"),
             IsActive = true,
             FailedLoginCount = 0,
-            LockoutEnd = null
+            LockoutEnd = null,
+            TotpEnrollmentStatus = "IDLE",
+            TotpSecretProtected = null,
+            TotpRecoveryCodeHashesJson = null,
+            TotpActivatedAtUtc = null
         };
         context.Users.Add(qaAdmin);
         await context.SaveChangesAsync();
@@ -232,23 +298,35 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     else
     {
         qaAdmin.TenantId = 1;
+        qaAdmin.SecurityDomain = "PLATFORM";
         qaAdmin.FullName = "Quản trị viên Hệ thống";
-        qaAdmin.Role = roles["Admin"];
+        qaAdmin.Role = roles["SuperAdmin"];
         qaAdmin.PasswordHash = hasher.HashPassword("QaAdmin@123456!");
         qaAdmin.IsActive = true;
         qaAdmin.FailedLoginCount = 0;
         qaAdmin.LockoutEnd = null;
+        qaAdmin.TotpEnrollmentStatus = "IDLE";
+        qaAdmin.TotpSecretProtected = null;
+        qaAdmin.TotpRecoveryCodeHashesJson = null;
+        qaAdmin.TotpActivatedAtUtc = null;
         await context.SaveChangesAsync();
     }
 
     var definitions = new[]
     {
-        new AccountDefinition("qa_admin_local", "Quản trị viên Nội bộ", roles["Admin"], false),
-        new AccountDefinition("qa_manager_wh01", "Quản lý Kho WH01", roles["Manager"], true),
-        new AccountDefinition("qa_staff_wh01", "Nhân viên Kho WH01", roles["WarehouseStaff"], true),
-        new AccountDefinition("qa_viewer_wh01", "Giám sát Kho WH01", roles["Viewer"], true)
+        new AccountDefinition("qa_billing_admin", "Quản trị Đối soát Nền tảng", roles["BillingAdmin"], "PLATFORM", false, false),
+        new AccountDefinition("qa_support_admin", "Chuyên viên Hỗ trợ Nền tảng", roles["SupportAdmin"], "PLATFORM", false, false),
+        new AccountDefinition("qa_security_auditor", "Kiểm toán An ninh Nền tảng", roles["SecurityAuditor"], "PLATFORM", false, false),
+        new AccountDefinition("qa_admin_local", "Quản trị viên Nội bộ", roles["Admin"], "CUSTOMER_TENANT", true, true),
+        new AccountDefinition("tenant_admin", "Quản trị viên Công ty Đại Phát", roles["Admin"], "CUSTOMER_TENANT", true, true, "owner@erpkho.vn"),
+        new AccountDefinition("qa_manager_wh01", "Quản lý Kho WH01", roles["Manager"], "CUSTOMER_TENANT", true, false),
+        new AccountDefinition("qa_supervisor_wh01", "Giám sát Tầng Kho WH01", roles["Supervisor"], "CUSTOMER_TENANT", true, false),
+        new AccountDefinition("qa_accountant", "Kế toán Kho Nội bộ", roles["Accountant"], "CUSTOMER_TENANT", true, true),
+        new AccountDefinition("qa_staff_wh01", "Nhân viên Kho WH01", roles["WarehouseStaff"], "CUSTOMER_TENANT", true, false),
+        new AccountDefinition("qa_viewer_wh01", "Người xem Kho WH01", roles["Viewer"], "CUSTOMER_TENANT", true, false)
     };
     var users = new Dictionary<string, User>(StringComparer.Ordinal);
+    var seededPasswordHash = hasher.HashPassword("QaSeed!LocalOnly#2026");
 
     foreach (var definition in definitions)
     {
@@ -257,50 +335,61 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         var user = matches.SingleOrDefault();
         if (user is null)
         {
-            var password = Console.IsInputRedirected ? $"QaSeed!{definition.Username}#2026" : "QaSeed!LocalOnly#2026";
             user = new User
             {
+                TenantId = 1,
+                SecurityDomain = definition.SecurityDomain,
                 Username = definition.Username,
                 FullName = definition.FullName,
+                Email = definition.Email,
                 Role = definition.Role,
-                PasswordHash = hasher.HashPassword(password),
-                IsActive = true
+                PasswordHash = seededPasswordHash,
+                IsActive = true,
+                FailedLoginCount = 0,
+                LockoutEnd = null,
+                TotpEnrollmentStatus = "IDLE",
+                TotpSecretProtected = null,
+                TotpRecoveryCodeHashesJson = null,
+                TotpActivatedAtUtc = null
             };
             context.Users.Add(user);
         }
         else
         {
+            user.TenantId = 1;
+            user.SecurityDomain = definition.SecurityDomain;
             user.FullName = definition.FullName;
+            if (definition.Email is not null)
+            {
+                user.Email = definition.Email;
+            }
+            user.Role = definition.Role;
+            user.PasswordHash = seededPasswordHash;
+            user.IsActive = true;
+            user.FailedLoginCount = 0;
+            user.LockoutEnd = null;
+            user.TotpEnrollmentStatus = "IDLE";
+            user.TotpSecretProtected = null;
+            user.TotpRecoveryCodeHashesJson = null;
+            user.TotpActivatedAtUtc = null;
         }
         users.Add(definition.Username, user);
     }
     await context.SaveChangesAsync();
 
+    var legacyAliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "qa_warehousestaff", "qa_viewer", "qa_viewer_browser", "qa_manager", "qa_manager_browser", "qa_admin_browser", "qa_supervisor"
+    };
     var allDbUsers = await context.Users.IgnoreQueryFilters().Where(u => u.TenantId == 1).ToListAsync();
     foreach (var dbUser in allDbUsers)
     {
-        dbUser.FullName = (dbUser.Username?.Trim().ToLowerInvariant(), dbUser.FullName?.Trim()) switch
+        if (dbUser.Username is not null && legacyAliases.Contains(dbUser.Username.Trim()))
         {
-            ("qa_admin_local", _) => "Quản trị viên Nội bộ",
-            ("qa_manager_wh01" or "qa_manager" or "qa_manager_browser", _) => "Quản lý Kho WH01",
-            ("qa_staff_wh01" or "qa_warehousestaff", _) => "Nhân viên Kho WH01",
-            ("qa_viewer_wh01" or "qa_viewer" or "qa_viewer_browser", _) => "Giám sát Kho WH01",
-            ("qa_admin" or "qa_admin_browser", _) => "Quản trị viên Hệ thống",
-            (_, "QA Manager WH01" or "QA Manager") => "Quản lý Kho WH01",
-            (_, "QA Staff WH01" or "QA WarehouseStaff") => "Nhân viên Kho WH01",
-            (_, "QA Viewer WH01" or "QA Supervisor WH01" or "QA Viewer") => "Giám sát Kho WH01",
-            (_, "QA System Admin" or "QA Admin" or "QA Admin Tenant 202") => "Quản trị viên Hệ thống",
-            _ => string.IsNullOrWhiteSpace(dbUser.FullName) ? "Quản lý Kho WH01" : dbUser.FullName
-        };
+            dbUser.IsActive = false;
+        }
     }
     await context.SaveChangesAsync();
-    await context.Database.ExecuteSqlRawAsync(@"
-        UPDATE dbo.Users SET FullName = N'Quản lý Kho WH01' WHERE FullName IN (N'QA Manager WH01', N'QA Manager') OR Username IN ('qa_manager_wh01', 'qa_manager', 'qa_manager_browser');
-        UPDATE dbo.Users SET FullName = N'Nhân viên Kho WH01' WHERE FullName IN (N'QA Staff WH01', N'QA WarehouseStaff') OR Username IN ('qa_staff_wh01', 'qa_warehousestaff');
-        UPDATE dbo.Users SET FullName = N'Giám sát Kho WH01' WHERE FullName IN (N'QA Viewer WH01', N'QA Supervisor WH01', N'QA Viewer') OR Username IN ('qa_viewer_wh01', 'qa_viewer', 'qa_viewer_browser');
-        UPDATE dbo.Users SET FullName = N'Quản trị viên Hệ thống' WHERE FullName IN (N'QA System Admin', N'QA Admin', N'QA Admin Tenant 202') OR Username IN ('qa_admin', 'qa_admin_browser');
-        UPDATE dbo.Users SET FullName = N'Quản trị viên Nội bộ' WHERE Username = 'qa_admin_local';
-    ");
 
     var admin = users["qa_admin_local"];
     if (!await context.UserWarehouses.IgnoreQueryFilters().AnyAsync(access => access.UserId == qaAdmin.Id && access.WarehouseId == primaryWarehouse.Id))
@@ -312,11 +401,32 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         context.UserWarehouses.Add(new UserWarehouse { UserId = qaAdmin.Id, WarehouseId = wh02.Id, CreatedBy = qaAdmin.Id });
     }
 
-    foreach (var definition in definitions.Where(item => item.AssignWh01))
+    foreach (var definition in definitions)
     {
         var user = users[definition.Username];
-        if (!await context.UserWarehouses.IgnoreQueryFilters().AnyAsync(access => access.UserId == user.Id && access.WarehouseId == wh01.Id))
-            context.UserWarehouses.Add(new UserWarehouse { UserId = user.Id, WarehouseId = wh01.Id, CreatedBy = admin.Id });
+        var existingAccesses = await context.UserWarehouses.IgnoreQueryFilters()
+            .Where(access => access.UserId == user.Id)
+            .ToListAsync();
+
+        var allowedWarehouseIds = new HashSet<int>();
+        if (definition.AssignWh01) allowedWarehouseIds.Add(wh01.Id);
+        if (definition.AssignWh02) allowedWarehouseIds.Add(wh02.Id);
+
+        var toRevoke = existingAccesses.Where(a => !allowedWarehouseIds.Contains(a.WarehouseId)).ToList();
+        if (toRevoke.Count > 0)
+        {
+            context.UserWarehouses.RemoveRange(toRevoke);
+            user.WarehouseAccessRevision++;
+        }
+
+        foreach (var targetWhId in allowedWarehouseIds)
+        {
+            if (existingAccesses.All(a => a.WarehouseId != targetWhId))
+            {
+                context.UserWarehouses.Add(new UserWarehouse { UserId = user.Id, WarehouseId = targetWhId, CreatedBy = admin.Id });
+                user.WarehouseAccessRevision++;
+            }
+        }
     }
     await context.SaveChangesAsync();
 
@@ -937,6 +1047,14 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
     else
     {
+        if (string.Equals(lotProduct.Code, "QA-MOUSE", StringComparison.OrdinalIgnoreCase)
+            && !await context.Products.IgnoreQueryFilters().AnyAsync(p => p.Id != lotProduct.Id && p.Code == "QA-LOT-002"))
+        {
+            lotProduct.Code = "QA-LOT-002";
+            lotProduct.Name = "Hộp cảm biến nhiệt độ QA-02";
+            lotProduct.Description = "Cảm biến nhiệt độ quản lý theo lô dùng cho kiểm thử ERP";
+        }
+
         lotProduct.UnitId = unit.Id;
         lotProduct.CategoryId ??= catQa02.Id;
         lotProduct.StorageClass = "AMBIENT";
@@ -946,6 +1064,29 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         lotProduct.TrackingType = ProductTrackingType.Lot;
         lotProduct.ExpiryControl = true;
         lotProduct.ShelfLifeDays ??= 365;
+        await context.SaveChangesAsync();
+    }
+
+    var auxProduct = await context.Products.IgnoreQueryFilters().OrderBy(p => p.Id)
+        .FirstOrDefaultAsync(p => p.IsActive && p.Id != product.Id && p.Id != lotProduct.Id);
+    if (auxProduct is null)
+    {
+        auxProduct = new Product
+        {
+            Code = "QA-PAPER",
+            Name = "QA Giấy A4",
+            UnitId = unit.Id,
+            CategoryId = catQa01.Id,
+            Description = "Vật tư đóng gói & phụ kiện kiểm thử ERP",
+            StorageClass = "AMBIENT",
+            UnitWeightKg = 0.45m,
+            UnitVolumeM3 = 0.0024m,
+            UnitPalletEquivalent = 0.04m,
+            TrackingType = ProductTrackingType.None,
+            ExpiryControl = false,
+            IsActive = true
+        };
+        context.Products.Add(auxProduct);
         await context.SaveChangesAsync();
     }
 
@@ -1302,27 +1443,27 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
 
     var salesOrder = await context.SalesOrders.IgnoreQueryFilters()
         .Include(o => o.Lines)
-        .FirstOrDefaultAsync(o => o.OrderCode == "SO-QA-001");
+        .FirstOrDefaultAsync(o => o.OrderCode == "SO-202611-001" || o.OrderCode == "SO-202610-001" || o.OrderCode == "SO-QA-001");
     if (salesOrder is null)
     {
         salesOrder = new SalesOrder
         {
-            OrderCode = "SO-QA-001",
-            ExternalOrderId = "EXT-SO-QA-001",
+            OrderCode = "SO-202611-001",
+            ExternalOrderId = "EXT-SO-202611-001",
             CustomerId = customer.Id,
             WarehouseId = primaryWarehouse.Id,
-            RequestedShipDate = DateTime.UtcNow.Date.AddDays(2),
+            RequestedShipDate = new DateTime(2026, 11, 5, 0, 0, 0, DateTimeKind.Utc),
             Priority = 2,
             ShippingMethod = "STANDARD",
             Status = SalesOrderStatus.Released,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = new DateTime(2026, 11, 2, 9, 30, 0, DateTimeKind.Utc),
             CreatedBy = qaAdmin.Id,
-            ReleasedAt = DateTime.UtcNow,
+            ReleasedAt = new DateTime(2026, 11, 2, 9, 30, 0, DateTimeKind.Utc),
             Lines =
             [
                 new SalesOrderLine
                 {
-                    ExternalLineId = "EXT-SO-QA-001-L1",
+                    ExternalLineId = "EXT-SO-202611-001-L1",
                     ProductId = product.Id,
                     OrderedQuantity = 5m,
                     CancelledQuantity = 0m,
@@ -1337,8 +1478,13 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
     else
     {
+        salesOrder.OrderCode = "SO-202611-001";
+        salesOrder.ExternalOrderId = "EXT-SO-202611-001";
+        salesOrder.CreatedAt = new DateTime(2026, 11, 2, 9, 30, 0, DateTimeKind.Utc);
+        salesOrder.ReleasedAt = new DateTime(2026, 11, 2, 9, 30, 0, DateTimeKind.Utc);
         foreach (var l in salesOrder.Lines)
         {
+            l.ExternalLineId = "EXT-SO-202611-001-L1";
             l.UomCode = unit.Code;
             if (l.UnitPrice <= 10000m || l.UnitPrice == 1200000m)
             {
@@ -1376,6 +1522,11 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             AllocationVersion = 1
         };
         context.StockReservations.Add(pickReservation);
+        await context.SaveChangesAsync();
+    }
+    else
+    {
+        pickReservation.SourceCode = salesOrder.OrderCode;
         await context.SaveChangesAsync();
     }
 
@@ -1445,6 +1596,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
     else
     {
+        pickingTask.SourceCode = salesOrder.OrderCode;
         pickingTask.CreatedAt = DateTime.UtcNow;
         if (pickingTask.Status is not (PickingTaskStatus.Open or PickingTaskStatus.Assigned))
         {
@@ -1463,27 +1615,27 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     // 5b. Idempotent Completed PickingTask ("PICK-QA-002") & Active PackingSession ("PACK-QA-001") + HandlingUnit ("HU-QA-001")
     var packSalesOrder = await context.SalesOrders.IgnoreQueryFilters()
         .Include(o => o.Lines)
-        .FirstOrDefaultAsync(o => o.OrderCode == "SO-QA-002");
+        .FirstOrDefaultAsync(o => o.OrderCode == "SO-202611-002" || o.OrderCode == "SO-202610-002" || o.OrderCode == "SO-QA-002");
     if (packSalesOrder is null)
     {
         packSalesOrder = new SalesOrder
         {
-            OrderCode = "SO-QA-002",
-            ExternalOrderId = "EXT-SO-QA-002",
+            OrderCode = "SO-202611-002",
+            ExternalOrderId = "EXT-SO-202611-002",
             CustomerId = customer.Id,
             WarehouseId = primaryWarehouse.Id,
-            RequestedShipDate = DateTime.UtcNow.Date.AddDays(1),
+            RequestedShipDate = new DateTime(2026, 11, 5, 0, 0, 0, DateTimeKind.Utc),
             Priority = 1,
             ShippingMethod = "EXPRESS",
             Status = SalesOrderStatus.Released,
-            CreatedAt = DateTime.UtcNow.AddMinutes(-35),
+            CreatedAt = new DateTime(2026, 11, 3, 14, 15, 0, DateTimeKind.Utc),
             CreatedBy = qaAdmin.Id,
-            ReleasedAt = DateTime.UtcNow.AddMinutes(-32),
+            ReleasedAt = new DateTime(2026, 11, 3, 14, 15, 0, DateTimeKind.Utc),
             Lines =
             [
                 new SalesOrderLine
                 {
-                    ExternalLineId = "EXT-SO-QA-002-L1",
+                    ExternalLineId = "EXT-SO-202611-002-L1",
                     ProductId = product.Id,
                     OrderedQuantity = 4m,
                     CancelledQuantity = 0m,
@@ -1498,8 +1650,13 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
     else
     {
+        packSalesOrder.OrderCode = "SO-202611-002";
+        packSalesOrder.ExternalOrderId = "EXT-SO-202611-002";
+        packSalesOrder.CreatedAt = new DateTime(2026, 11, 3, 14, 15, 0, DateTimeKind.Utc);
+        packSalesOrder.ReleasedAt = new DateTime(2026, 11, 3, 14, 15, 0, DateTimeKind.Utc);
         foreach (var l in packSalesOrder.Lines)
         {
+            l.ExternalLineId = "EXT-SO-202611-002-L1";
             l.UomCode = unit.Code;
             if (l.UnitPrice <= 10000m || l.UnitPrice == 1200000m)
             {
@@ -1539,6 +1696,11 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         context.StockReservations.Add(packReservation);
         await context.SaveChangesAsync();
     }
+    else
+    {
+        packReservation.SourceCode = packSalesOrder.OrderCode;
+        await context.SaveChangesAsync();
+    }
 
     var packAllocation = await context.StockAllocations.IgnoreQueryFilters()
         .FirstOrDefaultAsync(a => a.AllocationCode == "ALC-QA-PACK-001" || a.ReservationId == packReservation.Id);
@@ -1555,7 +1717,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             Quantity = 4m,
             Status = StockAllocationStatus.Active,
             Strategy = AllocationStrategy.LocationOrder,
-            SelectionReason = "Phân bổ đóng gói theo đơn SO-QA-002 tại kệ BIN-A01-01",
+            SelectionReason = "Phân bổ đóng gói theo đơn SO-202611-002 tại kệ BIN-A01-01",
             AllocatedAt = DateTime.UtcNow.AddMinutes(-31),
             AllocatedBy = qaAdmin.Id,
             Version = 1
@@ -1566,7 +1728,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     else
     {
         packAllocation.AllocationCode = "ALC-QA-PACK-001";
-        packAllocation.SelectionReason = "Phân bổ đóng gói theo đơn SO-QA-002 tại kệ BIN-A01-01";
+        packAllocation.SelectionReason = "Phân bổ đóng gói theo đơn SO-202611-002 tại kệ BIN-A01-01";
         await context.SaveChangesAsync();
     }
 
@@ -1610,6 +1772,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     }
     else
     {
+        packPickingTask.SourceCode = packSalesOrder.OrderCode;
         packPickingTask.Status = PickingTaskStatus.Completed;
         packPickingTask.CompletedAt ??= DateTime.UtcNow.AddMinutes(-20);
         foreach (var line in packPickingTask.Lines)
@@ -1975,7 +2138,9 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         .Include(r => r.Details)
         .OrderBy(r => r.Id)
         .ToListAsync();
-    var nonPutawayReceipts = allImportReceipts.Where(r => r.Id != putawayReceipt.Id).ToList();
+    var nonPutawayReceipts = allImportReceipts
+        .Where(r => r.Id != putawayReceipt.Id && r.Code != "PNK-202611-001")
+        .ToList();
     var irQa001 = nonPutawayReceipts.FirstOrDefault(r => r.Code == "IR-QA-001") ?? nonPutawayReceipts.FirstOrDefault();
     if (irQa001 is null)
     {
@@ -2049,9 +2214,99 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         r.SupplierId ??= supplier.Id;
         r.SupplierCodeSnapshot = supplier.Code;
         r.SupplierNameSnapshot = supplier.Name;
+        if (r.CreatedAt > DateTime.UtcNow.AddMinutes(-30))
+        {
+            r.CreatedAt = DateTime.UtcNow.AddHours(-6);
+        }
         if (string.IsNullOrWhiteSpace(r.Note) || r.Note.Contains("E2E", StringComparison.OrdinalIgnoreCase))
         {
             r.Note = $"Phiếu nhập kho bổ sung {r.Code}";
+        }
+    }
+
+    var pnkTopCreatedAt = new DateTime(
+        Math.Max(DateTime.UtcNow.AddMinutes(-5).Ticks, new DateTime(2026, 11, 3, 9, 0, 0, DateTimeKind.Utc).Ticks),
+        DateTimeKind.Utc);
+    var pnkTopReceipt = allImportReceipts.FirstOrDefault(r => r.Code == "PNK-202611-001");
+    if (pnkTopReceipt is null)
+    {
+        pnkTopReceipt = new ImportReceipt
+        {
+            Code = "PNK-202611-001",
+            WarehouseId = primaryWarehouse.Id,
+            SupplierId = supplier.Id,
+            SupplierCodeSnapshot = supplier.Code,
+            SupplierNameSnapshot = supplier.Name,
+            PurchaseOrderId = purchaseOrder.Id,
+            Status = ReceiptStatus.Received,
+            Note = "Phiếu nhập kho lô thiết bị tháng 11 chờ kiểm thu & ghi sổ PNK-202611-001",
+            CreatedBy = qaAdmin.Id,
+            CreatedAt = pnkTopCreatedAt,
+            Details =
+            [
+                new ImportReceiptDetail
+                {
+                    ProductId = product.Id,
+                    Quantity = 20m,
+                    ExpectedQuantity = 20m,
+                    ReceivedQuantity = 20m,
+                    ObservedQuantity = 20m,
+                    FinalReceivedQuantity = 20m,
+                    AcceptedQuantity = 20m,
+                    PostedQuantity = 0m,
+                    BaseExpectedQuantity = 20m,
+                    BaseReceivedQuantity = 20m,
+                    BaseObservedQuantity = 20m,
+                    BaseFinalReceivedQuantity = 20m,
+                    BaseAcceptedQuantity = 20m,
+                    BasePostedQuantity = 0m,
+                    OperationUnitId = unit.Id,
+                    OperationUnitCodeSnapshot = unit.Code,
+                    OperationUnitDecimalPlaces = unit.DecimalPlaces,
+                    BaseUnitId = unit.Id,
+                    BaseUnitCodeSnapshot = unit.Code,
+                    BaseUnitDecimalPlaces = unit.DecimalPlaces,
+                    ConversionFactor = 1m,
+                    ConversionVersion = 1,
+                    UnitPrice = 250000m,
+                    TaxPercent = 10m,
+                    Note = "Tiếp nhận 20 sản phẩm QA-E2E-001 chờ ghi sổ tồn kho"
+                }
+            ]
+        };
+        context.ImportReceipts.Add(pnkTopReceipt);
+    }
+    else
+    {
+        pnkTopReceipt.WarehouseId = primaryWarehouse.Id;
+        pnkTopReceipt.SupplierId = supplier.Id;
+        pnkTopReceipt.SupplierCodeSnapshot = supplier.Code;
+        pnkTopReceipt.SupplierNameSnapshot = supplier.Name;
+        pnkTopReceipt.PurchaseOrderId = purchaseOrder.Id;
+        pnkTopReceipt.Status = ReceiptStatus.Received;
+        pnkTopReceipt.ApprovedBy = null;
+        pnkTopReceipt.ApprovedAt = null;
+        pnkTopReceipt.CreatedAt = pnkTopCreatedAt;
+        pnkTopReceipt.Note = "Phiếu nhập kho lô thiết bị tháng 11 chờ kiểm thu & ghi sổ PNK-202611-001";
+        var pnkDetail = pnkTopReceipt.Details.FirstOrDefault();
+        if (pnkDetail is not null)
+        {
+            pnkDetail.ProductId = product.Id;
+            pnkDetail.Quantity = 20m;
+            pnkDetail.ExpectedQuantity = 20m;
+            pnkDetail.ReceivedQuantity = 20m;
+            pnkDetail.ObservedQuantity = 20m;
+            pnkDetail.FinalReceivedQuantity = 20m;
+            pnkDetail.AcceptedQuantity = 20m;
+            pnkDetail.PostedQuantity = 0m;
+            pnkDetail.BaseExpectedQuantity = 20m;
+            pnkDetail.BaseReceivedQuantity = 20m;
+            pnkDetail.BaseObservedQuantity = 20m;
+            pnkDetail.BaseFinalReceivedQuantity = 20m;
+            pnkDetail.BaseAcceptedQuantity = 20m;
+            pnkDetail.BasePostedQuantity = 0m;
+            pnkDetail.UnitPrice = 250000m;
+            pnkDetail.TaxPercent = 10m;
         }
     }
 
@@ -2187,7 +2442,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             ShipmentId = shipment.Id,
             Status = ReceiptStatus.Dispatched,
             DispatchMode = ExportDispatchMode.DispatchOnApproval,
-            Note = "Phiếu xuất kho giao hàng theo đơn bán SO-QA-001",
+            Note = "Phiếu xuất kho giao hàng theo đơn bán SO-202611-001",
             CreatedBy = qaAdmin.Id,
             CreatedAt = DateTime.UtcNow.AddDays(-1),
             ApprovedBy = qaAdmin.Id,
@@ -2240,12 +2495,12 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             {
                 er.SalesOrderId = salesOrder.Id;
                 er.ShipmentId = shipment.Id;
-                er.Note = "Phiếu xuất kho giao hàng theo đơn bán SO-QA-001";
+                er.Note = "Phiếu xuất kho giao hàng theo đơn bán SO-202611-001";
             }
             else if (idx == 1)
             {
                 er.SalesOrderId = packSalesOrder.Id;
-                er.Note = "Phiếu xuất kho xuất thẳng đơn bán SO-QA-002";
+                er.Note = "Phiếu xuất kho xuất thẳng đơn bán SO-202611-002";
             }
             else
             {
@@ -2288,7 +2543,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             ShipmentId = shipment.Id,
             Status = ReceiptStatus.Dispatched,
             DispatchMode = ExportDispatchMode.DispatchOnApproval,
-            Note = "Phiếu xuất kho xuất thẳng đơn bán SO-QA-002",
+            Note = "Phiếu xuất kho xuất thẳng đơn bán SO-202611-002",
             CreatedBy = qaAdmin.Id,
             CreatedAt = DateTime.UtcNow.AddHours(-18),
             ApprovedBy = qaAdmin.Id,
@@ -4106,13 +4361,45 @@ VALUES
 DELETE FROM dbo.TenantSubscriptions WHERE TenantId = 1;
 INSERT INTO dbo.TenantSubscriptions (TenantId, PlanCode, Status, MonthlyOrderQuota, CurrentMonthOrderCount, MaxWarehouses, MaxUsers, TrialEndsAtUtc, CurrentPeriodStartUtc, CurrentPeriodEndUtc, UpdatedAtUtc)
 VALUES
-(1, N'GROWTH', N'ACTIVE', 10000, 6420, 3, 20, NULL, DATEADD(DAY, -15, SYSUTCDATETIME()), DATEADD(DAY, 15, SYSUTCDATETIME()), SYSUTCDATETIME());
+(1, N'GROWTH', N'ACTIVE', 10000, 6420, 3, 20, NULL, '2026-11-01T00:00:00Z', '2026-11-30T23:59:59Z', SYSUTCDATETIME());
 
+DELETE FROM dbo.AuditLogs WHERE Action = N'PLATFORM_BILLING_MANUAL_RECONCILE';
 DELETE FROM dbo.SaasBillingInvoices WHERE TenantId = 1;
-INSERT INTO dbo.SaasBillingInvoices (TenantId, InvoiceCode, PlanCode, AmountVnd, PaymentProvider, Status, QrPayload, PaidAtUtc, CreatedAtUtc)
+INSERT INTO dbo.SaasBillingInvoices (TenantId, InvoiceCode, PlanCode, SubTotalVnd, VatRatePercent, VatAmountVnd, AmountVnd, BuyerTaxCode, BuyerLegalName, PaymentProvider, Status, QrPayload, PaidAtUtc, CreatedAtUtc)
 VALUES
-(1, N'INV-SAAS-202610-001', N'GROWTH', 1490000, N'VIETQR', N'PAID', N'00020101021238570010A00000072701270006970436011310293847560010208QRIBFTTA5303704540714900005802VN62290825ERPKHO T1 INVSAAS2026100016304A1B2', DATEADD(DAY, -15, SYSUTCDATETIME()), DATEADD(DAY, -15, SYSUTCDATETIME())),
-(1, N'INV-SAAS-202611-002', N'GROWTH', 1490000, N'VIETQR', N'UNPAID', N'00020101021238570010A00000072701270006970436011310293847560010208QRIBFTTA5303704540714900005802VN62290825ERPKHO T1 INVSAAS2026110026304C3D4', NULL, DATEADD(DAY, -1, SYSUTCDATETIME()));
+(1, N'INV-SAAS-202610-001', N'GROWTH', 1354545, 10.00, 135455, 1490000, N'0312345678', N'CÔNG TY TNHH THƯƠNG MẠI & DỊCH VỤ KHO VẬN ĐẠI PHÁT', N'VIETQR', N'PAID', N'00020101021238550010A000000727012500069704230111984181020050208QRIBFTTA5303704540714900005802VN62290825ERPKHO T1 INVSAAS2026100016304A1B2', '2026-10-03T09:15:00Z', '2026-10-01T00:00:00Z'),
+(1, N'INV-SAAS-202611-002', N'GROWTH', 1354545, 10.00, 135455, 1490000, N'0312345678', N'CÔNG TY TNHH THƯƠNG MẠI & DỊCH VỤ KHO VẬN ĐẠI PHÁT', N'VIETQR', N'UNPAID', N'00020101021238550010A000000727012500069704230111984181020050208QRIBFTTA5303704540714900005802VN62290825ERPKHO T1 INVSAAS2026110026304C3D4', NULL, '2026-11-01T00:00:00Z');
+
+DECLARE @octSaasInvId int = (SELECT TOP 1 Id FROM dbo.SaasBillingInvoices WHERE TenantId = 1 AND InvoiceCode = N'INV-SAAS-202610-001');
+IF @octSaasInvId IS NOT NULL
+BEGIN
+    INSERT INTO dbo.AuditLogs (TenantId, UserId, WarehouseId, Action, EntityName, EntityId, OldValues, NewValues, Reason, Result, Timestamp, IpAddress)
+    VALUES (1, {qaAdmin.Id}, NULL, N'PLATFORM_BILLING_MANUAL_RECONCILE', N'SaasBillingInvoice', @octSaasInvId, N'UNPAID', N'{{""invoiceCode"":""INV-SAAS-202610-001"",""bankTransactionRef"":""FT2627690123"",""bankCreditTimestampVi"":""03/10/2026 16:15"",""receivedAmountVnd"":1490000,""attachmentReference"":""UNC_TPB_20261003_1490k.pdf"",""auditStampVi"":""Xác nhận thủ công bởi Chủ dự án lúc 16:15 03/10/2026 (UNC: FT2627690123)""}}', N'Đối soát thủ công kỳ 10/2026 khớp 1.490.000đ', N'Success', '2026-10-03T09:15:00Z', N'127.0.0.1');
+END;
+
+DELETE FROM dbo.KitWorkOrderComponentLines WHERE TenantId = 1;
+DELETE FROM dbo.KitWorkOrders WHERE TenantId = 1;
+INSERT INTO dbo.KitWorkOrders (TenantId, WarehouseId, WorkOrderCode, KitProductId, WorkOrderType, Status, PlannedKitQty, CompletedKitQty, BaseUomCode, ConversionRateSnapshot, TargetLocationId, RolledUpUnitCost, EarliestComponentExpiryDate, CreatedByUserId, CompletedByUserId, CreatedAtUtc, CompletedAtUtc)
+VALUES
+(1, {primaryWarehouse.Id}, N'KWO-2026-001', {product.Id}, 1, N'Completed', 20, 20, N'Bộ', 1, {storageBin.Id}, 500000, '2026-12-31T00:00:00Z', {qaAdmin.Id}, {qaAdmin.Id}, '2026-10-28T08:00:00Z', '2026-10-28T10:30:00Z'),
+(1, {primaryWarehouse.Id}, N'KWO-2026-002', {product.Id}, 1, N'Open', 10, 0, N'Bộ', 1, {storageBin.Id}, 500000, '2026-12-31T00:00:00Z', {qaAdmin.Id}, NULL, '2026-11-01T09:00:00Z', NULL);
+
+DECLARE @kwo1Id int = (SELECT TOP 1 Id FROM dbo.KitWorkOrders WHERE TenantId = 1 AND WorkOrderCode = N'KWO-2026-001');
+DECLARE @kwo2Id int = (SELECT TOP 1 Id FROM dbo.KitWorkOrders WHERE TenantId = 1 AND WorkOrderCode = N'KWO-2026-002');
+IF @kwo1Id IS NOT NULL
+BEGIN
+    INSERT INTO dbo.KitWorkOrderComponentLines (TenantId, KitWorkOrderId, ComponentProductId, ComponentRatioQty, RequiredBaseQty, ConsumedBaseQty, BaseUomCode, ConversionRateSnapshot, SourceLocationId, ComponentUnitCost)
+    VALUES
+    (1, @kwo1Id, {lotProduct.Id}, 1, 20, 20, N'Cái', 1, {storageBin.Id}, 420000),
+    (1, @kwo1Id, {auxProduct.Id}, 1, 20, 20, N'Cái', 1, {storageBin.Id}, 80000);
+END;
+IF @kwo2Id IS NOT NULL
+BEGIN
+    INSERT INTO dbo.KitWorkOrderComponentLines (TenantId, KitWorkOrderId, ComponentProductId, ComponentRatioQty, RequiredBaseQty, ConsumedBaseQty, BaseUomCode, ConversionRateSnapshot, SourceLocationId, ComponentUnitCost)
+    VALUES
+    (1, @kwo2Id, {lotProduct.Id}, 1, 10, 0, N'Cái', 1, {storageBin.Id}, 420000),
+    (1, @kwo2Id, {auxProduct.Id}, 1, 10, 0, N'Cái', 1, {storageBin.Id}, 80000);
+END;
 
 DELETE FROM dbo.ShipmentFinancialLedgers WHERE TenantId = 1;
 INSERT INTO dbo.ShipmentFinancialLedgers (TenantId, ShipmentId, ExportReceiptId, TrackingNumber, CarrierCode, ExpectedCodAmount, ActualCodCollected, EstimatedShippingFee, ActualShippingFee, PlatformCommissionFee, ReturnFee, NetPayoutAmount, FeeOverchargeVariance, ReconciliationStatus, CreatedAtUtc, SettledAtUtc)
@@ -4131,8 +4418,8 @@ DECLARE @packSessionId int = (SELECT TOP 1 Id FROM dbo.PackingSessions ORDER BY 
 DELETE FROM dbo.PackingVideoEvidences WHERE TenantId = 1;
 INSERT INTO dbo.PackingVideoEvidences (TenantId, PackingSessionId, ExportReceiptId, TrackingNumber, OrderCode, CameraStationId, StartedAtUtc, EndedAtUtc, DurationSeconds, VideoHashSha256, StorageUrl, RecordedByUserId, RecordedAtUtc)
 VALUES
-(1, @packSessionId, ISNULL(@er01Id, 1), N'GHN84920188', N'SO-QA-001', N'CAM-PACK-STATION-01', DATEADD(MINUTE, -35, SYSUTCDATETIME()), DATEADD(MINUTE, -34, SYSUTCDATETIME()), 48, N'8F9C2E4A1B7D6035A9E2F8C1D4B7A0E3F6C9D2B5A8E1F4C7D0B3A6E9F2C5D8A1', N'https://cdn.erp-kho.vn/packing-evidence/2026/10/22/GHN84920188.mp4', {qaAdmin.Id}, DATEADD(MINUTE, -34, SYSUTCDATETIME())),
-(1, @packSessionId, ISNULL(@er02Id, 1), N'VTP99201122', N'SO-QA-002', N'CAM-PACK-STATION-02', DATEADD(MINUTE, -20, SYSUTCDATETIME()), DATEADD(MINUTE, -19, SYSUTCDATETIME()), 52, N'3A7B9C1D5E2F8A4B6C0D9E3F1A5B7C2D8E4F0A6B1C3D5E7F9A2B4C6D8E0F1A3B', N'https://cdn.erp-kho.vn/packing-evidence/2026/10/22/VTP99201122.mp4', {qaAdmin.Id}, DATEADD(MINUTE, -19, SYSUTCDATETIME()));
+(1, @packSessionId, ISNULL(@er01Id, 1), N'GHN84920188', N'SO-202611-001', N'CAM-PACK-STATION-01', DATEADD(MINUTE, -35, SYSUTCDATETIME()), DATEADD(MINUTE, -34, SYSUTCDATETIME()), 48, N'8F9C2E4A1B7D6035A9E2F8C1D4B7A0E3F6C9D2B5A8E1F4C7D0B3A6E9F2C5D8A1', N'https://cdn.erp-kho.vn/packing-evidence/2026/10/22/GHN84920188.mp4', {qaAdmin.Id}, DATEADD(MINUTE, -34, SYSUTCDATETIME())),
+(1, @packSessionId, ISNULL(@er02Id, 1), N'VTP99201122', N'SO-202611-002', N'CAM-PACK-STATION-02', DATEADD(MINUTE, -20, SYSUTCDATETIME()), DATEADD(MINUTE, -19, SYSUTCDATETIME()), 52, N'3A7B9C1D5E2F8A4B6C0D9E3F1A5B7C2D8E4F0A6B1C3D5E7F9A2B4C6D8E0F1A3B', N'https://cdn.erp-kho.vn/packing-evidence/2026/10/22/VTP99201122.mp4', {qaAdmin.Id}, DATEADD(MINUTE, -19, SYSUTCDATETIME()));
 
 DELETE FROM dbo.SupportImpersonationSessions WHERE TenantId = 1;
 INSERT INTO dbo.SupportImpersonationSessions (TenantId, SessionCode, SupportTicketCode, GrantedByUserId, SupportAgentUserId, ReadOnlyScope, Status, TokenHash, GrantedAtUtc, ExpiresAtUtc, RevokedAtUtc)
@@ -4144,9 +4431,9 @@ DELETE FROM dbo.CustomerReturnLines WHERE TenantId = 1;
 DELETE FROM dbo.CustomerReturns WHERE TenantId = 1;
 INSERT INTO dbo.CustomerReturns (TenantId, ReturnCode, WarehouseId, SalesOrderId, ExportReceiptId, TrackingNumber, OrderNumber, ReturnReason, Status, CreatedBy, CreatedAtUtc, CompletedAtUtc)
 VALUES
-(1, N'RMA-INSP-20261022-01', {primaryWarehouse.Id}, {salesOrder.Id}, ISNULL(@er01Id, 1), N'GHN84920188', N'SO-QA-001', N'Khách đổi size / Kiểm định bao bì móp nhẹ khi vận chuyển', N'COMPLETED', {qaAdmin.Id}, DATEADD(HOUR, -3, SYSUTCDATETIME()), DATEADD(HOUR, -2, SYSUTCDATETIME())),
-(1, N'RMA-RTS-OVERDUE-09D', {primaryWarehouse.Id}, {salesOrder.Id}, ISNULL(@er01Id, 1), N'GHN-RTS-OVERDUE-09D', N'SO-QA-001', N'Hoàn trả RTS quá hạn 7 ngày chưa kiểm định phân loại', N'PENDING_INSPECTION', {qaAdmin.Id}, DATEADD(DAY, -9, SYSUTCDATETIME()), NULL),
-(1, N'RMA-RTS-48H-CLAIM', {primaryWarehouse.Id}, {packSalesOrder.Id}, ISNULL(@er02Id, 1), N'SPX-RTS-48H-CLAIM', N'SO-QA-002', N'Hoàn trả RTS trong cửa sổ khiếu nại sàn < 48h cần quay video bằng chứng', N'PENDING_INSPECTION', {qaAdmin.Id}, DATEADD(HOUR, -12, SYSUTCDATETIME()), NULL);
+(1, N'RMA-INSP-20261022-01', {primaryWarehouse.Id}, {salesOrder.Id}, ISNULL(@er01Id, 1), N'GHN84920188', N'SO-202611-001', N'Khách đổi size / Kiểm định bao bì móp nhẹ khi vận chuyển', N'COMPLETED', {qaAdmin.Id}, DATEADD(HOUR, -3, SYSUTCDATETIME()), DATEADD(HOUR, -2, SYSUTCDATETIME())),
+(1, N'RMA-RTS-OVERDUE-09D', {primaryWarehouse.Id}, {salesOrder.Id}, ISNULL(@er01Id, 1), N'GHN-RTS-OVERDUE-09D', N'SO-202611-001', N'Hoàn trả RTS quá hạn 7 ngày chưa kiểm định phân loại', N'PENDING_INSPECTION', {qaAdmin.Id}, DATEADD(DAY, -9, SYSUTCDATETIME()), NULL),
+(1, N'RMA-RTS-48H-CLAIM', {primaryWarehouse.Id}, {packSalesOrder.Id}, ISNULL(@er02Id, 1), N'SPX-RTS-48H-CLAIM', N'SO-202611-002', N'Hoàn trả RTS trong cửa sổ khiếu nại sàn < 48h cần quay video bằng chứng', N'PENDING_INSPECTION', {qaAdmin.Id}, DATEADD(HOUR, -12, SYSUTCDATETIME()), NULL);
 
 DECLARE @seedReturnId int = (SELECT TOP 1 Id FROM dbo.CustomerReturns WHERE TenantId = 1 AND ReturnCode = N'RMA-INSP-20261022-01');
 DECLARE @overdueReturnId int = (SELECT TOP 1 Id FROM dbo.CustomerReturns WHERE TenantId = 1 AND ReturnCode = N'RMA-RTS-OVERDUE-09D');
@@ -4385,7 +4672,7 @@ static async Task<InventoryInvariant> CaptureInventoryInvariantAsync(ErpKhoDbCon
         await context.ExportReceipts.AsNoTracking().CountAsync());
 }
 
-internal sealed record AccountDefinition(string Username, string FullName, Role Role, bool AssignWh01);
+internal sealed record AccountDefinition(string Username, string FullName, Role Role, string SecurityDomain, bool AssignWh01, bool AssignWh02, string? Email = null);
 
 internal sealed record LocalQaAdminCurrentUser(int UserId) : ICurrentUser
 {

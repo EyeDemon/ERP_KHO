@@ -140,7 +140,8 @@ describe('TC-P1-02: Hardware Scanner Wedge, GS1-128 FNC1 Parser, Undo & Error Bu
 
     const undoBtn = screen.getByTestId('scanner-undo-last-btn') as HTMLButtonElement;
     expect(undoBtn.disabled).toBe(true);
-    expect(undoBtn.textContent).toContain('Hoàn tác lần quét gần nhất (Undo)');
+    expect(undoBtn.textContent).toContain('Hoàn tác');
+    expect(undoBtn.textContent).not.toContain('(Undo)');
 
     const searchInput = screen.getByRole('searchbox');
     fireEvent.change(searchInput, { target: { value: 'BIN-A-01' } });

@@ -1,0 +1,36 @@
+using ERP.Api.Authorization;
+using ERP.Application.DTOs;
+using ERP.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace ERP.Api.Controllers
+{
+    [Authorize]
+    [PermissionAuthorize(AppPermissions.InventoryRead)]
+    [ApiController]
+    [Route("api/[controller]")]
+    [Route("api/v1/inventory-stocks")]
+    public class InventoryStocksController : ControllerBase
+    {
+        private readonly IInventoryQueryService _inventoryQueryService;
+
+        public InventoryStocksController(IInventoryQueryService inventoryQueryService)
+        {
+            _inventoryQueryService = inventoryQueryService;
+        }
+
+        [HttpGet("current")]
+        [HttpGet("~/api/v1/inventory/current")]
+        [HttpGet("~/api/inventory/current")]
+        public async Task<ActionResult<IEnumerable<InventoryStockDto>>> GetCurrentStock(
+            [FromQuery] int? warehouseId, 
+            [FromQuery] int? productId, 
+            [FromQuery] string? keyword,
+            [FromQuery] decimal? lowStockThreshold = null)
+        {
+            var stocks = await _inventoryQueryService.GetCurrentStockAsync(warehouseId, productId, keyword, lowStockThreshold);
+            return Ok(stocks);
+        }
+    }
+}

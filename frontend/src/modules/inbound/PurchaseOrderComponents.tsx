@@ -137,7 +137,7 @@ export function PurchaseOrderCreateFormCard(props: {
         </div>
         <p className="inbound-planning-helper">Tạo đơn mua chỉ ghi nhận lượng hàng dự kiến về; tồn kho chỉ thay đổi khi Phiếu nhập kho được ghi sổ.</p>
         <div className="inbound-planning-form-actions">
-          <button type="submit" disabled={creating} style={{ background: '#0284c7', color: '#ffffff', fontWeight: 600, border: '1px solid #0284c7' }}>{creating ? 'Đang tạo...' : 'Tạo đơn mua'}</button>
+          <button type="submit" disabled={creating} style={{ background: '#1d4ed8', color: '#ffffff', fontWeight: 600, border: '1px solid #1d4ed8' }}>{creating ? 'Đang tạo...' : 'Tạo đơn mua'}</button>
           <button type="button" disabled={creating} onClick={resetForm}>Làm lại</button>
         </div>
       </form>}
@@ -174,7 +174,7 @@ export function PurchaseOrderDetailCard(props: {
         <div><strong>Tổng tiền đơn mua (Đã gồm thuế)</strong><br />{Number(selected.totalAmount || 0).toLocaleString('vi-VN')} đ</div>
       </div>
       <div className="inbound-planning-actions">
-        {canRelease && selected.status === 'Draft' && <button className="ui-primary-button" style={{ background: '#0284c7', color: '#ffffff', fontWeight: 600, border: '1px solid #0284c7' }} disabled={!!busy || !selected.rowVersion} onClick={() => void command('/api/v1/purchase-orders/' + selected.id + '/open', 'po-open:' + selected.id, 'Đơn mua đã được mở cho quy trình nhận hàng.')}>{busy ? 'Đang lưu...' : 'Mở đơn mua'}</button>}
+        {canRelease && selected.status === 'Draft' && <button className="ui-primary-button" style={{ background: '#1d4ed8', color: '#ffffff', fontWeight: 600, border: '1px solid #1d4ed8' }} disabled={!!busy || !selected.rowVersion} onClick={() => void command('/api/v1/purchase-orders/' + selected.id + '/open', 'po-open:' + selected.id, 'Đơn mua đã được mở cho quy trình nhận hàng.')}>{busy ? 'Đang lưu...' : 'Mở đơn mua'}</button>}
         {canClose && ['PartiallyReceived', 'Received'].includes(selected.status) && <button disabled={!!busy || !selected.rowVersion} onClick={() => void command('/api/v1/purchase-orders/' + selected.id + '/close', 'po-close:' + selected.id, 'Đơn mua đã được đóng.')}>Đóng đơn mua</button>}
         {canCancel && ['Draft', 'Open'].includes(selected.status) && <button style={{ border: '1px solid #dc2626', color: '#dc2626', background: '#fff5f5', fontWeight: 600 }} disabled={!!busy || !selected.rowVersion} onClick={() => window.confirm('Xác nhận hủy đơn mua này?') && void command('/api/v1/purchase-orders/' + selected.id + '/cancel', 'po-cancel:' + selected.id, 'Đơn mua đã được hủy.')}>Hủy đơn mua</button>}
       </div>
@@ -232,17 +232,17 @@ export function PurchaseOrderFulfillmentMonitorCard(props: {
     <UiCard title="Giám sát tiến độ tiếp nhận" subtitle="Tổng hợp tiến độ giao hàng theo đơn mua, cảnh báo quá hạn và điều phối đôn đốc nhà cung cấp">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 12 }}>
         <div style={{ padding: 12, borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc' }}>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Đơn mua quá hạn dự kiến</div>
+          <div style={{ fontSize: 12, color: '#475569', marginBottom: 4 }}>Đơn mua quá hạn dự kiến</div>
           <UiBadge tone={fulfillmentSummary.overdueExpectedCount > 0 ? 'danger' : 'success'}>
             {fulfillmentSummary.overdueExpectedCount} đơn mua quá hạn
           </UiBadge>
         </div>
         <div style={{ padding: 12, borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc' }}>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Tổng SL cơ sở đặt hàng</div>
+          <div style={{ fontSize: 12, color: '#475569', marginBottom: 4 }}>Tổng SL cơ sở đặt hàng</div>
           <strong style={{ fontSize: 16, fontVariantNumeric: 'tabular-nums' }}>{fulfillmentSummary.totalBaseOrderedQuantity.toLocaleString('vi-VN')} THÙNG</strong>
         </div>
         <div style={{ padding: 12, borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc' }}>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Tỷ lệ hoàn tất (Nhận đủ / Đóng)</div>
+          <div style={{ fontSize: 12, color: '#475569', marginBottom: 4 }}>Tỷ lệ hoàn tất (Nhận đủ / Đóng)</div>
           <strong style={{ fontSize: 16, fontVariantNumeric: 'tabular-nums' }}>{fulfillmentSummary.completionRate}% ({fulfillmentSummary.receivedOrClosedCount}/{totalItemsCount})</strong>
         </div>
       </div>
@@ -257,7 +257,7 @@ export function PurchaseOrderFulfillmentMonitorCard(props: {
           type="button"
           aria-label="Gửi Yêu cầu Đôn đốc NCC & Giữ Cửa Tiếp nhận Ưu tiên"
           title="Gửi Yêu cầu Đôn đốc NCC & Giữ Cửa Tiếp nhận Ưu tiên"
-          style={{ background: '#0284c7', color: '#ffffff', fontWeight: 600, border: '1px solid #0284c7' }}
+          style={{ background: '#1d4ed8', color: '#ffffff', fontWeight: 600, border: '1px solid #1d4ed8' }}
           disabled={!!busy || creating || governanceBusy}
           onClick={() => void expediteOverdue()}
         >

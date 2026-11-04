@@ -76,9 +76,7 @@ public sealed class IdempotentCommandFilter(
         metadata.RequestFingerprint = fingerprint;
         await using var transaction = !context.Database.IsRelational()
             ? null
-            : RequiresSerializableIsolation(commandScope)
-                ? await context.Database.BeginTransactionAsync(IsolationLevel.Serializable, actionContext.HttpContext.RequestAborted)
-                : await context.Database.BeginTransactionAsync(actionContext.HttpContext.RequestAborted);
+            : await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, actionContext.HttpContext.RequestAborted);
         var tenantId = context.CurrentTenantId;
         var record = new IdempotencyRecord
         {

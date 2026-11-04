@@ -269,7 +269,7 @@ const WarehouseLocations = () => {
                 {hierarchyRows.length === 0 ? (
                   <UiEmptyState title="Kho chưa có vị trí được gắn đường dẫn cấu trúc." detail="Vị trí cũ vẫn được giữ nguyên ở bảng Chưa gắn cấu trúc bên dưới." />
                 ) : (
-                  <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                  <div tabIndex={0} role="region" aria-label="Vùng cuộn cây cấu trúc vật lý kho" style={{ maxHeight: 260, overflowY: 'auto' }}>
                     <UiTableScroll>
                       <table aria-label="Cây cấu trúc vị trí thật" className="ui-table-compact">
                         <thead><tr><th>Cấp</th><th>Mã / Tên</th><th>Đường dẫn</th><th>Loại</th><th>Trạng thái</th><th>Khả dụng</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
@@ -297,7 +297,7 @@ const WarehouseLocations = () => {
 
               {unmapped.length > 0 && (
                 <UiCard title="Vị trí chưa gắn cấu trúc">
-                  <div style={{ maxHeight: 160, overflowY: 'auto' }}>
+                  <div tabIndex={0} role="region" aria-label="Vùng cuộn vị trí chưa gắn cấu trúc" style={{ maxHeight: 160, overflowY: 'auto' }}>
                     <UiTableScroll>
                       <table aria-label="Vị trí thật chưa gắn cấu trúc" className="ui-table-compact">
                         <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Trạng thái</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>

@@ -36,7 +36,7 @@ public sealed class SqlServerApprovalIdempotencyTests
     public async Task PermissionMigrationRequiresCanonicalUnlockedBootstrapAndRollsBackFailure()
     {
         const string previous = "20260927014531_AddInboundPutawayLocationMovement";
-        var canonicalPermissionCount = AppPermissions.Catalog.Length;
+        const int canonicalPermissionCount = 142;
         var outboundCodes = new[]
         {
             "export_receipt.read",

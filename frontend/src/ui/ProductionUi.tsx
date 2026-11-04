@@ -1,17 +1,14 @@
-import { Children, cloneElement, isValidElement, useEffect, useRef, type ReactElement, type ReactNode } from 'react';
+import { Children, cloneElement, isValidElement, useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { useDialogFocusTrap } from './useDialogFocusTrap';
 
-export const UiPage = ({ children }: { children: ReactNode }) => <section className="ui-page">{children}</section>;
+export const UiPage = ({ children, className = '' }: { children: ReactNode; className?: string }) => (
+  <section className={('ui-page ' + className).trim()}>{children}</section>
+);
 
 export const UiPageHeader = ({
-  eyebrow,
-  title,
-  description,
-  actions,
+  eyebrow, title, description, actions,
 }: {
-  eyebrow?: string;
-  title: string;
-  description?: string;
-  actions?: ReactNode;
+  eyebrow?: string; title: string; description?: string; actions?: ReactNode;
 }) => (
   <header className="ui-page-header">
     <div>
@@ -25,13 +22,7 @@ export const UiPageHeader = ({
 
 export const UiToolbar = ({ children }: { children: ReactNode }) => <div className="ui-toolbar">{children}</div>;
 
-export const UiToolbarField = ({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) => {
+export const UiToolbarField = ({ label, children }: { label: string; children: ReactNode }) => {
   const enhancedChildren = Children.map(children, (child) => {
     if (isValidElement(child) && typeof child.type === 'string' && ['input', 'select', 'textarea'].includes(child.type)) {
       const props = child.props as Record<string, unknown>;
@@ -50,42 +41,40 @@ export const UiToolbarField = ({
 };
 
 export const UiCard = ({
-  title,
-  subtitle,
-  children,
+  title, subtitle, actions, children,
 }: {
-  title?: string;
-  subtitle?: string;
-  children: ReactNode;
+  title?: string; subtitle?: string; actions?: ReactNode; children: ReactNode;
 }) => (
   <section className="ui-card">
-    {title && <h2 className="ui-card-title">{title}</h2>}
-    {subtitle && <p className="ui-muted-text" style={{ marginTop: -4, marginBottom: 10, fontSize: 13 }}>{subtitle}</p>}
+    {actions ? (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
+        <div>
+          {title && <h2 className="ui-card-title" style={{ marginBottom: subtitle ? 4 : 0 }}>{title}</h2>}
+          {subtitle && <p className="ui-muted-text" style={{ margin: 0, fontSize: 13 }}>{subtitle}</p>}
+        </div>
+        <div>{actions}</div>
+      </div>
+    ) : (
+      <>
+        {title && <h2 className="ui-card-title">{title}</h2>}
+        {subtitle && <p className="ui-muted-text" style={{ marginTop: -4, marginBottom: 10, fontSize: 13 }}>{subtitle}</p>}
+      </>
+    )}
     {children}
   </section>
 );
 
 export const UiBadge = ({
-  children,
-  tone = 'neutral',
-  title,
+  children, tone = 'neutral', title,
 }: {
-  children: ReactNode;
-  tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'info';
-  title?: string;
+  children: ReactNode; tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'info'; title?: string;
 }) => (
   <span className={'ui-badge ' + (tone === 'neutral' ? '' : tone)} title={title}>
     {children}
   </span>
 );
 
-export const UiEmptyState = ({
-  title,
-  detail,
-}: {
-  title: string;
-  detail?: string;
-}) => (
+export const UiEmptyState = ({ title, detail }: { title: string; detail?: string }) => (
   <div className="ui-empty">
     <div>
       <strong>{title}</strong>
@@ -94,22 +83,122 @@ export const UiEmptyState = ({
   </div>
 );
 
-export const UiTableScroll = ({ children }: { children: ReactNode }) => <div className="ui-table-scroll">{children}</div>;
+export const UiTableScroll = ({
+  children, className = '', 'data-testid': testId,
+}: {
+  children: ReactNode; className?: string; 'data-testid'?: string;
+}) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollState, setScrollState] = useState({ hasOverflow: false, canScrollLeft: false, canScrollRight: false });
 
-export const UiMetricGrid = ({ children }: { children: ReactNode }) => <div className="ui-metric-grid">{children}</div>;
+  const measure = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const hasOverflow = el.scrollWidth - el.clientWidth > 0;
+    const canScrollLeft = hasOverflow && el.scrollLeft > 1;
+    const canScrollRight = hasOverflow && el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+    setScrollState((prev) =>
+      prev.hasOverflow === hasOverflow && prev.canScrollLeft === canScrollLeft && prev.canScrollRight === canScrollRight
+        ? prev
+        : { hasOverflow, canScrollLeft, canScrollRight },
+    );
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    measure();
+    const rafId = typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function'
+      ? window.requestAnimationFrame(() => measure())
+      : 0;
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => measure());
+      observer.observe(el);
+      if (el.firstElementChild) observer.observe(el.firstElementChild);
+    }
+    window.addEventListener('resize', measure);
+    return () => {
+      if (rafId && typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(rafId);
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [measure, children]);
+
+  const classes = [
+    'ui-table-scroll',
+    scrollState.hasOverflow ? 'ui-table-scroll--has-overflow' : '',
+    scrollState.canScrollLeft ? 'ui-table-scroll--can-scroll-left' : '',
+    scrollState.canScrollRight ? 'ui-table-scroll--can-scroll-right' : '',
+    className,
+  ].filter(Boolean).join(' ');
+
+  return (
+    <div
+      ref={scrollRef}
+      className={classes}
+      data-testid={testId}
+      data-has-overflow={scrollState.hasOverflow ? 'true' : 'false'}
+      tabIndex={scrollState.hasOverflow ? 0 : undefined}
+      role={scrollState.hasOverflow ? 'region' : undefined}
+      aria-label={scrollState.hasOverflow ? 'Vùng bảng dữ liệu có thể cuộn ngang' : undefined}
+      onScroll={measure}
+    >
+      {children}
+    </div>
+  );
+};
+
+export const UiSortTh = ({
+  label, active, direction, onToggle, align = 'left', className = '', title, style,
+}: {
+  label: ReactNode; active: boolean; direction: 'asc' | 'desc'; onToggle: () => void;
+  align?: 'left' | 'right'; className?: string; title?: string; style?: React.CSSProperties;
+}) => (
+  <th
+    aria-sort={active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+    className={('ui-sort-th ' + className).trim()}
+    style={{ textAlign: align, paddingRight: 14, whiteSpace: 'nowrap', ...style }}
+  >
+    <button
+      type="button"
+      className="ui-sort-th-btn"
+      title={title}
+      onClick={onToggle}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        whiteSpace: 'nowrap',
+        justifyContent: align === 'right' ? 'flex-end' : 'flex-start',
+      }}
+    >
+      <span>{label}</span>
+      <span aria-hidden="true" className="ui-sort-indicator">
+        {active ? (direction === 'asc' ? '↑' : '↓') : '↕'}
+      </span>
+    </button>
+  </th>
+);
+
+export const UiMetricGrid = ({ children, 'data-testid': testId }: { children: ReactNode; 'data-testid'?: string }) => (
+  <div className="ui-metric-grid" data-testid={testId}>{children}</div>
+);
 
 export const UiMetric = ({
-  value,
-  label,
+  value, label, subtitle, isZero,
 }: {
-  value: ReactNode;
-  label: string;
-}) => (
-  <article className="ui-metric">
-    <strong>{value}</strong>
-    <span>{label}</span>
-  </article>
-);
+  value: ReactNode; label: ReactNode; subtitle?: ReactNode; isZero?: boolean;
+}) => {
+  const zero = isZero ?? (value === 0 || value === '0');
+  return (
+    <article className={'ui-metric' + (zero ? ' ui-metric--zero' : '')} data-zero={zero ? 'true' : undefined}>
+      <strong className="ui-metric-value">{value}</strong>
+      {subtitle !== undefined && subtitle !== null && <small className="ui-metric-subtitle">{subtitle}</small>}
+      <span className="ui-metric-label">{label}</span>
+    </article>
+  );
+};
 
 export interface UiTabItem<T extends string = string> {
   id?: T;
@@ -197,27 +286,7 @@ export const UiDrawer = ({
   children: ReactNode;
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const initial =
-      panelRef.current?.querySelector<HTMLElement>('[data-initial-focus]') ??
-      panelRef.current?.querySelector<HTMLElement>(
-        'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])',
-      );
-    initial?.focus();
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) {
-        event.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      returnFocusTo?.focus?.();
-    };
-  }, [open, busy, onClose, returnFocusTo]);
+  useDialogFocusTrap(panelRef, { open, onEscape: onClose, escapeDisabled: busy, returnFocusTo });
 
   if (!open) return null;
 
@@ -231,6 +300,7 @@ export const UiDrawer = ({
     >
       <aside
         ref={panelRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

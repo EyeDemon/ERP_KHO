@@ -15,6 +15,9 @@ public class CreateStockTransferDto
     public int SourceWarehouseId { get; set; }
     public int DestinationWarehouseId { get; set; }
     public string? Note { get; set; }
+    public string? InternalTransferOrderNo { get; set; }
+    public string? TransporterName { get; set; }
+    public string? VehiclePlateNumber { get; set; }
     public List<StockTransferDetailInputDto> Details { get; set; } = [];
 }
 
@@ -89,6 +92,10 @@ public sealed class StockTransferDto
     public int? ReverseTransferId { get; set; }
     public string? ReverseReasonCode { get; set; }
     public string? ReverseReason { get; set; }
+    public string? InternalTransferOrderNo { get; set; }
+    public string? TransporterName { get; set; }
+    public string? VehiclePlateNumber { get; set; }
+    public string? ElectronicPxkkvcnbNo { get; set; }
     public List<StockTransferDetailDto> Details { get; set; } = [];
 }
 

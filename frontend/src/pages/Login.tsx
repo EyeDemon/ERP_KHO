@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import apiClient, { setAccessToken } from '../services/apiClient';
 import { setCurrentPermissions } from '../services/authorization';
 import { permissionError } from '../services/permissionPresentation';
+import { clearActiveImpersonationState } from '../config/portalMode';
 
 export const parseTenantLoginInput = (
   rawUsername: string,
@@ -32,10 +33,41 @@ export const parseTenantLoginInput = (
     : { username: resolvedUsername || rawUsername };
 };
 
+export const resolvePostLoginDestination = (
+  role?: unknown,
+  securityDomain?: unknown,
+): string => {
+  const normalizedRole = String(role ?? '').trim();
+  const normalizedDomain = String(securityDomain ?? '').trim().toUpperCase();
+  if (normalizedRole === 'BillingAdmin' || normalizedRole === 'PlatformBillingAdmin') {
+    return '/platform/billing';
+  }
+  if (normalizedRole === 'SupportAdmin' || normalizedRole === 'PlatformSupportAgent') {
+    return '/platform/tenants';
+  }
+  if (normalizedRole === 'SecurityAuditor' || normalizedRole === 'PlatformSecurityAuditor') {
+    return '/platform/audit-logs';
+  }
+  if (
+    normalizedRole === 'SuperAdmin' ||
+    normalizedRole === 'PlatformSuperAdmin' ||
+    normalizedRole === 'PlatformOwner' ||
+    normalizedRole === 'PlatformAdmin' ||
+    normalizedRole === 'SupportReadOnly' ||
+    normalizedRole === 'PlatformReadOnly' ||
+    normalizedDomain === 'PLATFORM'
+  ) {
+    return '/platform';
+  }
+  return '/';
+};
+
 const Login = () => {
   const [tenantCode, setTenantCode] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -60,38 +92,73 @@ const Login = () => {
     setError('');
     try {
       const parsed = parseTenantLoginInput(username, tenantCode);
-      const payload = parsed.tenantCode
+      const basePayload = parsed.tenantCode
         ? { username: parsed.username, password, tenantCode: parsed.tenantCode }
         : { username: parsed.username, password };
+      const payload = totpCode.trim()
+        ? { ...basePayload, totpCode: totpCode.trim() }
+        : basePayload;
 
       const response = await apiClient.post('/api/v1/auth/login', payload);
+      if (response.data?.requiresTwoFactor && !response.data?.token && !response.data?.accessToken) {
+        setRequiresTwoFactor(true);
+        setError(
+          typeof response.data.message === 'string' && response.data.message.trim()
+            ? response.data.message.trim()
+            : 'Tài khoản yêu cầu xác thực 2 lớp (2FA). Vui lòng nhập mã TOTP 6 chữ số hoặc mã khôi phục.',
+        );
+        return;
+      }
+
+      const resolvedToken = String(response.data.token || response.data.accessToken || '');
       const resolvedTenantId = String(response.data.tenantId ?? 1);
       const resolvedTenantCode = String(
         response.data.tenantCode || parsed.tenantCode || `TENANT-${resolvedTenantId}`,
       );
 
+      clearActiveImpersonationState();
       const previousTenantId = localStorage.getItem('tenantId');
       if (previousTenantId && previousTenantId !== resolvedTenantId) {
         sessionStorage.clear();
       }
 
-      setAccessToken(response.data.token);
+      setAccessToken(resolvedToken);
       localStorage.setItem('username', response.data.username);
       localStorage.setItem('role', response.data.role);
       localStorage.setItem('userId', String(response.data.userId));
       localStorage.setItem('tenantId', resolvedTenantId);
       localStorage.setItem('tenantCode', resolvedTenantCode);
+      if (response.data.securityDomain && typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.setItem('securityDomain', String(response.data.securityDomain));
+      }
 
       const identity = await apiClient.get('/api/v1/auth/me');
       setCurrentPermissions(identity.data.permissions || []);
-      navigate('/');
+      const resolvedDomain = identity.data?.securityDomain ?? response.data?.securityDomain;
+      const resolvedRole = identity.data?.role ?? response.data?.role;
+      if (resolvedDomain && typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.setItem('securityDomain', String(resolvedDomain));
+      }
+      const postLoginPath = resolvePostLoginDestination(resolvedRole, resolvedDomain);
+      if (postLoginPath === '/') {
+        navigate('/');
+      } else {
+        navigate(postLoginPath, { replace: true });
+      }
     } catch (err: any) {
-      if (err?.response?.status === 401) {
+      const errCode = String(err?.response?.data?.errorCode || err?.response?.data?.code || '').toUpperCase();
+      if (errCode === 'TWO_FACTOR_REQUIRED' || errCode === 'TOTP_REQUIRED' || err?.response?.data?.requiresTwoFactor) {
+        setRequiresTwoFactor(true);
+        setError(
+          err?.response?.data?.message ||
+            'Tài khoản yêu cầu xác thực 2 lớp (2FA). Vui lòng nhập mã TOTP 6 chữ số hoặc mã khôi phục.',
+        );
+      } else if (err?.response?.status === 401) {
         const msg = err?.response?.data?.message;
         setError(
           typeof msg === 'string' && msg.trim() && msg.trim() !== 'Invalid credentials.'
             ? msg.trim()
-            : 'Sai tên đăng nhập hoặc mật khẩu. Vui lòng kiểm tra và thử lại.'
+            : 'Sai tên đăng nhập hoặc mật khẩu. Vui lòng kiểm tra và thử lại.',
         );
       } else {
         setError(permissionError(err, 'Đăng nhập thất bại. Vui lòng kiểm tra thông tin và thử lại.'));
@@ -165,6 +232,23 @@ const Login = () => {
               </button>
             </div>
           </div>
+
+          {requiresTwoFactor && (
+            <label className="ui-stack" htmlFor="login-totp-code">
+              <span>Mã xác thực 2 lớp (6 chữ số hoặc mã khôi phục)</span>
+              <input
+                id="login-totp-code"
+                data-testid="input-login-totp-code"
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                type="text"
+                placeholder="Nhập mã TOTP 6 chữ số hoặc mã khôi phục"
+                value={totpCode}
+                onChange={(event) => setTotpCode(event.target.value)}
+                required
+              />
+            </label>
+          )}
 
           <button type="submit" className="ui-primary-button" disabled={submitting}>
             {submitting ? 'Đang đăng nhập...' : 'Đăng nhập'}

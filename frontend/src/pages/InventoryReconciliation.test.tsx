@@ -23,8 +23,41 @@ describe('InventoryReconciliation', () => {
     vi.clearAllMocks();
   });
 
-  it('uses read-only demo data on the Vercel demo runtime without calling APIs', async () => {
+  it('loads demo runtime reconciliation rows through apiClient while showing the read-only disclaimer', async () => {
     vi.mocked(isReadOnlyDemoRuntime).mockReturnValue(true);
+    vi.mocked(apiClient.get).mockImplementation((url: string) =>
+      Promise.resolve({
+        data: url.endsWith('/warehouses')
+          ? [{ id: 1, code: 'WH-HCM', name: 'Kho Trung tâm TP.HCM' }]
+          : url.endsWith('/outbox-messages')
+            ? []
+            : {
+                items: [
+                  {
+                    warehouseId: 1,
+                    warehouseName: 'Kho Trung tâm TP.HCM',
+                    productId: 1001,
+                    productCode: 'SKU-1001',
+                    productName: 'Sản phẩm đối chiếu mô phỏng',
+                    currentQuantity: 95,
+                    expectedQuantity: 100,
+                    difference: -5,
+                    status: 'Mismatch',
+                    importQuantity: 120,
+                    exportQuantity: 20,
+                    transferInQuantity: 0,
+                    transferOutQuantity: 0,
+                    adjustmentIncreaseQuantity: 0,
+                    adjustmentDecreaseQuantity: 0,
+                  },
+                ],
+                totalRecords: 1,
+                pageIndex: 1,
+                pageSize: 20,
+                totalPages: 1,
+              },
+      }),
+    );
     const view = render(<InventoryReconciliation />);
 
     expect(await view.findByText('SKU-1001')).toBeTruthy();
@@ -36,11 +69,8 @@ describe('InventoryReconciliation', () => {
       note.textContent?.includes('không phải kết quả từ SQL Server thật')
       && note.textContent?.includes('Work Center Inventory Control')
     )).toBe(true);
-    expect(apiClient.get).not.toHaveBeenCalled();
+    expect(apiClient.get).toHaveBeenCalledWith('/api/v1/inventory-reconciliation/warehouses');
   });
-
-
-
 
   it('discloses unsupported stock buckets in both list and detailed evidence without inventing Match', async () => {
     const statuses = ['Available', 'QcHold', 'Quarantine', 'Damaged',
@@ -228,7 +258,6 @@ describe('InventoryReconciliation', () => {
     expect(view.getByText('Độ lệch đã xác định').previousSibling?.textContent).toBe('2');
   });
 
-
   it.each([
     ['phạm vi kho không khớp', { warehouseId: 9 }],
     ['tuyên bố Khớp sai', { status: 'Match' }],
@@ -367,7 +396,6 @@ describe('InventoryReconciliation', () => {
     expect(await view.findByText('Không tìm thấy kho đối chiếu trong phạm vi được cấp quyền.')).toBeTruthy();
   });
 
-
   it('opens a read-only SQL evidence investigation without creating stock corrections',async()=>{
     vi.mocked(apiClient.get).mockImplementation((url:string)=>{
       if(url==='/api/v1/inventory-reconciliation/warehouses')return Promise.resolve({data:[
@@ -413,5 +441,4 @@ describe('InventoryReconciliation', () => {
     expect(view.queryByRole('table',{name:'Bucket tồn phục vụ điều tra chênh lệch'})).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
-
 });

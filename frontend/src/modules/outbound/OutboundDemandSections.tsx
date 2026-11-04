@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import apiClient from '../../services/apiClient';
 import { UiBadge, UiCard, UiTableScroll } from '../../ui/ProductionUi';
+import { formatWarehouseLabel } from '../../utils/warehouseLabel';
 import {
   buildDefaultDomAllocations,
   type DomSplitAllocation,
@@ -162,8 +163,8 @@ export function OutboundDomRoutingCard({
         if (Array.isArray(rawSplits) && rawSplits.length === 1) {
           const it = rawSplits[0] as Record<string, unknown>;
           const whCode = String(it.allocatedWarehouseCode ?? it.warehouseCode ?? 'WH01');
-          const whName = String(it.allocatedWarehouseName ?? it.warehouseName ?? 'Kho Chính TP.HCM');
-          const fullWh = whName.includes('—') ? whName : `${whCode} — ${whName}`;
+          const whName = String(it.allocatedWarehouseName ?? it.warehouseName ?? 'Kho Trung tâm');
+          const fullWh = formatWarehouseLabel(whName, whCode, 1);
           const allocQty = Number(it.allocatedQuantity ?? it.allocatedQty ?? totalQty);
           setDomSplitAllocations([
             {
@@ -182,8 +183,8 @@ export function OutboundDomRoutingCard({
         setDomSplitAllocations(
           rawSplits.map((it: Record<string, unknown>, idx: number) => {
             const whCode = String(it.allocatedWarehouseCode ?? it.warehouseCode ?? (idx === 0 ? 'WH01' : 'WH02'));
-            const rawWhName = String(it.allocatedWarehouseName ?? it.warehouseName ?? (idx === 0 ? 'Kho Chính TP.HCM' : 'Kho Chi Nhánh Hà Nội'));
-            const fullWh = rawWhName.includes('—') ? rawWhName : `${whCode} — ${rawWhName}`;
+            const rawWhName = String(it.allocatedWarehouseName ?? it.warehouseName ?? (idx === 0 ? 'Kho Trung tâm' : 'WH02 — Kho Chi Nhánh Hà Nội'));
+            const fullWh = formatWarehouseLabel(rawWhName, whCode, idx === 0 ? 1 : 2);
             return {
               orderCode: String(it.orderCode ?? `${resolvedOrderCode}-SUB${idx + 1}`),
               productCode: String(it.productCode ?? resolvedProductCode),
@@ -270,7 +271,7 @@ export function OutboundDomRoutingCard({
               {domSplitAllocations.map((row, idx) => (
                 <tr key={`${row.orderCode}-${row.warehouseName}-${idx}`}>
                   <td style={{ whiteSpace: 'nowrap' }}><strong>{row.orderCode}</strong> • <code>{row.productCode}</code></td>
-                  <td>{row.warehouseName}</td>
+                  <td>{formatWarehouseLabel(row.warehouseName)}</td>
                   <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}><strong>{row.allocatedQuantity}</strong></td>
                   <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{row.estimatedPackagesCount} kiện</td>
                   <td>{row.routingStrategyLabel}</td>

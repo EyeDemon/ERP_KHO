@@ -142,7 +142,7 @@
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .import-receipts .import-form-grid,
   .import-receipts .import-line,
   .import-receipts .import-detail-meta {

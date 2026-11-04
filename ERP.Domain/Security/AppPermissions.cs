@@ -2,6 +2,7 @@ namespace ERP.Domain.Security;
 
 public static class AppPermissions
 {
+    public const string ApprovalApprove = "approval.approve";
     public const string ApprovalReject = "approval.reject";
     public const string AllocationRead = "allocation.read";
     public const string AllocationCreate = "allocation.create";
@@ -49,6 +50,14 @@ public static class AppPermissions
     public const string InventoryWrite = "inventory_movement.create";
     public const string InventoryOpeningBalanceImport = "inventory_opening_balance.import";
     public const string InventoryReversalCreate = "inventory_reversal.create";
+    public const string StocktakeRead = "stocktake.read";
+    public const string StocktakeManage = "stocktake.manage";
+    public const string ReplenishmentRead = "replenishment.read";
+    public const string ReplenishmentGenerate = "replenishment.generate";
+    public const string ReplenishmentExecute = "replenishment.execute";
+    public const string ReportExport = "report.export";
+    public const string CodReconciliationManage = "cod_reconciliation.manage";
+    public const string EinvoiceIssue = "einvoice.issue";
     public const string ExportReceiptRead = "export_receipt.read";
     public const string ExportReceiptCreate = "export_receipt.create";
     public const string ExportReceiptUpdate = "export_receipt.update";
@@ -138,6 +147,28 @@ public static class AppPermissions
     public const string UsersManage = UserManage;
     public const string RolesManage = RoleManage;
 
+    public const string PlatformDashboardRead = "platform.dashboard.read";
+    public const string PlatformTenantRead = "platform.tenant.read";
+    public const string PlatformTenantProvision = "platform.tenant.provision";
+    public const string PlatformTenantSuspend = "platform.tenant.suspend";
+    public const string PlatformTenantWrite = PlatformTenantSuspend;
+    public const string PlatformBillingManage = "platform.billing.manage";
+    public const string PlatformBillingWrite = PlatformBillingManage;
+    public const string PlatformBillingReconcile = "platform.billing.reconcile";
+    public const string PlatformQuotaOverride = "platform.quota.override";
+    public const string PlatformQuotaWrite = PlatformQuotaOverride;
+    public const string PlatformIntegrationManage = "platform.integration.manage";
+    public const string PlatformAuditRead = "platform.audit.read";
+    public const string PlatformSupportImpersonate = "platform.support.impersonate";
+
+    private static string[] NormalizeBundle(params string[] codes) =>
+        codes.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+
+    public static readonly string[] PlatformOnlyPermissions = NormalizeBundle(
+        PlatformDashboardRead, PlatformTenantRead, PlatformTenantProvision, PlatformTenantSuspend,
+        PlatformBillingManage, PlatformBillingReconcile, PlatformQuotaOverride, PlatformIntegrationManage,
+        PlatformAuditRead, PlatformSupportImpersonate);
+
     public static readonly string[] All = typeof(AppPermissions)
         .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
         .Where(x => x.IsLiteral && x.FieldType == typeof(string))
@@ -146,99 +177,128 @@ public static class AppPermissions
         .Order(StringComparer.Ordinal)
         .ToArray();
 
+    public static string[] Catalog => All;
+
+    public static readonly string[] CustomerAllPermissions = All
+        .Where(code => !code.StartsWith("platform.", StringComparison.OrdinalIgnoreCase))
+        .ToArray();
+
+    public static readonly string[] CanonicalCustomerRoleNames =
+        ["Admin", "Manager", "Supervisor", "Accountant", "WarehouseStaff", "Viewer"];
+
+    public static readonly string[] PlatformRoleNames =
+        [
+            "SuperAdmin", "BillingAdmin", "SupportAdmin", "SecurityAuditor",
+            "PlatformOpsAdmin", "PlatformSuperAdmin", "PlatformOwner", "PlatformAdmin",
+            "PlatformBillingAdmin", "PlatformSupportAgent", "PlatformSecurityAuditor",
+            "SupportReadOnly", "PlatformReadOnly"
+        ];
+
+    public static bool IsPlatformRole(string? roleName)
+    {
+        if (string.IsNullOrWhiteSpace(roleName))
+        {
+            return false;
+        }
+
+        var trimmed = roleName.Trim();
+        return trimmed.StartsWith("Platform", StringComparison.OrdinalIgnoreCase)
+            || PlatformRoleNames.Contains(trimmed, StringComparer.OrdinalIgnoreCase);
+    }
+
+    public static string ResolvePermissionDescriptionVi(string code) => code switch
+    {
+        ApprovalApprove => "Phê duyệt phiếu nhập kho",
+        ApprovalReject => "Từ chối phê duyệt phiếu nhập kho",
+        _ => $"Quyền hệ thống {code}"
+    };
+
     public static readonly IReadOnlyList<PermissionMetadata> Definitions = All
-        .Select(code => new PermissionMetadata(code, $"Quyền hệ thống {code}"))
+        .Select(code => new PermissionMetadata(code, ResolvePermissionDescriptionVi(code)))
         .ToArray();
 
-    private static readonly string[] ViewerPermissions =
-    [
-        AllocationRead,
-        AsnRead,
-        BackorderRead,
-        CategoryRead,
-        DiscrepancyRead,
-        DockAppointmentRead,
-        DockRead,
-        ExportReceiptRead,
-        HandlingUnitRead,
-        InventoryAvailabilityRead,
-        InventoryLedgerRead,
-        InventoryLockRead,
-        InventoryRead,
-        InventoryTraceabilityRead,
-        LocationRead,
-        PackingRead,
-        PartnerRead,
-        PickingRead,
-        ProductRead,
-        PurchaseOrderRead,
-        PutawayRead,
-        QualityPolicyRead,
-        ReasonRead,
-        ReceiptRead,
-        ReturnRead,
-        SalesOrderRead,
-        ShipmentRead,
-        ToleranceRead,
-        UomRead,
-        WarehouseRead,
-        YardRead
-    ];
-
-    private static readonly string[] WarehouseStaffPermissions =
-    [
-        ..ViewerPermissions,
-        AsnCreate,
-        AsnReceive,
-        AsnUpdate,
-        BarcodeManage,
-        DiscrepancyCreate,
-        DiscrepancySubmit,
-        DockAppointmentManage,
-        ExportReceiptCreate,
-        ExportReceiptDispatch,
-        ExportReceiptUpdate,
-        HandlingUnitCreate,
-        HandlingUnitMerge,
-        HandlingUnitModify,
-        HandlingUnitRepack,
-        HandlingUnitSplit,
-        InventoryMovementCreate,
-        LoadingExecute,
-        PackingExecute,
-        PickingExecute,
-        PickingShortPick,
-        PutawayExecute,
-        QualityComplete,
-        QualityExecute,
-        ReceiptComplete,
-        ReceiptCreate,
-        ReceiptReceive,
-        ReceiptUpdate,
-        ReturnCreate,
-        ReturnReceive,
-        ReturnInspect,
-        ReturnDisposition,
-        ShipmentConfirmDelivery,
-        ShipmentLoad,
-        ShipmentStage,
-        ShipmentUpdate,
-        YardAssignDock,
-        YardCheckIn,
-        YardCheckout
-    ];
-
-    private static readonly string[] ManagerPermissions = All
-        .Where(code => !string.Equals(code, PermissionAssign, StringComparison.OrdinalIgnoreCase)
-                    && !string.Equals(code, RoleManage, StringComparison.OrdinalIgnoreCase)
-                    && !string.Equals(code, UserManage, StringComparison.OrdinalIgnoreCase))
+    public static readonly IReadOnlyList<PermissionMetadata> CustomerDefinitions = CustomerAllPermissions
+        .Select(code => new PermissionMetadata(code, ResolvePermissionDescriptionVi(code)))
         .ToArray();
 
-    private static readonly string[] AccountantPermissions =
-    [
-        ..ViewerPermissions,
-        InventoryCostRead
-    ];
+    private static readonly string[] BillingAdminPermissions = NormalizeBundle(
+        PlatformDashboardRead, PlatformTenantRead, PlatformBillingManage,
+        PlatformBillingReconcile, PlatformQuotaOverride, PlatformAuditRead, PermissionRead);
+
+    private static readonly string[] SupportAdminPermissions = NormalizeBundle(
+        PlatformDashboardRead, PlatformTenantRead, PlatformAuditRead,
+        PlatformSupportImpersonate, PermissionRead);
+
+    private static readonly string[] SecurityAuditorPermissions = NormalizeBundle(
+        PlatformDashboardRead, PlatformTenantRead, PlatformAuditRead, PermissionRead);
+
+    private static readonly string[] PlatformOpsAdminPermissions = NormalizeBundle(
+        PlatformDashboardRead, PlatformTenantRead, PlatformTenantProvision, PlatformTenantSuspend,
+        PlatformIntegrationManage, PlatformAuditRead, PlatformSupportImpersonate,
+        PermissionRead, RoleRead, UserRead);
+
+    // 18 distinct Customer WMS read-only codes (0 mutations, 0 cost, 0 platform.*)
+    private static readonly string[] ViewerPermissions = NormalizeBundle(
+        InventoryRead, InventoryAvailabilityRead, InventoryLedgerRead, InventoryTraceabilityRead, StocktakeRead,
+        ProductRead, CategoryRead, UomRead, WarehouseRead, LocationRead, PartnerRead,
+        PurchaseOrderRead, AsnRead, ReceiptRead, SalesOrderRead, BackorderRead, ExportReceiptRead, ShipmentRead);
+
+    // 36 distinct Customer WMS floor codes (14 read + 22 floor execution; 0 cost, 0 opening_balance, 0 platform.*)
+    private static readonly string[] WarehouseStaffPermissions = NormalizeBundle(
+        InventoryRead, LocationRead, ProductRead, UomRead, WarehouseRead, ReceiptRead, AsnRead,
+        PutawayRead, PickingRead, PackingRead, HandlingUnitRead, ShipmentRead, ReturnRead, DockAppointmentRead,
+        AsnReceive, ReceiptReceive, ReceiptComplete, PutawayExecute, PickingExecute, PickingShortPick,
+        PackingExecute, HandlingUnitCreate, HandlingUnitModify, HandlingUnitSplit, HandlingUnitMerge, HandlingUnitRepack,
+        InventoryMovementCreate, ReplenishmentRead, ReplenishmentExecute, ShipmentStage, ShipmentLoad, LoadingExecute,
+        YardCheckIn, YardCheckout, ReturnReceive, DiscrepancyCreate);
+
+    // 54 distinct Customer WMS floor supervision & QC codes (36 staff + 18 supervisory; 0 cost, 0 opening_balance, 0 platform.*)
+    private static readonly string[] SupervisorPermissions = NormalizeBundle(
+        [
+            ..WarehouseStaffPermissions,
+            QualityExecute, QualityComplete,
+            DiscrepancyRead, DiscrepancySubmit, DiscrepancyResolve,
+            StocktakeRead, StocktakeManage, ReplenishmentGenerate,
+            InventoryLockRead, InventoryLockManage, InventoryStatusChangeCreate,
+            PickingAssign, PickingOverride, PackingReopen, PutawayAssign,
+            ReturnInspect, ReturnDisposition, YardAssignDock
+        ]);
+
+    // 42 distinct Customer WMS finance & audit codes (36 non-platform read + cost/export/COD/eInvoice/partner; 0 floor exec, 0 platform.*)
+    private static readonly string[] AccountantPermissions = NormalizeBundle(
+        AllocationRead, AsnRead, BackorderRead, CategoryRead, DiscrepancyRead, DockAppointmentRead, DockRead,
+        ExportReceiptRead, HandlingUnitRead, InventoryAvailabilityRead, InventoryLedgerRead, InventoryLockRead,
+        InventoryRead, InventoryTraceabilityRead, LocationRead, PackingRead, PartnerRead, PickingRead,
+        ProductRead, PurchaseOrderRead, PutawayRead, QualityPolicyRead, ReasonRead, ReceiptRead,
+        ReplenishmentRead, ReturnRead, SalesOrderRead, ShipmentRead, StocktakeRead, ToleranceRead,
+        UomRead, WarehouseRead, YardRead, PermissionRead, RoleRead, UserRead,
+        InventoryCostRead, ReportExport, CodReconciliationManage, EinvoiceIssue, PartnerCreate, PartnerUpdate);
+
+    // 98 distinct Customer WMS operational & approval codes (excludes opening_balance.import, IAM writes, and platform.*)
+    private static readonly string[] ManagerPermissions = NormalizeBundle(
+        ApprovalApprove, ApprovalReject,
+        InventoryRead, InventoryCostRead, InventoryAvailabilityRead, InventoryLedgerRead, InventoryTraceabilityRead,
+        InventoryStatusChangeCreate, InventoryLockRead, InventoryLockManage, InventoryMovementCreate, InventoryReversalCreate,
+        StocktakeRead, StocktakeManage, ReplenishmentRead, ReplenishmentGenerate, ReplenishmentExecute, ReportExport,
+        AllocationRead, AllocationCreate, AllocationRelease, AllocationReallocate, BackorderRead, BackorderManage,
+        PurchaseOrderRead, PurchaseOrderRelease,
+        AsnRead, AsnCreate, AsnUpdate, AsnConfirm, AsnReceive,
+        ReceiptRead, ReceiptCreate, ReceiptUpdate, ReceiptCancel, ReceiptReceive, ReceiptComplete, ReceiptPost,
+        PutawayRead, PutawayAssign, PutawayExecute, PutawayCancel,
+        QualityExecute, QualityComplete, QualityApprove,
+        DiscrepancyRead, DiscrepancyApprove, DiscrepancyReject, DiscrepancyResolve,
+        SalesOrderRead, SalesOrderHold, SalesOrderRelease,
+        PickingRead, PickingAssign, PickingShortPick, PickingOverride,
+        PackingRead, PackingExecute, PackingReopen,
+        HandlingUnitRead, HandlingUnitCreate,
+        ExportReceiptRead, ExportReceiptCreate, ExportReceiptUpdate, ExportReceiptApprove,
+        ExportReceiptDispatch, ExportReceiptCancel, ExportReceiptReprintAwb,
+        ShipmentRead, ShipmentUpdate, ShipmentStage, ShipmentLoad, ShipmentDispatch, ShipmentConfirmDelivery,
+        DockRead, DockAppointmentRead, DockAppointmentManage, YardRead,
+        ReturnRead, ReturnCreate, ReturnReceive, ReturnInspect, ReturnDisposition, ReturnPost,
+        ProductRead, ProductCreate, ProductUpdate, ProductDeactivate, CategoryRead, UomRead,
+        PartnerRead, PartnerCreate, PartnerUpdate, LocationRead, LocationManage, WarehouseRead, WarehouseManage,
+        PermissionRead);
 
     public static IReadOnlyList<string> GetDefaultPermissionsForRole(string? roleName)
     {
@@ -249,8 +309,14 @@ public static class AppPermissions
 
         return roleName.Trim() switch
         {
-            "Admin" => All,
+            "SuperAdmin" or "PlatformSuperAdmin" or "PlatformOwner" or "PlatformAdmin" => All,
+            "BillingAdmin" or "PlatformBillingAdmin" => BillingAdminPermissions,
+            "SupportAdmin" or "PlatformSupportAgent" => SupportAdminPermissions,
+            "SecurityAuditor" or "PlatformSecurityAuditor" or "SupportReadOnly" or "PlatformReadOnly" => SecurityAuditorPermissions,
+            "PlatformOpsAdmin" => PlatformOpsAdminPermissions,
+            "Admin" => CustomerAllPermissions,
             "Manager" or "WarehouseManager" => ManagerPermissions,
+            "Supervisor" or "WarehouseSupervisor" => SupervisorPermissions,
             "Accountant" => AccountantPermissions,
             "WarehouseStaff" => WarehouseStaffPermissions,
             "Viewer" or "SalesStaff" or "ProcurementStaff" => ViewerPermissions,

@@ -641,8 +641,9 @@ public class Wave01P0HardeningTests
             actorUserId: 1,
             cancellationToken: default);
         var rawJson = JsonSerializer.Serialize(invoicePayload);
-        rawJson.Should().NotContain("98418102005");
-        rawJson.Should().NotContain("HUYNH PHI VAN");
+        rawJson.Should().NotContain("NGUYEN THUY TRANG");
+        rawJson.Should().Contain("98418102005");
+        rawJson.Should().Contain("HUYNH PHI VAN");
     }
 
     [Fact]

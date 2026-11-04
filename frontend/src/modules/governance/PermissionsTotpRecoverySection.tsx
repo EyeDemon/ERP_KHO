@@ -215,9 +215,9 @@ export function PermissionsTotpRecoverySection({
                   borderRadius: 6,
                   fontSize: 12.5,
                   fontWeight: 700,
-                  background: recoverySavedConfirmed ? '#0284c7' : '#cbd5e1',
+                  background: recoverySavedConfirmed ? '#1d4ed8' : '#cbd5e1',
                   color: recoverySavedConfirmed ? '#ffffff' : '#475569',
-                  border: `1px solid ${recoverySavedConfirmed ? '#0369a1' : '#94a3b8'}`,
+                  border: `1px solid ${recoverySavedConfirmed ? '#1e40af' : '#94a3b8'}`,
                   cursor: recoverySavedConfirmed && !totpBusy ? 'pointer' : 'not-allowed',
                 }}
               >
@@ -274,8 +274,8 @@ export function PermissionsTotpRecoverySection({
                   fontSize: 12.5,
                   fontWeight: 600,
                   background: '#ffffff',
-                  color: '#0284c7',
-                  border: '1.5px solid #0284c7',
+                  color: '#1d4ed8',
+                  border: '1.5px solid #1d4ed8',
                   cursor: totpBusy ? 'not-allowed' : 'pointer',
                 }}
               >

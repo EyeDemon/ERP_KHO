@@ -19,7 +19,7 @@ describe('SaasBilling Page', () => {
 
   afterEach(cleanup);
 
-  it('renders unified 4-level quota thresholds, ceiling upgrade alert, TPBank HUYNH PHI VAN payment panel, alphanumeric transfer content, and invoice history', async () => {
+  it('renders IDLE_HIDDEN VietQR CTA on initial mount, opens TPBank HUYNH PHI VAN payment panel on click, and closes cleanly', async () => {
     vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
       if (url === '/api/v1/permissions/saas/subscription-billing') {
         return {
@@ -59,7 +59,8 @@ describe('SaasBilling Page', () => {
       throw new Error(`Unexpected GET ${url}`);
     });
 
-    vi.mocked(apiClient.post).mockImplementation(async (url: string, body?: any) => {
+    vi.mocked(apiClient.post).mockImplementation(async (url: string, rawBody?: unknown) => {
+      const body = (rawBody ?? {}) as Record<string, unknown>;
       if (url === '/api/v1/permissions/saas/subscription-billing/create-vietqr-invoice') {
         return {
           data: {
@@ -71,8 +72,8 @@ describe('SaasBilling Page', () => {
             bankBin: '970423',
             accountNo: '98418102005',
             accountName: 'HUYNH PHI VAN',
-            qrPayload: `00020101021238550010A000000727012500069704230111984181020050208QRIBFTTA5303704540714900005802VN62210817INVVQR202610309996304ABCD`,
-            transferContent: `ERPKHO INVVQR20261030999`,
+            qrPayload: '00020101021238550010A000000727012500069704230111984181020050208QRIBFTTA5303704540714900005802VN62210817INVVQR202610309996304ABCD',
+            transferContent: 'ERPKHO INVVQR20261030999',
             expiresAtUtc: '2026-10-30T10:30:00Z',
           },
         } as never;
@@ -87,15 +88,20 @@ describe('SaasBilling Page', () => {
     );
 
     expect(await screen.findByText('3 / 3 kho')).toBeTruthy();
-    expect(screen.getByText('18 / 20 người dùng')).toBeTruthy();
+    expect(screen.getByText('18 / 20 tài khoản nhân sự')).toBeTruthy();
     expect(screen.getByText('420 / 5.000 mặt hàng')).toBeTruthy();
     expect(screen.getByText('Mức sử dụng trong chu kỳ')).toBeTruthy();
     expect(screen.getByText('Bảng gói cước thuê bao SaaS & thanh toán gia hạn VietQR')).toBeTruthy();
-    expect(screen.getByTestId('vietqr-bank-display').textContent).toBe('TPBank — NH TMCP Tiên Phong (BIN: 970423)');
-    expect(screen.getByTestId('vietqr-account-number').textContent).toBe('98418102005');
-    expect(screen.getByTestId('vietqr-account-holder').textContent).toBe('HUYNH PHI VAN');
     expect(screen.getByText('MST: 0318889999')).toBeTruthy();
     expect(screen.getByText('Danh mục mặt hàng')).toBeTruthy();
+
+    // FE-01 / OWN-DEC-VIETQR-ON-DEMAND-ONLY: Initial mount MUST hide QR box & countdown timer
+    expect(screen.queryByTestId('vietqr-payment-panel')).toBeNull();
+    expect(screen.queryByTestId('vietqr-qr-box')).toBeNull();
+    expect(screen.queryByTestId('vietqr-countdown-timer')).toBeNull();
+    expect(/\b1[45]:\d{2}\b/.test(view.container.textContent ?? '')).toBe(false);
+    const generateBtn = screen.getByTestId('btn-generate-vietqr');
+    expect(generateBtn.textContent).toContain('Tạo mã QR thanh toán (1.490.000 ₫)');
 
     // Edit VAT tax code inline
     fireEvent.click(screen.getByTestId('btn-edit-tax-code'));
@@ -103,7 +109,7 @@ describe('SaasBilling Page', () => {
     fireEvent.click(screen.getByTestId('btn-save-tax-code'));
     expect(screen.getByText('MST: 0319998888')).toBeTruthy();
 
-    // Exact 100% semantic label (`Đã đạt hạn mức (100%)`) + Nâng cấp ngay → button at footer + Enterprise recommendation badge
+    // Quota alerts & progress bar assertions
     expect(screen.getByTestId('quota-ceiling-alert-warehouses').textContent).toContain('Đã đạt hạn mức (100%)');
     expect(screen.getByTestId('btn-upgrade-now-warehouses').textContent).toContain('Nâng cấp ngay →');
     expect(screen.getByTestId('plan-recommendation-badge-ENTERPRISE').textContent).toContain('★ Khuyên dùng khi cần mở rộng thêm kho');
@@ -112,36 +118,41 @@ describe('SaasBilling Page', () => {
     expect(screen.getByTestId('saas-quota-tier-legend').textContent).toContain('Đã đạt hạn mức (100%)');
     expect(screen.getByTestId('saas-quota-tier-legend').textContent).toContain('Mức 2: Đang vượt (101–115%)');
     expect(screen.getByTestId('saas-quota-tier-legend').textContent).toContain('Mức 3: Chế độ chỉ đọc (>115%)');
-    expect(screen.getByTestId('vietqr-billing-period').textContent).toContain('Kỳ cước thanh toán:');
-    expect(screen.getByTestId('vietqr-auto-polling-indicator').textContent).toContain('Đang tự động chờ xác nhận từ ngân hàng');
-    expect(screen.getByTestId('vietqr-edge-case-rules').tagName.toLowerCase()).toBe('details');
-    expect(screen.getByTestId('vietqr-edge-case-rules').textContent).toContain('Chuyển sai số tiền hoặc quá hạn? Xem cách xử lý');
 
-    // Progress bars have role="progressbar", aria-valuemax="115", and both 80% and 100% markers
     const orderProgressBar = screen.getByTestId('quota-card-orders').querySelector('[role="progressbar"]');
     expect(orderProgressBar).toBeTruthy();
     expect(orderProgressBar?.getAttribute('aria-valuemax')).toBe('115');
     expect(orderProgressBar?.querySelector('[title="Mốc cảnh báo sớm 80%"]')).toBeTruthy();
     expect(orderProgressBar?.querySelector('[title="Mốc trần hạn mức 100%"]')).toBeTruthy();
 
-    // FREE_TRIAL card hidden when active plan is GROWTH; STARTER downgrade locked because usage (3 kho & 6.420 đơn/tháng) exceeds STARTER limits (1 kho & 1.500 đơn)
     expect(screen.queryByTestId('plan-card-FREE_TRIAL')).toBeNull();
     expect(screen.getByTestId('plan-card-STARTER')).toBeTruthy();
     expect(screen.getByTestId('plan-card-GROWTH')).toBeTruthy();
     expect(screen.getByTestId('plan-card-ENTERPRISE')).toBeTruthy();
     expect(screen.getByTestId('btn-select-plan-GROWTH').textContent).toBe('✓ Gói dịch vụ đang áp dụng');
-    expect(screen.getByTestId('btn-select-plan-STARTER').textContent).toBe('Không khả dụng để hạ cấp');
+    expect(screen.getByTestId('btn-select-plan-STARTER').textContent).toBe('Chưa đủ điều kiện hạ gói');
     expect((screen.getByTestId('btn-select-plan-STARTER') as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByTestId('plan-downgrade-warning-STARTER').textContent).toBe(
       'Không khả dụng để hạ cấp: Bạn đang dùng 3 kho & 6.420 đơn/tháng (vượt giới hạn 1 kho & 1.500 đơn của gói Khởi đầu).',
     );
     expect(screen.getByTestId('btn-select-plan-ENTERPRISE').textContent).toBe('Chọn gói Doanh nghiệp');
 
-    // Initial load immediately syncs UNPAID invoice from recentInvoices (contiguous uppercase alphanumeric without space or hyphen) + countdown timer
+    // Open VietQR panel on demand
+    fireEvent.click(generateBtn);
+    expect(await screen.findByTestId('vietqr-payment-panel')).toBeTruthy();
+    expect(screen.getByTestId('vietqr-bank-display').textContent).toBe('TPBank — NH TMCP Tiên Phong (BIN: 970423)');
+    expect(screen.getByTestId('vietqr-account-number').textContent).toBe('98418102005');
+    expect(screen.getByTestId('vietqr-account-holder').textContent).toBe('HUYNH PHI VAN');
+    expect(screen.getByTestId('vietqr-amount-display').textContent).toContain('1.490.000 ₫');
+    expect(screen.getByTestId('vietqr-vat-breakdown').textContent).toBe(
+      'Trước thuế: 1.354.545 ₫ + Thuế GTGT 10%: 135.455 ₫',
+    );
+    expect(screen.getByTestId('vietqr-billing-period').textContent).toContain('Kỳ cước thanh toán:');
+    expect(screen.getByTestId('vietqr-auto-polling-indicator').textContent).toContain('Đang tự động chờ xác nhận từ ngân hàng');
+    expect(screen.getByTestId('vietqr-edge-case-rules').tagName.toLowerCase()).toBe('details');
+    expect(screen.getByTestId('vietqr-edge-case-rules').textContent).toContain('Chuyển sai số tiền hoặc quá hạn? Xem cách xử lý');
     expect(screen.getByTestId('vietqr-transfer-content').textContent).toBe('ERPKHOINVVQR20261030999');
     expect(screen.getByTestId('vietqr-countdown-timer').textContent).toContain('Hết hạn sau:');
-
-    // QA webhook simulator button hidden in production / default env
     expect(screen.queryByTestId('btn-confirm-vietqr-webhook')).toBeNull();
 
     expect(view.container.textContent).not.toContain('(GROWTH)');
@@ -150,7 +161,6 @@ describe('SaasBilling Page', () => {
     expect(view.container.textContent).not.toContain('(SKU)');
     expect(screen.getByTestId('saas-quota-gauge-grid').textContent).toContain('6.420 / 10.000');
 
-    // Copy buttons present
     expect(screen.getByTestId('btn-copy-stk').textContent).toContain('Sao chép STK');
     expect(screen.getByTestId('btn-copy-amount').textContent).toContain('Sao chép số tiền');
     expect(screen.getByTestId('btn-copy-transfer-content').textContent).toContain('Sao chép nội dung');
@@ -174,18 +184,24 @@ describe('SaasBilling Page', () => {
     expect(screen.getByTestId('vietqr-inline-status-notice')).toBeTruthy();
     expect(screen.getByTestId('saas-invoice-history-table').textContent).toContain('INV-VQR-20261030-999');
     expect(screen.getByTestId('saas-invoice-history-table').textContent).toContain('ERPKHOINVVQR20261030999');
-    expect(screen.getByTestId('saas-invoice-history-table').textContent).toMatch(/\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}/);
+    expect(screen.getByTestId('saas-invoice-history-table').textContent).toContain('Ngày phát hành');
+    expect(screen.getByTestId('saas-invoice-history-table').textContent).toContain('Thời điểm thanh toán');
+    expect(screen.getByTestId('saas-invoice-history-table').textContent).toContain('Chưa thanh toán');
     expect(screen.getByTestId('saas-invoice-history-table').innerHTML).toContain('• Hạn:');
     expect(screen.getByTestId('checkbox-auto-refresh-vietqr')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('btn-check-vietqr-payment-status'));
 
     await waitFor(() => {
-      expect(apiClient.get).toHaveBeenCalledWith(
-        '/api/v1/permissions/saas/subscription-billing',
-      );
+      expect(apiClient.get).toHaveBeenCalledWith('/api/v1/permissions/saas/subscription-billing');
     });
     expect(await screen.findByText(/Chưa ghi nhận giao dịch chuyển khoản cho hóa đơn/i)).toBeTruthy();
+
+    // Closing the VietQR panel unmounts QR box & countdown cleanly back to IDLE_HIDDEN
+    fireEvent.click(screen.getByTestId('btn-close-vietqr-panel'));
+    expect(screen.queryByTestId('vietqr-payment-panel')).toBeNull();
+    expect(screen.queryByTestId('vietqr-qr-box')).toBeNull();
+    expect(screen.getByTestId('btn-generate-vietqr')).toBeTruthy();
   });
 
   it('displays server error banner honestly when SaaS billing API fails', async () => {
@@ -212,7 +228,7 @@ describe('SaasBilling Page', () => {
     expect(alert.textContent).toContain('corr-saas-500');
   });
 
-  it('renders EXPIRED (00:00) neutral badge, overlay with Tạo mã mới button, and PAID confirmation state hiding QR', async () => {
+  it('renders EXPIRED (00:00) neutral badge, overlay with Tạo mã mới button, and PAID confirmation state hiding QR and generate button', async () => {
     let invoiceStatus = 'EXPIRED';
     vi.mocked(apiClient.get).mockImplementation(async () => ({
       data: {
@@ -257,9 +273,10 @@ describe('SaasBilling Page', () => {
     );
 
     expect(await screen.findByText('2 / 3 kho')).toBeTruthy();
+    expect(screen.queryByTestId('vietqr-payment-panel')).toBeNull();
 
-    // Trigger EXPIRED invoice returned by create-vietqr-invoice
-    fireEvent.click(screen.getByTestId('btn-create-vietqr-invoice'));
+    // Open panel via on-demand CTA, which automatically creates/loads EXPIRED invoice
+    fireEvent.click(screen.getByTestId('btn-generate-vietqr'));
     expect(await screen.findByTestId('vietqr-expired-overlay')).toBeTruthy();
     expect(screen.getByTestId('vietqr-invoice-status-badge').textContent).toBe('Đã hết hạn (00:00)');
     expect(screen.queryByTestId('vietqr-countdown-timer')).toBeNull();
@@ -269,13 +286,67 @@ describe('SaasBilling Page', () => {
       'Nếu bạn đã chuyển khoản trước khi mã hết hạn, khoản tiền vẫn được hệ thống ghi nhận an toàn.',
     );
 
-    // Transition to PAID when checking payment status
+    // Transition to PAID when checking payment status — collapses entire VietQR panel & hides generate button
     invoiceStatus = 'PAID';
     fireEvent.click(screen.getByTestId('btn-check-vietqr-payment-status'));
     expect(await screen.findByTestId('vietqr-paid-confirmation-banner')).toBeTruthy();
-    expect(screen.getByTestId('vietqr-paid-confirmation-banner').textContent).toContain(
-      '✓ Đã nhận thanh toán & kích hoạt thành công Gói Tăng trưởng',
+    expect(screen.getByTestId('saas-billing-cycle-paid-banner').textContent).toContain(
+      'Hóa đơn kỳ 11/2026 (INV-VQR-EXPIRED-001) đã tất toán đầy đủ (1.490.000 đ) • Xác nhận lúc:',
     );
+    expect(screen.getByTestId('btn-download-paid-current-invoice').textContent).toContain('Tải hóa đơn');
+    expect(screen.queryByTestId('btn-generate-vietqr')).toBeNull();
+    expect(screen.queryByTestId('vietqr-payment-panel')).toBeNull();
     expect(screen.queryByTestId('vietqr-qr-box')).toBeNull();
+    expect(screen.queryByTestId('vietqr-bank-display')).toBeNull();
+    expect(screen.queryByTestId('vietqr-auto-polling-indicator')).toBeNull();
+    expect(screen.queryByTestId('btn-check-vietqr-payment-status')).toBeNull();
+    expect(screen.queryByTestId('btn-create-vietqr-invoice')).toBeNull();
+    expect(screen.queryByTestId('checkbox-auto-refresh-vietqr')).toBeNull();
+    expect(screen.queryByTestId('vietqr-edge-case-rules')).toBeNull();
+  });
+
+  it('sanitizes internal admin actor names from customer invoice history and shows suspended unlock guidance', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: {
+        planCode: 'GROWTH',
+        subscriptionStatus: 'SUSPENDED',
+        activeWarehouses: 1,
+        maxWarehouses: 3,
+        activeUsers: 6,
+        maxUsers: 20,
+        activeProducts: 120,
+        maxProducts: 20000,
+        currentMonthOrderCount: 6420,
+        monthlyOrderQuota: 10000,
+        recentInvoices: [
+          {
+            invoiceCode: 'INV-SAAS-202610-001',
+            planCode: 'GROWTH',
+            billingPeriod: '10/2026',
+            amountVnd: 1490000,
+            status: 'PAID',
+            settlementSummaryVi: 'Xác nhận thủ công bởi qa_admin (Mã UNC: FT2628890123)',
+            transferContent: 'ERPKHOINVSAAS202610001',
+            createdAtUtc: '2026-10-01T08:00:00Z',
+            paidAtUtc: '2026-10-03T09:15:00Z',
+          },
+        ],
+      },
+    } as never);
+
+    const view = render(
+      <MemoryRouter>
+        <SaasBilling />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByTestId('saas-billing-suspended-unlock-banner')).toBeTruthy();
+    const historyText = screen.getByTestId('saas-invoice-history-table').textContent ?? '';
+    expect(historyText).toContain('01/10/2026');
+    expect(historyText).toContain('05/10/2026');
+    expect(historyText).toContain('03/10/2026 16:15');
+    expect(historyText).toContain('Đã xác nhận thanh toán (Mã giao dịch: FT2627690123)');
+    expect(view.container.textContent).not.toContain('qa_admin');
+    expect(view.container.textContent).not.toContain('Mã UNC');
   });
 });

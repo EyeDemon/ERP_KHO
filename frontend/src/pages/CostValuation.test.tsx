@@ -85,6 +85,9 @@ describe('CostValuation Page', () => {
     expect(screen.getByText('24.500.000 đ')).toBeTruthy();
     expect(screen.getByText('28,8%')).toBeTruthy();
     expect(screen.getByText('QA-E2E-001')).toBeTruthy();
+    expect(screen.getByText('Kho Trung tâm (WH01)')).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Đơn vị tính' })).toBeTruthy();
+    expect(view.container.textContent).not.toContain('ĐVT');
     expect(screen.getByText('120.000 đ')).toBeTruthy();
     expect(screen.getByText('12.000.000 đ')).toBeTruthy();
 
@@ -210,10 +213,12 @@ describe('CostValuation Page', () => {
 
     expect(
       await screen.findByText(
-        /Báo cáo Lợi nhuận Ròng Chủ Shop Sau Khấu Trừ Thuế Sàn TMĐT NĐ 70\/2025 & Phí Hạ Tầng/i,
+        /Báo cáo Đối soát Lợi nhuận Gộp, Phí Vận chuyển\/Sàn & Khấu trừ Thuế Sàn TMĐT/i,
       ),
     ).toBeTruthy();
-    expect(screen.getByText('Thuế Sàn TMĐT Khấu trừ Nộp thay 1,5% (1% GTGT + 0,5% TNCN)')).toBeTruthy();
+    expect(
+      screen.getByText('Khấu trừ thuế Sàn TMĐT 1,5% (1% GTGT + 0,5% TNCN — Cấu hình chính sách thuế TMĐT)'),
+    ).toBeTruthy();
     expect(screen.getByText('Phí Hạ tầng Đơn hàng Cố định (3.000đ/đơn)')).toBeTruthy();
     expect(screen.getByText('Lợi nhuận Ròng Sau Thuế Sàn & Phí')).toBeTruthy();
     expect(screen.getByText('30.000 đ')).toBeTruthy();
@@ -221,32 +226,74 @@ describe('CostValuation Page', () => {
     expect(screen.getByText('1.015.000 đ')).toBeTruthy();
   });
 
-  it('auto-activates MISA AMIS mode banner when routed via /misa-exports and supports switching tabs (UI-FND-011)', async () => {
+  it('separates /misa-exports and /cost-valuation into dedicated single-function workbenches without dual-purpose toggle tabs (WAVE-12)', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({
       data: {
-        grossRevenue: 1500000,
-        movingAverageCogs: 900000,
-        netPocketProfit: 600000,
-        netMarginPct: 40,
+        grossRevenue: 54000000,
+        movingAverageCogs: 8350000,
+        netPocketProfit: 43505000,
+        netMarginPct: 80.56,
+        withheldTaxTotalAmount: 810000,
+        fixedInfrastructureFeeTotal: 6000,
+        netProfitAfterWithheldTax: 42689000,
         costHiddenByRbac: false,
         skuValuations: [],
       },
     } as never);
 
-    render(
+    const misaView = render(
       <MemoryRouter initialEntries={['/misa-exports']}>
         <CostValuation />
       </MemoryRouter>,
     );
 
-    expect(await screen.findByTestId('cost-valuation-mode-tabs')).toBeTruthy();
-    expect(screen.getByTestId('misa-export-active-banner').textContent).toContain(
-      'Đang mở phân hệ Kết xuất MISA AMIS (/misa-exports)',
-    );
-    expect(screen.getByTestId('tab-cost-valuation-misa').getAttribute('aria-selected')).toBe('true');
+    expect(await misaView.findByTestId('misa-export-active-banner')).toBeTruthy();
+    expect(misaView.getByTestId('misa-export-active-banner').textContent).not.toContain('(/misa-exports)');
+    expect(misaView.queryByTestId('cost-valuation-mode-tabs')).toBeNull();
+    expect(misaView.queryByTestId('wac-profit-reconciliation-grid')).toBeNull();
+    expect(misaView.getByTestId('btn-export-misa-xlsx')).toBeTruthy();
+    cleanup();
 
-    fireEvent.click(screen.getByTestId('tab-cost-valuation-all'));
-    expect(screen.getByTestId('tab-cost-valuation-all').getAttribute('aria-selected')).toBe('true');
-    expect(screen.queryByTestId('misa-export-active-banner')).toBeNull();
+    const wacView = render(
+      <MemoryRouter initialEntries={['/cost-valuation']}>
+        <CostValuation />
+      </MemoryRouter>,
+    );
+    expect(await wacView.findByTestId('wac-profit-reconciliation-grid')).toBeTruthy();
+    expect(wacView.queryByTestId('btn-export-misa-xlsx')).toBeNull();
+    expect(wacView.getByText('45.650.000 đ')).toBeTruthy();
+    expect(wacView.getByText('84,54%')).toBeTruthy();
+    expect(wacView.getByText('42.689.000 đ')).toBeTruthy();
+    expect(wacView.queryByText('QA-SERIAL-001')).toBeNull();
+  });
+
+  it('renders pure WAC inventory KPI grid from live API data without hardcoded fallback rows (FE-FIX-4)', async () => {
+    const uaSpy = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 Chrome/130.0.0.0');
+    vi.mocked(apiClient.get).mockResolvedValue({
+      data: {
+        grossRevenue: 54000000,
+        movingAverageCogs: 8350000,
+        costHiddenByRbac: false,
+        skuValuations: [
+          { productId: 101, productCode: 'QA-SERIAL-001', productName: 'Thiết bị định vị GPS Hợp chuẩn', warehouseName: 'Kho Trung tâm WH01', unitName: 'Cái', onHandQty: 120, availableQty: 120, movingAverageUnitCost: 450000, totalInventoryValue: 54000000 },
+          { productId: 102, productCode: 'QA-LOT-002', productName: 'Bộ Kit Quà tặng Doanh nghiệp', warehouseName: 'Kho Trung tâm WH01', unitName: 'Bộ', onHandQty: 20, availableQty: 20, movingAverageUnitCost: 500000, totalInventoryValue: 10000000 },
+          { productId: 103, productCode: 'QA-LOT-002-BOX', productName: 'Vỏ hộp quà và Phụ kiện đóng gói', warehouseName: 'Kho Trung tâm WH01', unitName: 'Cái', onHandQty: 250, availableQty: 250, movingAverageUnitCost: 50000, totalInventoryValue: 12500000 },
+        ],
+      },
+    } as never);
+
+    const view = render(
+      <MemoryRouter initialEntries={['/cost-valuation']}>
+        <CostValuation />
+      </MemoryRouter>,
+    );
+
+    const kpiGrid = await view.findByTestId('wac-inventory-kpi-grid');
+    expect(kpiGrid.textContent).toContain('3 mặt hàng (Theo đơn vị tính chuẩn)');
+    expect(kpiGrid.textContent).toContain('Mặt hàng giá trị tồn lớn nhất');
+    expect(kpiGrid.textContent).toContain('Cập nhật giá vốn gần nhất');
+    expect(kpiGrid.textContent).toContain('76.500.000 đ');
+    expect(kpiGrid.textContent).toContain('QA-SERIAL-001');
+    uaSpy.mockRestore();
   });
 });

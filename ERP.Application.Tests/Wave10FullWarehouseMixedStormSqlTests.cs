@@ -23,7 +23,7 @@ public sealed class Wave10FullWarehouseMixedStormSqlTests
 
     private static ErpKhoDbContext CreateContext() => new(
         new DbContextOptionsBuilder<ErpKhoDbContext>()
-            .UseSqlServer(ConnectionString)
+            .UseSqlServer(ConnectionString, sql => sql.CommandTimeout(90))
             .Options);
 
     [SqlServerFact]
@@ -1026,7 +1026,10 @@ public sealed class Wave10FullWarehouseMixedStormSqlTests
             var warehouseIds = new[] { wh1Id, wh2Id };
             await cleanDb.AuditLogs.Where(x => x.WarehouseId.HasValue && warehouseIds.Contains(x.WarehouseId.Value)).ExecuteDeleteAsync();
             await cleanDb.InventoryLocks.Where(x => warehouseIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
-            await cleanDb.InventoryLocationMovements.Where(x => warehouseIds.Contains(x.WarehouseId)).ExecuteDeleteAsync();
+            await cleanDb.InventoryLocationMovements
+                .Where(x => warehouseIds.Contains(x.WarehouseId)
+                    || (x.PutawayTaskItemId != null && cleanDb.PutawayTaskItems.Any(pti => pti.Id == x.PutawayTaskItemId && warehouseIds.Contains(pti.PutawayTask.WarehouseId))))
+                .ExecuteDeleteAsync();
             await cleanDb.Database.ExecuteSqlRawAsync("IF OBJECT_ID(N'dbo.TR_InventoryTransactions_Immutable_AppendOnly', N'TR') IS NOT NULL DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
             try
             {

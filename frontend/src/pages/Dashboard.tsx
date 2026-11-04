@@ -1,22 +1,21 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, Boxes, ClipboardCheck, PackageSearch, Warehouse } from 'lucide-react';
+import { Boxes, ClipboardCheck, PackageSearch, Warehouse } from 'lucide-react';
 import { productionNavigation } from '../config/productionNavigation';
 import apiClient from '../services/apiClient';
 import { canViewApprovals, canViewStocktakes, hasPermission, usePermissionSet } from '../services/authorization';
 import { isReadOnlyDemoRuntime } from '../services/runtimeMode';
-import { UiBadge, UiCard, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
+import { UiPage, UiPageHeader } from '../ui/ProductionUi';
 import DashboardMetrics from '../components/dashboard/DashboardMetrics';
-import DashboardRecentActivity from '../components/dashboard/DashboardRecentActivity';
 import DashboardExceptionAlerts, {
   type DashboardOperationalExceptionItem,
   type DashboardWarehouseTaskItem,
 } from '../components/dashboard/DashboardExceptionAlerts';
 import PdaFloorLauncher from '../components/common/PdaFloorLauncher';
 import {
-  actionLabel,
-  entityNameLabel,
-  entityTypeLabel,
+  DashboardBottomWorkspaceSection,
+  DashboardGlobalSearchCard,
+} from '../modules/control-tower/DashboardSearchAndQuickLinks';
+import {
   exceptionCategoryLabel,
   priorityLabel,
   sanitizeOperationalException,
@@ -72,11 +71,11 @@ const Dashboard = () => {
         exceptionCode: code,
         resolutionNote: 'Tiếp nhận từ Trung tâm điều hành',
       });
-      setAcknowledgedCodes((prev) => (prev.includes(code) ? prev : [...prev, code]));
+      setAcknowledgedCodes(prev => (prev.includes(code) ? prev : [...prev, code]));
     } catch {
       setLiveError('Không thể xác nhận xử lý ngoại lệ vận hành.');
     } finally {
-      setAcknowledgingCode((current) => (current === code ? null : current));
+      setAcknowledgingCode(current => (current === code ? null : current));
     }
   };
 
@@ -118,10 +117,10 @@ const Dashboard = () => {
     };
 
     void Promise.resolve(apiClient.get<Record<string, unknown>>('/api/v1/reports/owner-gross-profit'))
-      .then((res) => {
+      .then(res => {
         if (!active || !res?.data) return;
         const d = res.data;
-        setOwnerFinance((prev) => ({
+        setOwnerFinance(prev => ({
           ...prev,
           netRevenue: Number(d.grossRevenue ?? d.netRevenue ?? d.totalDispatchedRevenue ?? 0),
           cogsAmount: Number(d.movingAverageCogs ?? d.totalCogs ?? d.cogsAmount ?? 0),
@@ -133,35 +132,39 @@ const Dashboard = () => {
       .catch(() => null);
 
     const applyCodData = (d: Record<string, unknown>) => {
-      setOwnerFinance((prev) => ({
+      setOwnerFinance(prev => ({
         ...prev,
         pendingCodAmount: Number(d.totalExpectedCod ?? d.pendingCodAmount ?? d.totalCodPending ?? d.expectedCodAmount ?? 0),
         receivedCodAmount: Number(d.totalActualCod ?? d.receivedFromCarrierAmount ?? d.actualReceivedAmount ?? 0),
-        codWarningCount: Number(d.discrepancyCount ?? d.feeDiscrepancyWarnings ?? d.discrepancyWarningCount ?? d.discrepancyAlertCount ?? (Array.isArray(d.discrepancies) ? d.discrepancies.length : 0)),
+        codWarningCount: Number(
+          d.discrepancyCount ??
+            d.feeDiscrepancyWarnings ??
+            d.discrepancyWarningCount ??
+            d.discrepancyAlertCount ??
+            (Array.isArray(d.discrepancies) ? d.discrepancies.length : 0),
+        ),
       }));
     };
 
     void Promise.resolve(apiClient.get<Record<string, unknown>>('/api/v1/reports/cod-reconciliation'))
-      .then(async (res) => {
+      .then(async res => {
         if (!active) return;
         let data: Record<string, unknown> | undefined = res?.data;
         if ((!data || Object.keys(data).length === 0) && 'mock' in (apiClient.get as unknown as Record<string, unknown>)) {
-          setShopNameInput((prev) => prev || 'Gian hàng Shopee Chính hãng');
-          setMarketplaceSkuInput((prev) => prev || 'SP-SKU-001');
-          setInternalSkuInput((prev) => prev || 'SP-NOIBO-001');
+          setShopNameInput(prev => prev || 'Gian hàng Shopee Chính hãng');
+          setMarketplaceSkuInput(prev => prev || 'SP-SKU-001');
+          setInternalSkuInput(prev => prev || 'SP-NOIBO-001');
           const fallbackRes = await Promise.resolve(
             apiClient.get<Record<string, unknown>>('/api/v1/reports/cod-shipping-reconciliation'),
           ).catch(() => null);
           data = fallbackRes?.data;
         }
-        if (data && Object.keys(data).length > 0) {
-          applyCodData(data);
-        }
+        if (data && Object.keys(data).length > 0) applyCodData(data);
       })
       .catch(() => null);
 
     void Promise.resolve(apiClient.get<OperationalDashboardSummary>('/api/v1/reports/operational-dashboard'))
-      .then((summaryRes) => {
+      .then(summaryRes => {
         if (!active) return;
         if (summaryRes?.data && typeof summaryRes.data.warehouseCount === 'number') {
           setLiveSummary(summaryRes.data);
@@ -176,19 +179,23 @@ const Dashboard = () => {
       });
 
     Promise.all([
-      apiClient.get<DashboardWarehouseTaskItem[]>('/api/v1/reports/warehouse-tasks').catch(captureAuxError({ data: [] as DashboardWarehouseTaskItem[] }, 'Không thể tải danh sách tác vụ kho.')),
-      apiClient.get<DashboardOperationalExceptionItem[]>('/api/v1/reports/operational-exceptions').catch(captureAuxError({ data: [] as DashboardOperationalExceptionItem[] }, 'Không thể tải danh sách ngoại lệ vận hành.')),
-      apiClient.get<MultiWarehouseControlTowerDto>('/api/v1/reports/multi-warehouse-control-tower').catch(captureAuxError(null, 'Không thể tải dữ liệu tháp điều hành đa kho.')),
+      apiClient
+        .get<DashboardWarehouseTaskItem[]>('/api/v1/reports/warehouse-tasks')
+        .catch(captureAuxError({ data: [] as DashboardWarehouseTaskItem[] }, 'Không thể tải danh sách tác vụ kho.')),
+      apiClient
+        .get<DashboardOperationalExceptionItem[]>('/api/v1/reports/operational-exceptions')
+        .catch(captureAuxError({ data: [] as DashboardOperationalExceptionItem[] }, 'Không thể tải danh sách ngoại lệ vận hành.')),
+      apiClient
+        .get<MultiWarehouseControlTowerDto>('/api/v1/reports/multi-warehouse-control-tower')
+        .catch(captureAuxError(null, 'Không thể tải dữ liệu tháp điều hành đa kho.')),
     ])
       .then(([tasksRes, exRes, towerRes]) => {
         if (!active) return;
         setLiveTasks(Array.isArray(tasksRes.data) ? tasksRes.data : []);
-        setLiveExceptions(Array.isArray(exRes.data) ? exRes.data.map((ex) => sanitizeOperationalException(ex)) : []);
+        setLiveExceptions(Array.isArray(exRes.data) ? exRes.data.map(ex => sanitizeOperationalException(ex)) : []);
         if (towerRes?.data && Array.isArray(towerRes.data.warehouses)) {
           setControlTower(towerRes.data);
-          if (towerRes.data.warehouses.length > 1) {
-            setShowEcommerceDetails(true);
-          }
+          if (towerRes.data.warehouses.length > 1) setShowEcommerceDetails(true);
         }
         if (auxError) setLiveError(auxError);
       })
@@ -229,21 +236,20 @@ const Dashboard = () => {
   };
 
   const mismatchCount = liveSummary?.invalidStockCount ?? 0;
-
-  const filteredTasks = taskTypeFilter
-    ? liveTasks.filter((t) => t.taskType === taskTypeFilter)
-    : liveTasks;
+  const filteredTasks = taskTypeFilter ? liveTasks.filter(t => t.taskType === taskTypeFilter) : liveTasks;
 
   const quickLinks = [
     { to: '/import-receipts', title: 'Nhập kho', detail: 'Nhận hàng, kiểm định chất lượng và ghi sổ', icon: ClipboardCheck, permission: 'receipt.read' },
     { to: '/inventory', title: 'Tồn kho', detail: 'Số dư, biến động và báo cáo', icon: Boxes, permission: 'inventory.read' },
     { to: '/inventory-reconciliation', title: 'Đối chiếu', detail: 'Kiểm tra chênh lệch sổ cái và số dư', icon: PackageSearch, permission: 'inventory_ledger.read' },
     { to: '/stock-transfers', title: 'Điều chuyển', detail: 'Theo dõi hàng đang vận chuyển giữa các kho', icon: Warehouse },
-  ].filter((link) => canAccessNavItem(link));
+  ].filter(link => canAccessNavItem(link));
 
-  const visibleProductionNavigation = productionNavigation.filter((item) => item.path !== '/' && canAccessNavItem(item));
+  const visibleProductionNavigation = productionNavigation.filter(item => item.path !== '/' && canAccessNavItem(item));
   const rawRecentActivities = liveSummary?.recentActivities ?? [];
-  const operationalRecentActivities = rawRecentActivities.filter((item) => item.action !== 'Authentication.RefreshRotated' && item.action !== 'Refresh' && item.entityName !== 'UserSession');
+  const operationalRecentActivities = rawRecentActivities.filter(
+    item => item.action !== 'Authentication.RefreshRotated' && item.action !== 'Refresh' && item.entityName !== 'UserSession',
+  );
   const visibleRecentActivities = operationalRecentActivities.length > 0 ? operationalRecentActivities : rawRecentActivities;
 
   return (
@@ -259,58 +265,25 @@ const Dashboard = () => {
       {typeof window !== 'undefined' && window.innerWidth <= 768 && <PdaFloorLauncher compactOnly />}
 
       {!demoRuntime && (
-        <UiCard title="Tìm kiếm toàn doanh nghiệp">
-          <form onSubmit={handleGlobalSearch} className="ui-inline-actions">
-            <input
-              aria-label="Tìm kiếm toàn doanh nghiệp"
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm mã SP, mã vạch, lô, sê-ri, mã phiếu..."
-              style={{ flex: '1 1 360px', minWidth: 260, fontSize: 13.5 }}
-            />
-            <button type="submit" disabled={searchLoading || searchQuery.trim().length < 2}>
-              {searchLoading ? 'Đang tìm...' : 'Tìm kiếm'}
-            </button>
-            {searchResults.length > 0 && (
-              <button type="button" onClick={() => { setSearchQuery(''); setSearchResults([]); }}>Xóa kết quả</button>
-            )}
-          </form>
-          {searchResults.length > 0 && (
-            <UiTableScroll>
-              <table className="ui-table-compact" aria-label="Kết quả tìm kiếm toàn doanh nghiệp">
-                <thead>
-                  <tr>
-                    <th>Loại</th>
-                    <th>Mã</th>
-                    <th>Thông tin</th>
-                    <th>Chi tiết</th>
-                    <th>Điều hướng</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {searchResults.map((item, idx) => (
-                    <tr key={`${item.entityType}-${item.code}-${idx}`}>
-                      <td><UiBadge>{entityTypeLabel(item.entityType)}</UiBadge></td>
-                      <td><strong>{item.code}</strong></td>
-                      <td>{item.title}</td>
-                      <td>{item.subtitle}</td>
-                      <td><Link to={item.route}>Mở màn hình →</Link></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </UiTableScroll>
-          )}
-        </UiCard>
+        <DashboardGlobalSearchCard
+          searchQuery={searchQuery}
+          searchLoading={searchLoading}
+          searchResults={searchResults}
+          onChangeSearchQuery={setSearchQuery}
+          onSubmitSearch={handleGlobalSearch}
+          onClearResults={() => {
+            setSearchQuery('');
+            setSearchResults([]);
+          }}
+        />
       )}
 
       <DashboardMetrics
         demoRuntime={demoRuntime}
-        warehouseCount={liveSummary ? liveSummary.warehouseCount : (demoRuntime ? 0 : '—')}
-        productCount={liveSummary ? liveSummary.productCount : (demoRuntime ? 0 : '—')}
-        inventoryBucketCount={liveSummary ? liveSummary.inventoryBucketCount : (demoRuntime ? 0 : '—')}
-        openTaskOrMismatchCount={demoRuntime ? mismatchCount : (liveSummary ? liveSummary.openTaskCount : '—')}
+        warehouseCount={liveSummary ? liveSummary.warehouseCount : demoRuntime ? 0 : '—'}
+        productCount={liveSummary ? liveSummary.productCount : demoRuntime ? 0 : '—'}
+        inventoryBucketCount={liveSummary ? liveSummary.inventoryBucketCount : demoRuntime ? 0 : '—'}
+        openTaskOrMismatchCount={demoRuntime ? mismatchCount : liveSummary ? liveSummary.openTaskCount : '—'}
         mismatchCount={mismatchCount}
         ownerFinance={ownerFinance}
         formatCurrencyVnd={formatCurrencyVnd}
@@ -356,64 +329,15 @@ const Dashboard = () => {
         visibleProductionNavigation={visibleProductionNavigation}
       />
 
-      <div className="dashboard-grid">
-        <UiCard title="Tiếp tục công việc">
-          <div className="dashboard-panel-meta">
-            {liveSummary
-              ? `Phiếu nhập mở: ${liveSummary.openInboundCount} • Cất hàng mở: ${liveSummary.openPutawayCount} • Phiếu xuất mở: ${liveSummary.openOutboundCount} • Điều chuyển mở: ${liveSummary.openTransferCount}`
-              : 'Mở phân hệ nghiệp vụ'}
-          </div>
-          <div className="dashboard-actions">
-            {quickLinks.map(({ to, title, detail, icon: Icon }) => (
-              <Link key={to} to={to}>
-                <Icon size={18} aria-hidden="true" />
-                <div><strong>{title}</strong><span>{detail}</span></div>
-                <ArrowRight size={16} aria-hidden="true" />
-              </Link>
-            ))}
-          </div>
-        </UiCard>
-
-        {!demoRuntime ? (
-          <DashboardRecentActivity
-            liveLoading={liveLoading}
-            hasSummary={Boolean(liveSummary)}
-            activities={visibleRecentActivities}
-            actionLabel={actionLabel}
-            entityNameLabel={entityNameLabel}
-          />
-        ) : (
-          <UiCard title="Màn hình nghiệp vụ đã kích hoạt">
-            <div className="dashboard-screen-count">{visibleProductionNavigation.length + 1}</div>
-            <div className="dashboard-screen-list">
-              {visibleProductionNavigation.map((item) => (
-                <Link key={item.path} to={item.path}>
-                  <span>{item.label}</span>
-                  <small>{item.section}</small>
-                </Link>
-              ))}
-            </div>
-          </UiCard>
-        )}
-      </div>
-
-      {demoRuntime && (
-        <UiCard title="Trạng thái môi trường">
-          <div className="dashboard-environment">
-            <div><span>Giao diện</span><strong>Chế độ trình diễn</strong></div>
-            <div><span>Nguồn dữ liệu</span><strong>Bộ dữ liệu mẫu</strong></div>
-            <div><span>Thao tác ghi</span><strong>Chặn ghi (405)</strong></div>
-            <div><span>Kết nối máy chủ</span><strong>Chưa kết nối</strong></div>
-          </div>
-        </UiCard>
-      )}
-
-      {mismatchCount > 0 && (
-        <div className="dashboard-attention" role="status">
-          <AlertTriangle size={18} aria-hidden="true" />
-          <span>{demoRuntime ? `Bộ dữ liệu mẫu hiện có ${mismatchCount} dòng đối chiếu cần chú ý.` : `Phát hiện ${mismatchCount} dòng tồn kho bất thường cần đối chiếu.`} Mở phân hệ Đối chiếu tồn kho để xem chi tiết.</span>
-        </div>
-      )}
+      <DashboardBottomWorkspaceSection
+        demoRuntime={demoRuntime}
+        liveLoading={liveLoading}
+        liveSummary={liveSummary}
+        quickLinks={quickLinks}
+        visibleRecentActivities={visibleRecentActivities}
+        visibleProductionNavigation={visibleProductionNavigation}
+        mismatchCount={mismatchCount}
+      />
     </UiPage>
   );
 };

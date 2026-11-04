@@ -11,6 +11,10 @@ public sealed class BusinessPartnerDto
     public string? Phone { get; set; }
     public string? Email { get; set; }
     public string? Address { get; set; }
+    public string? TaxCode { get; set; }
+    public string TaxpayerType { get; set; } = "ENTERPRISE";
+    public string? BankAccountNumber { get; set; }
+    public string? BankName { get; set; }
     public decimal CreditLimit { get; set; }
     public int PaymentTermDays { get; set; }
     public decimal PayableBalance { get; set; }
@@ -28,6 +32,10 @@ public sealed class SaveBusinessPartnerDto
     public string? Phone { get; set; }
     public string? Email { get; set; }
     public string? Address { get; set; }
+    public string? TaxCode { get; set; }
+    public string? TaxpayerType { get; set; }
+    public string? BankAccountNumber { get; set; }
+    public string? BankName { get; set; }
     public decimal CreditLimit { get; set; }
     public int PaymentTermDays { get; set; }
     public string? RowVersion { get; set; }

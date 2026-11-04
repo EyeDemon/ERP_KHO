@@ -21,6 +21,8 @@ public sealed class PartnerDebtInvoiceDto
     public DateTime IssuedAtUtc { get; set; }
     public DateTime? DueDateUtc { get; set; }
     public string? Note { get; set; }
+    public bool IsInputVatDeductible { get; set; } = true;
+    public string? TaxComplianceWarning { get; set; }
     public string RowVersion { get; set; } = string.Empty;
 }
 

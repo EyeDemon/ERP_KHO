@@ -1,5 +1,6 @@
 import React from 'react';
 import { UiBadge, UiCard } from '../../ui/ProductionUi';
+import { CANONICAL_WH01_LABEL, formatWarehouseLabel } from '../../utils/warehouseLabel';
 
 export interface OnboardingWizardStepCardsProps {
   busy: boolean;
@@ -210,11 +211,11 @@ export const OnboardingWizardStepCards: React.FC<OnboardingWizardStepCardsProps>
               {warehouses.length > 0 ? (
                 warehouses.map((w) => (
                   <option key={w.id} value={String(w.id)}>
-                    {w.code ? `${w.code} — ${w.name}` : w.name}
+                    {formatWarehouseLabel(w.name, w.code, w.id)}
                   </option>
                 ))
               ) : (
-                <option value="1">{warehouseName || 'Kho Trung tâm (WH01)'}</option>
+                <option value="1">{formatWarehouseLabel(warehouseName) || CANONICAL_WH01_LABEL}</option>
               )}
             </select>
           </label>
@@ -248,7 +249,7 @@ export const OnboardingWizardStepCards: React.FC<OnboardingWizardStepCardsProps>
               >
                 Chọn tệp Excel...
               </span>
-              <span style={{ color: selectedOpeningFile ? '#0f172a' : '#64748b', fontWeight: selectedOpeningFile ? 600 : 400 }}>
+              <span style={{ color: selectedOpeningFile ? '#0f172a' : '#475569', fontWeight: selectedOpeningFile ? 600 : 400 }}>
                 {selectedOpeningFile ? selectedOpeningFile.name : 'Chưa chọn tệp nào (.xlsx, .csv)'}
               </span>
               <input

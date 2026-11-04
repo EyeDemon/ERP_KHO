@@ -204,7 +204,7 @@ export function AsnCreateFormCard(props: {
         </div>
         <p className="inbound-planning-helper">Tổng ASN theo từng dòng đơn mua không được vượt số lượng đặt cộng dung sai nhận vượt. ASN không tạo tồn kho.</p>
         <div className="inbound-planning-form-actions">
-          <button type="submit" disabled={creating} style={{ background: '#0284c7', color: '#ffffff', fontWeight: 600, border: '1px solid #0284c7' }}>{creating ? 'Đang tạo...' : 'Tạo ASN'}</button>
+          <button type="submit" disabled={creating} style={{ background: '#1d4ed8', color: '#ffffff', fontWeight: 600, border: '1px solid #1d4ed8' }}>{creating ? 'Đang tạo...' : 'Tạo ASN'}</button>
           <button type="button" disabled={creating} onClick={resetForm}>Làm lại</button>
         </div>
       </form>}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { UiPage, UiPageHeader } from '../ui/ProductionUi';
 import { OnboardingWizardStepCards } from '../modules/governance/OnboardingWizardStepCards';
+import { CANONICAL_WH01_LABEL, formatWarehouseLabel } from '../utils/warehouseLabel';
 
 const extractErrorText = (err: any, fallback: string) => {
   const data = err?.response?.data;
@@ -26,7 +27,7 @@ const OnboardingWizard = () => {
     return stored;
   });
   const [companyName, setCompanyName] = useState('Công ty TNHH Kho vận SME');
-  const [warehouseName, setWarehouseName] = useState('Kho Trung tâm (WH01)');
+  const [warehouseName, setWarehouseName] = useState(CANONICAL_WH01_LABEL);
   const [ownerUsername, setOwnerUsername] = useState('');
   const [ownerPassword, setOwnerPassword] = useState('');
   const [warehouseTemplate, setWarehouseTemplate] = useState<'RETAIL_KIOT' | 'ECOMMERCE_3ZONES' | 'DISTRIBUTION_PALLET'>('ECOMMERCE_3ZONES');
@@ -89,11 +90,11 @@ const OnboardingWizard = () => {
             : [];
         const mappedWh = whItems
           .filter((x): x is Record<string, unknown> => Boolean(x && typeof x === 'object'))
-          .map((x) => ({
-            id: Number(x.id ?? 0),
-            code: typeof x.code === 'string' ? x.code : undefined,
-            name: String(x.name ?? x.code ?? `Kho #${x.id}`),
-          }))
+          .map((x) => {
+            const id = Number(x.id ?? 0);
+            const code = typeof x.code === 'string' ? x.code : undefined;
+            return { id, code, name: formatWarehouseLabel(String(x.name ?? ''), code, id) || `Kho #${id}` };
+          })
           .filter((x) => x.id > 0);
         if (mappedWh.length > 0) {
           setWarehouses(mappedWh);
@@ -130,10 +131,10 @@ const OnboardingWizard = () => {
       const payload: Record<string, unknown> = {
         tenantCode: tenantCode.trim() || 'TENANT-SME-2026',
         companyName: companyName.trim(),
-        warehouseName: warehouseName.trim() || 'Kho Trung tâm SME WH01',
+        warehouseName: warehouseName.trim() || CANONICAL_WH01_LABEL,
         templateCode: warehouseTemplate,
       };
-      if (isPublicRegister || ownerUsername.trim() || ownerPassword.trim()) {
+      if (isPublicRegister) {
         payload.allocateNewTenant = true;
       }
       if (ownerUsername.trim()) {
@@ -200,7 +201,7 @@ const OnboardingWizard = () => {
     try {
       const res = await apiClient.post<Record<string, unknown>>('/api/v1/reports/onboarding-wizard/quick-start', {
         tenantCode: tenantCode.trim() || 'TENANT-SME-2026',
-        warehouseName: warehouseName.trim() || 'Kho Trung tâm SME WH01',
+        warehouseName: warehouseName.trim() || CANONICAL_WH01_LABEL,
         templateCode: warehouseTemplate,
       });
       const d = (res?.data ?? {}) as Record<string, unknown>;
@@ -328,6 +329,15 @@ const OnboardingWizard = () => {
 
             {error && <div role="alert">{error}</div>}
             {notice && <p role="status" className="ui-success-text">{notice}</p>}
+            {!isPublicRegisterRoute && (
+              <div
+                role="note"
+                data-testid="onboarding-platform-restriction-note"
+                style={{ padding: '10px 14px', borderRadius: 8, background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e3a8a', fontSize: 13 }}
+              >
+                <strong>Phân tách Quản trị Đa thuê bao:</strong> Trên Cổng Khách hàng, trình hướng dẫn chỉ thiết lập sơ đồ kệ mẫu và tồn kho đầu kỳ cho thuê bao hiện tại. Việc cấp phát thuê bao (Tenant) mới độc lập được thực hiện tại <code>SaaS Control Center (/platform)</code>.
+              </div>
+            )}
 
             <OnboardingWizardStepCards
               busy={busy}

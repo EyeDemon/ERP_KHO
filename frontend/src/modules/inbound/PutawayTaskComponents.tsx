@@ -2,6 +2,7 @@ import React from 'react';
 import apiClient from '../../services/apiClient';
 import { roundQty4 } from '../../pages/productCatalog';
 import { UiBadge, UiCard, UiTableScroll } from '../../ui/ProductionUi';
+import { warehouseLocationTypeLabelVi } from '../../ui/vietnameseEnumLabels';
 import {
   type AbcInterleavingData,
   formatPutawayRuleLabel,
@@ -84,7 +85,7 @@ export function PutawayTaskListCard({
                       <button type="button" style={{ whiteSpace: 'nowrap', padding: '5px 10px', minHeight: 30, fontSize: 11.5, fontWeight: 600, lineHeight: 1.2 }} onClick={() => void detail(task.id)}>
                         {task.receiptCode}
                       </button>
-                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.25 }}>
+                      <div style={{ fontSize: 11, color: '#475569', marginTop: 4, lineHeight: 1.25 }}>
                         {task.warehouseName}
                         {(task.taskType === 'PutbackTask' || task.sourceType === 'PutbackTask') && <div style={{ marginTop: 3 }}><UiBadge tone="warning"><span style={{ whiteSpace: 'nowrap' }}>{taskTypes.PutbackTask}</span></UiBadge></div>}
                         {task.isCrossDock && <div style={{ marginTop: 3 }}><UiBadge tone="success"><span style={{ whiteSpace: 'nowrap' }}>CROSS-DOCK ({task.crossDockAllocatedQty ?? task.movedBaseQuantity})</span></UiBadge></div>}
@@ -155,14 +156,14 @@ export function PutawayWorkspaceAndSlottingCards({
             <span>Vị trí nguồn (Bãi tiếp nhận / đệm)</span>
             <select aria-label="Chọn vị trí nguồn cất hàng" style={{ minHeight: 44 }} value={workspaceFromLocId} onChange={e => setWorkspaceFromLocId(e.target.value)}>
               <option value="">-- Chọn vị trí nguồn --</option>
-              {(warehouseLocations.filter(l => l.locationType === 'Receiving' || l.locationType === 'Staging').length > 0 ? warehouseLocations.filter(l => l.locationType === 'Receiving' || l.locationType === 'Staging') : warehouseLocations).map(loc => <option key={loc.id} value={String(loc.id)}>{loc.code} — {loc.name} ({loc.locationType})</option>)}
+              {(warehouseLocations.filter(l => ['receiving', 'staging'].includes(l.locationType?.toLowerCase())).length > 0 ? warehouseLocations.filter(l => ['receiving', 'staging'].includes(l.locationType?.toLowerCase())) : warehouseLocations).map(loc => <option key={loc.id} value={String(loc.id)}>{loc.code} — {loc.name} ({warehouseLocationTypeLabelVi(loc.locationType)})</option>)}
             </select>
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'flex-start' }}>
             <span>Vị trí đích (Kệ lưu trữ)</span>
             <select aria-label="Chọn vị trí đích cất hàng" style={{ minHeight: 44 }} value={workspaceToLocId} onChange={e => { setWorkspaceToLocId(e.target.value); const firstItem = selected?.items?.[0]; if (firstItem && e.target.value) setDestination(v => ({ ...v, [firstItem.id]: Number(e.target.value) })); }}>
               <option value="">-- Chọn vị trí đích --</option>
-              {(warehouseLocations.filter(l => l.locationType === 'Storage').length > 0 ? warehouseLocations.filter(l => l.locationType === 'Storage') : [...warehouseLocations, ...Object.values(locations).flat()]).map(loc => <option key={loc.id} value={String(loc.id)}>{loc.code} — {loc.name} ({loc.locationType})</option>)}
+              {(warehouseLocations.filter(l => l.locationType?.toLowerCase() === 'storage').length > 0 ? warehouseLocations.filter(l => l.locationType?.toLowerCase() === 'storage') : [...warehouseLocations, ...Object.values(locations).flat()]).map(loc => <option key={loc.id} value={String(loc.id)}>{loc.code} — {loc.name} ({warehouseLocationTypeLabelVi(loc.locationType)})</option>)}
             </select>
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'flex-start' }}>
@@ -175,7 +176,7 @@ export function PutawayWorkspaceAndSlottingCards({
       <UiCard title="Gợi ý vị trí cất hàng tự động" subtitle="Tối ưu vị trí kệ đích theo nguyên tắc FEFO, sức chứa và điều phối chuyến kép">
         <div className="ui-stack" style={{ gap: 10 }}>
           <div className="ui-inline-wrap" style={{ marginTop: 2 }}>
-            <button type="button" style={{ background: '#0284c7', color: '#ffffff', fontWeight: 600, border: '1px solid #0284c7', minHeight: 40 }} disabled={!!busy || slottingBusy} onClick={() => void evaluateSlotting()}>
+            <button type="button" style={{ background: '#1d4ed8', color: '#ffffff', fontWeight: 600, border: '1px solid #1d4ed8', minHeight: 40 }} disabled={!!busy || slottingBusy} onClick={() => void evaluateSlotting()}>
               Chấm điểm Tối ưu Xếp dỡ &amp; Khớp Vị trí Kệ
             </button>
             <button type="button" data-testid="btn-execute-cross-dock" style={{ minHeight: 40 }} disabled={!!busy || slottingBusy || tasks.length === 0} onClick={() => void executeCrossDock()}>

@@ -24,15 +24,15 @@ namespace ERP.Api.Infrastructure
             var ws = wb.Worksheets.First();
             foreach (var row in ws.RowsUsed().Skip(1))
             {
-                var pCode = row.Cell(1).GetString()?.Trim();
-                var locCode = row.Cell(2).GetString()?.Trim();
+                var pCode = FileUploadSecurityValidator.SanitizeSpreadsheetCellFormula(row.Cell(1).GetString()?.Trim());
+                var locCode = FileUploadSecurityValidator.SanitizeSpreadsheetCellFormula(row.Cell(2).GetString()?.Trim());
                 var qtyVal = row.Cell(3).TryGetValue<decimal>(out var q)
                     ? q
                     : (decimal.TryParse(row.Cell(3).GetString()?.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var qParsed) ? qParsed : 0m);
                 var costVal = row.Cell(4).TryGetValue<decimal>(out var c)
                     ? c
                     : (decimal.TryParse(row.Cell(4).GetString()?.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var cParsed) ? cParsed : 0m);
-                var lotNumber = row.Cell(5).GetString()?.Trim();
+                var lotNumber = FileUploadSecurityValidator.SanitizeSpreadsheetCellFormula(row.Cell(5).GetString()?.Trim());
                 DateTime? expiryDate = null;
                 if (row.Cell(6).TryGetValue<DateTime>(out var dt))
                 {
@@ -171,7 +171,7 @@ namespace ERP.Api.Infrastructure
             var ws = wb.Worksheets.First();
             foreach (var r in ws.RowsUsed().Skip(1))
             {
-                var extId = r.Cell(2).GetString()?.Trim();
+                var extId = FileUploadSecurityValidator.SanitizeSpreadsheetCellFormula(r.Cell(2).GetString()?.Trim());
                 if (!string.IsNullOrWhiteSpace(extId))
                 {
                     var qVal = r.Cell(7).TryGetValue<decimal>(out var q) && q > 0m
@@ -181,12 +181,12 @@ namespace ERP.Api.Infrastructure
                         ? p
                         : (decimal.TryParse(r.Cell(8).GetString()?.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var pp) && pp >= 0m ? pp : 150000m);
                     rows.Add(new MarketplaceOrderExcelRowInput(
-                        ChannelCode: r.Cell(1).GetString()?.Trim(),
+                        ChannelCode: FileUploadSecurityValidator.SanitizeSpreadsheetCellFormula(r.Cell(1).GetString()?.Trim()),
                         ExternalOrderId: extId,
-                        BuyerName: r.Cell(3).GetString()?.Trim(),
-                        BuyerPhone: r.Cell(4).GetString()?.Trim(),
-                        ShippingAddress: r.Cell(5).GetString()?.Trim(),
-                        SkuCode: r.Cell(6).GetString()?.Trim(),
+                        BuyerName: FileUploadSecurityValidator.SanitizeSpreadsheetCellFormula(r.Cell(3).GetString()?.Trim()),
+                        BuyerPhone: FileUploadSecurityValidator.SanitizeSpreadsheetCellFormula(r.Cell(4).GetString()?.Trim()),
+                        ShippingAddress: FileUploadSecurityValidator.SanitizeSpreadsheetCellFormula(r.Cell(5).GetString()?.Trim()),
+                        SkuCode: FileUploadSecurityValidator.SanitizeSpreadsheetCellFormula(r.Cell(6).GetString()?.Trim()),
                         Quantity: qVal,
                         UnitPrice: pVal));
                 }

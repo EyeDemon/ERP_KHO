@@ -1,35 +1,44 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import { clearActiveImpersonationState, getActiveImpersonationState } from '../config/portalMode';
 import { beginPermissionRefresh, setCurrentPermissions } from './authorization';
 import { isReadOnlyDemoRuntime } from './runtimeMode';
-import { createReadOnlyDemoApiAdapter } from './demoApiAdapter';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || 'https://localhost:7198';
 const ACCESS_TOKEN_SESSION_KEY = 'wms_access_token';
 const AUTH_ME_CACHE_SESSION_KEY = 'wms_auth_me_cache';
 const AUTH_ME_CACHE_TTL_MS = 60_000;
+
+const LEGACY_LOCAL_JWT_KEYS = ['token', 'accessToken', 'jwt'] as const;
+const AUTH_CLEAR_STORAGE_KEYS = [
+  ...LEGACY_LOCAL_JWT_KEYS,
+  'username', 'role', 'userId', 'user', 'tenantId', 'tenantCode',
+  'erp_active_impersonation_session', 'erp_support_impersonation_session',
+  'wms_active_support_session', 'activeImpersonation', 'erp_platform_active_role',
+  'tenantLifecycleStatus', 'tenantSuspensionReason',
+  ACCESS_TOKEN_SESSION_KEY, AUTH_ME_CACHE_SESSION_KEY,
+] as const;
+
 const isVitestEnv = Boolean(
-  typeof import.meta !== 'undefined' && (import.meta.env?.VITEST || import.meta.env?.MODE === 'test')
+  typeof import.meta !== 'undefined' && (import.meta.env?.VITEST || import.meta.env?.MODE === 'test'),
 );
-let externalTokenOverride = false;
-let accessToken: string | null = (() => {
-  if (isVitestEnv) return null;
+
+const purgeLegacyLocalStorageTokens = (): void => {
+  if (typeof window === 'undefined') return;
   try {
-    if (typeof window === 'undefined') return null;
-    const localToken =
-      window.localStorage?.getItem('token') ||
-      window.localStorage?.getItem('accessToken') ||
-      window.localStorage?.getItem('jwt');
-    const sessionToken = window.sessionStorage?.getItem(ACCESS_TOKEN_SESSION_KEY);
-    if (localToken && localToken !== sessionToken) {
-      externalTokenOverride = true;
-      window.sessionStorage?.removeItem(AUTH_ME_CACHE_SESSION_KEY);
-      return localToken;
-    }
-    return sessionToken || localToken || null;
+    for (const key of LEGACY_LOCAL_JWT_KEYS) window.localStorage?.removeItem(key);
+  } catch { /* ignore storage access errors */ }
+};
+
+let accessToken: string | null = (() => {
+  if (isVitestEnv || typeof window === 'undefined') return null;
+  try {
+    purgeLegacyLocalStorageTokens();
+    return window.sessionStorage?.getItem(ACCESS_TOKEN_SESSION_KEY) || null;
   } catch {
     return null;
   }
 })();
+
 let isRedirecting = false;
 
 const isJwtLikelyValid = (token: string | null): boolean => {
@@ -41,10 +50,7 @@ const isJwtLikelyValid = (token: string | null): boolean => {
     const json = typeof atob === 'function' ? atob(base64) : '';
     if (!json) return false;
     const payload = JSON.parse(json) as { exp?: number };
-    if (typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now()) {
-      return false;
-    }
-    return true;
+    return !(typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now());
   } catch {
     return false;
   }
@@ -66,11 +72,7 @@ const getResponseCache = new Map<string, { expiresAt: number; promise: Promise<u
 const buildGetCacheKey = (url: string, config?: Record<string, unknown>): string => {
   let paramsKey = '';
   if (config?.params) {
-    try {
-      paramsKey = JSON.stringify(config.params);
-    } catch {
-      paramsKey = String(config.params);
-    }
+    try { paramsKey = JSON.stringify(config.params); } catch { paramsKey = String(config.params); }
   }
   return `${accessToken ?? 'anon'}:${url}:${paramsKey}`;
 };
@@ -88,14 +90,9 @@ const buildRequestFingerprint = (method: string, config: Record<string, unknown>
   if (!url) return null;
   let serializedData = '';
   if (config.data !== undefined && config.data !== null) {
-    if (typeof config.data === 'string') {
-      serializedData = config.data;
-    } else {
-      try {
-        serializedData = JSON.stringify(config.data);
-      } catch {
-        serializedData = String(config.data);
-      }
+    if (typeof config.data === 'string') serializedData = config.data;
+    else {
+      try { serializedData = JSON.stringify(config.data); } catch { serializedData = String(config.data); }
     }
   }
   return `${method}:${url}:${serializedData}`;
@@ -103,31 +100,18 @@ const buildRequestFingerprint = (method: string, config: Record<string, unknown>
 
 export const setAccessToken = (token: string | null): void => {
   accessToken = token;
-  externalTokenOverride = false;
-  if (token) {
-    isRedirecting = false;
-  }
+  if (token) isRedirecting = false;
   getResponseCache.clear();
-  if (!isVitestEnv) {
+  if (typeof window !== 'undefined') {
     try {
-      if (typeof window !== 'undefined') {
-        window.sessionStorage?.removeItem(AUTH_ME_CACHE_SESSION_KEY);
-        if (token) {
-          window.sessionStorage?.setItem(ACCESS_TOKEN_SESSION_KEY, token);
-          window.localStorage?.setItem('token', token);
-          window.localStorage?.setItem('accessToken', token);
-        } else {
-          window.sessionStorage?.removeItem(ACCESS_TOKEN_SESSION_KEY);
-          window.localStorage?.removeItem('token');
-          window.localStorage?.removeItem('accessToken');
-          window.localStorage?.removeItem('jwt');
-        }
-      }
-    } catch {
-      // Ignore storage access errors in restricted environments
-    }
+      purgeLegacyLocalStorageTokens();
+      window.sessionStorage?.removeItem(AUTH_ME_CACHE_SESSION_KEY);
+      if (token) window.sessionStorage?.setItem(ACCESS_TOKEN_SESSION_KEY, token);
+      else window.sessionStorage?.removeItem(ACCESS_TOKEN_SESSION_KEY);
+    } catch { /* ignore storage access errors */ }
   }
 };
+
 export const getAccessToken = (): string | null => accessToken;
 export const resetRedirectGuard = (): void => { isRedirecting = false; };
 
@@ -148,91 +132,95 @@ const refreshClient = axios.create({ baseURL, withCredentials: true });
 export const createSingleFlight = <T>(operation: () => Promise<T>): (() => Promise<T>) => {
   let pending: Promise<T> | null = null;
   return () => {
-    if (!pending) pending = operation().finally(() => { pending = null; });
+    if (!pending) {
+      pending = operation().finally(() => { pending = null; });
+    }
     return pending;
   };
 };
 
-const refreshAccessToken = createSingleFlight<string>(() => {
-  if (externalTokenOverride) {
-    return Promise.reject(new Error('External token override rejected by server'));
-  }
-  return refreshClient.post('/api/v1/auth/refresh', {})
-      .then(async (response) => {
-        const token = response.data.token as string;
-        setAccessToken(token);
-        if (response.data?.username) localStorage.setItem('username', String(response.data.username));
-        if (response.data?.role) localStorage.setItem('role', String(response.data.role));
-        const refreshUid = response.data?.userId ?? response.data?.id;
-        if (refreshUid !== undefined && refreshUid !== null) localStorage.setItem('userId', String(refreshUid));
-        const revision = beginPermissionRefresh();
-        const identity = await refreshClient.get('/api/v1/auth/me', { headers: { Authorization: `Bearer ${token}` } });
-        if (identity.data?.username) localStorage.setItem('username', String(identity.data.username));
-        if (identity.data?.role) localStorage.setItem('role', String(identity.data.role));
-        const uid = identity.data?.userId ?? identity.data?.id;
-        if (uid !== undefined && uid !== null) localStorage.setItem('userId', String(uid));
-        setCurrentPermissions(identity.data.permissions, revision);
-        return token;
-      });
-});
+const persistNonSensitiveIdentityMeta = (data?: Record<string, unknown>): void => {
+  if (!data || typeof window === 'undefined') return;
+  try {
+    if (data.username) window.localStorage?.setItem('username', String(data.username));
+    if (data.role) window.localStorage?.setItem('role', String(data.role));
+    const uid = data.userId ?? data.id;
+    if (uid !== undefined && uid !== null) window.localStorage?.setItem('userId', String(uid));
+  } catch { /* ignore storage errors */ }
+};
+
+const refreshAccessToken = createSingleFlight<string>(() =>
+  refreshClient.post('/api/v1/auth/refresh', {}).then(async (response) => {
+    const token = response.data.token as string;
+    setAccessToken(token);
+    persistNonSensitiveIdentityMeta(response.data as Record<string, unknown>);
+    const revision = beginPermissionRefresh();
+    const identity = await refreshClient.get('/api/v1/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    persistNonSensitiveIdentityMeta(identity.data as Record<string, unknown>);
+    setCurrentPermissions(identity.data.permissions, revision);
+    return token;
+  }),
+);
 
 export const clearAuthentication = (): void => {
   setAccessToken(null);
+  clearActiveImpersonationState();
   autoIdempotencyCache.clear();
   getResponseCache.clear();
-  try {
-    localStorage.removeItem('token');
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('jwt');
-    localStorage.removeItem('username');
-    localStorage.removeItem('role');
-    localStorage.removeItem('userId');
-    localStorage.removeItem('tenantId');
-    localStorage.removeItem('tenantCode');
-    sessionStorage.clear();
-  } catch {
-    // Ignore storage access errors in restricted environments
+  if (typeof window !== 'undefined') {
+    try {
+      for (const key of AUTH_CLEAR_STORAGE_KEYS) {
+        window.localStorage?.removeItem(key);
+        window.sessionStorage?.removeItem(key);
+      }
+      window.sessionStorage?.clear();
+    } catch { /* ignore storage access errors */ }
   }
   setCurrentPermissions([]);
 };
 
-apiClient.interceptors.request.use((config) => {
-  if (isReadOnlyDemoRuntime()) {
+apiClient.interceptors.request.use(async (config) => {
+  if ((import.meta.env.DEV || isVitestEnv) && isReadOnlyDemoRuntime()) {
+    const { createReadOnlyDemoApiAdapter } = await import('./demoApiAdapter');
     config.adapter = createReadOnlyDemoApiAdapter(config);
   }
   if (!isVitestEnv && typeof window !== 'undefined') {
     try {
-      const localToken =
-        window.localStorage?.getItem('token') ||
-        window.localStorage?.getItem('accessToken') ||
-        window.localStorage?.getItem('jwt');
-      const sessionToken = window.sessionStorage?.getItem(ACCESS_TOKEN_SESSION_KEY);
-      if (localToken && localToken !== accessToken) {
-        accessToken = localToken;
-        if (localToken !== sessionToken) {
-          externalTokenOverride = true;
-          window.sessionStorage?.removeItem(AUTH_ME_CACHE_SESSION_KEY);
-        }
+      purgeLegacyLocalStorageTokens();
+      const sessionToken = window.sessionStorage?.getItem(ACCESS_TOKEN_SESSION_KEY) || null;
+      if (sessionToken !== accessToken) {
+        accessToken = sessionToken;
+        window.sessionStorage?.removeItem(AUTH_ME_CACHE_SESSION_KEY);
       }
-    } catch {
-      // Ignore storage access errors
-    }
+    } catch { /* ignore storage access errors */ }
   }
   if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
+  const reqUrlLower = (config.url ?? '').trim().toLowerCase();
+  if (
+    config.headers &&
+    !reqUrlLower.startsWith('/api/v1/platform') &&
+    !reqUrlLower.startsWith('/api/v1/auth') &&
+    !reqUrlLower.startsWith('/api/auth') &&
+    !(config.headers['X-Support-Impersonation-Token'] ?? config.headers['x-support-impersonation-token'])
+  ) {
+    const activeImp = getActiveImpersonationState();
+    const expMs = activeImp?.expiresAtUtc ? new Date(activeImp.expiresAtUtc).getTime() : NaN;
+    if (activeImp?.impersonationToken && (Number.isNaN(expMs) || expMs > Date.now())) {
+      config.headers['X-Support-Impersonation-Token'] = activeImp.impersonationToken;
+    }
+  }
   const retryConfig = config as RetryConfig;
   const method = config.method?.toLowerCase();
   if (method && ['post', 'put', 'patch', 'delete'].includes(method)) {
     getResponseCache.clear();
     const existingKey =
-      config.headers?.['Idempotency-Key'] ??
-      config.headers?.['idempotency-key'] ??
-      retryConfig._idempotencyKey;
+      config.headers?.['Idempotency-Key'] ?? config.headers?.['idempotency-key'] ?? retryConfig._idempotencyKey;
     if (existingKey) {
       const resolvedKey = String(existingKey);
       retryConfig._idempotencyKey = resolvedKey;
-      if (config.headers) {
-        config.headers['Idempotency-Key'] = resolvedKey;
-      }
+      if (config.headers) config.headers['Idempotency-Key'] = resolvedKey;
     } else if (config.headers) {
       const now = Date.now();
       for (const [fp, entry] of autoIdempotencyCache.entries()) {
@@ -250,10 +238,7 @@ apiClient.interceptors.request.use((config) => {
             : `${now.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
         generatedKey = `auto-${method}-${randomPart}`;
         if (fingerprint) {
-          autoIdempotencyCache.set(fingerprint, {
-            key: generatedKey,
-            expiresAt: now + AUTO_IDEMPOTENCY_TTL_MS,
-          });
+          autoIdempotencyCache.set(fingerprint, { key: generatedKey, expiresAt: now + AUTO_IDEMPOTENCY_TTL_MS });
         }
       }
       retryConfig._idempotencyKey = generatedKey;
@@ -297,9 +282,7 @@ apiClient.interceptors.response.use(
     try {
       window.localStorage?.setItem('lastErrorCode', code);
       window.localStorage?.setItem('lastCorrelationId', correlationId);
-    } catch {
-      // ignore storage errors in restricted environments
-    }
+    } catch { /* ignore storage errors */ }
     const config = error.config as RetryConfig | undefined;
     const requestUrl = config?.url;
     const lowerUrl = requestUrl?.toLowerCase() ?? '';
@@ -311,11 +294,10 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 403 && accessToken) {
       const revision = beginPermissionRefresh();
       try {
-        const identity = await refreshClient.get('/api/v1/auth/me', { headers: { Authorization: `Bearer ${accessToken}` } });
-        if (identity.data?.username) localStorage.setItem('username', String(identity.data.username));
-        if (identity.data?.role) localStorage.setItem('role', String(identity.data.role));
-        const uid = identity.data?.userId ?? identity.data?.id;
-        if (uid !== undefined && uid !== null) localStorage.setItem('userId', String(uid));
+        const identity = await refreshClient.get('/api/v1/auth/me', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        persistNonSensitiveIdentityMeta(identity.data as Record<string, unknown>);
         setCurrentPermissions(identity.data.permissions, revision);
       } catch {
         setCurrentPermissions([], revision);
@@ -324,14 +306,15 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 429 && config && (config._rateLimitRetryCount ?? 0) < 2) {
       config._rateLimitRetryCount = (config._rateLimitRetryCount ?? 0) + 1;
       const retryAfterHeader = Number(headers['retry-after']);
-      const delayMs = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
-        ? Math.min(retryAfterHeader * 1000, 2500)
-        : 600 * config._rateLimitRetryCount;
+      const delayMs =
+        Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
+          ? Math.min(retryAfterHeader * 1000, 2500)
+          : 600 * config._rateLimitRetryCount;
       await new Promise((resolve) => setTimeout(resolve, delayMs));
       return apiClient.request(config);
     }
     if (error.response?.status === 401 && !isAuthEndpoint) {
-      if (config && !config._authRetry && !externalTokenOverride) {
+      if (config && !config._authRetry) {
         config._authRetry = true;
         try {
           const token = await refreshAccessToken();
@@ -358,65 +341,57 @@ apiClient.interceptors.response.use(
     }
     if (error.response) {
       releaseAutoIdempotencyKey(config);
-      if (config && config._autoFingerprint) {
-        delete config._idempotencyKey;
-      }
+      if (config && config._autoFingerprint) delete config._idempotencyKey;
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 export const logout = async (): Promise<void> => {
-  try { await apiClient.post('/api/v1/auth/logout'); } finally {
+  try {
+    await apiClient.post('/api/v1/auth/logout');
+  } finally {
     clearAuthentication();
     window.location.replace('/login');
   }
 };
 
 export const logoutAll = async (): Promise<void> => {
-  try { await apiClient.post('/api/v1/auth/logout-all'); } finally {
+  try {
+    await apiClient.post('/api/v1/auth/logout-all');
+  } finally {
     clearAuthentication();
     window.location.replace('/login');
   }
 };
 
 const rawGet = apiClient.get.bind(apiClient);
-const isTestRuntime = Boolean(
-  typeof import.meta !== 'undefined' && (import.meta.env?.VITEST || import.meta.env?.MODE === 'test')
-);
 
-if (!isTestRuntime) {
+if (!isVitestEnv) {
   apiClient.get = ((url: string, config?: Parameters<typeof rawGet>[1]) => {
     const now = Date.now();
     const normalizedUrl = url.trim().toLowerCase();
     const isAuthMeUrl = normalizedUrl === '/api/auth/me' || normalizedUrl === '/api/v1/auth/me';
-    if (isAuthMeUrl && accessToken && !externalTokenOverride && isJwtLikelyValid(accessToken) && typeof window !== 'undefined') {
+    if (isAuthMeUrl && accessToken && isJwtLikelyValid(accessToken) && typeof window !== 'undefined') {
       try {
         const rawCached = window.sessionStorage?.getItem(AUTH_ME_CACHE_SESSION_KEY);
         if (rawCached) {
           const parsed = JSON.parse(rawCached) as { token?: string; expiresAt?: number; data?: unknown };
           if (parsed && parsed.token === accessToken && typeof parsed.expiresAt === 'number' && parsed.expiresAt > now && parsed.data) {
             return Promise.resolve({
-              data: parsed.data,
-              status: 200,
-              statusText: 'OK',
-              headers: {},
+              data: parsed.data, status: 200, statusText: 'OK', headers: {},
               config: (config ?? {}) as InternalAxiosRequestConfig,
             }) as ReturnType<typeof rawGet>;
           }
         }
-      } catch {
-        // Ignore sessionStorage parse errors
-      }
+      } catch { /* ignore sessionStorage parse errors */ }
     }
     for (const [k, v] of getResponseCache.entries()) {
       if (v.expiresAt <= now) getResponseCache.delete(k);
     }
     const cacheKey = buildGetCacheKey(url, config as Record<string, unknown> | undefined);
     const hit = getResponseCache.get(cacheKey);
-    if (hit && hit.expiresAt > now) {
-      return hit.promise as ReturnType<typeof rawGet>;
-    }
+    if (hit && hit.expiresAt > now) return hit.promise as ReturnType<typeof rawGet>;
     const reqPromise = rawGet(url, config)
       .then((res) => {
         if (isAuthMeUrl && accessToken && res?.data && typeof window !== 'undefined') {
@@ -425,9 +400,7 @@ if (!isTestRuntime) {
               AUTH_ME_CACHE_SESSION_KEY,
               JSON.stringify({ token: accessToken, expiresAt: Date.now() + AUTH_ME_CACHE_TTL_MS, data: res.data }),
             );
-          } catch {
-            // Ignore storage write errors
-          }
+          } catch { /* ignore storage write errors */ }
         }
         return res;
       })
@@ -435,10 +408,7 @@ if (!isTestRuntime) {
         getResponseCache.delete(cacheKey);
         throw err;
       });
-    getResponseCache.set(cacheKey, {
-      expiresAt: now + GET_CACHE_TTL_MS,
-      promise: reqPromise,
-    });
+    getResponseCache.set(cacheKey, { expiresAt: now + GET_CACHE_TTL_MS, promise: reqPromise });
     return reqPromise;
   }) as typeof apiClient.get;
 }

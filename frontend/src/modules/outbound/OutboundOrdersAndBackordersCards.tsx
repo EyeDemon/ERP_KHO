@@ -31,7 +31,7 @@ export function OutboundOrdersListCard({
   return (
     <UiCard title="Danh sách Đơn bán hàng">
       {ordersCount === 0 ? (
-        <p>Chưa có đơn bán hàng nào.</p>
+        <UiEmptyState title="Chưa có đơn bán hàng nào." detail="Tạo đơn bán hàng mới hoặc nhập từ tệp Excel để bắt đầu điều phối xuất kho." />
       ) : (
         <>
           <UiTableScroll>
@@ -39,9 +39,9 @@ export function OutboundOrdersListCard({
               <thead>
                 <tr>
                   <th>Mã đơn</th>
+                  <th>Trạng thái</th>
                   <th>Khách hàng</th>
                   <th>Kho</th>
-                  <th>Trạng thái</th>
                   <th className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Đặt hàng</th>
                   <th className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Đã giữ</th>
                   <th className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Phân bổ</th>
@@ -96,12 +96,12 @@ export function OutboundOrdersListCard({
                         )}
                       </div>
                     </td>
+                    <td><UiBadge tone={tone(order.status)}>{orderLabels[order.status] ?? order.status}</UiBadge></td>
                     <td style={{ maxWidth: 185 }} title={`${order.customerCode} — ${order.customerName}`}>
                       <div style={{ fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>{order.customerCode}</div>
                       <div title={`${order.customerCode} — ${order.customerName}`} style={{ fontSize: 12.5, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 185 }}>{order.customerName}</div>
                     </td>
                     <td>{order.warehouseName}</td>
-                    <td><UiBadge tone={tone(order.status)}>{orderLabels[order.status] ?? order.status}</UiBadge></td>
                     <td className="ui-cell-numeric" style={qtyCellStyle(order.orderedQuantity)}>{order.orderedQuantity}</td>
                     <td className="ui-cell-numeric" style={qtyCellStyle(order.reservedQuantity)}>{order.reservedQuantity}</td>
                     <td className="ui-cell-numeric" style={qtyCellStyle(order.allocatedQuantity)}>{order.allocatedQuantity}</td>

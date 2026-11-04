@@ -5,11 +5,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Api.Authorization;
 
-public sealed class HttpCurrentUser(IHttpContextAccessor httpContextAccessor) : ICurrentUser
+public sealed class HttpCurrentUser(IHttpContextAccessor httpContextAccessor)
+    : ICurrentUser, ERP.Infrastructure.Services.ISecurityDomainCurrentUser
 {
     internal const string EffectiveRoleKey = "DatabaseAuthorization.Role";
     internal const string EffectivePermissionsCacheKey = "DatabaseAuthorization.Permissions";
-    internal const string CachedPermissionsKey = "DatabaseAuthorization.CachedPermissionSet";
+    public const string CachedPermissionsKey = "DatabaseAuthorization.CachedPermissionSet";
+    internal const string EvaluatedPermissionsCacheKey = "DatabaseAuthorization.EvaluatedPermissionDecisions";
 
     private sealed record CachedRolePermissions(
         bool HasDatabaseRolePermissions,
@@ -29,9 +31,33 @@ public sealed class HttpCurrentUser(IHttpContextAccessor httpContextAccessor) : 
         ? tenantId
         : 1;
 
-    public bool IsGlobalAdmin => string.Equals(Role, AppRoles.Admin, StringComparison.Ordinal);
+    public bool IsGlobalAdmin =>
+        string.Equals(Role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Role, AppRoles.SuperAdmin, StringComparison.OrdinalIgnoreCase);
+
     public string Role => httpContextAccessor.HttpContext?.Items[EffectiveRoleKey] as string
         ?? User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+
+    public string SecurityDomain
+    {
+        get
+        {
+            var effectiveRole = Role;
+            if (AppRoles.IsPlatformRole(effectiveRole))
+            {
+                return "PLATFORM";
+            }
+
+            var claimDomain = User.FindFirstValue(TenantClaimTypes.SecurityDomain);
+            if (string.Equals(claimDomain, "PLATFORM", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(effectiveRole, AppRoles.Admin, StringComparison.OrdinalIgnoreCase))
+            {
+                return "PLATFORM";
+            }
+
+            return "CUSTOMER_TENANT";
+        }
+    }
 
     public bool HasPermission(string permissionCode)
     {
@@ -41,6 +67,41 @@ public sealed class HttpCurrentUser(IHttpContextAccessor httpContextAccessor) : 
         }
 
         var normalizedCode = permissionCode.Trim();
+        var httpContext = httpContextAccessor.HttpContext;
+        Dictionary<string, bool>? decisionCache = null;
+        if (httpContext is not null)
+        {
+            if (httpContext.Items.TryGetValue(EvaluatedPermissionsCacheKey, out var existingCacheObj) &&
+                existingCacheObj is Dictionary<string, bool> existingCache)
+            {
+                if (existingCache.TryGetValue(normalizedCode, out var cachedDecision))
+                {
+                    return cachedDecision;
+                }
+                decisionCache = existingCache;
+            }
+            else
+            {
+                decisionCache = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+                httpContext.Items[EvaluatedPermissionsCacheKey] = decisionCache;
+            }
+        }
+
+        var result = EvaluatePermissionCore(normalizedCode, httpContext);
+        if (decisionCache is not null)
+        {
+            decisionCache[normalizedCode] = result;
+        }
+        return result;
+    }
+
+    private bool EvaluatePermissionCore(string normalizedCode, HttpContext? httpContext)
+    {
+        if (IsGlobalAdmin)
+        {
+            return true;
+        }
+
         var effectiveRole = Role;
         var hasExplicitClaim = User.Claims.Any(c =>
             (c.Type is "permission" or "permissions")
@@ -53,21 +114,12 @@ public sealed class HttpCurrentUser(IHttpContextAccessor httpContextAccessor) : 
             && !string.Equals(effectiveRole, AppRoles.Manager, StringComparison.OrdinalIgnoreCase)
             && !string.Equals(effectiveRole, "Accountant", StringComparison.OrdinalIgnoreCase);
 
-        var httpContext = httpContextAccessor.HttpContext;
         if (httpContext is not null)
         {
-            if (httpContext.Items.TryGetValue(CachedPermissionsKey, out var preloadedObj) &&
+            if (httpContext.Items.TryGetValue(PermissionAuthorizationFilter.CachedPermissionsKey, out var preloadedObj) &&
                 preloadedObj is IReadOnlySet<string> preloadedSet)
             {
-                if (preloadedSet.Contains(normalizedCode))
-                {
-                    return true;
-                }
-
-                if (!IsGlobalAdmin && !hasExplicitClaim)
-                {
-                    return false;
-                }
+                return preloadedSet.Contains(normalizedCode);
             }
 
             if (httpContext.Items[EffectivePermissionsCacheKey] is not CachedRolePermissions cached)
@@ -76,21 +128,13 @@ public sealed class HttpCurrentUser(IHttpContextAccessor httpContextAccessor) : 
                 httpContext.Items[EffectivePermissionsCacheKey] = cached;
                 if (cached.HasDatabaseRolePermissions)
                 {
-                    httpContext.Items[CachedPermissionsKey] = cached.GrantedCodes;
+                    httpContext.Items[PermissionAuthorizationFilter.CachedPermissionsKey] = cached.GrantedCodes;
                 }
             }
 
             if (cached.HasDatabaseRolePermissions)
             {
-                if (cached.GrantedCodes.Contains(normalizedCode))
-                {
-                    return true;
-                }
-
-                if (!IsGlobalAdmin)
-                {
-                    return false;
-                }
+                return cached.GrantedCodes.Contains(normalizedCode);
             }
         }
 
@@ -102,7 +146,7 @@ public sealed class HttpCurrentUser(IHttpContextAccessor httpContextAccessor) : 
             return false;
         }
 
-        if (IsGlobalAdmin || hasExplicitClaim)
+        if (hasExplicitClaim)
         {
             return true;
         }

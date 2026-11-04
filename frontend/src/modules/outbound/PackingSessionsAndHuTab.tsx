@@ -3,6 +3,7 @@ import { roundQty4, sanitizeScannerCode } from '../../pages/productCatalog';
 import { MobileBarcodeScannerBar } from '../../components/MobileBarcodeScannerBar';
 import { BarcodeSvg } from '../../components/BarcodeSvg';
 import { UiBadge, UiCard, UiTableScroll } from '../../ui/ProductionUi';
+import { CANONICAL_WH01_LABEL, formatWarehouseLabel } from '../../utils/warehouseLabel';
 import type { HandlingUnit, PackingSession } from './packingSessionsTypes';
 import { hiddenTabStyle, huStateLabels, stateLabels, tone } from './packingSessionsTypes';
 
@@ -76,7 +77,7 @@ export function PackingSessionsAndHuTab({
                   <tr key={item.id}>
                     <td style={{ padding: '6px 4px', fontSize: 11, verticalAlign: 'middle' }}>
                       <button type="button" style={{ whiteSpace: 'nowrap', padding: '4px 8px', minHeight: 28, fontSize: 11, lineHeight: 1.2 }} onClick={() => void detail(item.id)}>{item.sessionCode}</button>
-                      <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 3, lineHeight: 1.2 }}>{item.warehouseName}</div>
+                      <div style={{ fontSize: 10.5, color: '#475569', marginTop: 3, lineHeight: 1.2 }}>{formatWarehouseLabel(item.warehouseName, undefined, item.warehouseId)}</div>
                     </td>
                     <td style={{ padding: '6px 4px', fontSize: 10.5, lineHeight: 1.25, verticalAlign: 'middle' }}>
                       <span style={{ display: 'block', whiteSpace: 'nowrap', color: '#475569' }}>{item.pickingTaskCode || 'PICK'}</span>
@@ -89,7 +90,7 @@ export function PackingSessionsAndHuTab({
                     </td>
                     <td style={{ padding: '8px 10px 8px 0px', fontSize: 11.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle', fontVariantNumeric: 'tabular-nums' }}>
                       <strong>{item.packedQuantity}</strong> / {item.requiredQuantity}
-                      <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>{item.handlingUnitCount} kiện</div>
+                      <div style={{ fontSize: 10.5, color: '#475569', marginTop: 2 }}>{item.handlingUnitCount} kiện</div>
                     </td>
                   </tr>
                 ))}
@@ -103,7 +104,7 @@ export function PackingSessionsAndHuTab({
         <UiCard title={`Chi tiết ${selected.sessionCode}`}>
           <div className="ui-inline-wrap">
             <UiBadge tone={tone(selected.status)}>{stateLabels[selected.status] ?? selected.status}</UiBadge>
-            <span className="ui-muted-text">{selected.pickingTaskCode} • {selected.sourceCode ?? selected.sourceType} • {selected.warehouseName}</span>
+            <span className="ui-muted-text">{selected.pickingTaskCode} • {selected.sourceCode ?? selected.sourceType} • {formatWarehouseLabel(selected.warehouseName, undefined, selected.warehouseId)}</span>
             <span>Đã đóng gói: <strong>{selected.packedQuantity}</strong> / {selected.requiredQuantity} • Còn lại: {selected.remainingQuantity}</span>
           </div>
           <p className="ui-muted-text">Quản lý tạo kiện đóng gói, xác nhận hàng hóa vào kiện, niêm phong kiện, lồng ghép kiện (Pallet) và in nhãn vận chuyển.</p>
@@ -228,7 +229,7 @@ export function PackingSessionsAndHuTab({
               <span><strong>Mã vạch:</strong> <code>{labelPreviewHu.barcode}</code></span>
               <span><strong>SSCC:</strong> <code>{labelPreviewHu.sscc || labelPreviewHu.barcode || 'Chưa cấp SSCC'}</code></span>
               <span><strong>Loại kiện:</strong> {({ Carton: 'Thùng carton', Tote: 'Khay nhựa', Pallet: 'Pallet tiêu chuẩn', Container: 'Thùng hàng lớn', Custom: 'Tùy chỉnh' } as Record<string, string>)[labelPreviewHu.type] ?? labelPreviewHu.type}</span>
-              <span><strong>Kho:</strong> {labelPreviewHu.warehouseId === 1 ? 'WH01 — Kho Chính TP.HCM' : `WH0${labelPreviewHu.warehouseId} — ${selected?.warehouseName || sessions[0]?.warehouseName || 'Kho Chính TP.HCM'}`}</span>
+              <span><strong>Kho:</strong> {formatWarehouseLabel(selected?.warehouseName || sessions[0]?.warehouseName, labelPreviewHu.warehouseId === 1 ? 'WH01' : `WH0${labelPreviewHu.warehouseId}`, labelPreviewHu.warehouseId) || CANONICAL_WH01_LABEL}</span>
               <UiBadge tone={tone(labelPreviewHu.status)}>{huStateLabels[labelPreviewHu.status] ?? labelPreviewHu.status}</UiBadge>
             </div>
             <div><BarcodeSvg value={labelPreviewHu.barcode || labelPreviewHu.huCode} sscc={labelPreviewHu.sscc || '008938505000000018'} label={labelPreviewHu.huCode} qrCaption="Mã QR kiện hàng" /></div>
@@ -286,18 +287,18 @@ export function PackingSessionsAndHuTab({
                   <tr key={item.id}>
                     <td style={{ padding: '6px 4px', fontSize: 11, verticalAlign: 'middle' }}>
                       <strong style={{ display: 'block', whiteSpace: 'nowrap', fontSize: 11 }}>{item.huCode}</strong>
-                      <span style={{ display: 'block', fontSize: 10.5, color: '#64748b' }}>
+                      <span style={{ display: 'block', fontSize: 10.5, color: '#475569' }}>
                         {({ Carton: 'Thùng carton', Tote: 'Khay nhựa', Pallet: 'Pallet', Container: 'Thùng lớn', Custom: 'Tùy chỉnh' } as Record<string, string>)[item.type] ?? item.type}
                         {item.parentHandlingUnitCode ? ` • ${item.parentHandlingUnitCode}` : ''}
                       </span>
                     </td>
                     <td style={{ padding: '6px 4px', fontSize: 10.5, verticalAlign: 'middle' }}>
                       <code style={{ display: 'block', whiteSpace: 'nowrap', fontSize: 10.5 }}>{item.barcode}</code>
-                      {item.sscc ? <small style={{ display: 'block', fontSize: 10, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>SSCC: {item.sscc}</small> : null}
+                      {item.sscc ? <small style={{ display: 'block', fontSize: 10, color: '#475569', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>SSCC: {item.sscc}</small> : null}
                     </td>
                     <td style={{ padding: '6px 4px', fontSize: 10.5, verticalAlign: 'middle' }}>
                       <UiBadge tone={tone(item.status)}>{huStateLabels[item.status] ?? item.status}</UiBadge>
-                      <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>SL: {roundQty4((item.contents ?? []).reduce((sum, c) => sum + c.quantity, 0))}</div>
+                      <div style={{ fontSize: 10, color: '#475569', marginTop: 2 }}>SL: {roundQty4((item.contents ?? []).reduce((sum, c) => sum + c.quantity, 0))}</div>
                     </td>
                     <td style={{ padding: '8px 10px 8px 0px', fontSize: 10.5, whiteSpace: 'nowrap', textAlign: 'right', verticalAlign: 'middle' }}>
                       <button type="button" className="ui-btn-secondary" style={{ whiteSpace: 'nowrap', padding: '4px 8px', minHeight: 28, fontSize: 11, lineHeight: 1.2 }} onClick={() => setLabelPreviewHu(item)}>In nhãn</button>

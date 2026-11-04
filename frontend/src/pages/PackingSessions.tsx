@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useInRouterContext, useLocation } from 'react-router-dom';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
@@ -11,7 +12,16 @@ import { PackingKittingAndVideoTab } from '../modules/outbound/PackingKittingAnd
 import { PackingSessionsAndHuTab } from '../modules/outbound/PackingSessionsAndHuTab';
 
 export default function PackingSessions() {
-  const [activeTab, setActiveTab] = useState<'workbench' | 'sessions-hu' | 'kitting-video'>('workbench');
+  const inRouter = useInRouterContext();
+  const location = inRouter ? useLocation() : null;
+  const pathname = location?.pathname ?? (typeof window !== 'undefined' ? window.location.pathname : '/packing-sessions');
+  const isKitRoute = pathname.startsWith('/kitting') || pathname.startsWith('/kit-work-orders');
+  const [activeTab, setActiveTab] = useState<'workbench' | 'sessions-hu' | 'kitting-video'>(() =>
+    isKitRoute ? 'kitting-video' : 'workbench',
+  );
+  useEffect(() => {
+    setActiveTab(isKitRoute ? 'kitting-video' : 'workbench');
+  }, [isKitRoute]);
   const [sessions, setSessions] = useState<PackingSession[]>([]);
   const [selected, setSelected] = useState<PackingSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -89,68 +99,92 @@ export default function PackingSessions() {
   return (
     <UiPage>
       <UiPageHeader
-        eyebrow="XUẤT KHO"
-        title="Đóng gói & Đơn vị xử lý (HU)"
-        description="Đóng gói hàng đã lấy vào thùng carton, khay hoặc pallet (HU). Bước đóng gói bảo toàn số lượng và không trừ tồn kho; tồn kho chỉ trừ một lần khi xuất bến."
+        eyebrow={isKitRoute ? 'Sản xuất & Lắp ráp VAS' : 'XUẤT KHO'}
+        title={isKitRoute ? 'Lệnh lắp ráp bộ Kit' : 'Trạm đóng gói đơn hàng'}
+        description={
+          isKitRoute
+            ? 'Quản lý định mức cấu thành bộ Kit (BOM), lập lệnh lắp ráp / tháo dỡ bộ Kit, kế thừa hạn dùng FEFO sớm nhất và cộng dồn giá vốn bình quân gia quyền (MAC).'
+            : 'Đóng gói hàng đã lấy vào thùng carton, khay hoặc pallet (HU/SSCC). Bước đóng gói bảo toàn số lượng và không trừ tồn kho.'
+        }
       />
-      <OutboundPipelineStepper />
+      {!isKitRoute && <OutboundPipelineStepper />}
       {error && <div role="alert">{error}</div>}
 
-      <UiTabs
-        ariaLabel="Chuyển đổi phân mục bàn đóng gói"
-        activeTab={activeTab}
-        onChange={setActiveTab}
-        tabs={[
-          { id: 'workbench', label: '⚡ Bàn Đóng Gói Trực Tiếp (1 Màn Hình)', testId: 'tab-packing-workbench' },
-          { id: 'sessions-hu', label: 'Danh sách Phiên & Đơn vị xử lý (HU / SSCC)', badge: sessions.length, testId: 'tab-packing-sessions-hu' },
-          { id: 'kitting-video', label: 'Lắp ráp Kit / VAS & Kho Video SHA-256', testId: 'tab-packing-kitting-video' },
-        ]}
-      />
+      {isKitRoute ? (
+        <PackingKittingAndVideoTab
+          active={true}
+          isKitRoute={true}
+          sessions={sessions}
+          selected={selected}
+          huType={huType}
+          busy={busy}
+          governanceBusy={governanceBusy}
+          setGovernanceBusy={setGovernanceBusy}
+          videoEvidences={videoEvidences}
+          setVideoEvidences={setVideoEvidences}
+          setVideoNotice={setVideoNotice}
+          setError={setError}
+        />
+      ) : (
+        <>
+          <UiTabs
+            ariaLabel="Chuyển đổi phân mục bàn đóng gói"
+            activeTab={activeTab}
+            onChange={setActiveTab}
+            tabs={[
+              { id: 'workbench', label: 'Bàn Đóng Gói Trực Tiếp (1 Màn Hình)', testId: 'tab-packing-workbench' },
+              { id: 'sessions-hu', label: 'Danh sách Phiên & Đơn vị xử lý (HU / SSCC)', badge: sessions.length, testId: 'tab-packing-sessions-hu' },
+              { id: 'kitting-video', label: 'Lắp ráp Kit / VAS & Kho Video SHA-256', testId: 'tab-packing-kitting-video' },
+            ]}
+          />
 
-      <PackingWorkbenchTab
-        active={activeTab === 'workbench'}
-        sessions={sessions}
-        selected={selected}
-        busy={busy}
-        governanceBusy={governanceBusy}
-        videoAwbCode={videoAwbCode}
-        setVideoAwbCode={setVideoAwbCode}
-        videoNotice={videoNotice}
-        setVideoNotice={setVideoNotice}
-        setVideoEvidences={setVideoEvidences}
-        detail={detail}
-        setError={setError}
-      />
+          <PackingWorkbenchTab
+            active={activeTab === 'workbench'}
+            sessions={sessions}
+            selected={selected}
+            busy={busy}
+            governanceBusy={governanceBusy}
+            videoAwbCode={videoAwbCode}
+            setVideoAwbCode={setVideoAwbCode}
+            videoNotice={videoNotice}
+            setVideoNotice={setVideoNotice}
+            setVideoEvidences={setVideoEvidences}
+            detail={detail}
+            setError={setError}
+          />
 
-      <PackingKittingAndVideoTab
-        active={activeTab === 'kitting-video'}
-        sessions={sessions}
-        selected={selected}
-        huType={huType}
-        busy={busy}
-        governanceBusy={governanceBusy}
-        setGovernanceBusy={setGovernanceBusy}
-        videoEvidences={videoEvidences}
-        setVideoEvidences={setVideoEvidences}
-        setVideoNotice={setVideoNotice}
-        setError={setError}
-      />
+          <PackingKittingAndVideoTab
+            active={activeTab === 'kitting-video'}
+            isKitRoute={false}
+            sessions={sessions}
+            selected={selected}
+            huType={huType}
+            busy={busy}
+            governanceBusy={governanceBusy}
+            setGovernanceBusy={setGovernanceBusy}
+            videoEvidences={videoEvidences}
+            setVideoEvidences={setVideoEvidences}
+            setVideoNotice={setVideoNotice}
+            setError={setError}
+          />
 
-      <PackingSessionsAndHuTab
-        active={activeTab === 'sessions-hu'}
-        sessions={sessions}
-        selected={selected}
-        huRegistry={huRegistry}
-        huType={huType}
-        setHuType={setHuType}
-        busy={busy}
-        governanceBusy={governanceBusy}
-        canExecute={canExecute}
-        canCreateHu={canCreateHu}
-        canModifyHu={canModifyHu}
-        detail={detail}
-        mutate={mutate}
-      />
+          <PackingSessionsAndHuTab
+            active={activeTab === 'sessions-hu'}
+            sessions={sessions}
+            selected={selected}
+            huRegistry={huRegistry}
+            huType={huType}
+            setHuType={setHuType}
+            busy={busy}
+            governanceBusy={governanceBusy}
+            canExecute={canExecute}
+            canCreateHu={canCreateHu}
+            canModifyHu={canModifyHu}
+            detail={detail}
+            mutate={mutate}
+          />
+        </>
+      )}
     </UiPage>
   );
 }

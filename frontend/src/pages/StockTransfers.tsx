@@ -1,17 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import apiClient from '../services/apiClient';
-import { currentRole, currentUserId, hasPermission, usePermission } from '../services/authorization';
-import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
-import { UiPage, UiPageHeader, UiToolbar, UiToolbarField } from '../ui/ProductionUi';
+import { currentRole, currentUserId, usePermission } from '../services/authorization';
+import { UiPage, UiPageHeader } from '../ui/ProductionUi';
 import './StockTransfers.css';
 import StockTransferDetailsDialog from './StockTransferDetailsDialog';
 import {
   StockTransferDraftModal,
   StockTransferInTransitCard,
   StockTransferListCard,
-  StockTransferOverviewCard,
-} from '../modules/inventory-pages/StockTransferSections';
+} from '../modules/inventory/StockTransferSections';
+import {
+  fetchInTransitTransfers,
+  fetchStockTransferPageData,
+  postTransferCommand,
+  StockTransferFilterToolbar,
+  submitTransferDraft,
+  type StockTransferFilters,
+} from '../modules/inventory/StockTransferFilterToolbar';
 import {
   executeSimulateNetworkRebalancing,
   executeVerifyInTransitSeal,
@@ -29,7 +35,7 @@ import {
   type SealVerificationResult,
   type Transfer,
   type Warehouse,
-} from '../modules/inventory-pages/stockTransfersShared';
+} from '../modules/inventory/stockTransfersShared';
 
 export default function StockTransfers() {
   const role = currentRole();
@@ -55,8 +61,11 @@ export default function StockTransfers() {
   const [sourceId, setSourceId] = useState<number | ''>('');
   const [destinationId, setDestinationId] = useState<number | ''>('');
   const [note, setNote] = useState('');
+  const [internalTransferOrderNo, setInternalTransferOrderNo] = useState('');
+  const [transporterName, setTransporterName] = useState('');
+  const [vehiclePlateNumber, setVehiclePlateNumber] = useState('');
   const [lines, setLines] = useState<Line[]>([{ productId: '', quantity: '', note: '' }]);
-  const [filters, setFilters] = useState({ search: '', status: '', sourceWarehouseId: '', destinationWarehouseId: '' });
+  const [filters, setFilters] = useState<StockTransferFilters>({ search: '', status: '', sourceWarehouseId: '', destinationWarehouseId: '' });
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [receive, setReceive] = useState<Record<number, { receivedQuantity: number; missingQuantity: number; damagedQuantity: number }>>({});
@@ -76,11 +85,7 @@ export default function StockTransfers() {
   const loadInTransit = async () => {
     setInTransitLoading(true);
     try {
-      const params: Record<string, string> = {};
-      if (filters.sourceWarehouseId) params.sourceWarehouseId = filters.sourceWarehouseId;
-      if (filters.destinationWarehouseId) params.destinationWarehouseId = filters.destinationWarehouseId;
-      const res = await apiClient.get('/api/v1/stock-transfers/in-transit', { params });
-      setInTransitItems(Array.isArray(res.data?.items) ? (res.data.items as InTransitItem[]) : []);
+      setInTransitItems(await fetchInTransitTransfers(filters));
     } catch (failure: any) {
       setInTransitItems([]);
       setError(failure?.response?.data?.message || 'Không thể tải dữ liệu tồn kho đang vận chuyển.');
@@ -100,36 +105,13 @@ export default function StockTransfers() {
     setLoading(true);
     setError('');
     try {
-      const params = { ...filters, pageIndex: requestedPage, pageSize: 15 };
-      const hasExplicitPermissions = typeof localStorage !== 'undefined' && localStorage.getItem('permissions') !== null;
-      const canReadWarehouses = !hasExplicitPermissions || hasPermission('warehouse.read');
-      const canReadProducts = !hasExplicitPermissions || hasPermission('product.read');
-      let refLoadError = '';
-      const [transfers, warehouseResult, productResult] = await Promise.all([
-        apiClient.get('/api/v1/stock-transfers', { params }),
-        canReadWarehouses
-          ? apiClient.get('/api/v1/warehouses').catch((err: any) => {
-              if (err?.response?.status && err.response.status >= 400) {
-                refLoadError = err.response?.data?.message || 'Không thể tải danh sách kho.';
-              }
-              return { data: [] };
-            })
-          : Promise.resolve({ data: [] }),
-        canReadProducts
-          ? apiClient.get('/api/v1/products').catch((err: any) => {
-              if (err?.response?.status && err.response.status >= 400) {
-                refLoadError = refLoadError || err.response?.data?.message || 'Không thể tải danh sách sản phẩm.';
-              }
-              return { data: [] };
-            })
-          : Promise.resolve({ data: [] }),
-      ]);
+      const data = await fetchStockTransferPageData(filters, requestedPage);
       if (requestSequence !== listRequestSequence.current) return;
-      setItems(transfers.data.items);
-      setTotalPages(transfers.data.totalPages || 1);
-      setWarehouses(Array.isArray(warehouseResult.data) ? warehouseResult.data : []);
-      setProducts(Array.isArray(productResult.data) ? productResult.data : []);
-      if (refLoadError) setError(refLoadError);
+      setItems(data.items);
+      setTotalPages(data.totalPages);
+      setWarehouses(data.warehouses);
+      setProducts(data.products);
+      if (data.refLoadError) setError(data.refLoadError);
     } catch (failure: any) {
       if (requestSequence === listRequestSequence.current) {
         setError(failure.response?.data?.message || 'Không thể tải dữ liệu điều chuyển.');
@@ -139,7 +121,6 @@ export default function StockTransfers() {
     }
   };
 
-  // Filters are applied explicitly; changing page re-runs the current query.
   // oxlint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     void load(page);
@@ -253,24 +234,21 @@ export default function StockTransfers() {
     const validationErr = validateTransferDraft({ editingId, editingRevision, sourceId, destinationId, warehouses, products, lines, note });
     if (validationErr) return setError(validationErr);
 
-    const payload = {
-      sourceWarehouseId: sourceId,
-      destinationWarehouseId: destinationId,
-      note,
-      details: lines,
-      ...(editingId === null ? {} : { expectedDraftRevision: editingRevision }),
-    };
     const editId = editingId;
-    const action = `transfer-${editId === null ? 'create' : 'update:' + editId}:${JSON.stringify(payload)}`;
     createInFlightRef.current = true;
     setCreateInFlight(true);
     try {
-      if (editId === null) {
-        await apiClient.post('/api/v1/stock-transfers', payload, { headers: idempotencyHeaders(action) });
-      } else {
-        await apiClient.put(`/api/v1/stock-transfers/${editId}`, payload, { headers: idempotencyHeaders(action) });
-      }
-      completeIdempotentAction(action);
+      await submitTransferDraft({
+        editId,
+        editingRevision,
+        sourceId,
+        destinationId,
+        note,
+        lines,
+        internalTransferOrderNo,
+        transporterName,
+        vehiclePlateNumber,
+      });
       setShowCreate(false);
       setEditingId(null);
       setEditingRevision(null);
@@ -284,7 +262,6 @@ export default function StockTransfers() {
       if (editId !== null) await openDetail(editId);
     } catch (failure: any) {
       if (editId !== null && failure.response?.status === 409) {
-        completeIdempotentAction(action);
         setDraftConflict(true);
       }
       setError(
@@ -304,11 +281,9 @@ export default function StockTransfers() {
 
     actionInFlightRef.current = true;
     setActionInFlight(true);
-    const logicalAction = `transfer-${action}:${selected.id}${body === undefined ? '' : `:${JSON.stringify(body)}`}`;
     try {
-      const response = await apiClient.post(`/api/v1/stock-transfers/${selected.id}/${action}`, body, { headers: idempotencyHeaders(logicalAction) });
-      completeIdempotentAction(logicalAction);
-      await openDetail(action === 'reverse-draft' ? response.data.id : selected.id);
+      const data = await postTransferCommand(selected.id, action, body);
+      await openDetail(action === 'reverse-draft' ? data.id : selected.id);
       await load();
     } catch (failure: any) {
       setError(failure.response?.data?.message || 'Thao tác không thành công.');
@@ -328,30 +303,18 @@ export default function StockTransfers() {
 
   const handleVerifySeal = async () => {
     if (governanceBusy) return;
-    setGovernanceBusy(true);
-    setError('');
-    try {
-      setSealVerification(await executeVerifyInTransitSeal(items));
-    } catch (err: any) {
-      setSealVerification(null);
-      setError(err?.response?.data?.message || err?.message || 'Không thể xác minh niêm phong HU và đối chiếu hàng đang đi đường.');
-    } finally {
-      setGovernanceBusy(false);
-    }
+    setGovernanceBusy(true); setError('');
+    try { setSealVerification(await executeVerifyInTransitSeal(items)); }
+    catch (err: any) { setSealVerification(null); setError(err?.response?.data?.message || err?.message || 'Không thể xác minh niêm phong HU và đối chiếu hàng đang đi đường.'); }
+    finally { setGovernanceBusy(false); }
   };
 
   const handleSimulateRebalancing = async () => {
     if (governanceBusy) return;
-    setGovernanceBusy(true);
-    setError('');
-    try {
-      setNetworkRebalancing(await executeSimulateNetworkRebalancing(filters));
-    } catch (err: any) {
-      setNetworkRebalancing(null);
-      setError(err?.response?.data?.message || err?.message || 'Không thể mô phỏng tái cân bằng tồn kho mạng lưới.');
-    } finally {
-      setGovernanceBusy(false);
-    }
+    setGovernanceBusy(true); setError('');
+    try { setNetworkRebalancing(await executeSimulateNetworkRebalancing(filters)); }
+    catch (err: any) { setNetworkRebalancing(null); setError(err?.response?.data?.message || err?.message || 'Không thể mô phỏng tái cân bằng tồn kho mạng lưới.'); }
+    finally { setGovernanceBusy(false); }
   };
 
   const status = selected ? normalizeStatus(selected.status) : '';
@@ -363,60 +326,17 @@ export default function StockTransfers() {
           eyebrow="Kiểm soát tồn kho"
           title="Điều chuyển kho"
           description="Theo dõi hàng từ kho nguồn, duyệt xuất, trạng thái đang vận chuyển đến khi kho đích xác nhận và hoàn tất."
-          actions={
-            canWrite ? (
-              <button type="button" ref={createButtonRef} className="ui-primary-button" onClick={openNewDraft}>
-                <Plus size={17} aria-hidden="true" /> Tạo phiếu
-              </button>
-            ) : undefined
-          }
+          actions={canWrite ? <button type="button" ref={createButtonRef} className="ui-primary-button" onClick={openNewDraft}><Plus size={17} aria-hidden="true" /> Tạo phiếu</button> : undefined}
         />
 
-        {error && !showCreate && !selected && (
-          <div className="transfer-error" role="alert">
-            <span>{error}</span>
-            <button type="button" aria-label="Đóng thông báo lỗi" onClick={() => setError('')}>
-              <X size={16} aria-hidden="true" />
-            </button>
-          </div>
-        )}
-
-        <StockTransferOverviewCard
-          items={items}
-          actionInFlight={actionInFlight}
-          createInFlight={createInFlight}
-          governanceBusy={governanceBusy}
-          sealVerification={sealVerification}
-          networkRebalancing={networkRebalancing}
-          onVerifySeal={() => void handleVerifySeal()}
-          onSimulateRebalancing={() => void handleSimulateRebalancing()}
+        <StockTransferFilterToolbar
+          error={error} showCreate={showCreate} hasSelected={Boolean(selected)} onClearError={() => setError('')}
+          items={items} actionInFlight={actionInFlight} createInFlight={createInFlight} governanceBusy={governanceBusy}
+          sealVerification={sealVerification} networkRebalancing={networkRebalancing}
+          onVerifySeal={() => void handleVerifySeal()} onSimulateRebalancing={() => void handleSimulateRebalancing()}
+          filters={filters} setFilters={setFilters} warehouses={warehouses} showInTransit={showInTransit}
+          onApplyFilters={applyFilters} onToggleInTransit={toggleInTransit}
         />
-
-        <UiToolbar>
-          <UiToolbarField label="Mã phiếu">
-            <input aria-label="Tìm mã phiếu điều chuyển" placeholder="Tìm mã phiếu" value={filters.search} onChange={(e) => setFilters({ ...filters, search: e.target.value })} />
-          </UiToolbarField>
-          <UiToolbarField label="Trạng thái">
-            <select aria-label="Lọc trạng thái điều chuyển" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
-              <option value="">Mọi trạng thái</option>
-              {statusNames.map((name, index) => <option key={name} value={index}>{statusLabel[name]}</option>)}
-            </select>
-          </UiToolbarField>
-          <UiToolbarField label="Kho nguồn">
-            <select aria-label="Lọc kho nguồn" value={filters.sourceWarehouseId} onChange={(e) => setFilters({ ...filters, sourceWarehouseId: e.target.value })}>
-              <option value="">Mọi kho nguồn</option>
-              {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-            </select>
-          </UiToolbarField>
-          <UiToolbarField label="Kho đích">
-            <select aria-label="Lọc kho đích" value={filters.destinationWarehouseId} onChange={(e) => setFilters({ ...filters, destinationWarehouseId: e.target.value })}>
-              <option value="">Mọi kho đích</option>
-              {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-            </select>
-          </UiToolbarField>
-          <button type="button" onClick={applyFilters}>Lọc</button>
-          <button type="button" onClick={toggleInTransit}>{showInTransit ? 'Ẩn tồn đang vận chuyển' : 'Tồn đang vận chuyển'}</button>
-        </UiToolbar>
 
         {showInTransit && (
           <StockTransferInTransitCard inTransitLoading={inTransitLoading} inTransitItems={inTransitItems} onOpenDetail={(id) => void openDetail(id)} />
@@ -429,7 +349,11 @@ export default function StockTransfers() {
             draftDialogRef={draftDialogRef} editingId={editingId} editingRevision={editingRevision}
             draftConflict={draftConflict} createInFlight={createInFlight} error={error}
             sourceId={sourceId} setSourceId={setSourceId} destinationId={destinationId} setDestinationId={setDestinationId}
-            note={note} setNote={setNote} lines={lines} setLines={setLines} warehouses={warehouses} products={products}
+            note={note} setNote={setNote}
+            internalTransferOrderNo={internalTransferOrderNo} setInternalTransferOrderNo={setInternalTransferOrderNo}
+            transporterName={transporterName} setTransporterName={setTransporterName}
+            vehiclePlateNumber={vehiclePlateNumber} setVehiclePlateNumber={setVehiclePlateNumber}
+            lines={lines} setLines={setLines} warehouses={warehouses} products={products}
             onCloseDraftEditor={closeDraftEditor} onReloadConflictedDraft={() => void reloadConflictedDraft()}
             onSubmitCreate={(event) => void create(event)}
           />

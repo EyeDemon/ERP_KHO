@@ -323,12 +323,26 @@ describe('InventoryReconciliation', () => {
 
   it('does not call real investigation API on read-only demo',async()=>{
     vi.mocked(isReadOnlyDemoRuntime).mockReturnValue(true);
+    vi.mocked(apiClient.get).mockImplementation((url:string)=>{
+      if(url==='/api/v1/inventory-reconciliation/warehouses')
+        return Promise.resolve({data:[{id:1,code:'W1',name:'Kho HCM'}]});
+      if(url==='/api/v1/inventory-reconciliation/outbox-messages')
+        return Promise.resolve({data:[]});
+      return Promise.resolve({data:{items:[{
+        productId:10,productCode:'SKU-1001',productName:'Sản phẩm demo',
+        warehouseId:1,warehouseName:'Kho HCM',currentQuantity:95,expectedQuantity:100,
+        difference:-5,status:'Mismatch',importQuantity:100,exportQuantity:0,
+        transferInQuantity:0,transferOutQuantity:0,
+        adjustmentIncreaseQuantity:0,adjustmentDecreaseQuantity:0
+      }],totalRecords:1,pageIndex:1,pageSize:20,totalPages:1}});
+    });
     const view=render(<InventoryReconciliation />);
     await view.findByText('SKU-1001');
     const buttons=view.getAllByRole('button',{name:/Xem bằng chứng/});
     expect(buttons.length).toBeGreaterThan(0);
     expect(buttons.every(b=>(b as HTMLButtonElement).disabled)).toBe(true);
-    expect(apiClient.get).not.toHaveBeenCalled();
+    fireEvent.click(buttons[0]);
+    expect(vi.mocked(apiClient.get).mock.calls.some(([u])=>String(u).includes('/investigation'))).toBe(false);
   });
 
   it('clears stale evidence when filters change while investigation is in flight',async()=>{

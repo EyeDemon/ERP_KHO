@@ -70,7 +70,7 @@ export const DashboardExceptionAlerts = ({
         {filteredTasks.length === 0 ? (
           <p className="ui-muted-text">Không có tác vụ kho đang mở theo bộ lọc hiện tại.</p>
         ) : (
-          <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+          <div tabIndex={0} role="region" aria-label="Vùng cuộn hàng đợi tác vụ kho đang mở" style={{ maxHeight: 240, overflowY: 'auto' }}>
             <UiTableScroll>
               <table className="ui-table-compact" aria-label="Hàng đợi tác vụ kho đang mở">
                 <thead>
@@ -116,7 +116,7 @@ export const DashboardExceptionAlerts = ({
         {liveExceptions.length === 0 ? (
           <p className="ui-muted-text">Không có ngoại lệ vận hành mở trong phạm vi kho được phép.</p>
         ) : (
-          <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+          <div tabIndex={0} role="region" aria-label="Vùng cuộn trung tâm ngoại lệ vận hành" style={{ maxHeight: 240, overflowY: 'auto' }}>
             <UiTableScroll>
               <table className="ui-table-compact" aria-label="Trung tâm ngoại lệ vận hành" style={{ width: '100%' }}>
                 <thead>

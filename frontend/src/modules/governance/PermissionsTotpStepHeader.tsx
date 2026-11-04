@@ -62,7 +62,7 @@ export function PermissionsTotpStepHeader({
                 width: 22,
                 height: 22,
                 borderRadius: '50%',
-                background: '#0284c7',
+                background: '#1d4ed8',
                 color: '#ffffff',
                 fontWeight: 700,
                 fontSize: 12,
@@ -114,7 +114,7 @@ export function PermissionsTotpStepHeader({
                 width: 22,
                 height: 22,
                 borderRadius: '50%',
-                background: totpEnrollmentStage === 'IDLE' ? '#64748b' : '#0284c7',
+                background: totpEnrollmentStage === 'IDLE' ? '#64748b' : '#1d4ed8',
                 color: '#ffffff',
                 fontWeight: 700,
                 fontSize: 12,
@@ -168,7 +168,7 @@ export function PermissionsTotpStepHeader({
                 borderRadius: '50%',
                 background:
                   totpEnrollmentStage === 'RECOVERY_CODES_PENDING' || totpEnrollmentStage === 'VERIFIED'
-                    ? '#0284c7'
+                    ? '#1d4ed8'
                     : '#64748b',
                 color: '#ffffff',
                 fontWeight: 700,

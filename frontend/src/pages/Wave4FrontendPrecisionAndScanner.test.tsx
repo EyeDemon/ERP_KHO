@@ -96,30 +96,30 @@ describe('Wave-4 Sector D (REM-16): Frontend Precision, Scanner Hygiene & Idempo
 
   it('W4-SEC-D-04: apiClient request interceptor auto-attaches Idempotency-Key on write requests when missing', async () => {
     const handlers = (apiClient.interceptors.request as unknown as {
-      handlers: Array<{ fulfilled: (config: Record<string, unknown>) => Record<string, unknown> }>;
+      handlers: Array<{ fulfilled: (config: Record<string, unknown>) => Promise<Record<string, unknown>> | Record<string, unknown> }>;
     }).handlers;
     const requestInterceptor = handlers[0]?.fulfilled;
     expect(requestInterceptor).toBeTypeOf('function');
 
-    const postConfig = requestInterceptor({
+    const postConfig = (await requestInterceptor({
       method: 'post',
       url: '/api/v1/products',
       headers: {},
-    }) as { headers: Record<string, string> };
+    })) as { headers: Record<string, string> };
     expect(postConfig.headers['Idempotency-Key']).toMatch(/^auto-post-/);
 
-    const existingKeyConfig = requestInterceptor({
+    const existingKeyConfig = (await requestInterceptor({
       method: 'put',
       url: '/api/v1/products/1',
       headers: { 'Idempotency-Key': 'custom-key-123' },
-    }) as { headers: Record<string, string> };
+    })) as { headers: Record<string, string> };
     expect(existingKeyConfig.headers['Idempotency-Key']).toBe('custom-key-123');
 
-    const getConfig = requestInterceptor({
+    const getConfig = (await requestInterceptor({
       method: 'get',
       url: '/api/v1/products',
       headers: {},
-    }) as { headers: Record<string, string> };
+    })) as { headers: Record<string, string> };
     expect(getConfig.headers['Idempotency-Key']).toBeUndefined();
   });
 });

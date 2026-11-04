@@ -3,6 +3,7 @@ import apiClient from '../../services/apiClient';
 import { currentUserId } from '../../services/authorization';
 import { roundQty4, sanitizeScannerCode } from '../../pages/productCatalog';
 import { UiBadge, UiCard, UiTableScroll } from '../../ui/ProductionUi';
+import { formatWarehouseLabel } from '../../utils/warehouseLabel';
 import type { AlternateBinItem, PickingTask } from './pickingTasksTypes';
 import { failureMessage, lineStates, sourceTypeLabels, states, tone } from './pickingTasksTypes';
 
@@ -81,13 +82,14 @@ export function PickingTasksGrid({
                 {tasks.map(task => {
                   const sourceLabel = task.sourceCode ?? (sourceTypeLabels[task.sourceType] ?? task.sourceType);
                   const pickLocationLabel = task.lines?.[0]?.sourceLocationCode ?? 'BIN-PICK';
+                  const warehouseDisplay = formatWarehouseLabel(task.warehouseName, undefined, task.warehouseId);
                   return (
                     <tr key={task.id}>
                       <td style={{ padding: '6px 4px', fontSize: 11, verticalAlign: 'middle' }}>
                         <button type="button" style={{ whiteSpace: 'nowrap', padding: '4px 8px', minHeight: 28, fontSize: 11, lineHeight: 1.2 }} onClick={() => void detail(task.id)}>
                           {task.taskCode}
                         </button>
-                        <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 3, lineHeight: 1.2 }}>{task.warehouseName}</div>
+                        <div style={{ fontSize: 10.5, color: '#475569', marginTop: 3, lineHeight: 1.2 }}>{warehouseDisplay}</div>
                       </td>
                       <td style={{ padding: '6px 4px', fontSize: 10.5, lineHeight: 1.25, verticalAlign: 'middle' }}>
                         <span style={{ display: 'block', whiteSpace: 'nowrap', color: '#475569' }}>{sourceLabel}</span>
@@ -116,7 +118,9 @@ export function PickingTasksGrid({
         <UiCard title={`Chi tiết ${selected.taskCode}`}>
           <div className="ui-inline-wrap">
             <UiBadge tone={tone(selected.status)}>{states[selected.status] ?? selected.status}</UiBadge>
-            <span className="ui-muted-text">{selected.sourceCode ?? (sourceTypeLabels[selected.sourceType] ?? selected.sourceType)} • {selected.warehouseName}</span>
+            <span className="ui-muted-text">
+              {selected.sourceCode ?? (sourceTypeLabels[selected.sourceType] ?? selected.sourceType)} • {formatWarehouseLabel(selected.warehouseName, undefined, selected.warehouseId)}
+            </span>
             <span className="ui-muted-text">Tiến độ {selected.pickedQuantity}/{selected.requestedQuantity}</span>
           </div>
           <p className="ui-muted-text">Xác thực vị trí kệ nguồn, mã sản phẩm và số lượng lấy thực tế theo phân bổ tồn kho.</p>
@@ -135,7 +139,7 @@ export function PickingTasksGrid({
 
           <div className="ui-stack">
             <div data-testid="s-shape-pick-route-banner" style={{ padding: '8px 12px', borderRadius: 8, background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e3a8a', fontSize: 12.5, fontWeight: 600 }}>
-              🧭 Lộ trình nhặt hàng tối ưu hình chữ S (Dãy → Kệ → Tầng → Ô)
+              Lộ trình nhặt hàng tối ưu hình chữ S (Dãy → Kệ → Tầng → Ô)
             </div>
             {[...(selected.lines ?? [])].sort((a, b) => (a.sourceLocationCode || '').localeCompare(b.sourceLocationCode || '')).map(line => (
               <div className="ui-subcard" key={line.id}>

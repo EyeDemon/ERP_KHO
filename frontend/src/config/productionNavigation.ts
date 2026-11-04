@@ -1,5 +1,6 @@
 export type ProductionNavItem = {
   path: string;
+  aliases?: string[];
   label: string;
   section: string;
   description: string;
@@ -8,76 +9,94 @@ export type ProductionNavItem = {
   expressMode?: boolean;
 };
 
+export const productionSections = [
+  'Điều hành',
+  'Nhập kho',
+  'Xuất kho',
+  'Giao vận',
+  'Hàng hoàn',
+  'Tồn kho',
+  'Sản phẩm',
+  'Tài chính',
+  'Cấu trúc kho',
+  'Quản trị công ty',
+] as const;
+
 export const productionNavigation: ProductionNavItem[] = [
-  // 1. Tổng quan (chỉ giữ đúng 1 mục Tổng quan để không đẩy Nhập kho / Xuất kho xuống dưới)
-  { path: '/', label: 'Tổng quan', section: 'Tổng quan', description: 'Điểm vào nhanh tới các trung tâm công việc và trạng thái vận hành thực tế.', access: 'always', expressMode: true },
+  // 1. Điều hành (1)
+  { path: '/', label: 'Tổng quan vận hành', section: 'Điều hành', description: 'Trung tâm điều hành kho trực tuyến.', access: 'always', expressMode: true },
 
-  // 2. Nhập kho
-  { path: '/dock-yard', label: 'Cổng, sân bãi & cửa kho', section: 'Nhập kho', description: 'Lịch xe, nhận xe vào cổng, vị trí sân bãi, phân cửa kho và thời gian quay vòng.', permission: 'dock_appointment.read', expressMode: false },
-  { path: '/purchase-orders', label: 'Đơn mua (PO)', section: 'Nhập kho', description: 'Đơn hàng dự kiến từ ERP/Mua hàng, dung sai và trạng thái nhận hàng.', permission: 'purchase_order.read', expressMode: false },
-  { path: '/asns', label: 'ASN dự kiến', section: 'Nhập kho', description: 'Lô hàng dự kiến, vận chuyển, thời điểm đến và bàn giao sang tiếp nhận.', permission: 'asn.read', expressMode: false },
-  { path: '/import-receipts', label: 'Phiếu nhập kho', section: 'Nhập kho', description: 'Nhận hàng, kiểm tra chất lượng, chênh lệch và ghi sổ nhập kho.', permission: 'receipt.read', expressMode: true },
-  { path: '/putaway-tasks', label: 'Cất hàng', section: 'Nhập kho', description: 'Nhiệm vụ cất hàng từ khu nhận hàng tới vị trí đích.', permission: 'putaway.read', expressMode: false },
-  { path: '/customer-returns', label: 'Hàng hoàn & Đổi trả (RMA)', section: 'Nhập kho', description: 'Tiếp nhận kiện hoàn TMĐT vào biệt trữ, kiểm định chất lượng và định đoạt 4 luồng về sổ cái tồn kho.', permission: 'receipt.read', expressMode: true },
+  // 2. Nhập kho (5)
+  { path: '/dock-yard', label: 'Điều phối bãi xe', section: 'Nhập kho', description: 'Quản lý lịch xe và phân cửa bến bãi.', permission: 'dock_appointment.read', expressMode: false },
+  { path: '/purchase-orders', label: 'Đơn mua hàng', section: 'Nhập kho', description: 'Theo dõi đơn mua hàng và dung sai.', permission: 'purchase_order.read', expressMode: false },
+  { path: '/asns', label: 'Thông báo nhận hàng trước', section: 'Nhập kho', description: 'Lô hàng dự kiến đến kho kiểm nhận.', permission: 'asn.read', expressMode: false },
+  { path: '/import-receipts', label: 'Phiếu nhập kho', section: 'Nhập kho', description: 'Kiểm nhận thực tế và ghi sổ nhập.', permission: 'receipt.read', expressMode: true },
+  { path: '/putaway-tasks', aliases: ['/putaway'], label: 'Cất hàng vào kệ', section: 'Nhập kho', description: 'Cất hàng từ bãi nhận vào kệ đích.', permission: 'putaway.read', expressMode: false },
 
-  // 3. Xuất kho
-  { path: '/export-receipts', label: 'Phiếu xuất kho', section: 'Xuất kho', description: 'Chứng từ xuất, giữ hàng và xác nhận hàng rời kho.', permission: 'export_receipt.read', expressMode: true },
-  { path: '/stock-reservations', label: 'Giữ hàng', section: 'Xuất kho', description: 'Theo dõi tồn đã cam kết theo chứng từ và thời hạn.', permission: 'inventory.read', expressMode: false },
-  { path: '/stock-allocations', label: 'Phân bổ tồn', section: 'Xuất kho', description: 'Gắn lượng đã giữ vào vị trí có thể lấy hàng cụ thể, giải phóng và phân bổ lại có kiểm soát.', permission: 'allocation.read', expressMode: false },
-  { path: '/picking-tasks', label: 'Lấy hàng', section: 'Xuất kho', description: 'Ưu tiên quét mã khi lấy hàng theo phân bổ, xử lý thiếu hàng và ngoại lệ.', permission: 'picking.read', expressMode: false },
-  { path: '/packing-sessions', label: 'Đóng gói & đơn vị xử lý', section: 'Xuất kho', description: 'Đóng gói lượng đã lấy vào thùng/khay/đơn vị xử lý, bảo toàn số lượng và hỗ trợ đơn vị xử lý lồng nhau.', permission: 'packing.read', expressMode: true },
-  { path: '/shipments', label: 'Thực hiện giao hàng', section: 'Xuất kho', description: 'Theo dõi vận chuyển xuyên suốt từ Sẵn sàng → Tập kết → Đang xếp hàng → Đã xếp xong → Đã xuất bến đến xác nhận giao hàng.', permission: 'shipment.read', expressMode: true },
-  { path: '/handover-manifests', label: 'Biên bản bàn giao bưu tá', section: 'Xuất kho', description: 'Quét mã vận đơn AWB lên xe tải/bưu tá, chặn đơn hủy phút chót và niêm phong biên bản bàn giao.', permission: 'inventory.read', expressMode: true },
-  { path: '/backorders', label: 'Đơn bán & đơn thiếu hàng', section: 'Xuất kho', description: 'Vòng đời nhu cầu, giữ/phân bổ một phần, phục hồi đơn thiếu hàng và hủy đơn.', permission: 'backorder.read', expressMode: true },
+  // 3. Xuất kho (7 — theo luồng vật lý)
+  { path: '/sales-orders', label: 'Đơn bán hàng', section: 'Xuất kho', description: 'Tiếp nhận đơn bán và giữ chỗ tồn.', permission: 'sales_order.read', expressMode: true },
+  { path: '/backorders', label: 'Đơn thiếu hàng', section: 'Xuất kho', description: 'Theo dõi và cấp phát bù đơn thiếu.', permission: 'backorder.read', expressMode: true },
+  { path: '/stock-reservations', label: 'Giữ hàng tồn kho', section: 'Xuất kho', description: 'Theo dõi lượng tồn cam kết giữ chỗ.', permission: 'inventory.read', expressMode: false },
+  { path: '/stock-allocations', label: 'Phân bổ vị trí lấy', section: 'Xuất kho', description: 'Phân bổ vị trí lấy theo FEFO FIFO.', permission: 'allocation.read', expressMode: false },
+  { path: '/picking-tasks', label: 'Lấy hàng tại kệ', section: 'Xuất kho', description: 'Thực thi lấy hàng bằng quét mã vạch.', permission: 'picking.read', expressMode: false },
+  { path: '/packing-sessions', label: 'Trạm đóng gói đơn hàng', section: 'Xuất kho', description: 'Đóng gói đơn hàng vào thùng carton.', permission: 'packing.read', expressMode: true },
+  { path: '/export-receipts', label: 'Phiếu xuất kho', section: 'Xuất kho', description: 'Chứng từ xuất kho và xác nhận rời.', permission: 'export_receipt.read', expressMode: true },
 
-  // 4. Tồn kho
-  { path: '/inventory', label: 'Tồn kho', section: 'Tồn kho', description: 'Tồn thực tế/đã giữ/khả dụng theo nhóm Trạng thái/Lô/Sê-ri, lịch sử biến động và báo cáo xuất-nhập-tồn.', permission: 'inventory.read', expressMode: true },
-  { path: '/inventory-locks', label: 'Khóa / đóng băng tồn kho', section: 'Tồn kho', description: 'Khóa nhóm tồn theo Kho/Vị trí/Sản phẩm/Trạng thái/Lô/Sê-ri và mở khóa có lưu vết kiểm toán.', permission: 'inventory_lock.read', expressMode: false },
-  { path: '/inventory-movements', label: 'Di chuyển vị trí nội bộ', section: 'Tồn kho', description: 'Di chuyển tồn chưa được giữ giữa các vị trí trong cùng kho, giữ nguyên Trạng thái/Lô/Sê-ri và ghi bút toán di chuyển nội bộ.', permission: 'inventory.read', expressMode: false },
-  { path: '/inventory-reversals', label: 'Đảo giao dịch tồn kho', section: 'Tồn kho', description: 'Đảo hiệu chỉnh cho giao dịch di chuyển/đổi trạng thái mà không sửa lịch sử đã ghi sổ.', permission: 'inventory_ledger.read', expressMode: false },
-  { path: '/inventory-traceability', label: 'Truy vết & phả hệ tồn kho', section: 'Tồn kho', description: 'Truy nhóm tồn hiện tại và sổ cái bất biến theo Sản phẩm/Lô/Sê-ri/Tham chiếu.', permission: 'inventory_traceability.read', expressMode: false },
-  { path: '/inventory-reconciliation', label: 'Đối chiếu tồn kho', section: 'Tồn kho', description: 'So sánh số dư vận hành với sổ cái bất biến để phát hiện chênh lệch.', permission: 'inventory_ledger.read', expressMode: false },
-  { path: '/stocktakes', label: 'Kiểm kê kho', section: 'Tồn kho', description: 'Phiếu kiểm kê, chênh lệch và quy trình duyệt điều chỉnh.', access: 'stocktake', expressMode: true },
-  { path: '/stock-transfers', label: 'Điều chuyển kho', section: 'Tồn kho', description: 'Luân chuyển tồn giữa các kho và theo dõi hàng đang vận chuyển.', permission: 'inventory.read', expressMode: false },
+  // 4. Giao vận (2)
+  { path: '/shipments', label: 'Vận đơn giao hàng', section: 'Giao vận', description: 'Theo dõi vận đơn và trạng thái giao.', permission: 'shipment.read', expressMode: true },
+  { path: '/handover-manifests', label: 'Biên bản bàn giao ĐVVC', section: 'Giao vận', description: 'Quét mã vận đơn bàn giao hãng vận.', permission: 'inventory.read', expressMode: true },
 
-  // 5. Tài chính
-  { path: '/cod-reconciliation', label: 'Đối soát COD 3 chiều', section: 'Tài chính', description: 'Đối soát tiền thu hộ COD & phí vận chuyển 3 chiều giữa sổ cái nội bộ và bảng kê ĐVVC.', permission: 'inventory.cost.read', expressMode: true },
-  { path: '/cost-valuation', label: 'Giá vốn & kết xuất MISA', section: 'Tài chính', description: 'Định giá tồn kho bình quân gia quyền, lãi gộp chủ shop, kết xuất MISA AMIS và HĐĐT nháp NĐ 70/2025.', permission: 'inventory.cost.read', expressMode: true },
-  { path: '/partner-debts', label: 'Công nợ AP / AR', section: 'Tài chính', description: 'Hóa đơn công nợ phải trả (AP), phải thu (AR), thanh toán và sổ cái công nợ bất biến.', permission: 'partner.read', expressMode: false },
+  // 5. Hàng hoàn (1)
+  { path: '/customer-returns', label: 'Xử lý hàng hoàn RMA', section: 'Hàng hoàn', description: 'Tiếp nhận và kiểm định hàng hoàn.', permission: 'receipt.read', expressMode: true },
 
-  // 6. Quản trị
-  { path: '/onboarding-wizard', label: 'Thiết lập kho nhanh 5 bước', section: 'Quản trị', description: 'Khởi tạo thuê bao SaaS tự phục vụ, chọn mô hình kệ mẫu 1-Click và nhập Excel tồn đầu kỳ trong 15 phút.', permission: 'permission.read', expressMode: true },
-  { path: '/saas-billing', label: 'Gói cước SaaS & VietQR', section: 'Quản trị', description: 'Quản lý gói cước thuê bao SaaS, hạn mức 3 nấc và thanh toán tự động VietQR.', permission: 'permission.read', expressMode: true },
-  { path: '/products', label: 'Sản phẩm', section: 'Quản trị', description: 'SKU, danh mục, đơn vị tính và mã vạch của sản phẩm.', permission: 'product.read', expressMode: true },
-  { path: '/warehouses', label: 'Kho hàng', section: 'Quản trị', description: 'Danh mục kho và trạng thái hoạt động.', permission: 'warehouse.read', expressMode: true },
-  { path: '/warehouse-structure', label: 'Cấu trúc vị trí', section: 'Quản trị', description: 'Khu, dãy kệ, kệ, tầng và ô/vị trí theo phạm vi kho được phép.', permission: 'location.read', expressMode: false },
-  { path: '/warehouse-map', label: 'Bản đồ kho', section: 'Quản trị', description: 'Bố cục vật lý, mức sử dụng và bản đồ nhiệt vận hành theo phạm vi kho được phép.', permission: 'location.read', expressMode: false },
-  { path: '/warehouse-calendar', label: 'Lịch & ca kho', section: 'Quản trị', description: 'Múi giờ, lịch tuần, giờ chốt và năng lực theo ca vận hành.', permission: 'warehouse.read', expressMode: false },
-  { path: '/units', label: 'Đơn vị tính', section: 'Quản trị', description: 'Danh mục đơn vị tính dùng trong chứng từ và tồn kho.', permission: 'uom.read', expressMode: true },
-  { path: '/business-partners', label: 'Đối tác', section: 'Quản trị', description: 'Nhà cung cấp, khách hàng và thông tin liên hệ.', permission: 'partner.read', expressMode: true },
-  { path: '/approvals', label: 'Phê duyệt', section: 'Quản trị', description: 'Hàng đợi phê duyệt theo SLA, chứng từ và phạm vi kho được phép.', access: 'approvals', expressMode: false },
-  { path: '/permissions', label: 'Quản trị quyền', section: 'Quản trị', description: 'Danh mục quyền và cấp quyền theo vai trò.', permission: 'permission.read', expressMode: true },
+  // 6. Tồn kho (7)
+  { path: '/inventory', label: 'Tra cứu tồn kho', section: 'Tồn kho', description: 'Tra cứu tồn khả dụng theo 9 chiều.', permission: 'inventory.read', expressMode: true },
+  { path: '/inventory-locks', label: 'Khóa tồn kho trạng thái', section: 'Tồn kho', description: 'Phong tỏa và mở khóa lô hàng tồn.', permission: 'inventory_lock.read', expressMode: false },
+  { path: '/inventory-movements', label: 'Chuyển vị trí nội bộ', section: 'Tồn kho', description: 'Di chuyển tồn giữa các kệ nội bộ.', permission: 'inventory.read', expressMode: false },
+  { path: '/stock-transfers', label: 'Chuyển kho liên chi nhánh', section: 'Tồn kho', description: 'Luân chuyển hàng giữa các điểm kho.', permission: 'inventory.read', expressMode: false },
+  { path: '/stocktakes', label: 'Kiểm kê kho định kỳ', section: 'Tồn kho', description: 'Đếm mù tại kệ và duyệt chênh lệch.', access: 'stocktake', expressMode: true },
+  { path: '/inventory-reversals', label: 'Đảo bút toán kho', section: 'Tồn kho', description: 'Sinh giao dịch đảo sổ cái bất biến.', permission: 'inventory_ledger.read', expressMode: false },
+  { path: '/inventory-reconciliation', label: 'Đối soát sổ cái tồn kho', section: 'Tồn kho', description: 'Đối soát cân bằng sổ cái và số dư.', permission: 'inventory_ledger.read', expressMode: false },
+
+  // 7. Sản phẩm (6)
+  { path: '/products', label: 'Danh mục sản phẩm', section: 'Sản phẩm', description: 'Quản lý hồ sơ SKU, mã vạch và lô.', permission: 'product.read', expressMode: true },
+  { path: '/categories', label: 'Nhóm hàng hóa', section: 'Sản phẩm', description: 'Phân loại nhóm ngành hàng hóa kho.', permission: 'product.read', expressMode: true },
+  { path: '/units', label: 'Đơn vị tính quy đổi', section: 'Sản phẩm', description: 'Đơn vị tính cơ sở và hệ số quy đổi.', permission: 'uom.read', expressMode: true },
+  { path: '/kit-work-orders', aliases: ['/kitting'], label: 'Lệnh lắp ráp bộ Kit', section: 'Sản phẩm', description: 'Lập lệnh lắp ráp hoặc xả bộ Kit.', permission: 'packing.read', expressMode: true },
+  { path: '/inventory-traceability', label: 'Truy vết lô sê-ri', section: 'Sản phẩm', description: 'Truy vết phả hệ lô hàng và sê-ri.', permission: 'inventory_traceability.read', expressMode: false },
+  { path: '/business-partners', label: 'Danh mục đối tác', section: 'Sản phẩm', description: 'Hồ sơ nhà cung cấp và khách hàng.', permission: 'partner.read', expressMode: true },
+
+  // 8. Tài chính (5)
+  { path: '/cod-reconciliation', label: 'Đối soát thu hộ COD', section: 'Tài chính', description: 'Đối soát tiền thu hộ COD và cước.', permission: 'inventory.cost.read', expressMode: true },
+  { path: '/cost-valuation', label: 'Định giá tồn kho bình quân', section: 'Tài chính', description: 'Tính giá vốn bình quân gia quyền.', permission: 'inventory.cost.read', expressMode: true },
+  { path: '/profit-report', label: 'Báo cáo đối soát lợi nhuận', section: 'Tài chính', description: 'Đối soát lãi gộp, phí sàn, lãi ròng', permission: 'inventory.cost.read', expressMode: true },
+  { path: '/misa-exports', aliases: ['/accounting-export'], label: 'Kết xuất chứng từ kế toán', section: 'Tài chính', description: 'Kết xuất bảng kê kế toán và HĐĐT.', permission: 'inventory.cost.read', expressMode: true },
+  { path: '/partner-debts', label: 'Công nợ đối tác', section: 'Tài chính', description: 'Quản lý công nợ phải thu phải trả.', permission: 'partner.read', expressMode: false },
+
+  // 9. Cấu trúc kho (4)
+  { path: '/warehouses', label: 'Danh sách kho hàng', section: 'Cấu trúc kho', description: 'Danh sách điểm kho và địa chỉ kho.', permission: 'warehouse.read', expressMode: true },
+  { path: '/warehouse-structure', label: 'Sơ đồ vị trí kệ', section: 'Cấu trúc kho', description: 'Thiết lập Khu vực, Dãy, Kệ và Ô.', permission: 'location.read', expressMode: false },
+  { path: '/warehouse-map', label: 'Bản đồ nhiệt 2D', section: 'Cấu trúc kho', description: 'Sơ đồ bố cục và mật độ lấp đầy kệ.', permission: 'location.read', expressMode: false },
+  { path: '/warehouse-calendar', label: 'Lịch làm việc kho', section: 'Cấu trúc kho', description: 'Lịch làm việc tuần và giờ chốt ca.', permission: 'warehouse.read', expressMode: false },
+
+  // 10. Quản trị công ty (7)
+  { path: '/approvals', label: 'Phê duyệt chứng từ', section: 'Quản trị công ty', description: 'Phê duyệt điều chỉnh và xuất hủy.', access: 'approvals', expressMode: false },
+  { path: '/users', label: 'Quản lý người dùng', section: 'Quản trị công ty', description: 'Quản trị tài khoản và khóa bảo mật.', permission: 'permission.read', expressMode: true },
+  { path: '/roles', label: 'Vai trò phân quyền', section: 'Quản trị công ty', description: 'Thiết lập vai trò và ma trận quyền.', permission: 'permission.read', expressMode: true },
+  { path: '/warehouse-scopes', label: 'Phạm vi kho nhân sự', section: 'Quản trị công ty', description: 'Phân quyền truy cập theo điểm kho.', permission: 'permission.read', expressMode: true },
+  { path: '/account-security', label: 'Bảo mật tài khoản 2FA', section: 'Quản trị công ty', description: 'Xác thực 2 lớp và mã khôi phục.', permission: 'permission.read', expressMode: false },
+  { path: '/saas-billing', label: 'Gói thuê bao SaaS', section: 'Quản trị công ty', description: 'Theo dõi gói cước và hạn mức SaaS.', permission: 'permission.read', expressMode: true },
+  { path: '/onboarding-wizard', label: 'Khởi tạo doanh nghiệp', section: 'Quản trị công ty', description: 'Thiết lập kho mẫu nhanh 5 bước.', permission: 'permission.read', expressMode: true },
 ];
 
-export const productionSections = ['Tổng quan', 'Nhập kho', 'Xuất kho', 'Tồn kho', 'Tài chính', 'Quản trị'] as const;
-
 const aliasProductionPages: Record<string, ProductionNavItem> = {
-  '/categories': {
-    path: '/categories',
-    label: 'Danh mục sản phẩm',
-    section: 'Quản trị',
-    description: 'Phân loại nhóm hàng hóa, nguyên vật liệu và thành phẩm theo cấu trúc danh mục.',
-    permission: 'product.read',
-    expressMode: true,
-  },
-  '/misa-exports': {
-    path: '/misa-exports',
-    label: 'Giá vốn & kết xuất MISA',
-    section: 'Tài chính',
-    description: 'Định giá tồn kho bình quân gia quyền, lãi gộp chủ shop, kết xuất MISA AMIS và HĐĐT nháp NĐ 70/2025.',
-    permission: 'inventory.cost.read',
-    expressMode: true,
-  },
+  '/putaway': { path: '/putaway-tasks', aliases: ['/putaway'], label: 'Cất hàng vào kệ', section: 'Nhập kho', description: 'Cất hàng từ bãi nhận vào kệ đích.', permission: 'putaway.read', expressMode: false },
+  '/accounting-export': { path: '/misa-exports', aliases: ['/accounting-export'], label: 'Kết xuất chứng từ kế toán', section: 'Tài chính', description: 'Kết xuất bảng kê kế toán và HĐĐT.', permission: 'inventory.cost.read', expressMode: true },
+  '/kitting': { path: '/kit-work-orders', aliases: ['/kitting'], label: 'Lệnh lắp ráp bộ Kit', section: 'Sản phẩm', description: 'Lập lệnh lắp ráp hoặc xả bộ Kit.', permission: 'packing.read', expressMode: true },
+  '/outbound-demand': { path: '/sales-orders', label: 'Đơn bán hàng', section: 'Xuất kho', description: 'Tiếp nhận đơn bán và giữ chỗ tồn.', permission: 'sales_order.read', expressMode: true },
+  '/permissions': { path: '/permissions', label: 'Quản trị quyền truy cập', section: 'Quản trị công ty', description: 'Thiết lập vai trò và ma trận quyền.', permission: 'permission.read', expressMode: false },
+  '/partner-aging': { path: '/partner-debts', label: 'Công nợ đối tác', section: 'Tài chính', description: 'Quản lý công nợ phải thu phải trả.', permission: 'partner.read', expressMode: false },
+  '/ecommerce-integrations': { path: '/onboarding-wizard', label: 'Tích hợp sàn TMĐT', section: 'Quản trị công ty', description: 'Kết nối sàn TMĐT và đồng bộ đơn.', permission: 'permission.read', expressMode: true },
 };
 
 export const resolveProductionPage = (pathname: string): ProductionNavItem | undefined => {
@@ -86,5 +105,9 @@ export const resolveProductionPage = (pathname: string): ProductionNavItem | und
   return productionNavigation
     .filter(item => item.path !== '/')
     .sort((a, b) => b.path.length - a.path.length)
-    .find(item => pathname === item.path || pathname.startsWith(item.path + '/'));
+    .find(item =>
+      pathname === item.path ||
+      pathname.startsWith(item.path + '/') ||
+      Boolean(item.aliases?.some(alias => pathname === alias || pathname.startsWith(alias + '/'))),
+    );
 };

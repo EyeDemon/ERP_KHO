@@ -35,7 +35,7 @@ export const DashboardRecentActivity = ({
       ) : !hasSummary || activities.length === 0 ? (
         <p className="ui-muted-text">Chưa có hoạt động vận hành gần đây trong phạm vi kho được phép.</p>
       ) : (
-        <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+        <div tabIndex={0} role="region" aria-label="Vùng cuộn hoạt động vận hành gần đây" style={{ maxHeight: 240, overflowY: 'auto' }}>
           <UiTableScroll>
             <table className="ui-table-compact" aria-label="Hoạt động vận hành gần đây">
               <thead>

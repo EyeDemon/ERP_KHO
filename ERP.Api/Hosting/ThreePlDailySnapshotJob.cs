@@ -6,7 +6,7 @@ namespace ERP.Api.Hosting;
 
 /// <summary>
 /// Background worker that captures daily 3PL storage snapshots by OwnerId and WarehouseId
-/// into dbo.ThreePlStorageSnapshots.
+/// into dbo.ThreePlStorageSnapshots inside isolated per-tenant scopes.
 /// </summary>
 public sealed class ThreePlDailySnapshotJob(
     IServiceScopeFactory scopeFactory,
@@ -41,21 +41,37 @@ public sealed class ThreePlDailySnapshotJob(
 
     public async Task<int> CaptureDailySnapshotsOnceAsync(CancellationToken cancellationToken = default)
     {
-        using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetService<ErpKhoDbContext>();
-        if (db is null)
+        List<int> activeTenantIds;
+        await using (var discoveryScope = scopeFactory.CreateAsyncScope())
         {
-            return 0;
-        }
+            var discoveryDb = discoveryScope.ServiceProvider.GetService<ErpKhoDbContext>();
+            if (discoveryDb is null)
+            {
+                return 0;
+            }
 
-        var activeTenantIds = await db.Warehouses
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .Where(w => w.IsActive && w.TenantId > 0)
-            .Select(w => w.TenantId)
-            .Distinct()
-            .OrderBy(t => t)
-            .ToListAsync(cancellationToken);
+            var saasTenantIds = await discoveryDb.SaasTenants
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(t => t.TenantId > 0 &&
+                            t.LifecycleStatus != "ARCHIVED" &&
+                            t.LifecycleStatus != "SUSPENDED")
+                .Select(t => t.TenantId)
+                .ToListAsync(cancellationToken);
+
+            var warehouseTenantIds = await discoveryDb.Warehouses
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(w => w.IsActive && w.TenantId > 0)
+                .Select(w => w.TenantId)
+                .ToListAsync(cancellationToken);
+
+            activeTenantIds = saasTenantIds
+                .Concat(warehouseTenantIds)
+                .Distinct()
+                .OrderBy(t => t)
+                .ToList();
+        }
 
         if (activeTenantIds.Count == 0)
         {
@@ -65,16 +81,22 @@ public sealed class ThreePlDailySnapshotJob(
         var now = DateTime.UtcNow;
         var today = now.Date;
         var snapshotCode = $"3PL-SNAP-{now:yyyyMMdd}";
-        var originalTenantId = db.CurrentTenantId > 0 ? db.CurrentTenantId : 1;
-        var upserted = 0;
+        var totalUpserted = 0;
 
-        try
+        foreach (var tenantId in activeTenantIds)
         {
-            foreach (var tenantId in activeTenantIds)
+            try
             {
-                db.UseTenant(tenantId);
+                await using var tenantScope = scopeFactory.CreateAsyncScope();
+                var tenantDb = tenantScope.ServiceProvider.GetService<ErpKhoDbContext>();
+                if (tenantDb is null)
+                {
+                    continue;
+                }
 
-                var stocks = await db.InventoryStocks
+                tenantDb.UseTenant(tenantId);
+
+                var stocks = await tenantDb.InventoryStocks
                     .AsNoTracking()
                     .Include(x => x.Product)
                     .Where(x => x.TenantId == tenantId && x.Quantity > 0m)
@@ -85,14 +107,44 @@ public sealed class ThreePlDailySnapshotJob(
                     continue;
                 }
 
-                var existingToday = await db.ThreePlStorageSnapshots
+                var ownerIds = stocks
+                    .Where(x => x.OwnerId.HasValue)
+                    .Select(x => x.OwnerId!.Value)
+                    .Distinct()
+                    .ToList();
+
+                var tenantPartners = ownerIds.Count > 0
+                    ? await tenantDb.BusinessPartners
+                        .AsNoTracking()
+                        .Where(p => p.TenantId == tenantId && ownerIds.Contains(p.Id))
+                        .Select(p => new { p.Id, p.Code, p.Name })
+                        .ToDictionaryAsync(p => p.Id, cancellationToken)
+                    : [];
+
+                var existingToday = await tenantDb.ThreePlStorageSnapshots
                     .Where(s => s.TenantId == tenantId && s.SnapshotDateUtc == today)
+                    .ToListAsync(cancellationToken);
+
+                var latestOwnerRates = await tenantDb.ThreePlStorageSnapshots
+                    .AsNoTracking()
+                    .Where(s => s.TenantId == tenantId)
+                    .OrderByDescending(s => s.SnapshotDateUtc)
+                    .ThenByDescending(s => s.Id)
+                    .Select(s => new
+                    {
+                        s.WarehouseId,
+                        s.OwnerId,
+                        s.DailyPalletRateVnd,
+                        s.DailyCbmRateVnd,
+                        s.DailyBinRateVnd
+                    })
                     .ToListAsync(cancellationToken);
 
                 var grouped = stocks
                     .GroupBy(x => new { x.WarehouseId, x.OwnerId })
                     .ToList();
 
+                var tenantUpserted = 0;
                 foreach (var g in grouped)
                 {
                     var distinctSkuCount = g.Select(x => x.ProductId).Distinct().Count();
@@ -102,22 +154,46 @@ public sealed class ThreePlDailySnapshotJob(
                         g.Sum(x => x.Quantity * (x.Product?.UnitVolumeM3 is > 0m ? x.Product.UnitVolumeM3.Value : 0.002m)),
                         3);
                     var palletEquivalentCount = Math.Max(1m, Math.Round(ownerVolumeCbm / 1.2m, 2));
-                    const decimal dailyPalletRateVnd = 18000m;
-                    const decimal dailyCbmRateVnd = 15000m;
-                    const decimal dailyBinRateVnd = 5000m;
-                    var estimatedDailyStorageFeeVnd = Math.Round((palletEquivalentCount * dailyPalletRateVnd) + (occupiedBinCount * dailyBinRateVnd), 0);
+
+                    var rateSource = latestOwnerRates.FirstOrDefault(r =>
+                        r.WarehouseId == g.Key.WarehouseId && r.OwnerId == g.Key.OwnerId);
+                    var dailyPalletRateVnd = rateSource?.DailyPalletRateVnd is > 0m ? rateSource.DailyPalletRateVnd : 18000m;
+                    var dailyCbmRateVnd = rateSource?.DailyCbmRateVnd is > 0m ? rateSource.DailyCbmRateVnd : 15000m;
+                    var dailyBinRateVnd = rateSource?.DailyBinRateVnd is > 0m ? rateSource.DailyBinRateVnd : 5000m;
+
+                    var estimatedDailyStorageFeeVnd = Math.Round(
+                        (palletEquivalentCount * dailyPalletRateVnd) + (occupiedBinCount * dailyBinRateVnd), 0);
                     var estimatedMonthlyStorageFeeVnd = estimatedDailyStorageFeeVnd * 30m;
 
-                    var existing = existingToday.FirstOrDefault(s => s.WarehouseId == g.Key.WarehouseId && s.OwnerId == g.Key.OwnerId);
+                    var ownerCode = "OWN-DEFAULT";
+                    var ownerName = "Chủ hàng 3PL";
+                    if (g.Key.OwnerId.HasValue)
+                    {
+                        if (tenantPartners.TryGetValue(g.Key.OwnerId.Value, out var partner))
+                        {
+                            ownerCode = !string.IsNullOrWhiteSpace(partner.Code) ? partner.Code.Trim() : $"OWN-{g.Key.OwnerId.Value}";
+                            ownerName = !string.IsNullOrWhiteSpace(partner.Name) ? partner.Name.Trim() : ownerName;
+                        }
+                        else
+                        {
+                            ownerCode = $"OWN-{g.Key.OwnerId.Value}";
+                        }
+                    }
+
+                    var existing = existingToday.FirstOrDefault(s =>
+                        s.TenantId == tenantId &&
+                        s.WarehouseId == g.Key.WarehouseId &&
+                        s.OwnerId == g.Key.OwnerId);
+
                     if (existing == null)
                     {
-                        db.ThreePlStorageSnapshots.Add(new ThreePlStorageSnapshot
+                        tenantDb.ThreePlStorageSnapshots.Add(new ThreePlStorageSnapshot
                         {
                             TenantId = tenantId,
                             WarehouseId = g.Key.WarehouseId,
                             OwnerId = g.Key.OwnerId,
-                            OwnerCode = g.Key.OwnerId.HasValue ? $"OWN-{g.Key.OwnerId.Value}" : "OWN-DEFAULT",
-                            OwnerName = "Chủ hàng 3PL",
+                            OwnerCode = ownerCode,
+                            OwnerName = ownerName,
                             SnapshotCode = snapshotCode,
                             SnapshotDateUtc = today,
                             DistinctSkuCount = distinctSkuCount,
@@ -135,6 +211,8 @@ public sealed class ThreePlDailySnapshotJob(
                     }
                     else
                     {
+                        existing.OwnerCode = ownerCode;
+                        existing.OwnerName = ownerName;
                         existing.DistinctSkuCount = distinctSkuCount;
                         existing.OccupiedBinCount = occupiedBinCount;
                         existing.TotalOnHandQty = ownerOnHandQty;
@@ -145,20 +223,21 @@ public sealed class ThreePlDailySnapshotJob(
                         existing.CapturedAtUtc = now;
                     }
 
-                    upserted++;
+                    tenantUpserted++;
+                }
+
+                if (tenantUpserted > 0)
+                {
+                    await tenantDb.SaveChangesAsync(cancellationToken);
+                    totalUpserted += tenantUpserted;
                 }
             }
-
-            if (upserted > 0)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                await db.SaveChangesAsync(cancellationToken);
+                logger.LogError(ex, "ThreePlDailySnapshotJob failed for TenantId={TenantId}.", tenantId);
             }
         }
-        finally
-        {
-            db.UseTenant(originalTenantId);
-        }
 
-        return upserted;
+        return totalUpserted;
     }
 }

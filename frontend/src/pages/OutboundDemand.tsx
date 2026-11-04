@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useInRouterContext, useLocation } from 'react-router-dom';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
@@ -6,31 +7,20 @@ import { OutboundPipelineStepper } from '../components/common/OutboundPipelineSt
 import { roundQty4, sanitizeScannerCode } from './productCatalog';
 import { UiPage, UiPageHeader, UiTabs } from '../ui/ProductionUi';
 import {
-  type Backorder,
-  type CreateLine,
-  emptyLine,
-  messageOf,
-  type Partner,
-  type Product,
-  type SalesOrder,
-  translateOutboundSignal,
-  type Warehouse,
+  type Backorder, type CreateLine, emptyLine, messageOf, type Partner,
+  type Product, type SalesOrder, type Warehouse,
 } from '../modules/outbound/outboundDemandTypes';
-import {
-  OutboundDemandOverviewCard,
-  OutboundDomRoutingCard,
-} from '../modules/outbound/OutboundDemandSections';
-import {
-  OutboundCreateOrderCard,
-  OutboundMarketplaceAddressCard,
-} from '../modules/outbound/OutboundCreateAndExcelCards';
-import {
-  OutboundBackordersCard,
-  OutboundOrdersListCard,
-  OutboundSelectedOrderCard,
-} from '../modules/outbound/OutboundOrdersAndBackordersCards';
+import { OutboundCreateOrderCard } from '../modules/outbound/OutboundCreateAndExcelCards';
+import { OutboundSelectedOrderCard } from '../modules/outbound/OutboundOrdersAndBackordersCards';
+import { OutboundOrdersAndShortageSection } from '../modules/outbound/OutboundOrdersAndShortageSection';
+import { OutboundMultiTabWorkspaceBody, useOutboundGovernanceActions } from '../modules/outbound/OutboundDemandWorkspaceBody';
 
 export default function OutboundDemand() {
+  const inRouter = useInRouterContext();
+  const location = inRouter ? useLocation() : null;
+  const pathname = location?.pathname ?? (typeof window !== 'undefined' ? window.location.pathname : '/');
+  const isSalesOrdersRoute = pathname.startsWith('/sales-orders');
+  const isBackordersOnlyRoute = pathname.startsWith('/backorders');
   const canReadOrders = usePermission('sales_order.read');
   const canCreate = usePermission('sales_order.create');
   const canHold = usePermission('sales_order.hold');
@@ -199,13 +189,8 @@ export default function OutboundDemand() {
       completeIdempotentAction(key);
       setNotice('Đã tạo Sales Order.');
       setShowCreate(false);
-      setExternalOrderId('');
-      setCustomerId('');
-      setWarehouseId('');
-      setRequestedShipDate('');
-      setPriority('0');
-      setShippingMethod('');
-      setCreateLines([emptyLine(1)]);
+      setExternalOrderId(''); setCustomerId(''); setWarehouseId(''); setRequestedShipDate('');
+      setPriority('0'); setShippingMethod(''); setCreateLines([emptyLine(1)]);
       setSelected(response.data);
       await load();
     } catch (e) {
@@ -217,84 +202,29 @@ export default function OutboundDemand() {
   };
 
   const masterReady = canReadPartners && canReadProducts && canReadWarehouses;
-  const [governanceBusy, setGovernanceBusy] = useState(false);
-  const [expediteResult, setExpediteResult] = useState<{ expediteId: string; orderNumber: string; allocationWaveQueued: boolean } | null>(null);
-  const [atpRoutingResult, setAtpRoutingResult] = useState<{
-    evaluationId: string;
-    atpCtpPromiseStatus: string;
-    fulfillmentNodeRouting: string;
-    allocationFairnessPolicy: string;
-    serviceSegmentation: string;
-    status: string;
-  } | null>(null);
-
-  const triggerExpediteBackorder = async () => {
-    if (governanceBusy) return;
-    setGovernanceBusy(true);
-    setError('');
-    try {
-      const res = await apiClient.post(
-        '/api/v1/sales-orders/expedite-backorder',
-        {
-          warehouseId: orders[0]?.warehouseId ?? undefined,
-          orderNumber: backorders[0]?.orderCode ?? orders[0]?.orderCode ?? 'SO-PRIORITY-QUEUE',
-        },
-        { headers: idempotencyHeaders('so-expedite-backorder:' + Date.now()) },
-      );
-      if (res?.data?.expediteId) {
-        setExpediteResult({
-          expediteId: String(res.data.expediteId),
-          orderNumber: translateOutboundSignal(String(res.data.orderNumber ?? backorders[0]?.orderCode ?? orders[0]?.orderCode ?? 'SO-PRIORITY-QUEUE')),
-          allocationWaveQueued: Boolean(res.data.allocationWaveQueued ?? true),
-        });
-      } else {
-        setExpediteResult(null);
-        setError('Phản hồi kích hoạt ưu tiên cấp phát Backorder không hợp lệ từ máy chủ.');
-      }
-    } catch (e) {
-      setExpediteResult(null);
-      setError(messageOf(e));
-    } finally {
-      setGovernanceBusy(false);
-    }
-  };
-
-  const evaluateAtpRouting = async () => {
-    if (governanceBusy) return;
-    setGovernanceBusy(true);
-    setError('');
-    try {
-      const res = await apiClient.post('/api/v1/sales-orders/evaluate-atp-routing', {
-        warehouseId: orders[0]?.warehouseId ?? undefined,
-      });
-      if (res?.data?.evaluationId && res?.data?.status) {
-        setAtpRoutingResult({
-          evaluationId: String(res.data.evaluationId),
-          atpCtpPromiseStatus: translateOutboundSignal(String(res.data.atpCtpPromiseStatus || '')),
-          fulfillmentNodeRouting: translateOutboundSignal(String(res.data.fulfillmentNodeRouting || '')),
-          allocationFairnessPolicy: translateOutboundSignal(String(res.data.allocationFairnessPolicy || '')),
-          serviceSegmentation: translateOutboundSignal(String(res.data.serviceSegmentation || '')),
-          status: translateOutboundSignal(String(res.data.status)),
-        });
-      } else {
-        setAtpRoutingResult(null);
-        setError('Phản hồi tính toán ATP/CTP và định tuyến kho không hợp lệ từ máy chủ.');
-      }
-    } catch (e) {
-      setAtpRoutingResult(null);
-      setError(messageOf(e));
-    } finally {
-      setGovernanceBusy(false);
-    }
-  };
+  const {
+    governanceBusy, expediteResult, atpRoutingResult,
+    triggerExpediteBackorder, evaluateAtpRouting,
+  } = useOutboundGovernanceActions({ orders, backorders, setError });
 
   const totalOrderedQty = roundQty4(orders.reduce((sum, item) => sum + item.orderedQuantity, 0));
   const totalReservedQty = roundQty4(orders.reduce((sum, item) => sum + item.reservedQuantity, 0));
   const totalAllocatedQty = roundQty4(orders.reduce((sum, item) => sum + item.allocatedQuantity, 0));
   const totalShippedQty = roundQty4(orders.reduce((sum, item) => sum + item.shippedQuantity, 0));
   const openBackorderRemaining = roundQty4(backorders.reduce((sum, item) => sum + item.remainingQuantity, 0));
-  const fulfillmentRatePct = totalOrderedQty > 0 ? Math.round((totalShippedQty * 10000) / totalOrderedQty) / 100 : 100;
-  const [activeSectionTab, setActiveSectionTab] = useState<'ALL' | 'ORDERS' | 'CREATE_EXCEL' | 'DOM_ROUTING' | 'BACKORDERS'>('ALL');
+  const fulfillmentRatePct =
+    isBackordersOnlyRoute && backorders.length === 0
+      ? 100
+      : totalOrderedQty > 0
+        ? Math.round((totalShippedQty * 10000) / totalOrderedQty) / 100
+        : 100;
+  const [activeSectionTab, setActiveSectionTab] = useState<'ALL' | 'ORDERS' | 'CREATE_EXCEL' | 'DOM_ROUTING' | 'BACKORDERS'>(() =>
+    isBackordersOnlyRoute ? 'BACKORDERS' : isSalesOrdersRoute ? 'ORDERS' : 'ALL',
+  );
+  useEffect(() => {
+    if (isBackordersOnlyRoute) setActiveSectionTab('BACKORDERS');
+    else if (isSalesOrdersRoute) setActiveSectionTab('ORDERS');
+  }, [isBackordersOnlyRoute, isSalesOrdersRoute]);
   const [orderPage, setOrderPage] = useState<number>(1);
   const orderPageSize = 10;
   const totalOrderPages = Math.max(1, Math.ceil(orders.length / orderPageSize));
@@ -306,132 +236,92 @@ export default function OutboundDemand() {
     <UiPage>
       <UiPageHeader
         eyebrow="Xuất kho"
-        title="Quản lý Đơn bán hàng & Đơn nợ hàng"
-        description="Theo dõi toàn trình từ Đặt hàng → Giữ hàng → Phân bổ → Lấy hàng → Giao hàng → Đơn nợ hàng. Phát hành đơn chỉ tạo cam kết giữ chỗ; tồn kho thực tế chỉ giảm khi Xuất bến giao hàng."
-        actions={canCreate && masterReady && !showCreate ? <button type="button" onClick={() => setShowCreate(true)}>Tạo Đơn bán hàng</button> : undefined}
+        title={isBackordersOnlyRoute ? 'Đơn thiếu hàng' : 'Đơn bán hàng'}
+        description={
+          isBackordersOnlyRoute
+            ? 'Theo dõi các dòng đơn bán thiếu tồn khả dụng, kích hoạt ưu tiên cấp phát bù hàng và phục hồi hoặc hủy phần thiếu có kiểm soát.'
+            : 'Tiếp nhận nhu cầu đơn bán hàng đa kênh, kiểm tra tồn khả dụng, định tuyến kho thực hiện và phát hành giữ chỗ.'
+        }
+        actions={
+          !isBackordersOnlyRoute && !isSalesOrdersRoute && canCreate && masterReady && !showCreate ? (
+            <button type="button" onClick={() => setShowCreate(true)}>Tạo Đơn bán hàng</button>
+          ) : undefined
+        }
       />
-      <OutboundPipelineStepper />
-      <UiTabs
-        ariaLabel="Chọn phân khu quản lý đơn bán hàng"
-        activeTab={activeSectionTab}
-        onTabChange={(nextTab) => {
-          setActiveSectionTab(nextTab);
-          if (nextTab === 'CREATE_EXCEL' && canCreate && masterReady) {
-            setShowCreate(true);
-          }
-        }}
-        tabs={[
-          { id: 'ALL', label: 'Tất cả phân khu' },
-          { id: 'ORDERS', label: `1. Danh sách đơn bán (${orders.length})` },
-          { id: 'CREATE_EXCEL', label: '2. Tạo đơn & Nhập Excel' },
-          { id: 'DOM_ROUTING', label: '3. Định tuyến đa kho' },
-          { id: 'BACKORDERS', label: `4. Đơn nợ hàng (${backorders.length})` },
-        ]}
-      />
+      {!isBackordersOnlyRoute && !isSalesOrdersRoute && <OutboundPipelineStepper />}
+      {!isSalesOrdersRoute && !isBackordersOnlyRoute && (
+        <UiTabs
+          ariaLabel="Chọn phân khu quản lý đơn bán hàng"
+          activeTab={activeSectionTab}
+          onTabChange={(nextTab) => {
+            setActiveSectionTab(nextTab);
+            if (nextTab === 'CREATE_EXCEL' && canCreate && masterReady) setShowCreate(true);
+          }}
+          tabs={[
+            { id: 'ALL', label: 'Tất cả phân khu' },
+            { id: 'ORDERS', label: `1. Danh sách đơn bán (${orders.length})` },
+            { id: 'CREATE_EXCEL', label: '2. Tạo đơn & Nhập Excel' },
+            { id: 'DOM_ROUTING', label: '3. Định tuyến đa kho' },
+            { id: 'BACKORDERS', label: `4. Đơn nợ hàng (${backorders.length})` },
+          ]}
+        />
+      )}
       {error && <div role="alert">{error}</div>}
       {notice && <p role="status" className="ui-success-text">{notice}</p>}
-      {canCreate && !masterReady && <p className="ui-muted-text">Tạo Đơn bán hàng trên UI cần thêm partner.read, product.read và warehouse.read để chọn dữ liệu danh mục.</p>}
+      {canCreate && !masterReady && !isBackordersOnlyRoute && (
+        <p className="ui-muted-text">Tạo Đơn bán hàng trên UI cần thêm partner.read, product.read và warehouse.read để chọn dữ liệu danh mục.</p>
+      )}
 
       <div className="ui-stack">
-        <OutboundDemandOverviewCard
-          totalOrderedQty={totalOrderedQty}
-          totalReservedQty={totalReservedQty}
-          totalAllocatedQty={totalAllocatedQty}
-          totalShippedQty={totalShippedQty}
-          backordersCount={backorders.length}
-          openBackorderRemaining={openBackorderRemaining}
-          fulfillmentRatePct={fulfillmentRatePct}
-          busy={busy}
-          governanceBusy={governanceBusy}
-          onTriggerExpediteBackorder={triggerExpediteBackorder}
-          onEvaluateAtpRouting={evaluateAtpRouting}
-          expediteResult={expediteResult}
-          atpRoutingResult={atpRoutingResult}
-        />
-
-        {(activeSectionTab === 'ALL' || activeSectionTab === 'DOM_ROUTING') && (
-          <OutboundDomRoutingCard
-            selected={selected}
-            orders={orders}
-            busy={busy}
-            governanceBusy={governanceBusy}
-            setError={setError}
-          />
-        )}
-
-        {(activeSectionTab === 'ALL' || activeSectionTab === 'CREATE_EXCEL') && (
-          <OutboundMarketplaceAddressCard
-            orders={orders}
-            warehouseId={warehouseId}
-            busy={busy}
-            setError={setError}
-            setNotice={setNotice}
-            onReload={load}
-          />
-        )}
-
-        {(showCreate || activeSectionTab === 'CREATE_EXCEL') && canCreate && masterReady && (
-          <OutboundCreateOrderCard
-            externalOrderId={externalOrderId}
-            setExternalOrderId={setExternalOrderId}
-            customerId={customerId}
-            setCustomerId={setCustomerId}
-            warehouseId={warehouseId}
-            setWarehouseId={setWarehouseId}
-            requestedShipDate={requestedShipDate}
-            setRequestedShipDate={setRequestedShipDate}
-            priority={priority}
-            setPriority={setPriority}
-            shippingMethod={shippingMethod}
-            setShippingMethod={setShippingMethod}
-            partners={partners}
-            warehouses={warehouses}
-            products={products}
-            createLines={createLines}
-            setCreateLines={setCreateLines}
-            busy={busy}
-            onCreateOrder={createOrder}
-            onClose={() => setShowCreate(false)}
-          />
-        )}
-
-        {(activeSectionTab === 'ALL' || activeSectionTab === 'ORDERS') && canReadOrders && (
-          <OutboundOrdersListCard
-            ordersCount={orders.length}
-            pagedOrders={pagedOrders}
-            orderPage={orderPage}
-            totalOrderPages={totalOrderPages}
-            setOrderPage={setOrderPage}
-            onSelectDetail={detail}
-            onCopyNotice={setNotice}
-          />
-        )}
-
-        {selected && (
-          <OutboundSelectedOrderCard
-            selected={selected}
-            canHold={canHold}
-            canRelease={canRelease}
-            canCancel={canCancel}
-            busy={busy}
-            orderCancelReason={orderCancelReason}
-            setOrderCancelReason={setOrderCancelReason}
-            onMutate={mutate}
-          />
-        )}
-
-        {(activeSectionTab === 'ALL' || activeSectionTab === 'BACKORDERS') && canReadBackorders && (
-          <OutboundBackordersCard
-            backorders={backorders}
-            canManageBackorders={canManageBackorders}
-            busy={busy}
-            recoverQty={recoverQty}
-            setRecoverQty={setRecoverQty}
-            backorderCancelQty={backorderCancelQty}
-            setBackorderCancelQty={setBackorderCancelQty}
-            backorderCancelReason={backorderCancelReason}
-            setBackorderCancelReason={setBackorderCancelReason}
-            onMutate={mutate}
+        {(isSalesOrdersRoute || isBackordersOnlyRoute) ? (
+          <>
+            <OutboundOrdersAndShortageSection
+              mode={isBackordersOnlyRoute ? 'backorders' : 'sales-orders'} orders={orders} backorders={backorders}
+              totalOrderedQty={totalOrderedQty} totalReservedQty={totalReservedQty} totalAllocatedQty={totalAllocatedQty}
+              totalShippedQty={totalShippedQty} openBackorderRemaining={openBackorderRemaining} fulfillmentRatePct={fulfillmentRatePct}
+              canCreate={canCreate} masterReady={masterReady} canManageBackorders={canManageBackorders}
+              busy={busy} governanceBusy={governanceBusy} showCreate={showCreate} onOpenCreate={() => setShowCreate(true)}
+              onSelectDetail={detail} onCopyNotice={setNotice} onEvaluateAtpRouting={evaluateAtpRouting}
+              onTriggerExpediteBackorder={triggerExpediteBackorder} atpRoutingResult={atpRoutingResult} expediteResult={expediteResult}
+              recoverQty={recoverQty} setRecoverQty={setRecoverQty} backorderCancelQty={backorderCancelQty}
+              setBackorderCancelQty={setBackorderCancelQty} backorderCancelReason={backorderCancelReason}
+              setBackorderCancelReason={setBackorderCancelReason} onMutate={mutate}
+            />
+            {isSalesOrdersRoute && showCreate && canCreate && masterReady && (
+              <OutboundCreateOrderCard
+                externalOrderId={externalOrderId} setExternalOrderId={setExternalOrderId} customerId={customerId} setCustomerId={setCustomerId}
+                warehouseId={warehouseId} setWarehouseId={setWarehouseId} requestedShipDate={requestedShipDate} setRequestedShipDate={setRequestedShipDate}
+                priority={priority} setPriority={setPriority} shippingMethod={shippingMethod} setShippingMethod={setShippingMethod}
+                partners={partners} warehouses={warehouses} products={products} createLines={createLines} setCreateLines={setCreateLines}
+                busy={busy} onCreateOrder={createOrder} onClose={() => setShowCreate(false)}
+              />
+            )}
+            {isSalesOrdersRoute && selected && (
+              <OutboundSelectedOrderCard
+                selected={selected} canHold={canHold} canRelease={canRelease} canCancel={canCancel} busy={busy}
+                orderCancelReason={orderCancelReason} setOrderCancelReason={setOrderCancelReason} onMutate={mutate}
+              />
+            )}
+          </>
+        ) : (
+          <OutboundMultiTabWorkspaceBody
+            activeSectionTab={activeSectionTab} orders={orders} pagedOrders={pagedOrders} orderPage={orderPage}
+            totalOrderPages={totalOrderPages} setOrderPage={setOrderPage} backorders={backorders} selected={selected}
+            totalOrderedQty={totalOrderedQty} totalReservedQty={totalReservedQty} totalAllocatedQty={totalAllocatedQty}
+            totalShippedQty={totalShippedQty} openBackorderRemaining={openBackorderRemaining} fulfillmentRatePct={fulfillmentRatePct}
+            canReadOrders={canReadOrders} canCreate={canCreate} masterReady={masterReady} canHold={canHold} canRelease={canRelease}
+            canCancel={canCancel} canReadBackorders={canReadBackorders} canManageBackorders={canManageBackorders}
+            showCreate={showCreate} setShowCreate={setShowCreate} busy={busy} governanceBusy={governanceBusy}
+            triggerExpediteBackorder={triggerExpediteBackorder} evaluateAtpRouting={evaluateAtpRouting}
+            expediteResult={expediteResult} atpRoutingResult={atpRoutingResult}
+            externalOrderId={externalOrderId} setExternalOrderId={setExternalOrderId} customerId={customerId} setCustomerId={setCustomerId}
+            warehouseId={warehouseId} setWarehouseId={setWarehouseId} requestedShipDate={requestedShipDate} setRequestedShipDate={setRequestedShipDate}
+            priority={priority} setPriority={setPriority} shippingMethod={shippingMethod} setShippingMethod={setShippingMethod}
+            partners={partners} warehouses={warehouses} products={products} createLines={createLines} setCreateLines={setCreateLines}
+            createOrder={createOrder} detail={detail} setError={setError} setNotice={setNotice} load={load}
+            orderCancelReason={orderCancelReason} setOrderCancelReason={setOrderCancelReason} recoverQty={recoverQty} setRecoverQty={setRecoverQty}
+            backorderCancelQty={backorderCancelQty} setBackorderCancelQty={setBackorderCancelQty}
+            backorderCancelReason={backorderCancelReason} setBackorderCancelReason={setBackorderCancelReason} mutate={mutate}
           />
         )}
       </div>

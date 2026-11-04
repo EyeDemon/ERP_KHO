@@ -330,7 +330,7 @@ export const DashboardControlTowerPanel: React.FC<DashboardControlTowerPanelProp
 
               <UiCard title="Màn hình nghiệp vụ đã kích hoạt">
                 <div className="dashboard-screen-count">{visibleProductionNavigation.length + 1}</div>
-                <div className="dashboard-screen-list" style={{ maxHeight: 220, overflowY: 'auto' }}>
+                <div className="dashboard-screen-list" tabIndex={0} role="region" aria-label="Vùng cuộn màn hình nghiệp vụ đã kích hoạt" style={{ maxHeight: 220, overflowY: 'auto' }}>
                   {visibleProductionNavigation.map((item) => (
                     <Link key={item.path} to={item.path}>
                       <span>{item.label}</span>

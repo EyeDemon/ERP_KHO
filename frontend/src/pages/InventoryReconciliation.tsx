@@ -3,26 +3,25 @@ import { Link, useInRouterContext } from 'react-router-dom';
 import type { FormEvent } from 'react';
 import apiClient from '../services/apiClient';
 import { isReadOnlyDemoRuntime } from '../services/runtimeMode';
-import { demoReconciliationRows, demoReconciliationWarehouses } from '../mocks/inventoryReconciliationDemo';
 import { UiMetric, UiMetricGrid, UiPage, UiPageHeader } from '../ui/ProductionUi';
 import type {
   Investigation,
+  OutboxMessageItem,
   PagedResult,
   ReconciliationRow,
   SiteReadinessVerdict,
   WarehouseOption,
-} from '../modules/inventory-pages/inventoryReconciliationValidators';
+} from '../modules/inventory/inventoryReconciliationValidators';
 import {
-  DEFAULT_OUTBOX_MESSAGES,
   isValidInvestigationEvidence,
   isValidReconciliationPage,
   mapOutboxMessages,
   numberFormat,
   pageSize,
   statusLabels,
-} from '../modules/inventory-pages/inventoryReconciliationValidators';
-import { ReconciliationGovernanceAndTable } from '../modules/inventory-pages/ReconciliationGovernanceAndTable';
-import { ReconciliationInvestigationCard } from '../modules/inventory-pages/ReconciliationInvestigationCard';
+} from '../modules/inventory/inventoryReconciliationValidators';
+import { ReconciliationGovernanceAndTable } from '../modules/inventory/ReconciliationGovernanceAndTable';
+import { ReconciliationInvestigationCard } from '../modules/inventory/ReconciliationInvestigationCard';
 import './InventoryReconciliation.css';
 
 export default function InventoryReconciliation() {
@@ -51,14 +50,10 @@ export default function InventoryReconciliation() {
   const investigationTrigger = useRef<HTMLButtonElement | null>(null);
   const [outboxDispatchNotice, setOutboxDispatchNotice] = useState('');
   const [rebuildNotice, setRebuildNotice] = useState('');
-  const [outboxMessages, setOutboxMessages] = useState(DEFAULT_OUTBOX_MESSAGES);
+  const [outboxMessages, setOutboxMessages] = useState<OutboxMessageItem[]>([]);
   const [siteReadinessVerdict, setSiteReadinessVerdict] = useState<SiteReadinessVerdict | null>(null);
 
   useEffect(() => {
-    if (demoRuntime) {
-      setWarehouses(demoReconciliationWarehouses);
-      return;
-    }
     let active = true;
     void Promise.resolve(apiClient.get('/api/v1/inventory-reconciliation/outbox-messages'))
       .then((res) => {
@@ -88,7 +83,7 @@ export default function InventoryReconciliation() {
         setWarehouseError('Không thể tải danh sách kho được cấp quyền. Hãy thử lại hoặc liên hệ quản trị.');
       });
     return () => { active = false; };
-  }, [demoRuntime]);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -96,27 +91,6 @@ export default function InventoryReconciliation() {
       setLoading(true);
       setError('');
       try {
-        if (demoRuntime) {
-          const normalizedKeyword = applied.keyword.trim().toLocaleLowerCase('vi');
-          const filtered = demoReconciliationRows.filter((row) => {
-            const warehouseMatches = !applied.warehouseId || row.warehouseId === Number(applied.warehouseId);
-            const productMatches = !applied.productId || row.productId === Number(applied.productId);
-            const keywordMatches = !normalizedKeyword || row.productCode.toLocaleLowerCase('vi').includes(normalizedKeyword) || row.productName.toLocaleLowerCase('vi').includes(normalizedKeyword);
-            return warehouseMatches && productMatches && keywordMatches;
-          });
-          const start = (page - 1) * pageSize;
-          if (active) {
-            setResult({
-              items: filtered.slice(start, start + pageSize),
-              totalRecords: filtered.length,
-              pageIndex: page,
-              pageSize,
-              totalPages: Math.ceil(filtered.length / pageSize),
-            });
-          }
-          return;
-        }
-
         const params = new URLSearchParams();
         if (applied.warehouseId) params.set('warehouseId', applied.warehouseId);
         if (applied.productId) params.set('productId', applied.productId);
@@ -149,7 +123,7 @@ export default function InventoryReconciliation() {
     };
     void load();
     return () => { active = false; };
-  }, [applied, demoRuntime, page]);
+  }, [applied, page]);
 
   useEffect(() => {
     investigationGeneration.current += 1;
@@ -171,7 +145,6 @@ export default function InventoryReconciliation() {
     bucketStatus = 'Available', eventStatus = 'Available',
     allStatusBucketAnchor?: number, allStatusBucketAggregateFingerprint?: string,
   ) => {
-    if (demoRuntime) return;
     const generation = ++investigationGeneration.current;
     setInvestigation(null);
     setInvestigationError('');

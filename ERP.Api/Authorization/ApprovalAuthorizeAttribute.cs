@@ -29,16 +29,32 @@ public sealed class ApprovalAuthorizationFilter(ErpKhoDbContext db) : IAsyncAuth
             { context.Result = new UnauthorizedObjectResult(new { message = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." }); return; }
             context.HttpContext.Items[HttpCurrentUser.EffectiveRoleKey] = user.Role;
             var type = context.RouteData.Values.TryGetValue("documentType", out var value) ? value?.ToString() : null;
-            var legacy = user.Role is "Admin" or "Manager";
+            var legacy = user.Role is "Admin" or "Manager" or "SuperAdmin";
             var isPost = HttpMethods.IsPost(context.HttpContext.Request.Method);
+            var path = context.HttpContext.Request.Path.Value ?? string.Empty;
+            var isApproveEndpoint = isPost && path.EndsWith("/approve", StringComparison.OrdinalIgnoreCase);
             var allowed = type switch
             {
-                "ImportReceipt" => user.Permissions.Contains(isPost ? AppPermissions.ApprovalReject : AppPermissions.ReceiptRead),
-                "ExportReceipt" => isPost
-                    ? user.Permissions.Contains(AppPermissions.ApprovalReject) && user.Permissions.Contains(AppPermissions.ExportReceiptCancel)
-                    : user.Permissions.Contains(AppPermissions.ExportReceiptRead),
-                null => legacy || user.Permissions.Contains(AppPermissions.ReceiptRead) || user.Permissions.Contains(AppPermissions.ExportReceiptRead),
-                _ => legacy
+                "ImportReceipt" => isApproveEndpoint
+                    ? user.Permissions.Contains(AppPermissions.ReceiptComplete) || user.Permissions.Contains(AppPermissions.ApprovalApprove)
+                    : user.Permissions.Contains(isPost ? AppPermissions.ApprovalReject : AppPermissions.ReceiptRead),
+                "ExportReceipt" => isApproveEndpoint
+                    ? user.Permissions.Contains(AppPermissions.ExportReceiptApprove) || user.Permissions.Contains(AppPermissions.ApprovalApprove)
+                    : isPost
+                        ? user.Permissions.Contains(AppPermissions.ApprovalReject) && user.Permissions.Contains(AppPermissions.ExportReceiptCancel)
+                        : user.Permissions.Contains(AppPermissions.ExportReceiptRead),
+                "Stocktake" => isApproveEndpoint
+                    ? user.Permissions.Contains(AppPermissions.StocktakeManage) || user.Permissions.Contains(AppPermissions.InventoryWrite) || user.Permissions.Contains(AppPermissions.ApprovalApprove) || legacy
+                    : isPost
+                        ? user.Permissions.Contains(AppPermissions.ApprovalReject) || user.Permissions.Contains(AppPermissions.StocktakeManage) || legacy
+                        : user.Permissions.Contains(AppPermissions.StocktakeRead) || user.Permissions.Contains(AppPermissions.InventoryRead) || legacy,
+                "StockTransfer" => isApproveEndpoint
+                    ? user.Permissions.Contains(AppPermissions.InventoryMovementCreate) || user.Permissions.Contains(AppPermissions.ApprovalApprove) || legacy
+                    : isPost
+                        ? user.Permissions.Contains(AppPermissions.ApprovalReject) || user.Permissions.Contains(AppPermissions.InventoryMovementCreate) || legacy
+                        : user.Permissions.Contains(AppPermissions.InventoryRead) || legacy,
+                null => legacy || user.Permissions.Contains(AppPermissions.ReceiptRead) || user.Permissions.Contains(AppPermissions.ExportReceiptRead) || user.Permissions.Contains(AppPermissions.StocktakeRead) || user.Permissions.Contains(AppPermissions.ApprovalApprove),
+                _ => legacy || user.Permissions.Contains(AppPermissions.ApprovalApprove)
             };
             if (!allowed) context.Result = new ObjectResult(new { message = "Bạn không có quyền thực hiện thao tác này." }) { StatusCode = 403 };
         }

@@ -88,6 +88,54 @@ export type VideoEvidenceItem = {
   cameraStation: string;
 };
 
+export interface KitWorkOrderRow {
+  id: number;
+  workOrderCode: string;
+  kitSku: string;
+  kitName: string;
+  orderType: 'ASSEMBLY' | 'DISASSEMBLY';
+  plannedQty: number;
+  completedQty: number;
+  uomLabel: string;
+  earliestExpiry: string;
+  rolledUpCost: number;
+  totalCost?: number;
+  warehouseName?: string;
+  status: string;
+}
+
+export const DEFAULT_KIT_ORDERS: KitWorkOrderRow[] = [
+  {
+    id: 1,
+    workOrderCode: 'KWO-2026-001',
+    kitSku: 'QA-LOT-002',
+    kitName: 'Bộ Kit Quà tặng Doanh nghiệp (Kèm định vị GPS)',
+    orderType: 'ASSEMBLY',
+    plannedQty: 20,
+    completedQty: 20,
+    uomLabel: 'Bộ',
+    earliestExpiry: '31/12/2026 (Hạn dùng sớm nhất)',
+    rolledUpCost: 500000,
+    totalCost: 10000000,
+    warehouseName: 'Kho Trung tâm (WH01)',
+    status: 'COMPLETED',
+  },
+  {
+    id: 2,
+    workOrderCode: 'KWO-2026-002',
+    kitSku: 'QA-LOT-002',
+    kitName: 'Bộ Kit Quà tặng Doanh nghiệp (Kèm định vị GPS)',
+    orderType: 'ASSEMBLY',
+    plannedQty: 15,
+    completedQty: 0,
+    uomLabel: 'Bộ',
+    earliestExpiry: '31/12/2026 (Hạn dùng sớm nhất)',
+    rolledUpCost: 500000,
+    warehouseName: 'Kho Trung tâm (WH01)',
+    status: 'OPEN',
+  },
+];
+
 export const stateLabels: Record<string, string> = {
   Open: 'Mở',
   InProgress: 'Đang đóng gói',

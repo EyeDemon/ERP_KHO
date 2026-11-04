@@ -120,9 +120,9 @@ export function DockAppointmentsAndDoorsSection({
                             fontSize: 12,
                             fontWeight: 600,
                             whiteSpace: 'nowrap',
-                            background: '#f0f9ff',
-                            color: '#0369a1',
-                            border: '1px solid #bae6fd',
+                            background: '#eff6ff',
+                            color: '#1e40af',
+                            border: '1px solid #bfdbfe',
                           }}
                         >
                           {statusLabel[item.status] || item.status}
@@ -138,37 +138,37 @@ export function DockAppointmentsAndDoorsSection({
                     <td>
                       <div className="ui-inline-actions" style={{ gap: 6, flexWrap: 'wrap' }}>
                         {canManageAppointment && item.status === 0 && (
-                          <button type="button" aria-label={'Xác nhận lịch hẹn ' + item.code} style={{ background: '#0284c7', color: '#ffffff', border: '1px solid #0284c7', fontWeight: 600 }} onClick={() => void runCommand(item, 'confirm')}>
+                          <button type="button" aria-label={'Xác nhận lịch hẹn ' + item.code} style={{ background: '#1d4ed8', color: '#ffffff', border: '1px solid #1d4ed8', fontWeight: 600 }} onClick={() => void runCommand(item, 'confirm')}>
                             Xác nhận
                           </button>
                         )}
                         {canCheckIn && item.status === 1 && (
-                          <button type="button" aria-label={'Ghi nhận xe đến ' + item.code} style={{ background: '#0284c7', color: '#ffffff', border: '1px solid #0284c7', fontWeight: 600 }} onClick={() => void runCommand(item, 'arrive')}>
+                          <button type="button" aria-label={'Ghi nhận xe đến ' + item.code} style={{ background: '#1d4ed8', color: '#ffffff', border: '1px solid #1d4ed8', fontWeight: 600 }} onClick={() => void runCommand(item, 'arrive')}>
                             Xe đến
                           </button>
                         )}
                         {canCheckIn && item.status === 2 && (
-                          <button type="button" aria-label={'Ghi nhận vào cổng cho lịch hẹn ' + item.code} style={{ background: '#0284c7', color: '#ffffff', border: '1px solid #0284c7', fontWeight: 600 }} onClick={() => setActionPanel({ mode: 'checkin', appointment: item, vehiclePlate: item.vehiclePlate ?? '', trailerPlate: item.trailerPlate ?? '', driverName: '', driverPhone: '', sealNumber: '', yardSlotId: '', note: '' })}>
+                          <button type="button" aria-label={'Ghi nhận vào cổng cho lịch hẹn ' + item.code} style={{ background: '#1d4ed8', color: '#ffffff', border: '1px solid #1d4ed8', fontWeight: 600 }} onClick={() => setActionPanel({ mode: 'checkin', appointment: item, vehiclePlate: item.vehiclePlate ?? '', trailerPlate: item.trailerPlate ?? '', driverName: '', driverPhone: '', sealNumber: '', yardSlotId: '', note: '' })}>
                             Ghi nhận vào cổng
                           </button>
                         )}
                         {canManageAppointment && item.status === 4 && (
-                          <button type="button" aria-label={'Bắt đầu phục vụ lịch hẹn ' + item.code} style={{ background: '#0284c7', color: '#ffffff', border: '1px solid #0284c7', fontWeight: 600 }} onClick={() => void runCommand(item, 'start-service')}>
+                          <button type="button" aria-label={'Bắt đầu phục vụ lịch hẹn ' + item.code} style={{ background: '#1d4ed8', color: '#ffffff', border: '1px solid #1d4ed8', fontWeight: 600 }} onClick={() => void runCommand(item, 'start-service')}>
                             Bắt đầu
                           </button>
                         )}
                         {canManageAppointment && item.status === 5 && (
-                          <button type="button" aria-label={'Hoàn thành phục vụ lịch hẹn ' + item.code} style={{ background: '#0284c7', color: '#ffffff', border: '1px solid #0284c7', fontWeight: 600 }} onClick={() => void runCommand(item, 'complete')}>
+                          <button type="button" aria-label={'Hoàn thành phục vụ lịch hẹn ' + item.code} style={{ background: '#1d4ed8', color: '#ffffff', border: '1px solid #1d4ed8', fontWeight: 600 }} onClick={() => void runCommand(item, 'complete')}>
                             Hoàn thành
                           </button>
                         )}
                         {canCheckout && (item.status === 6 || (item.status === 9 && Boolean(item.checkedInAtUtc))) && !item.checkedOutAtUtc && (
-                          <button type="button" aria-label={'Ghi nhận rời cổng cho lịch hẹn ' + item.code} style={{ background: '#0284c7', color: '#ffffff', border: '1px solid #0284c7', fontWeight: 600 }} onClick={() => void runCommand(item, 'checkout')}>
+                          <button type="button" aria-label={'Ghi nhận rời cổng cho lịch hẹn ' + item.code} style={{ background: '#1d4ed8', color: '#ffffff', border: '1px solid #1d4ed8', fontWeight: 600 }} onClick={() => void runCommand(item, 'checkout')}>
                             Rời cổng
                           </button>
                         )}
                         {canAssignDock && [3, 4].includes(item.status) && (
-                          <button type="button" aria-label={(item.status === 4 ? 'Đổi cửa kho cho lịch hẹn ' : 'Gán cửa kho cho lịch hẹn ') + item.code} style={item.status === 3 ? { background: '#0284c7', color: '#ffffff', border: '1px solid #0284c7', fontWeight: 600 } : { background: '#f8fafc', color: '#0f172a', border: '1px solid #cbd5e1' }} onClick={() => setActionPanel({ mode: 'assignDock', appointment: item, dockId: item.dockId?.toString() ?? '', note: '' })}>
+                          <button type="button" aria-label={(item.status === 4 ? 'Đổi cửa kho cho lịch hẹn ' : 'Gán cửa kho cho lịch hẹn ') + item.code} style={item.status === 3 ? { background: '#1d4ed8', color: '#ffffff', border: '1px solid #1d4ed8', fontWeight: 600 } : { background: '#f8fafc', color: '#0f172a', border: '1px solid #cbd5e1' }} onClick={() => setActionPanel({ mode: 'assignDock', appointment: item, dockId: item.dockId?.toString() ?? '', note: '' })}>
                             {item.status === 4 ? 'Đổi cửa kho' : 'Gán cửa kho'}
                           </button>
                         )}

@@ -899,12 +899,15 @@ public class Wave48To51FullClosureTests
             .Options;
         await using var db = new ErpKhoDbContext(options);
 
+        var rawSupportToken = "SUP-RO-TOKEN-001";
+        var tokenSha256Hex = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(rawSupportToken)));
         db.SupportImpersonationSessions.Add(new SupportImpersonationSession
         {
             Id = 1,
             TenantId = 1,
-            SessionCode = "SUP-RO-TOKEN-001",
-            TokenHash = "SUP-RO-TOKEN-001",
+            SessionCode = "IMP-SES-W53-001",
+            TokenHash = tokenSha256Hex,
             SupportAgentUserId = 99,
             SupportTicketCode = "TICKET-W53",
             ReadOnlyScope = true,
@@ -914,6 +917,16 @@ public class Wave48To51FullClosureTests
             ExpiresAtUtc = DateTime.UtcNow.AddMinutes(25)
         });
         await db.SaveChangesAsync();
+
+        var supportPrincipal = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity(
+            [
+                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "99"),
+                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, "qa_support_admin"),
+                new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, "SupportAdmin"),
+                new System.Security.Claims.Claim(TenantClaimTypes.TenantId, "1"),
+                new System.Security.Claims.Claim(TenantClaimTypes.SecurityDomain, "PLATFORM")
+            ], "TestAuth"));
 
         var services = new ServiceCollection();
         services.AddSingleton(db);
@@ -927,9 +940,10 @@ public class Wave48To51FullClosureTests
         });
 
         // 1. GET request with ReadOnlyScope=true passes through (200 OK)
-        var getContext = new DefaultHttpContext { RequestServices = serviceProvider };
+        var getContext = new DefaultHttpContext { RequestServices = serviceProvider, User = supportPrincipal };
         getContext.Request.Method = HttpMethods.Get;
-        getContext.Request.Headers[SupportImpersonationMiddleware.ImpersonationTokenHeader] = "SUP-RO-TOKEN-001";
+        getContext.Request.Path = "/api/v1/sales-orders";
+        getContext.Request.Headers[SupportImpersonationMiddleware.ImpersonationTokenHeader] = rawSupportToken;
         getContext.Response.Body = new MemoryStream();
 
         await middleware.InvokeAsync(getContext);
@@ -940,9 +954,10 @@ public class Wave48To51FullClosureTests
         // 2. POST/PUT/DELETE requests with ReadOnlyScope=true are blocked with 403 IMPERSONATION_READ_ONLY_ENFORCED
         foreach (var method in new[] { HttpMethods.Post, HttpMethods.Put, HttpMethods.Delete })
         {
-            var mutContext = new DefaultHttpContext { RequestServices = serviceProvider };
+            var mutContext = new DefaultHttpContext { RequestServices = serviceProvider, User = supportPrincipal };
             mutContext.Request.Method = method;
-            mutContext.Request.Headers[SupportImpersonationMiddleware.ImpersonationTokenHeader] = "SUP-RO-TOKEN-001";
+            mutContext.Request.Path = "/api/v1/sales-orders";
+            mutContext.Request.Headers[SupportImpersonationMiddleware.ImpersonationTokenHeader] = rawSupportToken;
             mutContext.Response.Body = new MemoryStream();
 
             await middleware.InvokeAsync(mutContext);
@@ -1879,7 +1894,7 @@ public class Wave48To51FullClosureTests
         codDoc.RootElement.GetProperty("totalPitWithheldAmount").GetDecimal().Should().Be(10000m); // 0.5% of 2,000,000
         codDoc.RootElement.GetProperty("totalWithheldTaxAmount").GetDecimal().Should().Be(30000m); // 1.5% total
         codDoc.RootElement.GetProperty("totalFixedOrderProcessingFee").GetDecimal().Should().Be(3000m); // 1 order * 3,000
-        codDoc.RootElement.GetProperty("taxPolicyReference").GetString().Should().Contain("Nghị định 70/2025/NĐ-CP");
+        codDoc.RootElement.GetProperty("taxPolicyReference").GetString().Should().Contain("Khấu trừ thuế Sàn TMĐT 1,5%");
 
         // 2. Owner Gross Profit verifies withheldVatAmount, withheldPitAmount, withheldTaxTotalAmount, fixedInfrastructureFeeTotal, netProfitAfterWithheldTax
         var pnlRes = await reportsController.GetOwnerGrossProfit(1, default);
@@ -2491,7 +2506,7 @@ public class Wave48To51FullClosureTests
 
         // 3. 3PL Daily Storage Billing Snapshot (CBM / Pallet / Bin fee calculation)
         var reportsCtrl = new ReportsController(new Mock<IReportService>().Object, new ReportOperationsService(db), whAuth.Object, Mock.Of<ICurrentUser>());
-        var snapRes = await reportsCtrl.GetOrCaptureThreePlStorageSnapshot(1, 20, default);
+        var snapRes = await reportsCtrl.GetThreePlStorageSnapshot(1, 20, default);
         using var snapDoc = JsonSerializer.SerializeToDocument(snapRes.Should().BeOfType<OkObjectResult>().Subject.Value);
         snapDoc.RootElement.GetProperty("ownerCount").GetInt32().Should().Be(1);
         snapDoc.RootElement.GetProperty("totalOccupiedBins").GetInt32().Should().Be(1);

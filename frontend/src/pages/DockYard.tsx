@@ -261,7 +261,7 @@ const DockYard = () => {
           actions={
             <div className="ui-inline-actions" style={{ gap: 8, flexWrap: 'wrap' }}>
               {canManageAppointment && (
-                <button type="button" aria-label="Tạo lịch hẹn" className="ui-primary-button" style={{ background: '#0284c7', color: '#ffffff', fontWeight: 600, border: '1px solid #0284c7', padding: '8px 16px', borderRadius: 8 }} onClick={() => (appointmentForm && !appointmentForm.id ? setAppointmentForm(null) : openAppointment())}>
+                <button type="button" aria-label="Tạo lịch hẹn" className="ui-primary-button" style={{ background: '#1d4ed8', color: '#ffffff', fontWeight: 600, border: '1px solid #1d4ed8', padding: '8px 16px', borderRadius: 8 }} onClick={() => (appointmentForm && !appointmentForm.id ? setAppointmentForm(null) : openAppointment())}>
                   {appointmentForm && !appointmentForm.id ? 'Thu gọn biểu mẫu' : '+ Tạo lịch hẹn'}
                 </button>
               )}
@@ -319,7 +319,7 @@ const DockYard = () => {
                 { id: 'crossdock' as const, label: '3. Điều phối trung chuyển thẳng' },
                 { id: 'all' as const, label: 'Xem tất cả phân khu' },
               ].map(tab => (
-                <button key={tab.id} type="button" role="tab" aria-selected={activeSectionTab === tab.id} onClick={() => setActiveSectionTab(tab.id)} style={{ flex: '1 1 180px', minHeight: 38, fontWeight: 600, borderRadius: 8, background: activeSectionTab === tab.id ? '#0284c7' : '#ffffff', color: activeSectionTab === tab.id ? '#ffffff' : '#0f172a', border: `1px solid ${activeSectionTab === tab.id ? '#0284c7' : '#cbd5e1'}` }}>
+                <button key={tab.id} type="button" role="tab" aria-selected={activeSectionTab === tab.id} onClick={() => setActiveSectionTab(tab.id)} style={{ flex: '1 1 180px', minHeight: 38, fontWeight: 600, borderRadius: 8, background: activeSectionTab === tab.id ? '#1d4ed8' : '#ffffff', color: activeSectionTab === tab.id ? '#ffffff' : '#0f172a', border: `1px solid ${activeSectionTab === tab.id ? '#1d4ed8' : '#cbd5e1'}` }}>
                   {tab.label}
                 </button>
               ))}

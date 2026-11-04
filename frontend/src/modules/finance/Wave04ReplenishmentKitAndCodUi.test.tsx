@@ -2,7 +2,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import apiClient from '../../services/apiClient';
-import { MinMaxReplenishmentPanel } from '../inventory-pages/MinMaxReplenishmentPanel';
+import { setCurrentPermissions } from '../../services/authorization';
+import { MinMaxReplenishmentPanel } from '../inventory/MinMaxReplenishmentPanel';
 import { ProductBundleAndGiftSection } from '../catalog/ProductBundleAndGiftSection';
 import CodReconciliation from '../../pages/CodReconciliation';
 
@@ -134,7 +135,7 @@ describe('Wave 04 — Min/Max Replenishment, KitWorkOrder FEFO & RBAC Cost, and 
     } as never);
 
     localStorage.setItem('role', 'Admin');
-    localStorage.setItem('user_permissions', JSON.stringify(['inventory.cost.read']));
+    setCurrentPermissions(['inventory.cost.read']);
 
     const { unmount } = render(
       <ProductBundleAndGiftSection
@@ -157,7 +158,7 @@ describe('Wave 04 — Min/Max Replenishment, KitWorkOrder FEFO & RBAC Cost, and 
     cleanup();
 
     localStorage.setItem('role', 'Staff');
-    localStorage.setItem('user_permissions', JSON.stringify(['products.read']));
+    setCurrentPermissions(['products.read']);
 
     render(
       <ProductBundleAndGiftSection

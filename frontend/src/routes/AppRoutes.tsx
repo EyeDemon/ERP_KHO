@@ -1,11 +1,13 @@
 import { Suspense, lazy, type ReactNode } from 'react';
 import { Navigate, Routes, Route, useInRouterContext, useLocation } from 'react-router-dom';
 import MainLayout from '../layouts/MainLayout';
+import PlatformControlCenterLayout from '../layouts/PlatformControlCenterLayout';
 import WorkspaceErrorBoundary from '../components/common/WorkspaceErrorBoundary';
 import { canViewApprovals, canViewStocktakes, hasPermission, usePermissionSet } from '../services/authorization';
 import { isReadOnlyDemoRuntime } from '../services/runtimeMode';
 import { UiCard, UiPage } from '../ui/ProductionUi';
 
+const PlatformControlCenter = lazy(() => import('../pages/PlatformControlCenter'));
 const Dashboard = lazy(() => import('../pages/Dashboard'));
 const NotFound = lazy(() => import('../pages/NotFound'));
 const Login = lazy(() => import('../pages/Login'));
@@ -99,6 +101,22 @@ const AppRoutes = () => {
         <Routes>
           <Route path="/login" element={<RouteErrorGuard><Login /></RouteErrorGuard>} />
           <Route path="/register" element={<RouteErrorGuard><OnboardingWizard /></RouteErrorGuard>} />
+          <Route
+            path="/platform"
+            element={
+              <PlatformControlCenterLayout>
+                <RouteErrorGuard><PlatformControlCenter /></RouteErrorGuard>
+              </PlatformControlCenterLayout>
+            }
+          />
+          <Route
+            path="/platform/*"
+            element={
+              <PlatformControlCenterLayout>
+                <RouteErrorGuard><PlatformControlCenter /></RouteErrorGuard>
+              </PlatformControlCenterLayout>
+            }
+          />
 
           {/* Hệ thống vận hành thật (Production ERP WMS) */}
           <Route path="/" element={<MainLayout />}>
@@ -115,6 +133,7 @@ const AppRoutes = () => {
           <Route path="units" element={<PermissionRoute permission="uom.read"><Units /></PermissionRoute>} />
           <Route path="business-partners" element={<PermissionRoute permission="partner.read"><BusinessPartners /></PermissionRoute>} />
           <Route path="partner-debts" element={<PermissionRoute permission="partner.read"><PartnerDebts /></PermissionRoute>} />
+          <Route path="partner-aging" element={<PermissionRoute permission="partner.read"><PartnerDebts /></PermissionRoute>} />
           <Route path="export-receipts" element={<PermissionRoute permission="export_receipt.read"><ExportReceipts /></PermissionRoute>} />
           <Route path="purchase-orders" element={<PermissionRoute permission="purchase_order.read"><PurchaseOrders /></PermissionRoute>} />
           <Route path="asns" element={<PermissionRoute permission="asn.read"><Asns /></PermissionRoute>} />
@@ -132,21 +151,29 @@ const AppRoutes = () => {
           <Route path="stock-allocations" element={<PermissionRoute permission="allocation.read"><StockAllocations /></PermissionRoute>} />
           <Route path="picking-tasks" element={<PermissionRoute permission="picking.read"><PickingTasks /></PermissionRoute>} />
           <Route path="packing-sessions" element={<PermissionRoute permission="packing.read"><PackingSessions /></PermissionRoute>} />
+          <Route path="kit-work-orders" element={<PermissionRoute permission="packing.read"><PackingSessions /></PermissionRoute>} />
+          <Route path="kitting" element={<PermissionRoute permission="packing.read"><PackingSessions /></PermissionRoute>} />
           <Route path="shipments" element={<PermissionRoute permission="shipment.read"><Shipments /></PermissionRoute>} />
           <Route path="handover-manifests" element={<PermissionRoute permission="inventory.read"><HandoverManifests /></PermissionRoute>} />
+          <Route path="sales-orders" element={<PermissionRoute permission={['sales_order.read', 'backorder.read']}><OutboundDemand /></PermissionRoute>} />
           <Route path="backorders" element={<PermissionRoute permission={['backorder.read', 'sales_order.read']}><OutboundDemand /></PermissionRoute>} />
-          <Route path="outbound-demand" element={<Navigate to="/backorders" replace />} />
+          <Route path="outbound-demand" element={<Navigate to="/sales-orders" replace />} />
           <Route path="cod-reconciliation" element={<PermissionRoute permission="inventory.cost.read"><CodReconciliation /></PermissionRoute>} />
           <Route path="cost-valuation" element={<PermissionRoute permission="inventory.cost.read"><CostValuation /></PermissionRoute>} />
+          <Route path="profit-report" element={<PermissionRoute permission="inventory.cost.read"><CostValuation /></PermissionRoute>} />
           <Route path="misa-exports" element={<PermissionRoute permission="inventory.cost.read"><CostValuation /></PermissionRoute>} />
+          <Route path="accounting-export" element={<PermissionRoute permission="inventory.cost.read"><CostValuation /></PermissionRoute>} />
           <Route path="onboarding-wizard" element={<PermissionRoute permission="permission.read"><OnboardingWizard /></PermissionRoute>} />
+          <Route path="ecommerce-integrations" element={<PermissionRoute permission="permission.read"><OnboardingWizard /></PermissionRoute>} />
           <Route path="saas-billing" element={<PermissionRoute permission="permission.read"><SaasBilling /></PermissionRoute>} />
           <Route path="approvals" element={<ApprovalRoute />} />
           <Route path="putaway-tasks" element={<PermissionRoute permission="putaway.read"><PutawayTasks /></PermissionRoute>} />
+          <Route path="putaway" element={<PermissionRoute permission="putaway.read"><PutawayTasks /></PermissionRoute>} />
+          <Route path="users" element={<PermissionRoute permission="permission.read"><Permissions /></PermissionRoute>} />
+          <Route path="roles" element={<PermissionRoute permission="permission.read"><Permissions /></PermissionRoute>} />
+          <Route path="warehouse-scopes" element={<PermissionRoute permission="permission.read"><Permissions /></PermissionRoute>} />
+          <Route path="account-security" element={<PermissionRoute permission="permission.read"><Permissions /></PermissionRoute>} />
           <Route path="permissions" element={<PermissionRoute permission="permission.read"><Permissions /></PermissionRoute>} />
-          <Route path="users" element={<Navigate to="/permissions" replace />} />
-          <Route path="roles" element={<Navigate to="/permissions" replace />} />
-          <Route path="warehouse-scopes" element={<Navigate to="/permissions" replace />} />
         </Route>
         <Route path="*" element={<RouteErrorGuard><NotFound /></RouteErrorGuard>} />
         </Routes>

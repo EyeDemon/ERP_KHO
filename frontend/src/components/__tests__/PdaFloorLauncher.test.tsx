@@ -48,23 +48,15 @@ describe('TC-P1-03: PdaFloorLauncher Mobile Viewport (390x844) & 6 Core Warehous
 
     const launcher = screen.getByTestId('pda-floor-launcher');
     expect(launcher).toBeTruthy();
-    expect(launcher.textContent).toContain('Bàn Phím Nhanh Sàn Kho PDA (6 Tác vụ Cốt lõi)');
+    expect(launcher.textContent).toContain('Tác vụ sàn kho nhanh');
 
     const expectedTiles: Array<{ testId: string; href: string; title: string }> = [
-      { testId: 'pda-tile-inbound', href: '/import-receipts', title: '1. Nhận hàng' },
-      { testId: 'pda-tile-putaway', href: '/putaway-tasks', title: '2. Cất hàng' },
-      { testId: 'pda-tile-picking', href: '/picking-tasks', title: '3. Lấy hàng' },
-      {
-        testId: 'pda-tile-handover',
-        href: '/handover-manifests',
-        title: '4. Đóng gói & Bàn giao AWB',
-      },
-      {
-        testId: 'pda-tile-returns-movements',
-        href: '/customer-returns',
-        title: '5. Hàng hoàn & Chuyển vị trí',
-      },
-      { testId: 'pda-tile-stocktake', href: '/stocktakes', title: '6. Kiểm kê kho' },
+      { testId: 'pda-tile-inbound', href: '/import-receipts', title: 'Nhận hàng nhập' },
+      { testId: 'pda-tile-putaway', href: '/putaway-tasks', title: 'Cất hàng vào kệ' },
+      { testId: 'pda-tile-picking', href: '/picking-tasks', title: 'Lấy hàng tại kệ' },
+      { testId: 'pda-tile-packing', href: '/packing-sessions', title: 'Đóng gói đơn hàng' },
+      { testId: 'pda-tile-handover', href: '/handover-manifests', title: 'Bàn giao vận đơn' },
+      { testId: 'pda-tile-stocktake', href: '/stocktakes', title: 'Kiểm kê tại kệ' },
     ];
 
     expect(PDA_FLOOR_TILES).toHaveLength(6);
