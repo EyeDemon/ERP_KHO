@@ -28,7 +28,7 @@ export const mapOutboxMessages = (raw: unknown): OutboxMessageItem[] | null => {
         .replace(/^ChannelSkuMapping-/, 'Đồng bộ kênh bán #')
         .replace(/\[?HandlingUnitLpnMove\]?/gi, '[Di chuyển kiện LPN]');
       return {
-        messageId: String(item.messageId || `OUTBOX-QA-00${idx + 1}`),
+        messageId: String(item.messageId || `SYNC-QA-00${idx + 1}`),
         eventType: eventTypeLabels[rawType] || String(item.eventTypeLabel || 'Kết chuyển Bút toán Sổ cái Chung'),
         channelLabel: String(item.channelLabel || item.targetSystem || item.description || 'Đồng bộ bản tin tích hợp hệ thống'),
         referenceCode: rawRef,

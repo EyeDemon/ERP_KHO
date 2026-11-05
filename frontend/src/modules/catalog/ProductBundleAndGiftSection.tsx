@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Lock } from 'lucide-react';
 import apiClient from '../../services/apiClient';
 import { usePermission } from '../../services/authorization';
 import { completeIdempotentAction, idempotencyHeaders } from '../../services/idempotency';
@@ -117,7 +118,7 @@ export function ProductBundleAndGiftSection({
           completeIdempotentAction(completeKey);
         }
         await loadKitWorkOrders();
-        setNotice(`Đã thực thi lệnh ${kitWorkOrderType === 'Assemble' ? 'lắp ráp đóng gói (Assemble)' : 'tháo dỡ phân rã (Disassemble)'} bộ Kit vật lý tại sàn kho (MAC + Kế thừa hạn dùng FEFO).`);
+        setNotice(`Đã thực thi lệnh ${kitWorkOrderType === 'Assemble' ? 'lắp ráp đóng gói' : 'tháo dỡ phân rã'} bộ Kit vật lý tại sàn kho (Bình quân gia quyền + Kế thừa hạn dùng ngắn nhất).`);
       } catch (err) {
         setError(messageOf(err, 'Không thể thực thi lệnh gia công lắp ráp / tháo dỡ bộ Kit tại sàn kho.'));
       }
@@ -210,10 +211,10 @@ export function ProductBundleAndGiftSection({
         {bundleComponents.length > 0 && (
           <UiTableScroll>
             <table aria-label="Danh sách thành phần Combo / Kit" className="ui-table-compact" style={{ marginTop: 10 }}>
-              <thead><tr><th>Mã thành phần</th><th>Tên thành phần</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Định mức / Bộ Kit</th></tr></thead>
+              <thead><tr><th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Mã thành phần</th><th style={{ minWidth: 180 }}>Tên thành phần</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 125, whiteSpace: 'nowrap' }}>Định mức / Bộ Kit</th></tr></thead>
               <tbody>
                 {bundleComponents.map(item => (
-                  <tr key={item.id}><td><strong>{item.childProductCode}</strong></td><td>{item.childProductName}</td><td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{item.quantity}</td></tr>
+                  <tr key={item.id}><td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.childProductCode}</strong></td><td>{item.childProductName}</td><td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{item.quantity}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -222,14 +223,14 @@ export function ProductBundleAndGiftSection({
       </UiCard>
 
       <UiCard
-        title="Lệnh Gia Công Lắp Ráp & Tháo Dỡ Bộ Kit Vật Lý Tại Sàn Kho (Physical Floor Kitting & De-Kitting)"
-        subtitle="Ghi nhận bút toán đối ứng nguyên tử 9 chiều: xuất linh kiện cấu thành, nhập thành phẩm Kit kèm kết chuyển giá vốn bình quân gia quyền (MAC) và kế thừa hạn dùng ngắn nhất (FEFO)"
+        title="Lệnh Gia Công Lắp Ráp & Tháo Dỡ Bộ Kit Vật Lý Tại Sàn Kho"
+        subtitle="Đối ứng nguyên tử sổ cái tồn kho: xuất linh kiện cấu thành, nhập thành phẩm Kit kèm kết chuyển giá vốn bình quân gia quyền và kế thừa hạn dùng ngắn nhất"
       >
         <form onSubmit={createAndCompleteKitWorkOrder} className="ui-inline-wrap" style={{ alignItems: 'end', gap: 10 }}>
           <UiToolbarField label="Loại lệnh gia công">
             <select aria-label="Loại lệnh gia công Kit" data-testid="select-kit-work-order-type" value={kitWorkOrderType} onChange={e => setKitWorkOrderType(e.target.value as 'Assemble' | 'Disassemble')} style={{ height: 38, boxSizing: 'border-box', minWidth: 210 }}>
-              <option value="Assemble">Lắp ráp đóng gói (Assemble)</option>
-              <option value="Disassemble">Tháo dỡ phân rã (Disassemble)</option>
+              <option value="Assemble">Lắp ráp đóng gói</option>
+              <option value="Disassemble">Tháo dỡ phân rã</option>
             </select>
           </UiToolbarField>
           <UiToolbarField label="SL bộ Kit thực hiện">
@@ -243,13 +244,13 @@ export function ProductBundleAndGiftSection({
           <table aria-label="Danh sách lệnh gia công lắp ráp tháo dỡ bộ Kit" data-testid="kit-work-orders-table" className="ui-table-compact" style={{ marginTop: 10, width: '100%' }}>
             <thead>
               <tr>
-                <th>Mã lệnh KWO</th>
-                <th>Loại gia công</th>
-                <th>Sản phẩm Kit &amp; ĐVT chuẩn (Base UOM)</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>SL Kế hoạch / Hoàn thành</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Giá vốn cộng dồn (Rolled-Up MAC)</th>
-                <th>Hạn dùng kế thừa dự kiến (FEFO Min Expiry)</th>
-                <th>Trạng thái</th>
+                <th style={{ minWidth: 115, whiteSpace: 'nowrap' }}>Mã lệnh</th>
+                <th style={{ minWidth: 115, whiteSpace: 'nowrap' }}>Loại gia công</th>
+                <th style={{ minWidth: 155 }}>Sản phẩm &amp; Đơn vị</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 115, whiteSpace: 'nowrap' }}>SL đạt / KH</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 135, whiteSpace: 'nowrap' }}>Giá vốn cộng dồn</th>
+                <th style={{ minWidth: 140 }}>Hạn dùng kế thừa</th>
+                <th style={{ minWidth: 115, whiteSpace: 'nowrap' }}>Trạng thái</th>
               </tr>
             </thead>
             <tbody>
@@ -260,15 +261,21 @@ export function ProductBundleAndGiftSection({
                   const allowCost = canReadCostRbac && kwo.canReadCost !== false && kwo.rolledUpUnitCost !== null;
                   return (
                     <tr key={kwo.id}>
-                      <td><strong>{kwo.workOrderCode}</strong></td>
-                      <td><UiBadge tone={kwo.workOrderType === 'Assemble' ? 'success' : 'warning'}>{kwo.workOrderType === 'Assemble' ? 'Lắp ráp (Assemble)' : 'Tháo dỡ (Disassemble)'}</UiBadge></td>
-                      <td><strong>{kwo.kitProductCode}</strong> – {kwo.kitProductName} <UiBadge tone="neutral">{kwo.baseUomCode || 'PCS'} (x{kwo.conversionRateSnapshot ?? 1})</UiBadge></td>
-                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}><strong>{kwo.completedKitQty}</strong> / {kwo.plannedKitQty}</td>
-                      <td data-testid="kit-wo-rolledup-cost" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                        {allowCost ? `${Number(kwo.rolledUpUnitCost).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} đ` : 'Ẩn theo quyền RBAC (inventory.cost.read)'}
+                      <td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{kwo.workOrderCode}</strong></td>
+                      <td><UiBadge tone={kwo.workOrderType === 'Assemble' ? 'success' : 'warning'}>{kwo.workOrderType === 'Assemble' ? 'Lắp ráp' : 'Tháo dỡ'}</UiBadge></td>
+                      <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{kwo.kitProductCode}</strong> – {kwo.kitProductName} <UiBadge tone="neutral">{kwo.baseUomCode || 'PCS'} (x{kwo.conversionRateSnapshot ?? 1})</UiBadge></td>
+                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}><strong>{kwo.completedKitQty}</strong> / {kwo.plannedKitQty}</td>
+                      <td data-testid="kit-wo-rolledup-cost" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                        {allowCost ? (
+                          `${Number(kwo.rolledUpUnitCost).toLocaleString('vi-VN', { maximumFractionDigits: 2 })} ₫`
+                        ) : (
+                          <span className="ui-cost-masked-badge" style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <Lock size={12} aria-hidden="true" /> Ẩn theo quyền
+                          </span>
+                        )}
                       </td>
-                      <td data-testid="kit-wo-earliest-expiry">
-                        {kwo.completedLotNumber || 'LOT-KIT-AUTO'} • HSD: {kwo.earliestComponentExpiryDate ? new Date(kwo.earliestComponentExpiryDate).toLocaleDateString('vi-VN') : 'Chưa xác định'}
+                      <td data-testid="kit-wo-earliest-expiry" style={{ whiteSpace: 'nowrap' }}>
+                        <span className="ui-code" style={{ whiteSpace: 'nowrap' }}>{kwo.completedLotNumber || 'LOT-KIT-2026'}</span> • HSD: {kwo.earliestComponentExpiryDate ? new Date(kwo.earliestComponentExpiryDate).toLocaleDateString('vi-VN') : 'Chưa xác định'}
                       </td>
                       <td><UiBadge tone={kwo.status === 'Completed' ? 'success' : kwo.status === 'Cancelled' ? 'danger' : 'neutral'}>{kwo.status === 'Completed' ? 'Đã hoàn thành' : kwo.status === 'Cancelled' ? 'Đã hủy (Đảo sổ cái)' : kwo.status}</UiBadge></td>
                     </tr>

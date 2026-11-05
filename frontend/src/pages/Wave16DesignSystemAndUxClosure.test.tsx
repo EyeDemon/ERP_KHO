@@ -93,12 +93,12 @@ describe('Wave-16 Design System Unification, WCAG & UX Closure', () => {
       screen.getByTestId('permissions-role-tabs').querySelectorAll('button[role="tab"]'),
     ).map((b) => b.textContent);
     expect(chipTabs).toEqual([
-      'Quản trị viên công ty (Admin · 3)',
-      'Quản lý kho (Manager · 2)',
-      'Giám sát & QC (Supervisor · 1)',
-      'Kế toán kho (Accountant · 1)',
-      'Nhân viên kho (WarehouseStaff · 1)',
-      'Chỉ xem / Kiểm toán (Viewer · 1)',
+      'Quản trị công ty (3)',
+      'Quản lý kho (2)',
+      'Giám sát & QC (1)',
+      'Kế toán kho (1)',
+      'Nhân viên kho (1)',
+      'Kiểm toán nội bộ (1)',
     ]);
     expect(new Set(chipTabs).size).toBe(chipTabs.length);
     expect(view.container.textContent).not.toContain('Vai trò khác');
@@ -109,9 +109,10 @@ describe('Wave-16 Design System Unification, WCAG & UX Closure', () => {
     expect(view.container.textContent).not.toContain('PlatformSuperAdmin');
     expect(view.container.textContent).not.toContain('platform.tenant.read');
     expect(screen.queryByLabelText('Lọc theo vai trò')).toBeNull();
+    expect(screen.queryByTestId('select-permission-module')).toBeNull();
 
-    const moduleSelect = screen.getByLabelText('Lọc theo phân hệ') as HTMLSelectElement;
-    fireEvent.change(moduleSelect, { target: { value: 'Nhập kho' } });
+    const modulePill = screen.getByRole('button', { name: /^Nhập kho \(\d+\)$/ });
+    fireEvent.click(modulePill);
     const batchBtn = screen.getByTestId('btn-batch-grant-module');
     expect(batchBtn.textContent).toContain('Cấp quyền nhóm đang chọn (2)');
     fireEvent.click(batchBtn);
@@ -224,6 +225,7 @@ describe('Wave-16 Design System Unification, WCAG & UX Closure', () => {
       />,
     );
 
+    expect(screen.getByTestId('kit-bom-preview-table')).toBeTruthy();
     expect(screen.queryByText(/Tổng giá vốn định mức 1 Bộ Kit/i)).toBeNull();
     fireEvent.click(screen.getByTestId('btn-kit-more-KWO-2026-001'));
     fireEvent.click(screen.getByTestId('menu-item-kit-reverse'));
@@ -239,7 +241,7 @@ describe('Wave-16 Design System Unification, WCAG & UX Closure', () => {
     expect(confirmKitBtn.disabled).toBe(true);
 
     fireEvent.change(screen.getByTestId('input-kit-reversal-reason'), { target: { value: 'Ngắn' } });
-    expect(screen.getByTestId('kit-reversal-char-counter').textContent).toBe('(4/10 ký tự)');
+    expect(screen.getByTestId('kit-reversal-char-counter').textContent).toBe('Còn thiếu 6 ký tự (Tối thiểu 10 ký tự)');
     expect(confirmKitBtn.disabled).toBe(true);
 
     fireEvent.change(screen.getByTestId('input-kit-reversal-reason'), {
@@ -464,7 +466,7 @@ describe('Wave-16 Design System Unification, WCAG & UX Closure', () => {
       const revNoCost = beginPermissionRefresh();
       setCurrentPermissions(['receipt.read'], revNoCost);
     });
-    expect(mobileReceiptsView.getByTestId('import-receipt-mobile-total').textContent).toContain('Đã ẩn theo phân quyền');
+    expect(mobileReceiptsView.getByTestId('import-receipt-mobile-total').textContent).toContain('Ẩn theo quyền');
   });
 
   it('Wave-19 V-01 & FND-W19-01: traps Tab/Shift+Tab focus inside modals, restores focus on Escape, wires skip-links, and places Trạng thái in Column 2', async () => {

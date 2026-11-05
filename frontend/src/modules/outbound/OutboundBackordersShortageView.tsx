@@ -41,7 +41,7 @@ export function OutboundBackordersShortageView({
     <>
       <UiMetricGrid data-testid="backorders-kpi-grid">
         <UiMetric value={`${backorders.length} dòng`} label="Đơn thiếu hàng đang mở" isZero={backorders.length === 0} />
-        <UiMetric value={`${openBackorderRemaining} ĐVT`} label="Tổng SL thiếu chờ bù" isZero={openBackorderRemaining === 0} />
+        <UiMetric value={`${openBackorderRemaining} sản phẩm`} label="Tổng SL thiếu chờ bù" isZero={openBackorderRemaining === 0} />
         <UiMetric
           value={`${backorders.filter((b) => b.remainingQuantity > 0).length} đơn`}
           label="Đơn ưu tiên chờ cấp phát"

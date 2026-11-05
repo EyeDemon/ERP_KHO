@@ -188,14 +188,14 @@ export default function PutawayTasks() {
       } | undefined;
       if (data?.evaluationId) {
         const statusLabelText = data.statusLabel ?? 'Đã chấm điểm tối ưu xếp dỡ & phân bổ ô kệ thực tế';
-        const fefoText = data.fefoHazardCompliance === 'VERIFIED' || !data.fefoHazardCompliance ? 'Đạt chuẩn tương thích FEFO & phân vùng bảo quản' : data.fefoHazardCompliance;
+        const fefoText = data.fefoHazardCompliance === 'VERIFIED' || !data.fefoHazardCompliance ? 'Đạt chuẩn tương thích Ưu tiên Hạn dùng & phân vùng bảo quản' : data.fefoHazardCompliance;
         const recommendationMap: Record<string, string> = {
           OPTIMAL_SLOTTING_BALANCED: 'Phân bổ vị trí kệ cân bằng tối ưu',
           SLOTTING_OPTIMIZED: 'Đã tối ưu phân bổ vị trí kệ',
-          FEFO_HAZMAT_VERIFIED: 'Đạt chuẩn tương thích FEFO & phân vùng bảo quản',
+          FEFO_HAZMAT_VERIFIED: 'Đạt chuẩn tương thích Ưu tiên Hạn dùng & phân vùng bảo quản',
         };
         const recommendationText = data.slottingRecommendation ? ` (${recommendationMap[data.slottingRecommendation] ?? data.slottingRecommendation})` : '';
-        setSlottingEvaluationResult(`${data.evaluationId} • ${statusLabelText} • Khớp vị trí tối ưu: ${data.optimalBinMatchRatePct ?? 100}% • Tương thích FEFO/Bảo quản: ${fefoText}${recommendationText}`);
+        setSlottingEvaluationResult(`${data.evaluationId} • ${statusLabelText} • Khớp vị trí tối ưu: ${data.optimalBinMatchRatePct ?? 100}% • Tương thích Hạn dùng/Bảo quản: ${fefoText}${recommendationText}`);
       } else {
         setSlottingEvaluationResult(''); setError('Không thể chấm điểm tối ưu xếp dỡ: dữ liệu phản hồi không hợp lệ.');
       }
@@ -323,7 +323,7 @@ export default function PutawayTasks() {
                       <div>
                         <strong style={{ color: '#1e3a8a' }}>Gợi ý Vị trí Kệ Cất hàng Thông minh:</strong>{' '}
                         <UiBadge tone="success">{directedSuggestions[item.id]?.recommendedBinCode || locations[item.id]?.[0]?.code || warehouseLocations.find(l => l.locationType === 'Storage')?.code || 'Kệ lưu trữ đích'}</UiBadge>{' '}
-                        <span style={{ color: '#334155' }}>({directedSuggestions[item.id]?.reasonText || 'Cùng nhóm bảo quản Nhiệt độ thường • Ưu tiên FEFO • Còn 85% sức chứa'})</span>
+                        <span style={{ color: '#334155' }}>({directedSuggestions[item.id]?.reasonText || 'Cùng nhóm bảo quản Nhiệt độ thường • Ưu tiên Hạn dùng • Còn 85% sức chứa'})</span>
                       </div>
                       <button type="button" data-testid="apply-directed-putaway-btn" style={{ minHeight: 38, fontWeight: 600 }} disabled={!!busy || directedBusyItem === item.id} onClick={() => void applyDirectedPutawaySuggestion(selected.id, item.id, item.remainingBaseQuantity)}>
                         {directedBusyItem === item.id ? 'Đang áp dụng...' : 'Áp dụng Kệ Gợi ý'}

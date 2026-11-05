@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { FileText, History, MoreHorizontal, PauseCircle, PlayCircle } from 'lucide-react';
+import { formatUserDisplayNameVi } from '../../services/permissionPresentation';
 import { UiBadge, UiCard } from '../../ui/ProductionUi';
+import { normalizeTenantLegalNameVi, normalizeTenantTaxCode } from './platformBillingHelpers';
 import { PlatformQuotaDrawerAndModals } from './PlatformQuotaDrawerAndModals';
 import { PlatformQuotasUtilizationCard } from './PlatformQuotasUtilizationCard';
 
@@ -127,14 +129,14 @@ export const PlatformTenantsAndQuotaSection: React.FC<Props> = ({
             <table className="ui-table" data-testid="platform-tenants-table">
               <thead>
                 <tr>
-                  <th>Mã DN</th>
-                  <th>Doanh nghiệp &amp; Chủ sở hữu</th>
-                  <th>MST / CCCD</th>
-                  <th>Gói cước</th>
-                  <th style={{ textAlign: 'right' }}>Đơn tháng này</th>
-                  <th style={{ textAlign: 'right' }}>Kho &amp; Nhân sự</th>
-                  <th>Trạng thái</th>
-                  <th>Thao tác</th>
+                  <th style={{ minWidth: 88 }}>Mã DN</th>
+                  <th style={{ minWidth: 160 }}>Doanh nghiệp &amp; Chủ sở hữu</th>
+                  <th style={{ minWidth: 112 }}>MST / CCCD</th>
+                  <th style={{ minWidth: 112 }}>Gói cước</th>
+                  <th style={{ minWidth: 128, textAlign: 'right' }}>Đơn tháng này</th>
+                  <th style={{ minWidth: 116, textAlign: 'right' }}>Kho &amp; Nhân sự</th>
+                  <th style={{ minWidth: 116 }}>Trạng thái</th>
+                  <th style={{ minWidth: 140 }}>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -143,16 +145,22 @@ export const PlatformTenantsAndQuotaSection: React.FC<Props> = ({
                   const rowUsedWh = t.usedWarehouses ?? 1;
                   const rowUsedUsr = t.usedUsers ?? 6;
                   const orderPct = Math.round((t.currentMonthOrderCount / Math.max(1, t.monthlyOrderQuota)) * 100);
-                  const planLabelVi = t.planCode.toUpperCase() === 'ENTERPRISE' ? 'Gói Doanh nghiệp' : 'Gói Tăng trưởng';
+                  const planCodeUpper = t.planCode.toUpperCase();
+                  const planLabelVi =
+                    planCodeUpper === 'ENTERPRISE' || planCodeUpper === 'FULL_WMS'
+                      ? 'Gói Quản trị Kho Toàn diện'
+                      : 'Gói Tăng trưởng';
+                  const companyNameVi = normalizeTenantLegalNameVi(t.companyName, t.tenantId, t.tenantCode);
+                  const taxCodeVi = normalizeTenantTaxCode(t.taxCode);
                   return (
                     <tr key={t.tenantId} data-testid={`platform-tenant-row-${t.tenantId}`}>
-                      <td className="cell-nowrap" style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{t.tenantCode}</td>
-                      <td style={{ maxWidth: 220, whiteSpace: 'normal' }}>
-                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{t.companyName}</div>
+                      <td className="cell-nowrap ui-code" style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{t.tenantCode}</td>
+                      <td style={{ maxWidth: 230, whiteSpace: 'normal' }}>
+                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{companyNameVi}</div>
                         <div style={{ fontSize: 11.5, color: '#475569' }}>{t.ownerEmail}</div>
                       </td>
                       <td className="cell-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                        <div style={{ fontWeight: 600 }}>{t.taxCode || '0312345678'}</div>
+                        <div style={{ fontWeight: 600 }}>{taxCodeVi}</div>
                         <div style={{ fontSize: 11.5, color: '#475569' }}>{t.taxpayerType === 'HOUSEHOLD_INDIVIDUAL' ? 'Hộ kinh doanh' : 'Doanh nghiệp'}</div>
                       </td>
                       <td className="cell-nowrap"><UiBadge tone="info">{planLabelVi}</UiBadge></td>
@@ -167,7 +175,7 @@ export const PlatformTenantsAndQuotaSection: React.FC<Props> = ({
                         {isSuspended ? (
                           <>
                             <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>
-                              Bởi {t.suspendedBy || 'SuperAdmin'} • {t.suspendedAtVi || 'Vừa xong'}
+                              Bởi {formatUserDisplayNameVi(t.suspendedBy, 'SuperAdmin')} • {t.suspendedAtVi || 'Vừa xong'}
                             </div>
                             <button type="button" data-testid={`btn-toggle-suspend-reason-${t.tenantId}`} onClick={() => setExpandedReasonTenantId((prev) => (prev === t.tenantId ? null : t.tenantId))} style={{ background: 'none', border: 0, padding: 0, marginTop: 2, fontSize: 11, fontWeight: 600, color: '#991b1b', cursor: 'pointer', textDecoration: 'underline' }}>
                               Xem lý do

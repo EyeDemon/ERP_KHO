@@ -16,6 +16,7 @@ interface PickingMobileStationCardProps {
   setGovernanceBusy: (val: boolean) => void;
   busy: string;
   setError: (msg: string) => void;
+  isHandheldViewport?: boolean;
 }
 
 export function PickingMobileStationCard({
@@ -27,6 +28,7 @@ export function PickingMobileStationCard({
   setGovernanceBusy,
   busy,
   setError,
+  isHandheldViewport = false,
 }: PickingMobileStationCardProps) {
   const [mobileScanResult, setMobileScanResult] = useState('');
   const [automationTelemetry, setAutomationTelemetry] = useState<{
@@ -112,7 +114,7 @@ export function PickingMobileStationCard({
         telemetrySyncId: String(res.data.telemetrySyncId),
         wcsRoboticsState: telemetryLabels[rawWcs] ?? 'Đã sắp xếp lộ trình đi bộ nhặt hàng chữ S (Dãy → Kệ → Tầng → Ô)',
         rfidIotTelemetry: telemetryLabels[rawRfid] ?? 'Đã kiểm tra điều kiện bảo quản theo phân khu kệ',
-        voicePickToLight: telemetryLabels[rawVoice] ?? 'Kết hợp ưu tiên lô cận hạn FEFO',
+        voicePickToLight: telemetryLabels[rawVoice] ?? 'Kết hợp ưu tiên lô cận hạn xuất trước',
       });
     } catch (e) {
       setAutomationTelemetry(null);
@@ -137,11 +139,11 @@ export function PickingMobileStationCard({
       const cutoffLabel = typeof cutoffData.statusLabel === 'string' && cutoffData.statusLabel ? cutoffData.statusLabel : 'Đã đối soát giờ chốt xuất kho';
       const cutoffTime = typeof cutoffData.outboundCutoffLocal === 'string' && cutoffData.outboundCutoffLocal ? cutoffData.outboundCutoffLocal : '22:00';
       const openTasks = typeof cutoffData.openPickingTasksCount === 'number' ? cutoffData.openPickingTasksCount : 0;
-      const fefoLabel = typeof fefoData.statusLabel === 'string' && fefoData.statusLabel ? fefoData.statusLabel : 'Tuân thủ chuẩn FEFO/FIFO';
+      const fefoLabel = typeof fefoData.statusLabel === 'string' && fefoData.statusLabel ? fefoData.statusLabel : 'Tuân thủ chuẩn Ưu tiên Hạn dùng / Nhập trước';
       const activeAllocations = typeof fefoData.activeAllocationsCount === 'number' ? fefoData.activeAllocationsCount : 0;
       const expiringLots = typeof fefoData.expiringLotsWithin30DaysCount === 'number' ? fefoData.expiringLotsWithin30DaysCount : 0;
       setFefoCutoffBanner(
-        `Kiểm định Giờ cắt đơn & FEFO hoàn tất: ${cutoffLabel} (Giờ chốt: ${cutoffTime}, ${openTasks} tác vụ mở) • ${fefoLabel} (${activeAllocations} phân bổ, ${expiringLots} lô cận hạn <30 ngày)`,
+        `Kiểm định Giờ cắt đơn & Ưu tiên Hạn dùng hoàn tất: ${cutoffLabel} (Giờ chốt: ${cutoffTime}, ${openTasks} tác vụ mở) • ${fefoLabel} (${activeAllocations} phân bổ, ${expiringLots} lô cận hạn <30 ngày)`,
       );
     } catch (e) {
       setFefoCutoffBanner('');
@@ -162,40 +164,42 @@ export function PickingMobileStationCard({
           Bước 1: Quét vị trí kệ → Bước 2: Quét mã hàng → Bước 3: Xác nhận số lượng
         </div>
       )}
-      <div className="ui-inline-wrap">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, width: '100%' }}>
-          <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Đang thực thi / Chờ lấy</span>
-            <strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{mobileReadyTasksCount}</strong>
-          </div>
-          <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tổng cần lấy</span>
-            <strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{totalRequestedQty}</strong>
-          </div>
-          <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tổng đã lấy</span>
-            <strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{totalPickedQty}</strong>
-          </div>
-          <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Ngoại lệ chờ xử lý ({shortPickExceptionTasksCount})</span>
-            <div><UiBadge tone="success">Đồng bộ chống trùng lặp an toàn</UiBadge></div>
+      {!isHandheldViewport && (
+        <div className="ui-inline-wrap" style={{ minWidth: 0, maxWidth: '100%' }}>
+          <div className="picking-station-kpi-grid">
+            <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+              <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Chờ lấy / Đang lấy</span>
+              <strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{mobileReadyTasksCount}</strong>
+            </div>
+            <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+              <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tổng cần lấy</span>
+              <strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{totalRequestedQty}</strong>
+            </div>
+            <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+              <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Tổng đã lấy</span>
+              <strong style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{totalPickedQty}</strong>
+            </div>
+            <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+              <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Ngoại lệ chờ xử lý ({shortPickExceptionTasksCount})</span>
+              <div style={{ minWidth: 0, maxWidth: '100%' }}><UiBadge tone="success">Đồng bộ chống trùng lặp an toàn</UiBadge></div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
       <div className="ui-inline-wrap">
         <input
           aria-label="Quét nhanh mã vạch hoặc vị trí Mobile"
-          style={{ minWidth: 310 }}
+          style={{ flex: '1 1 220px', minWidth: 0, width: '100%' }}
           value={mobileScanInput}
           onChange={e => setMobileScanInput(e.target.value)}
-          placeholder="Quét mã phiếu, mã mặt hàng hoặc vị trí..."
+          placeholder="Quét mã phiếu, mã hàng hoặc vị trí..."
         />
         <button type="button" disabled={governanceBusy || !!busy} onClick={() => void verifyMobileScan()}>Kiểm tra mã quét</button>
         <button type="button" disabled={governanceBusy || !!busy} onClick={() => void syncAutomationTelemetry()}>
           Tối ưu Lộ trình Đi bộ Nhặt hàng Chữ S (Dãy → Kệ → Tầng → Ô)
         </button>
         <button type="button" disabled={governanceBusy || !!busy} onClick={() => void verifyFefoAndCutoff()}>
-          Kiểm định Giờ cắt đơn Xuất kho, Quét Lô Hết hạn &amp; Tuân thủ FEFO
+          Kiểm định Giờ cắt đơn Xuất kho, Quét Lô Hết hạn &amp; Cận hạn xuất trước
         </button>
         <button
           type="button"
@@ -221,7 +225,7 @@ export function PickingMobileStationCard({
             </button>
           </div>
           <span style={{ fontSize: 12, color: '#475569' }}>
-            Tùy chọn nâng cao dành cho kho có trang bị băng chuyền phân loại, cổng đọc thẻ từ và đèn hướng dẫn nhặt hàng. Mặc định thu gọn để ưu tiên không gian cho máy quét mã vạch cầm tay (PDA) và lộ trình FEFO.
+            Tùy chọn nâng cao dành cho kho có trang bị băng chuyền phân loại, cổng đọc thẻ từ và đèn hướng dẫn nhặt hàng. Mặc định thu gọn để ưu tiên không gian cho máy quét mã vạch cầm tay (PDA) và lộ trình cận hạn xuất trước.
           </span>
         </div>
       )}
@@ -232,7 +236,7 @@ export function PickingMobileStationCard({
       )}
       {automationTelemetry && (
         <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word' }}>
-          {`Đã sắp xếp lộ trình đi bộ nhặt hàng chữ S (Dãy → Kệ → Tầng → Ô) kết hợp ưu tiên lô cận hạn FEFO (${automationTelemetry.telemetrySyncId})`}
+          {`Đã sắp xếp lộ trình đi bộ nhặt hàng chữ S (Dãy → Kệ → Tầng → Ô) kết hợp ưu tiên lô cận hạn xuất trước (${automationTelemetry.telemetrySyncId})`}
         </div>
       )}
       {fefoCutoffBanner && (
@@ -248,14 +252,15 @@ export function PickingWaveSummaryCard({ waves }: { waves: WaveGroup[] }) {
   return (
     <UiCard title="Tổng hợp Đợt lấy hàng theo Đợt / Đơn">
       <div
+        className="picking-wave-template-banner"
         data-testid="wave-release-template-cluster-banner"
-        style={{ marginBottom: 10, padding: '8px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: 12, color: '#334155', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}
+        style={{ marginBottom: 10, padding: '8px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: 12, color: '#334155', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }}
       >
         <strong>Mẫu Phát Hành Sóng &amp; Giỏ Nhặt Cụm:</strong>
         <UiBadge tone="info">TPL-FLASH-SLA-2H (SLA &lt; 2h • 6 đơn/giỏ)</UiBadge>
         <UiBadge tone="neutral">TPL-CUTOFF-1800 (Chốt 18:00 • 8 đơn/giỏ)</UiBadge>
         <UiBadge tone="warning">TPL-BREACHED-RESCUE (Cứu đơn quá hạn • 4 đơn/giỏ)</UiBadge>
-        <span>• Tự động gom giỏ <code>TOTE-CL-01..08</code> &amp; bàn giao sang <code>PackingSession</code> khi đủ ô Put-to-Wall</span>
+        <span style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'break-word' }}>• Tự động gom giỏ <code>TOTE-CL-01..08</code> &amp; bàn giao sang <code>PackingSession</code> khi đủ ô Put-to-Wall</span>
       </div>
       {waves.length === 0 ? (
         <UiEmptyState title="Chưa có đợt lấy hàng đang hoạt động" detail="Chưa có đợt lấy hàng (Wave/Batch) đang hoạt động." />

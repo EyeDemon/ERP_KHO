@@ -216,7 +216,7 @@ describe('ExportReceipts shared production UI', () => {
     expect(await view.findByText('MP-SHOPEE-9988')).toBeTruthy();
     expect(view.getAllByText('GHN-EXPRESS').length).toBeGreaterThan(0);
     expect(view.getAllByText('AWB-77665544').length).toBeGreaterThan(0);
-    expect(view.getAllByText('Ẩn theo phân quyền').length).toBeGreaterThanOrEqual(3);
+    expect(view.getAllByText('Ẩn theo quyền').length).toBeGreaterThanOrEqual(3);
   });
 
   it('submits MarketplaceOrderId, CarrierCode, TrackingNumber, preserves form inputs on 409 INSUFFICIENT_AVAILABLE_STOCK, and maps 409 ORDER_CANCELLED_PUTBACK_REQUIRED', async () => {
@@ -361,8 +361,8 @@ describe('ExportReceipts shared production UI', () => {
     );
 
     const handoverInput = view.getByTestId('input-handover-awb-codes') as HTMLInputElement;
-    expect(handoverInput.style.minWidth).toBe('340px');
-    expect(handoverInput.style.width).toBe('360px');
+    expect(handoverInput.style.minWidth).toBe('220px');
+    expect(handoverInput.style.width).toBe('280px');
     expect(handoverInput.value).toBe('GHN84920188, VTP99201122');
 
     fireEvent.change(view.getByLabelText('Nhập hoặc quét mã vận đơn bàn giao'), {

@@ -125,14 +125,14 @@ export const InventoryInOutTab: React.FC<InventoryInOutTabProps> = ({
             <table aria-label="Báo cáo xuất nhập tồn" className="ui-table-compact">
               <thead>
                 <tr>
-                  <th>Mã SP</th>
-                  <th>Tên SP</th>
-                  <th>ĐVT</th>
-                  <th>Kho</th>
-                  <th className="inventory-numeric" style={rightNumStyle}>Tồn đầu kỳ</th>
-                  <th className="inventory-numeric" style={rightNumStyle}>Nhập trong kỳ</th>
-                  <th className="inventory-numeric" style={rightNumStyle}>Xuất trong kỳ</th>
-                  <th className="inventory-numeric" style={rightNumStyle}>Tồn cuối kỳ</th>
+                  <th style={{ minWidth: 92, whiteSpace: 'nowrap' }}>Mã SP</th>
+                  <th style={{ minWidth: 150 }}>Tên SP</th>
+                  <th style={{ minWidth: 78, whiteSpace: 'nowrap' }}>Đơn vị</th>
+                  <th style={{ minWidth: 115 }}>Kho</th>
+                  <th className="inventory-numeric" style={{ ...rightNumStyle, minWidth: 96, whiteSpace: 'nowrap' }}>Tồn đầu kỳ</th>
+                  <th className="inventory-numeric" style={{ ...rightNumStyle, minWidth: 105, whiteSpace: 'nowrap' }}>Nhập trong kỳ</th>
+                  <th className="inventory-numeric" style={{ ...rightNumStyle, minWidth: 105, whiteSpace: 'nowrap' }}>Xuất trong kỳ</th>
+                  <th className="inventory-numeric" style={{ ...rightNumStyle, minWidth: 96, whiteSpace: 'nowrap' }}>Tồn cuối kỳ</th>
                 </tr>
               </thead>
               <tbody>
@@ -143,7 +143,7 @@ export const InventoryInOutTab: React.FC<InventoryInOutTabProps> = ({
                 ) : (
                   inoutCurrentPageData.map((item, index) => (
                     <tr key={item.productId + '-' + item.warehouseId + '-' + index}>
-                      <td><strong>{item.productCode}</strong></td>
+                      <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.productCode}</strong></td>
                       <td>{item.productName}</td>
                       <td>{formatUnitName(item.unitName)}</td>
                       <td>{formatWarehouseLabel(item.warehouseName, undefined, item.warehouseId)}</td>

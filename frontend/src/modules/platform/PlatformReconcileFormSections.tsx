@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { AlertCircle, Upload, X } from 'lucide-react';
+import { formatMinLengthCounterVi } from '../../services/permissionPresentation';
 import { UiVnDateInput } from '../../components/common/UiVnDateInput';
 
 export interface PlatformReconcileFormSectionsProps {
@@ -129,9 +130,9 @@ export const PlatformReconcileFormSections: React.FC<PlatformReconcileFormSectio
               data-testid="reconcile-amount-variance-banner"
               style={{
                 marginTop: 5, padding: '6px 10px', borderRadius: 6, fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
-                background: numericAmount === total ? '#ecfdf5' : numericAmount < total ? '#fffbeb' : '#eff6ff',
-                color: numericAmount === total ? '#047857' : numericAmount < total ? '#b45309' : '#1d4ed8',
-                border: numericAmount === total ? '1px solid #a7f3d0' : numericAmount < total ? '1px solid #fde68a' : '1px solid #bfdbfe',
+                background: numericAmount === total ? '#ecfdf5' : numericAmount < total ? '#fffbeb' : '#F0F9FF',
+                color: numericAmount === total ? '#047857' : numericAmount < total ? '#b45309' : '#0369A1',
+                border: numericAmount === total ? '1px solid #a7f3d0' : numericAmount < total ? '1px solid #fde68a' : '1px solid #BAE6FD',
               }}
             >
               {numericAmount === total
@@ -241,13 +242,13 @@ export const PlatformReconcileFormSections: React.FC<PlatformReconcileFormSectio
         ) : null}
 
         <div className="platform-form-field" style={{ marginBottom: 4 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
             <label htmlFor="input-reconcile-note">Ghi chú kiểm toán đối soát *</label>
             <span
               data-testid="reconcile-note-char-counter"
-              style={{ fontSize: 11.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: noteLength >= 10 ? '#047857' : '#475569' }}
+              style={{ fontSize: 11.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: noteLength >= 10 ? '#047857' : '#64748b' }}
             >
-              ({noteLength}/10 ký tự tối thiểu)
+              {formatMinLengthCounterVi(noteLength, 10)}
             </span>
           </div>
           <textarea

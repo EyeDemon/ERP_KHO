@@ -66,7 +66,7 @@ export default function InventoryTraceability() {
     if (recallSimulating) return;
     setRecallSimulating(true);
     setRequestError('');
-    const queryValue = form.lotNumber.trim() || form.serialNumber.trim() || 'LÔ-FEFO-2026';
+    const queryValue = form.lotNumber.trim() || form.serialNumber.trim() || 'LÔ-2026-01';
     try {
       const response = await apiClient.post<RecallTreeSimulationResult>(
         '/api/v1/inventory/traceability/simulate-recall-tree',

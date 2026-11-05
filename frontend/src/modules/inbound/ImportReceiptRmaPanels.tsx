@@ -118,7 +118,7 @@ export function ImportReceiptRmaWorkflowGrid({
             color: deadlineInfo.completed ? '#065f46' : '#92400e', fontSize: 12, fontWeight: 600,
           }}
         >
-          ⏱ Hạn phản hồi khiếu nại sàn: {deadlineInfo.text}
+          Hạn phản hồi khiếu nại sàn: {deadlineInfo.text}
         </span>
         <div className="ui-inline-actions">
           <button

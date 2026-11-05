@@ -87,7 +87,7 @@ export function MinMaxReplenishmentPanel({
                 ? String(row.sourceLotNumber)
                 : row.lotNumber
                   ? String(row.lotNumber)
-                  : 'LOT-FEFO-01',
+                  : 'LOT-2026-01',
               sourceExpiryDate: rawExp ? String(rawExp) : null,
               targetLocationId: Number(row.targetLocationId ?? row.toLocationId ?? row.locationId ?? 1),
               targetLocationCode: String(row.targetLocationCode ?? row.toLocationCode ?? row.locationCode ?? 'PICK-FACE-A01'),
@@ -173,9 +173,9 @@ export function MinMaxReplenishmentPanel({
       );
       const d = (res?.data ?? {}) as Record<string, unknown>;
       const movedQty = Number(d.movedQty ?? d.movedQuantity ?? d.replenishedBaseQty ?? d.totalMovedQuantity ?? target?.neededQty ?? 50);
-      const sourceLotNumber = String(d.sourceLotNumber ?? d.lotNumber ?? target?.sourceLotNumber ?? 'LOT-FEFO-01');
+      const sourceLotNumber = String(d.sourceLotNumber ?? d.lotNumber ?? target?.sourceLotNumber ?? 'LOT-2026-01');
       const rawExpiry = d.sourceExpiryDate ?? d.sourceLotExpiryDate ?? d.expiryDate ?? target?.sourceExpiryDate;
-      const sourceExpiryDate = rawExpiry ? new Date(String(rawExpiry)).toLocaleDateString('vi-VN') : 'Chuẩn FEFO';
+      const sourceExpiryDate = rawExpiry ? new Date(String(rawExpiry)).toLocaleDateString('vi-VN') : 'Ưu tiên hạn dùng';
       const targetQuantityAfter = Number(
         d.targetQuantityAfter ?? d.newPickFaceQty ?? (target ? target.currentPickFaceQty + movedQty : movedQty),
       );
@@ -189,13 +189,15 @@ export function MinMaxReplenishmentPanel({
         targetLocationCode,
         message: String(
           d.message ??
-            `Đã bổ sung ${movedQty} ĐVT từ lô FEFO ${sourceLotNumber} (HSD: ${sourceExpiryDate}) sang kệ nhặt ${targetLocationCode}. Tồn sau bù: ${targetQuantityAfter}.`,
-        ),
+            `Đã bổ sung ${movedQty} sản phẩm từ lô ${sourceLotNumber} (HSD: ${sourceExpiryDate}) sang kệ nhặt ${targetLocationCode}. Tồn sau bù: ${targetQuantityAfter}.`,
+        )
+          .replace(/\b(\d+(?:[.,]\d+)?)\s*ĐVT\b/gi, '$1 sản phẩm')
+          .replace(/\bFEFO\b/gi, 'ưu tiên hạn dùng'),
       });
       await loadSuggestions();
       onExecuted?.();
     } catch (err: any) {
-      setError(err?.response?.data?.message || err?.message || 'Không thể thực thi bổ sung kệ nhặt theo FEFO.');
+      setError(err?.response?.data?.message || err?.message || 'Không thể thực thi bổ sung kệ nhặt theo ưu tiên hạn dùng.');
     } finally {
       setBusy(false);
     }
@@ -204,11 +206,11 @@ export function MinMaxReplenishmentPanel({
   return (
     <div data-testid="replenishment-minmax-panel" className="ui-stack">
       <UiCard
-        title="Điều phối Bổ sung Kệ nhặt lẻ theo Định mức Min/Max & Ưu tiên Hạn dùng FEFO"
-        subtitle="Thiết lập ngưỡng tồn tối thiểu (Min) / tối đa (Max) cho kệ nhặt mặt tiền (Pick-Face) và tự động điều chuyển từ kệ dự trữ (Bulk Reserve) theo lô hết hạn trước (FEFO)"
+        title="Điều phối Bổ sung Kệ nhặt lẻ theo Định mức Min/Max & Ưu tiên Hạn dùng"
+        subtitle="Thiết lập ngưỡng tồn tối thiểu (Min) / tối đa (Max) cho kệ nhặt lẻ và tự động điều chuyển từ kệ dự trữ theo lô hết hạn trước"
       >
         <form onSubmit={handleSaveMinMaxRule} className="ui-inline-wrap" style={{ alignItems: 'end', gap: 12, marginBottom: 12 }}>
-          <UiToolbarField label="Vị trí Kệ nhặt đích (Pick-Face)">
+          <UiToolbarField label="Vị trí Kệ nhặt đích">
             <select
               aria-label="Vị trí Kệ nhặt đích (Pick-Face)"
               value={selectedLocationId}
@@ -231,7 +233,7 @@ export function MinMaxReplenishmentPanel({
                 ))}
             </select>
           </UiToolbarField>
-          <UiToolbarField label="Định mức Tối thiểu (Min Base Qty)">
+          <UiToolbarField label="Định mức Tối thiểu">
             <input
               aria-label="Định mức Tối thiểu (Min Base Qty)"
               data-testid="input-replenish-min-qty"
@@ -243,7 +245,7 @@ export function MinMaxReplenishmentPanel({
               style={{ height: 38, boxSizing: 'border-box', width: 140 }}
             />
           </UiToolbarField>
-          <UiToolbarField label="Định mức Tối đa (Max Base Qty)">
+          <UiToolbarField label="Định mức Tối đa">
             <input
               aria-label="Định mức Tối đa (Max Base Qty)"
               data-testid="input-replenish-max-qty"
@@ -265,7 +267,7 @@ export function MinMaxReplenishmentPanel({
             onClick={() => void handleExecuteFefoReplenishment()}
             style={{ height: 38, minHeight: 38, background: '#0f172a', color: '#ffffff', fontWeight: 600 }}
           >
-            ⚡ Sinh &amp; Thực thi Bổ sung Kệ nhặt (FEFO)
+            Sinh &amp; Thực thi Bổ sung Kệ nhặt
           </button>
         </form>
 
@@ -281,7 +283,7 @@ export function MinMaxReplenishmentPanel({
             data-testid="replenish-execution-result"
             style={{ marginBottom: 10, padding: '10px 14px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}
           >
-            <strong>{execResult.message}</strong> • SL bù: <strong>{execResult.movedQty}</strong> • Lô FEFO: <strong>{execResult.sourceLotNumber}</strong> • HSD: <strong>{execResult.sourceExpiryDate}</strong> • Tồn đích sau bù: <strong>{execResult.targetQuantityAfter}</strong>
+            <strong>{execResult.message}</strong> • SL bù: <strong>{execResult.movedQty}</strong> • Lô nguồn: <strong>{execResult.sourceLotNumber}</strong> • HSD: <strong>{execResult.sourceExpiryDate}</strong> • Tồn đích sau bù: <strong>{execResult.targetQuantityAfter}</strong>
           </div>
         )}
 
@@ -289,32 +291,32 @@ export function MinMaxReplenishmentPanel({
           <table className="ui-table-compact" aria-label="Danh sách Đề xuất Bổ sung Kệ nhặt theo FEFO">
             <thead>
               <tr>
-                <th>Sản phẩm (SKU)</th>
-                <th>Kệ lưu trữ nguồn (Bulk Reserve)</th>
-                <th>Lô nguồn ưu tiên FEFO (Lot &amp; Hạn dùng)</th>
-                <th>Kệ nhặt đích (Pick-Face)</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tồn hiện tại / Định mức (Min–Max)</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số lượng cần bù (Needed Qty)</th>
-                <th>Mức ưu tiên</th>
+                <th style={{ minWidth: 130 }}>Sản phẩm</th>
+                <th style={{ minWidth: 115 }}>Kệ nguồn dự trữ</th>
+                <th style={{ minWidth: 135 }}>Lô nguồn ưu tiên</th>
+                <th style={{ minWidth: 115 }}>Kệ nhặt đích</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 120, whiteSpace: 'nowrap' }}>Tồn / Định mức</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 96, whiteSpace: 'nowrap' }}>SL cần bù</th>
+                <th style={{ minWidth: 115, whiteSpace: 'nowrap' }}>Mức ưu tiên</th>
               </tr>
             </thead>
             <tbody>
               {suggestions.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="ui-empty-cell">
-                    Chưa có kệ nhặt nào chạm dưới ngưỡng Min — Có thể nhấn &ldquo;⚡ Sinh &amp; Thực thi Bổ sung Kệ nhặt (FEFO)&rdquo; để kiểm tra và bù kệ tức thời.
+                    Chưa có kệ nhặt nào chạm dưới ngưỡng Min — Có thể nhấn &ldquo;Sinh &amp; Thực thi Bổ sung Kệ nhặt&rdquo; để kiểm tra và bù kệ tức thời.
                   </td>
                 </tr>
               ) : (
                 suggestions.map((s) => (
                   <tr key={`${s.productId}-${s.targetLocationId}-${s.sourceLotNumber}`}>
-                    <td><strong>{s.productCode}</strong> – {s.productName}</td>
-                    <td><code>{s.sourceLocationCode}</code></td>
+                    <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{s.productCode}</strong> – {s.productName}</td>
+                    <td><code className="ui-code" style={{ whiteSpace: 'nowrap' }}>{s.sourceLocationCode}</code></td>
                     <td>
-                      <strong>{s.sourceLotNumber || 'LOT-FEFO'}</strong>
-                      {s.sourceExpiryDate ? ` • HSD: ${new Date(s.sourceExpiryDate).toLocaleDateString('vi-VN')}` : ' • FEFO'}
+                      <strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{s.sourceLotNumber || 'LOT-2026'}</strong>
+                      {s.sourceExpiryDate ? ` • HSD: ${new Date(s.sourceExpiryDate).toLocaleDateString('vi-VN')}` : ' • Ưu tiên hạn dùng'}
                     </td>
-                    <td><code>{s.targetLocationCode}</code></td>
+                    <td><code className="ui-code" style={{ whiteSpace: 'nowrap' }}>{s.targetLocationCode}</code></td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                       <strong>{s.currentPickFaceQty}</strong> / ({s.minBaseQty}–{s.maxBaseQty})
                     </td>

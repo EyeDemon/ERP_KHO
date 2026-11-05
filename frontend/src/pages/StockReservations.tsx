@@ -276,15 +276,15 @@ export default function StockReservations() {
             <thead>
               <tr>
                 <th style={{ whiteSpace: 'nowrap', minWidth: 155 }}>Mã giữ</th>
-                <th>Sản phẩm</th>
-                <th>Kho</th>
-                <th>Nguồn</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Ban đầu</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Còn giữ</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Đã phân bổ</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Chưa phân bổ</th>
-                <th>Hết hạn</th>
-                <th style={{ whiteSpace: 'nowrap' }}>Trạng thái</th>
+                <th style={{ minWidth: 145 }}>Sản phẩm</th>
+                <th style={{ minWidth: 110 }}>Kho</th>
+                <th style={{ minWidth: 115 }}>Nguồn</th>
+                <th style={{ minWidth: 86, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Ban đầu</th>
+                <th style={{ minWidth: 86, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Còn giữ</th>
+                <th style={{ minWidth: 96, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Đã phân bổ</th>
+                <th style={{ minWidth: 108, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Chưa phân bổ</th>
+                <th style={{ minWidth: 125, whiteSpace: 'nowrap' }}>Hết hạn</th>
+                <th style={{ minWidth: 105, whiteSpace: 'nowrap' }}>Trạng thái</th>
                 {canOperate && <th style={{ whiteSpace: 'nowrap', minWidth: 115 }}>Thao tác</th>}
               </tr>
             </thead>
@@ -295,8 +295,8 @@ export default function StockReservations() {
                 <tr><td className="ui-empty-cell" colSpan={canOperate ? 11 : 10}>Không có bản ghi giữ hàng phù hợp.</td></tr>
               ) : data.items.map((item) => (
                 <tr key={item.id}>
-                  <td style={{ whiteSpace: 'nowrap' }}><strong style={{ whiteSpace: 'nowrap' }}>{item.reservationCode}</strong></td>
-                  <td>{item.productCode} – {item.productName}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.reservationCode}</strong></td>
+                  <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.productCode}</strong> – {item.productName}</td>
                   <td>{item.warehouseName}</td>
                   <td>{sourceTypeLabel(item.sourceType)}{item.sourceCode ? ` / ${item.sourceCode}` : ''}</td>
                   <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.quantity}</td>

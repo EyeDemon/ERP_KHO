@@ -233,7 +233,7 @@ const Products = () => {
             { id: Date.now(), unitId: selectedUnit?.id || Number(uomUnitId) || 1, unitCode: selectedUnit?.code || 'BOX', unitName: selectedUnit?.name || 'Thùng', conversionFactor: factor, conversionFactorToBase: factor },
           ],
         } : item));
-        setNotice(`Đã cập nhật quy đổi ĐVT cho sản phẩm ${targetProduct.code}.`);
+        setNotice(`Đã cập nhật quy đổi đơn vị tính cho sản phẩm ${targetProduct.code}.`);
       } catch (err) { setError(messageOf(err, 'Không thể cập nhật quy đổi đơn vị tính.')); }
     });
   };

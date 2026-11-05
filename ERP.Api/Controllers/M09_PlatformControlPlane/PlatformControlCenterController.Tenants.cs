@@ -84,7 +84,7 @@ public sealed partial class PlatformControlCenterController
                 rawTenantCode = rawCode,
                 companyName = normalizedCompanyName,
                 companyLegalName = normalizedCompanyName,
-                taxCode = tenant?.TaxCode ?? string.Empty,
+                taxCode = SaasBillingService.NormalizeTenantTaxCode(tid, tenant?.TaxCode, tenant?.CompanyName, tenant?.TenantName),
                 taxpayerType = tenant?.TaxpayerType ?? "ENTERPRISE",
                 ownerEmail = tenant?.OwnerEmail ?? $"owner.t{tid}@erpkho.local",
                 status = effectiveStatus,
@@ -209,6 +209,8 @@ public sealed partial class PlatformControlCenterController
                 TenantId = tenantId,
                 TenantCode = $"TENANT-{tenantId:D3}",
                 CompanyName = SaasBillingService.NormalizeTenantLegalName(tenantId, null),
+                TenantName = SaasBillingService.NormalizeTenantLegalName(tenantId, null),
+                TaxCode = SaasBillingService.NormalizeTenantTaxCode(tenantId, null),
                 TaxpayerType = "ENTERPRISE",
                 LifecycleStatus = rawStatus,
                 SuspensionReason = effectiveReason,
@@ -221,6 +223,7 @@ public sealed partial class PlatformControlCenterController
         else
         {
             tenant.CompanyName = SaasBillingService.NormalizeTenantLegalName(tenantId, tenant.CompanyName, tenant.TenantName);
+            tenant.TaxCode = SaasBillingService.NormalizeTenantTaxCode(tenantId, tenant.TaxCode, tenant.CompanyName, tenant.TenantName);
             tenant.LifecycleStatus = rawStatus;
             tenant.SuspensionReason = effectiveReason;
             if (request?.AllowSupportAccess.HasValue == true)

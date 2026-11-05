@@ -151,11 +151,11 @@ describe('Wave 06–08 — Multi-Carrier GHN, Tax Compliance & SaaS Platform Con
       return { data: [] } as never;
     });
     const billingView = render(<SaasBilling />);
-    await waitFor(() => expect((billingView.getByTestId('input-saas-buyer-tax-code') as HTMLInputElement).value).toBe('0312345678'));
+    await waitFor(() => expect((billingView.getByTestId('input-saas-buyer-tax-code') as HTMLInputElement).value).toBe('0318294012'));
     cleanup();
 
     const partnerView = render(<BusinessPartners />);
-    expect((await partnerView.findAllByText(/Thanh toán không tiền mặt >= 5\.000\.000 VNĐ/)).length).toBeGreaterThan(0);
+    expect((await partnerView.findAllByText(/Thanh toán không tiền mặt >= 5\.000\.000 ₫/)).length).toBeGreaterThan(0);
     cleanup();
   }, 20000);
 
@@ -272,8 +272,8 @@ describe('Wave 06–08 — Multi-Carrier GHN, Tax Compliance & SaaS Platform Con
       </MemoryRouter>,
     );
     const revenueSummary = await billingPlatformView.findByTestId('platform-billing-revenue-summary');
-    await waitFor(() => expect(revenueSummary.textContent).toContain('ARR (Trước thuế): 16.254.540 đ/năm'));
-    expect(revenueSummary.textContent).toContain('Thu thực tế (Gồm 10% VAT): 1.490.000 đ/tháng');
+    await waitFor(() => expect(revenueSummary.textContent).toContain('ARR (Trước thuế): 16.254.540 ₫/năm'));
+    expect(revenueSummary.textContent).toContain('Thu thực tế (Gồm 10% VAT): 1.490.000 ₫/tháng');
     const billingInvoicesTable = await billingPlatformView.findByTestId('platform-billing-invoices-table');
     expect(billingInvoicesTable.textContent).toContain('1.354.545 ₫');
     expect(billingInvoicesTable.textContent).toContain('135.455 ₫');
@@ -287,7 +287,7 @@ describe('Wave 06–08 — Multi-Carrier GHN, Tax Compliance & SaaS Platform Con
     expect(billingPlatformView.queryByTestId('platform-kpi-grid')).toBeNull();
     fireEvent.click(billingPlatformView.getByTestId('btn-reconcile-saas-invoice-2'));
     expect(await billingPlatformView.findByTestId('modal-confirm-invoice-reconcile')).toBeTruthy();
-    expect(billingPlatformView.getByTestId('reconcile-actor-readonly').textContent).toContain('billing_admin');
+    expect(billingPlatformView.getByTestId('reconcile-actor-readonly').textContent).toContain('Quản trị Cước phí SaaS');
     expect((billingPlatformView.getByTestId('input-reconcile-approver') as HTMLSelectElement).value).toBe('');
     expect((billingPlatformView.getByTestId('input-reconcile-received-amount') as HTMLInputElement).value).toBe('');
     expect((billingPlatformView.getByTestId('input-reconcile-credit-time') as HTMLInputElement).value).toBe('');
@@ -400,7 +400,7 @@ describe('Wave 06–08 — Multi-Carrier GHN, Tax Compliance & SaaS Platform Con
         </Routes>
       </MemoryRouter>,
     );
-    expect((await workersView.findByTestId('worker-last-run-OutboxDispatcherWorker')).textContent).toContain('8 giây trước');
+    expect((await workersView.findByTestId('worker-last-run-InvoiceLedgerSyncWorker')).textContent).toContain('8 giây trước');
     expect(workersView.queryByTestId('platform-integrations-card')).toBeNull();
     expect(workersView.queryByTestId('input-impersonation-ticket')).toBeNull();
     expect(workersView.getByTestId('worker-last-run-InventoryConsistencyWorker').textContent).toContain('47 giây trước');
@@ -430,7 +430,7 @@ describe('Wave 06–08 — Multi-Carrier GHN, Tax Compliance & SaaS Platform Con
     expect((supportView.getByTestId('input-impersonation-reason') as HTMLInputElement).value).toBe('');
     expect(supportView.getByTestId('impersonation-duplicate-guard-msg').textContent).toContain('Doanh nghiệp này đang có phiên hỗ trợ hoạt động');
     expect((supportView.getByTestId('btn-start-impersonation') as HTMLButtonElement).disabled).toBe(true);
-    expect(supportView.getByTestId('active-impersonation-sessions-table').textContent).toContain('qa_admin');
+    expect(supportView.getByTestId('active-impersonation-sessions-table').textContent).toContain('Chủ dự án (SuperAdmin)');
     expect(supportView.getByTestId('btn-end-session-row-1').textContent).toBe('Kết thúc');
     cleanup();
 
@@ -446,9 +446,9 @@ describe('Wave 06–08 — Multi-Carrier GHN, Tax Compliance & SaaS Platform Con
       </MemoryRouter>,
     );
     const suspendedBanner = await customerView.findByTestId('tenant-suspended-lock-banner');
-    expect(suspendedBanner.textContent).toContain('TENANT-001 (CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO)');
+    expect(suspendedBanner.textContent).toContain('TENANT-001 (Công ty TNHH Thương mại & Kho vận Đại Phát)');
     expect(customerView.getByTestId('btn-goto-billing-unlock').textContent).toContain('Thanh toán mở khóa ngay →');
-    expect(customerView.getByTestId('active-impersonation-ribbon').textContent).toContain('TENANT-001 (CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO)');
+    expect(customerView.getByTestId('active-impersonation-ribbon').textContent).toContain('TENANT-001 (Công ty TNHH Thương mại & Kho vận Đại Phát)');
     expect(customerView.getByTestId('customer-portal-impersonation-countdown').textContent).toContain('Thời gian còn lại:');
     fireEvent.click(customerView.getByTestId('btn-exit-impersonation'));
     expect(await customerView.findByTestId('platform-redirect-target')).toBeTruthy();

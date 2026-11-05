@@ -272,14 +272,14 @@ const WarehouseLocations = () => {
                   <div tabIndex={0} role="region" aria-label="Vùng cuộn cây cấu trúc vật lý kho" style={{ maxHeight: 260, overflowY: 'auto' }}>
                     <UiTableScroll>
                       <table aria-label="Cây cấu trúc vị trí thật" className="ui-table-compact">
-                        <thead><tr><th>Cấp</th><th>Mã / Tên</th><th>Đường dẫn</th><th>Loại</th><th>Trạng thái</th><th>Khả dụng</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
+                        <thead><tr><th style={{ minWidth: 88, whiteSpace: 'nowrap' }}>Cấp độ</th><th style={{ minWidth: 130 }}>Mã / Tên</th><th style={{ minWidth: 140 }}>Đường dẫn</th><th style={{ minWidth: 110 }}>Phân loại</th><th style={{ minWidth: 100, whiteSpace: 'nowrap' }}>Trạng thái</th><th style={{ minWidth: 120 }}>Khả dụng</th>{canManage && <th style={{ minWidth: 88, whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
                         <tbody>
                           {hierarchyRows.map(row => {
                             const status = row.location ? locationStatus(row.location) : null;
                             return (
                               <tr key={row.key}>
                                 <td><span className={'warehouse-location-depth depth-' + row.depth}>{row.level}</span></td>
-                                <td><strong style={{ whiteSpace: 'nowrap' }}>{row.code}</strong>{row.location && <><br /><small>{row.location.name}</small></>}</td>
+                                <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{row.code}</strong>{row.location && <><br /><small>{row.location.name}</small></>}</td>
                                 <td>{row.path}</td>
                                 <td>{row.location ? locationTypeLabels[row.location.locationType] || row.location.locationType : '—'}</td>
                                 <td>{status ? <UiBadge tone={status.tone}>{status.label}</UiBadge> : '—'}</td>
@@ -300,11 +300,11 @@ const WarehouseLocations = () => {
                   <div tabIndex={0} role="region" aria-label="Vùng cuộn vị trí chưa gắn cấu trúc" style={{ maxHeight: 160, overflowY: 'auto' }}>
                     <UiTableScroll>
                       <table aria-label="Vị trí thật chưa gắn cấu trúc" className="ui-table-compact">
-                        <thead><tr><th>Mã</th><th>Tên</th><th>Loại</th><th>Trạng thái</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
+                        <thead><tr><th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Mã vị trí</th><th style={{ minWidth: 135 }}>Tên vị trí</th><th style={{ minWidth: 110 }}>Phân loại</th><th style={{ minWidth: 100, whiteSpace: 'nowrap' }}>Trạng thái</th>{canManage && <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
                         <tbody>
                           {unmapped.map(location => {
                             const status = locationStatus(location);
-                            return <tr key={location.id}><td style={{ whiteSpace: 'nowrap' }}><strong>{location.code}</strong></td><td>{location.name}</td><td>{locationTypeLabels[location.locationType] || location.locationType}</td><td><UiBadge tone={status.tone}>{status.label}</UiBadge></td>{canManage && <td style={{ whiteSpace: 'nowrap' }}><button type="button" onClick={() => openEdit(location)} style={{ whiteSpace: 'nowrap' }}>Gắn cấu trúc / Sửa</button></td>}</tr>;
+                            return <tr key={location.id}><td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{location.code}</strong></td><td>{location.name}</td><td>{locationTypeLabels[location.locationType] || location.locationType}</td><td><UiBadge tone={status.tone}>{status.label}</UiBadge></td>{canManage && <td style={{ whiteSpace: 'nowrap' }}><button type="button" onClick={() => openEdit(location)} style={{ whiteSpace: 'nowrap' }}>Gắn cấu trúc / Sửa</button></td>}</tr>;
                           })}
                         </tbody>
                       </table>

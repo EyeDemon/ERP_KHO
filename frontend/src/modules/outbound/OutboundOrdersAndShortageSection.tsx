@@ -3,7 +3,7 @@ import { Copy, Plus } from 'lucide-react';
 import { UiBadge, UiCard, UiEmptyState, UiMetric, UiMetricGrid, UiSortTh, UiTableScroll } from '../../ui/ProductionUi';
 import { formatWarehouseLabel } from '../../utils/warehouseLabel';
 import { OutboundBackordersShortageView } from './OutboundBackordersShortageView';
-import { type Backorder, type SalesOrder, orderLabels, tone } from './outboundDemandTypes';
+import { type Backorder, type SalesOrder, formatShippingMethodVi, orderLabels, tone } from './outboundDemandTypes';
 import { OutboundSalesOrderMobileCards, useIsMobileViewport } from './OutboundSalesOrderMobileCards';
 
 interface OutboundOrdersAndShortageSectionProps {
@@ -107,16 +107,17 @@ export const OutboundOrdersAndShortageSection: React.FC<OutboundOrdersAndShortag
   return (
     <>
       <UiMetricGrid data-testid="sales-orders-kpi-grid">
-        <UiMetric value={`${orders.length} đơn (${totalOrderedQty} ĐVT)`} label="Tổng đơn bán hàng" isZero={orders.length === 0} />
+        <UiMetric value={`${orders.length} đơn (${totalOrderedQty} sản phẩm)`} label="Tổng đơn bán hàng" isZero={orders.length === 0} />
         <UiMetric value={`${readyOrdersCount} đơn`} label="Đơn đủ tồn sẵn sàng" isZero={readyOrdersCount === 0} />
         <UiMetric value={`${totalReservedQty} / ${totalAllocatedQty}`} label="Đang giữ / Phân bổ" isZero={totalReservedQty === 0 && totalAllocatedQty === 0} />
-        <UiMetric value={`${totalShippedQty} ĐVT`} label="Đã xuất kho" isZero={totalShippedQty === 0} />
+        <UiMetric value={`${totalShippedQty} sản phẩm`} label="Đã xuất kho" isZero={totalShippedQty === 0} />
       </UiMetricGrid>
 
       <UiCard
         title="Danh sách đơn bán hàng"
         subtitle="Tra cứu, lọc trạng thái và kiểm tra tồn khả dụng trước khi phát hành đơn bán"
       >
+        <style>{`@media (max-width: 768px) { [data-testid="sales-orders-mobile-cards"] { display: grid !important; } [data-testid="sales-orders-desktop-wrap"] { display: none !important; } }`}</style>
         <div className="ui-inline-wrap" style={{ gap: 8, marginBottom: 12, justifyContent: 'flex-end' }}>
           <button
             type="button"
@@ -154,17 +155,17 @@ export const OutboundOrdersAndShortageSection: React.FC<OutboundOrdersAndShortag
             type="search"
             data-testid="input-search-sales-orders"
             aria-label="Tìm kiếm đơn bán hàng"
-            placeholder="Tìm theo mã đơn SO, mã đơn kênh bán hoặc tên khách hàng..."
+            placeholder="Tìm mã đơn SO, khách hàng..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ flex: 1, minWidth: 240 }}
+            style={{ flex: '1 1 250px', minWidth: 240 }}
           />
           <select
             aria-label="Lọc trạng thái đơn bán hàng"
             data-testid="select-filter-sales-orders"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            style={{ minWidth: 180 }}
+            style={{ minWidth: 190 }}
           >
             <option value="ALL">Tất cả trạng thái ({orders.length})</option>
             <option value="Released">Đã phát hành</option>
@@ -190,62 +191,75 @@ export const OutboundOrdersAndShortageSection: React.FC<OutboundOrdersAndShortag
               />
             )}
 
-            <div className="ui-desktop-table-wrap">
+            <div className="ui-desktop-table-wrap" data-testid="sales-orders-desktop-wrap">
               <UiTableScroll>
-                <table className="ui-table-compact" data-testid="sales-orders-table" aria-label="Danh sách đơn bán hàng">
+                <table className="ui-table-compact" data-testid="sales-orders-table" aria-label="Danh sách đơn bán hàng" style={{ width: '100%', minWidth: 0 }}>
                   <thead>
                     <tr>
-                      <UiSortTh label="Mã đơn bán" active={sortKey === 'orderCode'} direction={sortDir} onToggle={() => toggleSort('orderCode')} className="ui-sticky-id" />
-                      <UiSortTh label="Trạng thái" active={sortKey === 'status'} direction={sortDir} onToggle={() => toggleSort('status')} />
-                      <UiSortTh label="Khách hàng / Kênh bán" active={sortKey === 'customerName'} direction={sortDir} onToggle={() => toggleSort('customerName')} />
-                      <th style={{ whiteSpace: 'nowrap' }}>Kho xuất</th>
-                      <UiSortTh label="SL Đặt" align="right" active={sortKey === 'orderedQuantity'} direction={sortDir} onToggle={() => toggleSort('orderedQuantity')} />
-                      <th style={{ textAlign: 'right', whiteSpace: 'normal', maxWidth: 88, lineHeight: 1.2 }}>Đã giữ / Phân bổ</th>
-                      <UiSortTh label="Đã xuất" align="right" active={sortKey === 'shippedQuantity'} direction={sortDir} onToggle={() => toggleSort('shippedQuantity')} />
-                      <th className="ui-sticky-action" style={{ width: 108, maxWidth: 136 }}>Thao tác</th>
+                      <UiSortTh label="Mã đơn bán" active={sortKey === 'orderCode'} direction={sortDir} onToggle={() => toggleSort('orderCode')} className="ui-sticky-id" style={{ minWidth: 120, maxWidth: 152 }} />
+                      <UiSortTh label="Trạng thái" active={sortKey === 'status'} direction={sortDir} onToggle={() => toggleSort('status')} style={{ minWidth: 92 }} />
+                      <UiSortTh label="Khách hàng" active={sortKey === 'customerName'} direction={sortDir} onToggle={() => toggleSort('customerName')} style={{ minWidth: 112, maxWidth: 148 }} />
+                      <th style={{ minWidth: 98, maxWidth: 122, padding: '6px 6px', whiteSpace: 'nowrap' }}>Kho xuất</th>
+                      <UiSortTh label="SL Đặt" align="right" active={sortKey === 'orderedQuantity'} direction={sortDir} onToggle={() => toggleSort('orderedQuantity')} style={{ minWidth: 76 }} />
+                      <th style={{ textAlign: 'right', minWidth: 82, padding: '6px 8px 6px 6px', whiteSpace: 'nowrap' }}>Đã giữ / PB</th>
+                      <UiSortTh label="Đã xuất" align="right" active={sortKey === 'shippedQuantity'} direction={sortDir} onToggle={() => toggleSort('shippedQuantity')} style={{ minWidth: 82 }} />
+                      <th className="ui-sticky-action" style={{ width: 88, minWidth: 84, maxWidth: 92, padding: '6px 6px', position: 'sticky', right: 0, zIndex: 4, background: '#f8fafc', boxShadow: '-4px 0 8px -4px rgba(15, 23, 42, 0.14)', whiteSpace: 'nowrap' }}>Thao tác</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedOrders.map((order) => (
-                      <tr key={order.id} data-testid={`sales-order-row-${order.id}`}>
-                        <td className="cell-nowrap ui-sticky-id" style={{ background: '#ffffff' }}>
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                            <strong style={{ whiteSpace: 'nowrap' }}>{order.orderCode}</strong>
-                            <button
-                              type="button"
-                              className="ui-inline-icon-btn"
-                              title="Sao chép mã đơn"
-                              aria-label={`Sao chép mã đơn ${order.orderCode}`}
-                              data-testid={`btn-copy-so-${order.id}`}
-                              onClick={() => {
-                                void navigator.clipboard?.writeText(order.orderCode);
-                                onCopyNotice(`Đã sao chép mã đơn ${order.orderCode}`);
-                              }}
-                              style={{ padding: '4px 6px', borderRadius: 4, border: '1px solid #cbd5e1', background: '#f8fafc', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                            >
-                              <Copy size={13} strokeWidth={2} aria-hidden="true" />
-                            </button>
-                          </div>
-                          <div className="ui-muted-text" style={{ fontSize: 11.5 }}>Mã gốc: {order.externalOrderId}</div>
-                        </td>
-                        <td className="cell-nowrap">
-                          <UiBadge tone={tone(order.status)}>{orderLabels[order.status] ?? order.status}</UiBadge>
-                        </td>
-                        <td style={{ minWidth: 130, maxWidth: 170, whiteSpace: 'normal', lineHeight: 1.3 }}>
-                          <div style={{ fontWeight: 600, color: '#0f172a' }}>{order.customerName}</div>
-                          <div className="ui-muted-text" style={{ fontSize: 11.5 }}>
-                            {order.shippingMethod || 'Giao tiêu chuẩn'} • {order.customerCode}
-                          </div>
-                        </td>
-                        <td style={{ whiteSpace: 'normal', maxWidth: 135, lineHeight: 1.3 }}>{formatWarehouseLabel(order.warehouseName, undefined, order.warehouseId)}</td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, whiteSpace: 'nowrap' }}>{order.orderedQuantity}</td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', maxWidth: 88, whiteSpace: 'nowrap' }}>{order.reservedQuantity} / {order.allocatedQuantity}</td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, whiteSpace: 'nowrap' }}>{order.shippedQuantity}</td>
-                        <td className="cell-nowrap ui-sticky-action" style={{ background: '#ffffff', width: 108, maxWidth: 136 }}>
-                          <button type="button" className="ui-btn-secondary" style={{ whiteSpace: 'nowrap' }} onClick={() => void onSelectDetail(order.id)}>Chi tiết</button>
-                        </td>
-                      </tr>
-                    ))}
+                    {sortedOrders.map((order) => {
+                      const createdDateStr = order.createdAt ? new Date(order.createdAt) : null;
+                      const orderDateVi = createdDateStr && !Number.isNaN(createdDateStr.getTime())
+                        ? `${String(createdDateStr.getDate()).padStart(2, '0')}/${String(createdDateStr.getMonth() + 1).padStart(2, '0')}/${createdDateStr.getFullYear()}`
+                        : '';
+                      return (
+                        <tr key={order.id} data-testid={`sales-order-row-${order.id}`}>
+                          <td className="ui-sticky-id" style={{ background: '#ffffff', minWidth: 120, maxWidth: 152, padding: '6px 6px', whiteSpace: 'normal', lineHeight: 1.25 }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, minWidth: 0, maxWidth: '100%' }}>
+                              <span className="ui-code" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word', fontWeight: 700, color: '#0f172a', minWidth: 0 }}>{order.orderCode}</span>
+                              <button
+                                type="button"
+                                className="ui-inline-icon-btn"
+                                title="Sao chép mã đơn"
+                                aria-label={`Sao chép mã đơn ${order.orderCode}`}
+                                data-testid={`btn-copy-so-${order.id}`}
+                                onClick={() => {
+                                  void navigator.clipboard?.writeText(order.orderCode);
+                                  onCopyNotice(`Đã sao chép mã đơn ${order.orderCode}`);
+                                }}
+                                style={{ flexShrink: 0, padding: '4px 6px', borderRadius: 4, border: '1px solid #cbd5e1', background: '#f8fafc', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                              >
+                                <Copy size={13} strokeWidth={2} aria-hidden="true" />
+                              </button>
+                            </div>
+                            {orderDateVi ? (
+                              <div className="ui-muted-text" style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                                {orderDateVi}
+                              </div>
+                            ) : null}
+                            <div className="ui-muted-text" style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                              {order.externalOrderId}
+                            </div>
+                          </td>
+                          <td className="cell-nowrap" style={{ minWidth: 92, padding: '6px 6px', whiteSpace: 'nowrap' }}>
+                            <UiBadge tone={tone(order.status)}>{orderLabels[order.status] ?? order.status}</UiBadge>
+                          </td>
+                          <td style={{ minWidth: 112, maxWidth: 146, padding: '6px 6px', whiteSpace: 'normal', lineHeight: 1.3 }}>
+                            <div style={{ fontWeight: 600, color: '#0f172a' }}>{order.customerName}</div>
+                            <div className="ui-muted-text" style={{ fontSize: 11.5 }}>
+                              {formatShippingMethodVi(order.shippingMethod)} • {order.customerCode}
+                            </div>
+                          </td>
+                          <td style={{ minWidth: 98, maxWidth: 122, padding: '6px 6px', whiteSpace: 'normal', lineHeight: 1.3 }}>{formatWarehouseLabel(order.warehouseName, undefined, order.warehouseId)}</td>
+                          <td style={{ minWidth: 76, padding: '6px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, whiteSpace: 'nowrap' }}>{order.orderedQuantity}</td>
+                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 82, padding: '6px 8px 6px 6px', whiteSpace: 'nowrap' }}>{order.reservedQuantity} / {order.allocatedQuantity}</td>
+                          <td style={{ minWidth: 82, padding: '6px 12px 6px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, whiteSpace: 'nowrap' }}>{order.shippedQuantity}</td>
+                          <td className="cell-nowrap ui-sticky-action" style={{ position: 'sticky', right: 0, zIndex: 3, background: '#ffffff', boxShadow: '-4px 0 8px -4px rgba(15, 23, 42, 0.14)', width: 88, minWidth: 84, maxWidth: 92, padding: '6px 6px', whiteSpace: 'nowrap' }}>
+                            <button type="button" className="ui-btn-secondary" style={{ whiteSpace: 'nowrap', padding: '4px 8px' }} onClick={() => void onSelectDetail(order.id)}>Chi tiết</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </UiTableScroll>

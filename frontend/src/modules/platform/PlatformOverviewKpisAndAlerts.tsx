@@ -50,7 +50,10 @@ export const PlatformOverviewKpisAndAlerts: React.FC<PlatformOverviewKpisAndAler
 }) => {
   return (
     <>
-      <UiCard title="Cần xử lý" subtitle="Danh sách cảnh báo vận hành và tác vụ ưu tiên cần quyết định trên Trung tâm Điều hành SaaS">
+      <UiCard
+        title="Cần xử lý"
+        subtitle="Danh sách cảnh báo vận hành và tác vụ ưu tiên • Thuê bao trọng điểm: TENANT-001 — Công ty TNHH Thương mại & Kho vận Đại Phát"
+      >
         <div data-testid="platform-action-required-section" style={{ display: 'grid', gap: 10 }}>
           {suspendedTenant ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 14px', borderRadius: 8, backgroundColor: '#fef2f2', border: '1px solid #fecaca' }}>
@@ -76,8 +79,8 @@ export const PlatformOverviewKpisAndAlerts: React.FC<PlatformOverviewKpisAndAler
               <UiBadge tone="info">Hóa đơn chờ đối soát</UiBadge>{' '}
               <strong style={{ marginLeft: 6 }}>
                 {dashboard.unpaidInvoicesCount > 0
-                  ? `${dashboard.unpaidInvoicesCount} hóa đơn thuê bao chờ đối soát VietQR (1.490.000 ₫ — TENANT-001) • ${dueLabelVi}`
-                  : '0 hóa đơn thuê bao chờ đối soát • Toàn bộ hóa đơn kỳ hiện tại đã tất toán'}
+                  ? `${dashboard.unpaidInvoicesCount} hóa đơn thuê bao chờ đối soát VietQR (1.490.000 ₫ — TENANT-001 — Công ty TNHH Thương mại & Kho vận Đại Phát) • ${dueLabelVi}`
+                  : '0 hóa đơn thuê bao chờ đối soát • TENANT-001 — Công ty TNHH Thương mại & Kho vận Đại Phát đã tất toán kỳ hiện tại'}
               </strong>
             </div>
             <button type="button" className="platform-btn platform-btn-secondary" onClick={() => onNavigate('/platform/billing')}>Mở Hóa đơn thuê bao SaaS</button>
@@ -102,9 +105,9 @@ export const PlatformOverviewKpisAndAlerts: React.FC<PlatformOverviewKpisAndAler
           <span className="platform-kpi-value">{dashboard.mrrVnd.toLocaleString('vi-VN')} ₫</span>
           <div className="platform-kpi-subtext" style={{ display: 'grid', gap: 2 }}>
             <div style={{ whiteSpace: 'nowrap' }}>
-              <abbr title="Doanh thu định kỳ hàng năm">ARR</abbr> (Trước thuế): {dashboard.arrVnd.toLocaleString('vi-VN')} đ/năm
+              <abbr title="Doanh thu định kỳ hàng năm">ARR</abbr> (Trước thuế): {dashboard.arrVnd.toLocaleString('vi-VN')} ₫/năm
             </div>
-            <div style={{ whiteSpace: 'nowrap' }}>Thu thực tế (Gồm 10% VAT): 1.490.000 đ/tháng</div>
+            <div style={{ whiteSpace: 'nowrap' }}>Thu thực tế (Gồm 10% VAT): 1.490.000 ₫/tháng</div>
           </div>
         </div>
         <div className="platform-kpi-card" data-testid="kpi-expiring-tenants" data-zero={dashboard.expiringSoonTenantsCount === 0 ? 'true' : undefined}>
@@ -123,11 +126,11 @@ export const PlatformOverviewKpisAndAlerts: React.FC<PlatformOverviewKpisAndAler
           <div className="platform-kpi-subtext"><span>Đã tất toán: {dashboard.paidInvoicesCount} hóa đơn kỳ hiện tại</span></div>
         </div>
         <div className="platform-kpi-card" data-testid="kpi-drift-dlq" data-zero={dashboard.driftCount === 0 && dashboard.dlqCount === 0 ? 'true' : undefined}>
-          <span className="platform-kpi-label">Đối soát sổ cái 9 chiều &amp; Hàng đợi lỗi</span>
+          <span className="platform-kpi-label">Đối soát cân bằng sổ cái tồn kho</span>
           <span className="platform-kpi-value">
-            {dashboard.driftCount} lệch • {dashboard.dlqCount} lỗi <abbr title="Hàng đợi thông điệp lỗi cần xử lý">DLQ</abbr>
+            {dashboard.driftCount} lệch • {dashboard.dlqCount} lỗi đồng bộ
           </span>
-          <div className="platform-kpi-subtext"><span>Sự kiện Outbox đang chờ: {dashboard.outboxPendingCount}</span></div>
+          <div className="platform-kpi-subtext"><span>Hàng đợi đồng bộ đối tác: {dashboard.outboxPendingCount} chờ xử lý</span></div>
         </div>
       </div>
 

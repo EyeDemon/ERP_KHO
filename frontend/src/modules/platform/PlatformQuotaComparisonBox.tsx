@@ -31,9 +31,9 @@ export const PlatformQuotaComparisonBox: React.FC<PlatformQuotaComparisonBoxProp
         borderRadius: 999,
         fontSize: 11.5,
         fontWeight: 600,
-        color: delta > 0 ? '#1d4ed8' : delta < 0 ? '#b45309' : '#475569',
-        background: delta > 0 ? '#eff6ff' : delta < 0 ? '#fffbeb' : '#f1f5f9',
-        border: delta > 0 ? '1px solid #bfdbfe' : delta < 0 ? '1px solid #fde68a' : '1px solid #cbd5e1',
+        color: delta > 0 ? '#0F172A' : delta < 0 ? '#b45309' : '#475569',
+        background: delta > 0 ? '#f8fafc' : delta < 0 ? '#fffbeb' : '#f1f5f9',
+        border: delta > 0 ? '1px solid #cbd5e1' : delta < 0 ? '1px solid #fde68a' : '1px solid #cbd5e1',
       }}
     >
       ({delta >= 0 ? '+' : ''}{label})
@@ -52,7 +52,7 @@ export const PlatformQuotaComparisonBox: React.FC<PlatformQuotaComparisonBoxProp
   const valueStyle = (delta: number): React.CSSProperties => ({
     fontSize: 12,
     fontWeight: delta === 0 ? 600 : 700,
-    color: delta > 0 ? '#1d4ed8' : delta < 0 ? '#b45309' : '#475569',
+    color: delta > 0 ? '#0F172A' : delta < 0 ? '#b45309' : '#475569',
     textAlign: 'right',
   });
 

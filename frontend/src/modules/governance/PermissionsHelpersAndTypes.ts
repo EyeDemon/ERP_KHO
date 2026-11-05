@@ -91,6 +91,7 @@ export type UserWarehouseAccessListDto = {
 export type PermissionAuditLog = {
   id: number;
   userId?: number | null;
+  username?: string | null;
   action: string;
   entityName: string;
   entityId: number;
@@ -99,6 +100,31 @@ export type PermissionAuditLog = {
   result?: string | null;
   timestamp: string;
 };
+
+export function isDefaultGrantedForRole(roleName: string, code: string): boolean {
+  const clean = (code ?? '').trim().toLowerCase();
+  if (!clean) return false;
+  switch (roleName) {
+    case 'Admin':
+      return true;
+    case 'Manager':
+      return !clean.startsWith('permission.assign') && !clean.startsWith('role.') && !clean.startsWith('user.security');
+    case 'Supervisor':
+      return !clean.startsWith('permission.') && !clean.startsWith('role.') && !clean.startsWith('user.') && !clean.includes('cost');
+    case 'Accountant':
+      return clean.includes('cost') || clean.includes('invoice') || clean.includes('cod') || clean.includes('finance') || clean.includes('report') || clean.endsWith('.read');
+    case 'WarehouseStaff':
+      return (
+        (clean.startsWith('receipt.') || clean.startsWith('putaway.') || clean.startsWith('pick') || clean.startsWith('pack') || clean.startsWith('shipment.') || clean.startsWith('stocktake.') || clean.startsWith('inventory.')) &&
+        !clean.includes('cost') &&
+        !clean.endsWith('.approve')
+      );
+    case 'Viewer':
+      return clean.endsWith('.read') && !clean.includes('cost') && !clean.startsWith('permission.') && !clean.startsWith('user.');
+    default:
+      return false;
+  }
+}
 
 export type PermissionsBillingSummary = {
   planName: string;

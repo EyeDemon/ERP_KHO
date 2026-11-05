@@ -165,7 +165,7 @@ describe('Products category and barcode UI (mocked API)', () => {
     );
 
     fireEvent.change(view.getByLabelText('Giá trị đơn hàng tối thiểu (VNĐ)'), { target: { value: '600000' } });
-    fireEvent.click(view.getByRole('button', { name: 'Lưu quy tắc Quà tặng 0đ' }));
+    fireEvent.click(view.getByRole('button', { name: 'Lưu quy tắc Quà tặng 0 ₫' }));
     await waitFor(() =>
       expect(apiClient.post).toHaveBeenCalledWith(
         '/api/v1/sales-orders/promotion-gift-rules',
@@ -174,7 +174,7 @@ describe('Products category and barcode UI (mocked API)', () => {
     );
     expect(await view.findByRole('table', { name: 'Danh sách quy tắc quà tặng 0đ' })).toBeTruthy();
 
-    fireEvent.click(view.getByRole('button', { name: 'Tải danh sách Quy tắc Quà tặng 0đ' }));
+    fireEvent.click(view.getByRole('button', { name: 'Tải danh sách Quy tắc Quà tặng 0 ₫' }));
     await waitFor(() =>
       expect(apiClient.get).toHaveBeenCalledWith('/api/v1/sales-orders/promotion-gift-rules'),
     );
@@ -193,13 +193,13 @@ describe('Products category and barcode UI (mocked API)', () => {
 
     const maskedView = render(<Products />);
     const maskedCell = await maskedView.findByTestId('kit-wo-rolledup-cost');
-    expect(maskedCell.textContent).toBe('Ẩn theo quyền RBAC (inventory.cost.read)');
+    expect(maskedCell.textContent?.trim()).toBe('Ẩn theo quyền');
     expect(maskedCell.textContent).not.toContain('125.000');
     cleanup();
 
     localStorage.setItem('permissions', '["product.read","inventory.cost.read"]');
     const allowedView = render(<Products />);
     const allowedCell = await allowedView.findByTestId('kit-wo-rolledup-cost');
-    expect(allowedCell.textContent).toContain('125.000 đ');
+    expect(allowedCell.textContent).toContain('125.000 ₫');
   });
 });

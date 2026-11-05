@@ -206,7 +206,7 @@ describe('Outbound demand and backorder workbench',()=>{
     expect(soView.container.textContent).not.toContain('SO-202611-001');
     expect(soView.container.textContent).toContain('Kho Trung tâm (WH01)');
     const codeSortHeader=soView.getByRole('columnheader',{name:/Mã đơn bán/}) as HTMLElement;
-    const customerSortHeader=soView.getByRole('columnheader',{name:/Khách hàng \/ Kênh bán/}) as HTMLElement;
+    const customerSortHeader=soView.getByRole('columnheader',{name:/^Khách hàng/}) as HTMLElement;
     expect(codeSortHeader.style.paddingRight).toBe('14px');
     expect(codeSortHeader.style.whiteSpace).toBe('nowrap');
     expect(customerSortHeader.style.paddingRight).toBe('14px');

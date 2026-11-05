@@ -1,4 +1,6 @@
 import React, { useRef } from 'react';
+import { Lock } from 'lucide-react';
+import { formatMinLengthCounterVi } from '../../services/permissionPresentation';
 import { useDialogFocusTrap } from '../../ui/useDialogFocusTrap';
 import type { KitWorkOrderRow } from './packingSessionsTypes';
 
@@ -70,13 +72,41 @@ export const KitWorkOrderReversalModal: React.FC<KitWorkOrderReversalModalProps>
         }}
       >
         <form onSubmit={(e) => void onConfirm(e)} className="ui-stack" style={{ gap: 14 }}>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase' }}>
-              Cảnh báo tác vụ đảo bút toán tồn kho &amp; giá vốn
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase' }}>
+                Cảnh báo tác vụ đảo bút toán tồn kho &amp; giá vốn
+              </div>
+              <h2 id="kit-reversal-modal-title" style={{ margin: '4px 0 0', fontSize: 17, fontWeight: 700, color: '#0f172a' }}>
+                Xác nhận đảo lệnh lắp ráp {order.workOrderCode} ({order.kitSku})
+              </h2>
             </div>
-            <h2 id="kit-reversal-modal-title" style={{ margin: '4px 0 0', fontSize: 17, fontWeight: 700, color: '#0f172a' }}>
-              Xác nhận đảo lệnh lắp ráp {order.workOrderCode} ({order.kitSku})
-            </h2>
+            <button
+              type="button"
+              aria-label="Đóng hộp thoại"
+              disabled={busy}
+              onClick={onClose}
+              style={{
+                width: 34,
+                height: 34,
+                minWidth: 34,
+                minHeight: 34,
+                padding: 0,
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                background: '#f8fafc',
+                color: '#0f172a',
+                fontSize: 18,
+                fontWeight: 700,
+                lineHeight: 1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}
+            >
+              ×
+            </button>
           </div>
 
           <div
@@ -110,13 +140,20 @@ export const KitWorkOrderReversalModal: React.FC<KitWorkOrderReversalModalProps>
               fontVariantNumeric: 'tabular-nums',
             }}
           >
-            {canReadCost
-              ? `Chi tiết giá vốn bình quân (MAC): ${unitCost.toLocaleString('vi-VN')} ₫ / Bộ × ${woQty} Bộ = ${totalMac.toLocaleString('vi-VN')} ₫`
-              : 'Chi tiết giá vốn bình quân (MAC): Đã ẩn theo phân quyền'}
+            {canReadCost ? (
+              `Chi tiết giá vốn bình quân (MAC): ${unitCost.toLocaleString('vi-VN')} ₫ / Bộ × ${woQty} Bộ = ${totalMac.toLocaleString('vi-VN')} ₫`
+            ) : (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span>Chi tiết giá vốn bình quân (MAC):</span>
+                <span className="ui-cost-masked-badge" style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Lock size={12} aria-hidden="true" /> Ẩn theo quyền
+                </span>
+              </span>
+            )}
           </div>
 
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, fontWeight: 600 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span>Lý do đảo lệnh lắp ráp (bắt buộc tối thiểu 10 ký tự) *</span>
               <span
                 data-testid="kit-reversal-char-counter"
@@ -127,7 +164,7 @@ export const KitWorkOrderReversalModal: React.FC<KitWorkOrderReversalModalProps>
                   fontVariantNumeric: 'tabular-nums',
                 }}
               >
-                ({trimmedLen}/10 ký tự)
+                {formatMinLengthCounterVi(trimmedLen, 10)}
               </span>
             </div>
             <textarea
@@ -144,10 +181,10 @@ export const KitWorkOrderReversalModal: React.FC<KitWorkOrderReversalModalProps>
           <div
             style={{
               display: 'flex',
-              justifyContent: 'space-between',
+              justifyContent: 'flex-end',
               alignItems: 'center',
-              gap: 12,
-              paddingTop: 8,
+              gap: 10,
+              paddingTop: 10,
               borderTop: '1px solid #e2e8f0',
             }}
           >
@@ -157,7 +194,7 @@ export const KitWorkOrderReversalModal: React.FC<KitWorkOrderReversalModalProps>
               disabled={busy}
               onClick={onClose}
             >
-              Hủy bỏ
+              Hủy
             </button>
             <button
               type="submit"
@@ -171,7 +208,7 @@ export const KitWorkOrderReversalModal: React.FC<KitWorkOrderReversalModalProps>
                 cursor: !isReasonValid || busy ? 'not-allowed' : 'pointer',
               }}
             >
-              {busy ? 'Đang đảo lệnh...' : 'Xác nhận đảo lệnh'}
+              {busy ? 'Đang đảo lệnh...' : 'Xác nhận Đảo lệnh'}
             </button>
           </div>
         </form>

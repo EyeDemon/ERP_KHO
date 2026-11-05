@@ -26,7 +26,7 @@ export type { ResolvedBarcodeResult, ParsedGs1Data, MobileBarcodeScannerBarProps
 
 export function MobileBarcodeScannerBar({
   label = 'Quét mã vạch Thiết bị Cầm tay (Camera hoặc Súng quét)',
-  placeholder = 'Nhập hoặc quét mã kệ, mã SP, số lô, số sê-ri, mã GS1-128...',
+  placeholder = 'Quét mã kệ, mã SP hoặc số lô...',
   sampleCode = 'BIN-A01',
   warehouseId,
   disabled = false,
@@ -46,13 +46,20 @@ export function MobileBarcodeScannerBar({
   const [stepHistory, setStepHistory] = useState<{ 1: string; 2: string; 3: string }>({ 1: '', 2: '', 3: '' });
   const [step3Completed, setStep3Completed] = useState(false);
   const [lastScanFeedback, setLastScanFeedback] = useState<LastScanFeedback | null>(null);
+  const [showGs1Hint, setShowGs1Hint] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState<boolean>(
     () => typeof window !== 'undefined' && window.innerWidth > 0 && window.innerWidth <= 767,
+  );
+  const [isCompact480, setIsCompact480] = useState<boolean>(
+    () => typeof window !== 'undefined' && window.innerWidth > 0 && window.innerWidth <= 480,
   );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const onResize = () => setIsMobileViewport(window.innerWidth > 0 && window.innerWidth <= 767);
+    const onResize = () => {
+      setIsMobileViewport(window.innerWidth > 0 && window.innerWidth <= 767);
+      setIsCompact480(window.innerWidth > 0 && window.innerWidth <= 480);
+    };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
@@ -241,6 +248,7 @@ export function MobileBarcodeScannerBar({
         <div
           className="scanner-control-panel"
           data-testid="scanner-control-panel"
+          data-mobile-hint-open={showGs1Hint ? 'true' : 'false'}
           style={isMobileViewport ? { padding: '6px 8px', gap: 6, minHeight: 0 } : undefined}
         >
           <div className="scanner-control-header">
@@ -367,6 +375,17 @@ export function MobileBarcodeScannerBar({
             onApplySample={() => { setInput(sampleCode); setCameraNotice(''); void handleTrigger(sampleCode); }}
             onDismissNotice={() => setCameraNotice('')}
           />
+          {isCompact480 && (
+            <button
+              type="button"
+              className="scanner-gs1-hint-toggle"
+              data-testid="btn-toggle-gs1-hint"
+              aria-expanded={showGs1Hint}
+              onClick={() => setShowGs1Hint(prev => !prev)}
+            >
+              Hướng dẫn mã GS1-128
+            </button>
+          )}
         </div>
       </div>
     </section>

@@ -159,7 +159,7 @@ describe('TASK-W2-04: CustomerReturns (RMA 4-Disposition) & StockCardS12DnPanel'
 
     await waitFor(() => {
       expect(screen.getByTestId('rma-cost-redacted').textContent).toContain(
-        'Đã ẩn theo phân quyền',
+        'Ẩn theo quyền',
       );
     });
     expect(screen.queryByTestId('rma-cost-visible')).toBeNull();

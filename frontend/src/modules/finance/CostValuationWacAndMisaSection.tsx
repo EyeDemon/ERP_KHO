@@ -29,7 +29,7 @@ export type FinanceSummaryState = {
   netProfitAfterWithheldTax: number;
 };
 
-export const formatCurrencyVnd = (amount: number) => `${Math.round(amount).toLocaleString('vi-VN')} đ`;
+export const formatCurrencyVnd = (amount: number) => `${Math.round(amount).toLocaleString('vi-VN')} ₫`;
 
 interface CostValuationWacSectionProps {
   isPureWacValuationPage: boolean;
@@ -177,7 +177,7 @@ export const CostValuationWacSection: React.FC<CostValuationWacSectionProps> = (
             </div>
 
             <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc' }}>
-              <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 600 }}>Phí Hạ tầng Đơn hàng Cố định (3.000đ/đơn)</div>
+              <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 600 }}>Phí Hạ tầng Đơn hàng Cố định (3.000 ₫/đơn)</div>
               <div style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
                 {formatCurrencyVnd(financeSummary.fixedInfrastructureFeeTotal)}
               </div>
@@ -239,27 +239,27 @@ export const CostValuationWacSection: React.FC<CostValuationWacSectionProps> = (
               <table className="ui-table-compact" aria-label="Bảng định giá tồn kho bình quân gia quyền" style={{ width: '100%' }}>
                 <thead>
                   <tr>
-                    <th className="ui-sticky-id">Mã mặt hàng</th>
-                    <th>Tên sản phẩm</th>
-                    <th>Kho</th>
-                    <th>Đơn vị tính</th>
-                    <th style={{ textAlign: 'right' }}>Tồn thực tế</th>
-                    <th style={{ textAlign: 'right' }}>Khả dụng</th>
-                    <th style={{ textAlign: 'right' }} title="Bình quân gia quyền di động">
-                      Đơn giá vốn bình quân
+                    <th className="ui-sticky-id" style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Mã mặt hàng</th>
+                    <th style={{ minWidth: 180 }}>Tên sản phẩm</th>
+                    <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Kho</th>
+                    <th style={{ minWidth: 84, whiteSpace: 'nowrap' }}>Đơn vị</th>
+                    <th style={{ minWidth: 96, whiteSpace: 'nowrap', textAlign: 'right' }}>Tồn thực tế</th>
+                    <th style={{ minWidth: 92, whiteSpace: 'nowrap', textAlign: 'right' }}>Khả dụng</th>
+                    <th style={{ minWidth: 135, whiteSpace: 'nowrap', textAlign: 'right' }} title="Bình quân gia quyền di động">
+                      Đơn giá vốn
                     </th>
-                    <th style={{ textAlign: 'right' }}>Thành tiền tồn kho</th>
+                    <th style={{ minWidth: 135, whiteSpace: 'nowrap', textAlign: 'right' }}>Thành tiền tồn</th>
                   </tr>
                 </thead>
                 <tbody>
                   {visibleRows.map((row, idx) => (
                     <tr key={`${row.productId}-${row.productCode}-${idx}`}>
-                      <td className="ui-sticky-id" style={{ background: '#ffffff' }}>
-                        <strong>{row.productCode}</strong>
+                      <td className="ui-sticky-id" style={{ background: '#ffffff', whiteSpace: 'nowrap' }}>
+                        <strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{row.productCode}</strong>
                       </td>
                       <td>{row.productName}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>{formatWarehouseLabel(row.warehouseName)}</td>
-                      <td>{row.unitName}</td>
+                      <td>{!row.unitName || row.unitName.trim().toUpperCase() === 'ĐVT' ? 'Cái' : row.unitName}</td>
                       <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.onHandQty}</td>
                       <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.availableQty}</td>
                       <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>

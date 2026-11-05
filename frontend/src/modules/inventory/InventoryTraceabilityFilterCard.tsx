@@ -109,8 +109,8 @@ export const InventoryTraceabilityFilterCard: React.FC<InventoryTraceabilityFilt
     <form
       onSubmit={onSearch}
       noValidate
-      className="ui-form-grid"
-      style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, alignItems: 'end', maxWidth: '100%' }}
+      className="ui-form-grid traceability-filter-grid"
+      style={{ maxWidth: '100%' }}
       aria-busy={loading}
     >
       <UiToolbarField label="Kho truy vết">
@@ -121,7 +121,7 @@ export const InventoryTraceabilityFilterCard: React.FC<InventoryTraceabilityFilt
           aria-describedby="traceability-warehouse-help"
           onChange={(e) => updateField('warehouseId', e.target.value)}
         >
-          <option value="">Tất cả kho được phân quyền (cần thêm bộ lọc)</option>
+          <option value="">Tất cả kho được phân quyền</option>
           {warehouses.map((x) => (
             <option key={x.id} value={x.id}>
               {x.code} — {x.name}
@@ -136,7 +136,7 @@ export const InventoryTraceabilityFilterCard: React.FC<InventoryTraceabilityFilt
           value={form.productId}
           onChange={(e) => updateField('productId', e.target.value)}
           inputMode="numeric"
-          placeholder="Chọn hoặc nhập mã định danh SP"
+          placeholder="VD: 1001"
         />
       </UiToolbarField>
       <UiToolbarField label="Mã lô">

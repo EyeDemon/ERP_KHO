@@ -110,7 +110,7 @@ export const ImportReceiptScannerSection: React.FC<ImportReceiptScannerSectionPr
   <div
     ref={scannerContainerRef}
     className="no-print import-pda-scanner-zone"
-    style={activeWorkspaceTab === 'scanner' ? undefined : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }}
+    style={activeWorkspaceTab === 'scanner' ? undefined : { display: 'none' }}
   >
     <MobileBarcodeScannerBar
       warehouseId={warehouseId ? Number(warehouseId) : (warehouses[0]?.id ?? undefined)}
@@ -163,7 +163,7 @@ export const ImportReceiptScannerSection: React.FC<ImportReceiptScannerSectionPr
                 setReceivingConfirmedSignature('');
               }}
             >
-              <option value="">-- Chọn vị trí nguồn (Khu tiếp nhận / Tập kết) --</option>
+              <option value="">Chọn vị trí nguồn tiếp nhận</option>
               {(warehouseLocations.filter(l => ['receiving', 'staging'].includes(l.locationType?.toLowerCase())).length > 0
                 ? warehouseLocations.filter(l => ['receiving', 'staging'].includes(l.locationType?.toLowerCase()))
                 : warehouseLocations
@@ -185,7 +185,7 @@ export const ImportReceiptScannerSection: React.FC<ImportReceiptScannerSectionPr
                 setReceivingConfirmedSignature('');
               }}
             >
-              <option value="">-- Chọn vị trí đích (Kệ lưu trữ) --</option>
+              <option value="">Chọn vị trí đích lưu trữ</option>
               {(warehouseLocations.filter(l => l.locationType?.toLowerCase() === 'storage').length > 0
                 ? warehouseLocations.filter(l => l.locationType?.toLowerCase() === 'storage')
                 : warehouseLocations

@@ -177,15 +177,15 @@ export const ReconciliationInvestigationCard: React.FC<ReconciliationInvestigati
                 <table aria-label="Đối chiếu từng trạng thái tồn kho theo Ledger">
                   <thead>
                     <tr>
-                      <th>Trạng thái</th>
-                      <th style={rightNumStyle}>Bucket</th>
-                      <th style={rightNumStyle}>Tồn hiện tại</th>
-                      <th style={rightNumStyle}>Đang giữ</th>
-                      <th style={rightNumStyle}>Ledger nhập/xuất ròng</th>
-                      <th style={rightNumStyle}>Chuyển trạng thái vào</th>
-                      <th style={rightNumStyle}>Chuyển trạng thái ra</th>
-                      <th style={rightNumStyle}>Ledger dự kiến</th>
-                      <th style={rightNumStyle}>Lệch tham khảo</th>
+                      <th style={{ minWidth: 110 }}>Trạng thái</th>
+                      <th style={{ ...rightNumStyle, minWidth: 84, whiteSpace: 'nowrap' }}>Nhóm tồn</th>
+                      <th style={{ ...rightNumStyle, minWidth: 96, whiteSpace: 'nowrap' }}>Tồn hiện tại</th>
+                      <th style={{ ...rightNumStyle, minWidth: 84, whiteSpace: 'nowrap' }}>Đang giữ</th>
+                      <th style={{ ...rightNumStyle, minWidth: 105, whiteSpace: 'nowrap' }}>Nhập/xuất ròng</th>
+                      <th style={{ ...rightNumStyle, minWidth: 100, whiteSpace: 'nowrap' }}>Chuyển TT vào</th>
+                      <th style={{ ...rightNumStyle, minWidth: 100, whiteSpace: 'nowrap' }}>Chuyển TT ra</th>
+                      <th style={{ ...rightNumStyle, minWidth: 100, whiteSpace: 'nowrap' }}>Sổ cái dự kiến</th>
+                      <th style={{ ...rightNumStyle, minWidth: 100, whiteSpace: 'nowrap' }}>Lệch tham khảo</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -242,12 +242,12 @@ export const ReconciliationInvestigationCard: React.FC<ReconciliationInvestigati
             <table aria-label="Bucket tồn phục vụ điều tra chênh lệch">
               <thead>
                 <tr>
-                  <th style={rightNumStyle}>ID bucket</th>
-                  <th>Vị trí</th>
-                  <th>Lô</th>
-                  <th>Sê-ri</th>
-                  <th style={rightNumStyle}>Tồn</th>
-                  <th style={rightNumStyle}>Đã giữ</th>
+                  <th style={{ ...rightNumStyle, minWidth: 84, whiteSpace: 'nowrap' }}>ID nhóm</th>
+                  <th style={{ minWidth: 115 }}>Vị trí</th>
+                  <th style={{ minWidth: 92, whiteSpace: 'nowrap' }}>Mã lô</th>
+                  <th style={{ minWidth: 92, whiteSpace: 'nowrap' }}>Số sê-ri</th>
+                  <th style={{ ...rightNumStyle, minWidth: 84, whiteSpace: 'nowrap' }}>Tồn kho</th>
+                  <th style={{ ...rightNumStyle, minWidth: 84, whiteSpace: 'nowrap' }}>Đã giữ</th>
                 </tr>
               </thead>
               <tbody>
@@ -293,12 +293,12 @@ export const ReconciliationInvestigationCard: React.FC<ReconciliationInvestigati
             <table aria-label="Sự kiện Ledger phục vụ điều tra chênh lệch">
               <thead>
                 <tr>
-                  <th style={rightNumStyle}>ID giao dịch</th>
-                  <th>Loại</th>
-                  <th>Vị trí</th>
-                  <th>Lô/sê-ri</th>
-                  <th style={rightNumStyle}>Số lượng có dấu</th>
-                  <th>Chứng từ</th>
+                  <th style={{ ...rightNumStyle, minWidth: 96, whiteSpace: 'nowrap' }}>ID giao dịch</th>
+                  <th style={{ minWidth: 115 }}>Loại GD</th>
+                  <th style={{ minWidth: 115 }}>Vị trí</th>
+                  <th style={{ minWidth: 105 }}>Lô / Sê-ri</th>
+                  <th style={{ ...rightNumStyle, minWidth: 96, whiteSpace: 'nowrap' }}>SL có dấu</th>
+                  <th style={{ minWidth: 120 }}>Chứng từ</th>
                 </tr>
               </thead>
               <tbody>

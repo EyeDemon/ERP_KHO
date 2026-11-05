@@ -2,6 +2,7 @@ import React from 'react';
 import { UiBadge, UiCard } from '../../ui/ProductionUi';
 import {
   formatDateVi,
+  normalizeSaasTaxCode,
   resolveSubscriptionStatusLabel,
   secondaryBtnStyle,
   type BillingState,
@@ -68,7 +69,17 @@ export const SaasBillingSummaryAndQuotas: React.FC<SaasBillingSummaryAndQuotasPr
             <div style={{ fontSize: 11, color: '#475569' }}>Gói dịch vụ đang áp dụng</div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 1 }}>
               <strong style={{ fontSize: 13.5, color: '#0f172a' }}>{billing.planName}</strong>
-              <UiBadge tone="success">{resolveSubscriptionStatusLabel(billing.subscriptionStatus)}</UiBadge>
+              <UiBadge
+                tone={
+                  /SUSPEND|READ_ONLY|LOCK|CANCEL/i.test(billing.subscriptionStatus)
+                    ? 'danger'
+                    : /PAST_DUE|OVERDUE/i.test(billing.subscriptionStatus)
+                      ? 'warning'
+                      : 'success'
+                }
+              >
+                {resolveSubscriptionStatusLabel(billing.subscriptionStatus)}
+              </UiBadge>
             </div>
           </div>
           <div style={{ padding: '4px 10px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
@@ -79,7 +90,7 @@ export const SaasBillingSummaryAndQuotas: React.FC<SaasBillingSummaryAndQuotasPr
           </div>
           <div style={{ padding: '4px 10px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
             <div style={{ fontSize: 11, color: '#475569' }}>Ngày gia hạn tiếp theo</div>
-            <strong style={{ display: 'block', fontSize: 13, color: '#1d4ed8', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
+            <strong style={{ display: 'block', fontSize: 13, color: '#0F172A', fontWeight: 700, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
               {formatDateVi(billing.nextRenewalDateUtc)}
             </strong>
           </div>
@@ -105,7 +116,7 @@ export const SaasBillingSummaryAndQuotas: React.FC<SaasBillingSummaryAndQuotasPr
                 <button
                   type="button"
                   onClick={() => {
-                    setTaxCodeDraft(billing.taxCode);
+                    setTaxCodeDraft(normalizeSaasTaxCode(billing.taxCode));
                     setEditingTaxCode(false);
                   }}
                   style={{ ...secondaryBtnStyle, padding: '2px 8px', minHeight: 26, fontSize: 11.5 }}
@@ -115,12 +126,12 @@ export const SaasBillingSummaryAndQuotas: React.FC<SaasBillingSummaryAndQuotasPr
               </div>
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 1 }}>
-                <strong style={{ fontSize: 12.5, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>MST: {billing.taxCode}</strong>
+                <strong style={{ fontSize: 12.5, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>MST: {normalizeSaasTaxCode(billing.taxCode)}</strong>
                 <button
                   type="button"
                   data-testid="btn-edit-tax-code"
                   onClick={() => {
-                    setTaxCodeDraft(billing.taxCode);
+                    setTaxCodeDraft(normalizeSaasTaxCode(billing.taxCode));
                     setEditingTaxCode(true);
                   }}
                   style={{ ...secondaryBtnStyle, padding: '1px 8px', minHeight: 24, fontSize: 11.5 }}
@@ -160,7 +171,7 @@ export const SaasBillingSummaryAndQuotas: React.FC<SaasBillingSummaryAndQuotasPr
               style={{
                 display: 'grid',
                 gridTemplateColumns: 'minmax(0, 1fr)',
-                gridTemplateRows: '24px 20px 7px 22px',
+                gridTemplateRows: 'minmax(24px, auto) 20px 7px 22px',
                 gap: 3,
                 padding: '6px 10px',
                 borderRadius: 8,
@@ -172,9 +183,9 @@ export const SaasBillingSummaryAndQuotas: React.FC<SaasBillingSummaryAndQuotasPr
             >
               <div
                 data-testid={item.tier.atCeiling ? `quota-ceiling-alert-${item.key}` : undefined}
-                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, height: 24, minWidth: 0 }}
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6, minHeight: 24, minWidth: 0 }}
               >
-                <strong style={{ fontSize: 12.5, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+                <strong style={{ fontSize: 12.5, color: '#0f172a', whiteSpace: 'normal', lineHeight: 1.25, minWidth: 0 }}>
                   {item.title}
                 </strong>
                 <UiBadge tone={item.tier.tone}>{item.tier.label}</UiBadge>

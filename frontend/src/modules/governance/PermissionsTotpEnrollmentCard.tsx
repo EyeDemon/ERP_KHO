@@ -94,8 +94,8 @@ export function PermissionsTotpEnrollmentCard({ targetUserIdInput, onError }: { 
         return;
       }
       const uri = hasServerUri
-        ? String(d.otpauthUri)
-        : `otpauth://totp/ERP_KHO:user_${uid}?secret=${apiSecret}&issuer=ERP_KHO`;
+        ? String(d.otpauthUri).replace(/ERP_KHO/gi, 'ERPKHO')
+        : `otpauth://totp/ERPKHO:user_${uid}?secret=${apiSecret}&issuer=ERPKHO`;
       enrolledTotpSecretRef.current = apiSecret;
       setTotpState({ secretKeyBase32: '', otpauthUri: uri, recoveryCodes: [] });
       setShowTotpSecret(false);

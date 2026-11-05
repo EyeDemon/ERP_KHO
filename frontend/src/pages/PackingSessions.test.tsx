@@ -89,7 +89,8 @@ describe('Packing workbench',()=>{
     grant('packing.read','packing.execute');
     const view=render(<PackingSessions/>);
     await view.findByText('PACK-2026-0077');
-    const sessionCodeBtn=view.getByText('PACK-2026-0077');
+    fireEvent.click(view.getByTestId('tab-packing-sessions-hu'));
+    const sessionCodeBtn=view.getByRole('button',{name:'PACK-2026-0077'});
     expect(sessionCodeBtn.style.whiteSpace).toBe('nowrap');
     expect(view.getByText('1 kiện')).toBeTruthy();
     const routeSourceSpan=view.getByText('PICK-2026-0088');
@@ -104,6 +105,7 @@ describe('Packing workbench',()=>{
     const huSelect=await view.findByLabelText('HU đích SKU-1001');
     expect(huSelect.closest('label')?.style.flexDirection).toBe('column');
     expect(huSelect.closest('.ui-subcard')).toBeTruthy();
+    fireEvent.click(view.getByTestId('tab-packing-workbench'));
     expect(view.getByTestId('unified-packing-station-card').style.gridTemplateColumns).toBe('repeat(2, minmax(0, 1fr))');
     expect(view.getByText('Mã QR vận đơn')).toBeTruthy();
     expect(view.queryByText('QR GS1')).toBeNull();
@@ -135,6 +137,7 @@ describe('Packing workbench',()=>{
         cameraStation:'CAM-PACK-01',
       }),
     );
+    fireEvent.click(view.getByTestId('tab-packing-kitting-video'));
     expect(view.getByRole('table',{name:'Danh sách bằng chứng video đóng gói'})).toBeTruthy();
 
     fireEvent.change(view.getByLabelText('Tra cứu video theo mã vận đơn AWB'),{target:{value:'SPXVN058291042'}});
@@ -185,6 +188,7 @@ describe('Packing workbench',()=>{
     expect(view.getByTestId('unified-carton-suggestion').textContent).toContain('Trọng lượng quy đổi (D×R×C / 6000):');
     expect(view.getByTestId('unified-carton-suggestion').textContent).toContain('Cảnh báo Cước Quy Đổi (Trọng lượng quy đổi > Trọng lượng thực tế)');
 
+    fireEvent.click(view.getByTestId('tab-packing-kitting-video'));
     const modeSelect=view.getByTestId('select-kitting-vas-mode');
     fireEvent.change(modeSelect,{target:{value:'DEKIT_DISASSEMBLE'}});
     fireEvent.click(view.getByRole('button',{name:'Thực thi Đóng bộ / Tách bộ & Dịch vụ Gia tăng'}));
@@ -258,11 +262,12 @@ describe('Packing workbench',()=>{
 
     const completedRow=await view.findByTestId('kit-wo-row-1');
     const openRow=view.getByTestId('kit-wo-row-2');
-    expect(completedRow.textContent).toContain('Ẩn theo phân quyền');
+    expect(view.getByTestId('kit-bom-preview-table')).toBeTruthy();
+    expect(completedRow.textContent).toContain('Ẩn theo quyền');
     expect(completedRow.textContent).not.toContain('500.000 ₫');
     expect(completedRow.textContent).not.toContain('10.000.000 ₫');
-    expect(openRow.textContent).toContain('Ẩn theo phân quyền');
+    expect(openRow.textContent).toContain('Ẩn theo quyền');
     expect(openRow.textContent).not.toContain('620.000 ₫');
-    expect(view.container.textContent).toContain('Ẩn theo RBAC');
+    expect(view.container.textContent).toContain('Ẩn theo quyền');
   });
 });

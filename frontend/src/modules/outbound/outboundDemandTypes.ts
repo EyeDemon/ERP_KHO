@@ -99,18 +99,50 @@ export type DomSplitAllocation = {
 export const orderLabels: Record<string, string> = {
   Draft: 'Nháp',
   Hold: 'Tạm giữ',
+  Held: 'Đang tạm giữ',
+  PendingApproval: 'Chờ duyệt',
   Released: 'Đã phát hành',
+  InProgress: 'Đang thực hiện',
+  Allocated: 'Đã phân bổ',
+  Picking: 'Đang lấy hàng',
+  PartiallyAllocated: 'Phân bổ một phần',
   PartiallyFulfilled: 'Giao một phần',
+  Dispatched: 'Đã xuất kho',
+  Shipped: 'Đã xuất kho',
   Fulfilled: 'Hoàn tất',
+  Completed: 'Hoàn tất',
   Cancelled: 'Đã hủy',
 };
 
 export const backorderLabels: Record<string, string> = {
-  Open: 'Mở',
+  Open: 'Thiếu hàng',
   PartiallyAllocated: 'Khôi phục một phần',
-  Allocated: 'Đã khôi phục',
-  Fulfilled: 'Đã giao',
+  Allocated: 'Đã phân bổ',
+  Fulfilled: 'Hoàn tất',
   Cancelled: 'Đã hủy',
+};
+
+export const formatShortOrderDateVi = (iso?: string): string => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+};
+
+export const shippingMethodLabelsVi: Record<string, string> = {
+  EXPRESS: 'Giao hỏa tốc',
+  STANDARD: 'Giao tiêu chuẩn',
+  SAME_DAY: 'Giao trong ngày',
+  SAMEDAY: 'Giao trong ngày',
+  ECONOMY: 'Giao tiết kiệm',
+  PICKUP: 'Nhận tại kho',
+};
+
+export const formatShippingMethodVi = (raw?: string | null): string => {
+  if (!raw) return 'Giao tiêu chuẩn';
+  const key = raw.trim().toUpperCase();
+  return shippingMethodLabelsVi[key] ?? raw;
 };
 
 export const outboundSignalLabels: Record<string, string> = {
@@ -126,14 +158,13 @@ export const outboundSignalLabels: Record<string, string> = {
 export const translateOutboundSignal = (value?: string | null) =>
   value ? (outboundSignalLabels[value] ?? value) : '';
 
-export const tone = (status: string): 'neutral' | 'success' | 'warning' | 'danger' =>
-  ['Fulfilled'].includes(status)
-    ? 'success'
-    : status === 'Cancelled'
-      ? 'danger'
-      : ['Hold', 'PartiallyFulfilled', 'PartiallyAllocated'].includes(status)
-        ? 'warning'
-        : 'neutral';
+export const tone = (status: string): 'neutral' | 'success' | 'warning' | 'danger' | 'info' => {
+  if (status === 'Cancelled') return 'danger';
+  if (['Fulfilled', 'Completed', 'Dispatched', 'Shipped'].includes(status)) return 'success';
+  if (['Released', 'InProgress', 'Allocated', 'Picking'].includes(status)) return 'info';
+  if (['Hold', 'Held', 'PendingApproval', 'Open', 'PartiallyFulfilled', 'PartiallyAllocated'].includes(status)) return 'warning';
+  return 'neutral';
+};
 
 export const messageOf = (failure: unknown) => {
   const response = (failure as { response?: { status?: number; data?: { message?: string; code?: string } } })?.response;

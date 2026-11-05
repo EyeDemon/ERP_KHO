@@ -186,7 +186,7 @@ const Login = () => {
               id="login-tenant-code"
               autoComplete="off"
               type="text"
-              placeholder="VD: MA-DOANH-NGHIEP (để trống = mặc định)"
+              placeholder="Để trống nếu dùng kho mặc định"
               value={tenantCode}
               onChange={(event) => setTenantCode(event.target.value)}
             />

@@ -65,7 +65,7 @@ export function BusinessPartnerListSection({
           <UiMetric value={missingContactInfoCount} label="Thiếu thông tin liên hệ" />
         </UiMetricGrid>
         <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-          <UiBadge tone="success">Thanh toán không tiền mặt &gt;= 5.000.000 VNĐ (Luật Thuế GTGT 48/2024/QH15 &amp; NĐ 181/2025/NĐ-CP)</UiBadge>
+          <UiBadge tone="success">Thanh toán không tiền mặt &gt;= 5.000.000 ₫ (Luật Thuế GTGT 48/2024/QH15 &amp; NĐ 181/2025/NĐ-CP)</UiBadge>
           <span style={{ fontSize: 12.5, color: '#334155' }}>
             Chuẩn hóa Mã số thuế (10/13 số) / Mã định danh CCCD (12 số - TT 86/2024/TT-BTC) &amp; Tài khoản ngân hàng thụ hưởng.
           </span>
@@ -95,12 +95,12 @@ export function BusinessPartnerListSection({
 
       <UiCard title="Danh sách đối tác">
         {loading ? <p role="status">Đang tải đối tác...</p> : <UiTableScroll><table className="ui-table-compact" aria-label="Danh sách đối tác kinh doanh">
-          <thead><tr><th>Mã</th><th>Tên</th><th style={{ minWidth: 145, whiteSpace: 'nowrap' }}>Vai trò</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>CÔNG NỢ HIỆN TẠI</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>HẠN MỨC &amp; KỲ HẠN TT</th><th>Liên hệ</th><th style={{ whiteSpace: 'nowrap' }}>Trạng thái</th>{canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
+          <thead><tr><th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Mã đối tác</th><th style={{ minWidth: 160 }}>Tên đối tác</th><th style={{ minWidth: 145, whiteSpace: 'nowrap' }}>Vai trò</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 145, whiteSpace: 'nowrap' }}>Công nợ hiện tại</th><th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 140, whiteSpace: 'nowrap' }}>Hạn mức &amp; Kỳ hạn</th><th style={{ minWidth: 130 }}>Liên hệ</th><th style={{ minWidth: 105, whiteSpace: 'nowrap' }}>Trạng thái</th>{canManage && <th style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
           <tbody>
             {items.length === 0
               ? <tr><td colSpan={canManage ? 8 : 7} className="ui-empty-cell">Không có đối tác phù hợp với bộ lọc hiện tại.</td></tr>
               : items.map(item => <tr key={item.id}>
-                <td style={{ whiteSpace: 'nowrap' }}><strong>{item.code}</strong></td>
+                <td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.code}</strong></td>
                 <td>
                   <div>{item.name}</div>
                   {item.address && <small>{item.address}</small>}
@@ -123,10 +123,10 @@ export function BusinessPartnerListSection({
                 <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, whiteSpace: 'nowrap' }}>
                     {item.isCustomer && (
-                      <div style={{ whiteSpace: 'nowrap' }}><small>Phải thu KH: <strong>{Number(item.receivableBalance ?? 0).toLocaleString('vi-VN')} đ</strong></small></div>
+                      <div style={{ whiteSpace: 'nowrap' }}><small>Phải thu KH: <strong>{Number(item.receivableBalance ?? 0).toLocaleString('vi-VN')} ₫</strong></small></div>
                     )}
                     {item.isSupplier && (
-                      <div style={{ whiteSpace: 'nowrap' }}><small>Phải trả NCC: <strong>{Number(item.payableBalance ?? 0).toLocaleString('vi-VN')} đ</strong></small></div>
+                      <div style={{ whiteSpace: 'nowrap' }}><small>Phải trả NCC: <strong>{Number(item.payableBalance ?? 0).toLocaleString('vi-VN')} ₫</strong></small></div>
                     )}
                     {item.isCustomer && Number(item.creditLimit ?? 0) > 0 && Number(item.receivableBalance ?? 0) > Number(item.creditLimit ?? 0) && (
                       <UiBadge tone="danger">Vượt hạn mức tín dụng</UiBadge>
@@ -141,7 +141,7 @@ export function BusinessPartnerListSection({
                 </td>
                 <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, whiteSpace: 'nowrap' }}>
-                    <div style={{ whiteSpace: 'nowrap' }}><small>Hạn mức: <strong>{Number(item.creditLimit ?? 0) > 0 ? `${Number(item.creditLimit).toLocaleString('vi-VN')} đ` : 'Không giới hạn'}</strong></small></div>
+                    <div style={{ whiteSpace: 'nowrap' }}><small>Hạn mức: <strong>{Number(item.creditLimit ?? 0) > 0 ? `${Number(item.creditLimit).toLocaleString('vi-VN')} ₫` : 'Không giới hạn'}</strong></small></div>
                     <div style={{ whiteSpace: 'nowrap' }}><small>Kỳ hạn TT: <strong>{item.paymentTermDays ?? 30} ngày</strong></small></div>
                   </div>
                 </td>

@@ -18,6 +18,7 @@ interface PickingTasksGridProps {
   detail: (id: number) => Promise<void>;
   mutate: (key: string, path: string, body: object) => Promise<void>;
   setError: (msg: string) => void;
+  isHandheldViewport?: boolean;
 }
 
 export function PickingTasksGrid({
@@ -31,6 +32,7 @@ export function PickingTasksGrid({
   detail,
   mutate,
   setError,
+  isHandheldViewport = false,
 }: PickingTasksGridProps) {
   const [scan, setScan] = useState<Record<number, { location: string; product: string; quantity: string }>>({});
   const [shortReason, setShortReason] = useState<Record<number, string>>({});
@@ -62,8 +64,7 @@ export function PickingTasksGrid({
     }
   };
 
-  return (
-    <div className="ui-grid-2" style={{ display: 'grid', gridTemplateColumns: selected ? 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))' : 'minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
+  const taskListCard = (
       <UiCard title="Danh sách nhiệm vụ lấy hàng">
         {tasks.length === 0 ? (
           <p>Chưa có nhiệm vụ Picking phù hợp.</p>
@@ -113,8 +114,9 @@ export function PickingTasksGrid({
           </UiTableScroll>
         )}
       </UiCard>
+  );
 
-      {selected && (
+  const selectedDetailCard = selected ? (
         <UiCard title={`Chi tiết ${selected.taskCode}`}>
           <div className="ui-inline-wrap">
             <UiBadge tone={tone(selected.status)}>{states[selected.status] ?? selected.status}</UiBadge>
@@ -153,7 +155,7 @@ export function PickingTasksGrid({
                   </button>
                   {alternateBinsByLine[line.id] && alternateBinsByLine[line.id].length > 0 && (
                     <div data-testid={`alternate-fefo-bins-${line.id}`} style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: '#f8fafc', border: '1px solid #cbd5e1', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <strong style={{ fontSize: 12, color: '#0f172a' }}>Danh sách Kệ Thay thế Ưu tiên FEFO có Tồn Khả dụng:</strong>
+                      <strong style={{ fontSize: 12, color: '#0f172a' }}>Danh sách Kệ Thay thế Ưu tiên Hạn dùng có Tồn Khả dụng:</strong>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                         {alternateBinsByLine[line.id].map(alt => (
                           <div key={`${alt.locationCode}-${alt.lotNumber}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 8px', borderRadius: 6, background: '#ffffff', border: '1px solid #93c5fd', fontSize: 12 }}>
@@ -256,6 +258,28 @@ export function PickingTasksGrid({
             </div>
           ))}
         </UiCard>
+  ) : null;
+
+  return (
+    <div
+      className="ui-grid-2"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: selected ? 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))' : 'minmax(0, 1fr)',
+        gap: isHandheldViewport ? 8 : 16,
+        alignItems: 'start',
+      }}
+    >
+      {isHandheldViewport ? (
+        <>
+          {selectedDetailCard}
+          {taskListCard}
+        </>
+      ) : (
+        <>
+          {taskListCard}
+          {selectedDetailCard}
+        </>
       )}
     </div>
   );

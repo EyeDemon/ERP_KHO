@@ -56,11 +56,11 @@ export function PartnerDeleteConfirmModal(props: {
         Mã đối tác: <strong>{deleteCandidate.code}</strong> • Tên đối tác: <strong>{deleteCandidate.name}</strong>
       </div>
       <div style={{ fontSize: 13, color: '#334155', fontVariantNumeric: 'tabular-nums' }}>
-        Số dư công nợ hiện tại: Phải thu KH: <strong>{Number(deleteCandidate.receivableBalance ?? 0).toLocaleString('vi-VN')} đ</strong> • Phải trả NCC: <strong>{Number(deleteCandidate.payableBalance ?? 0).toLocaleString('vi-VN')} đ</strong>
+        Số dư công nợ hiện tại: Phải thu KH: <strong>{Number(deleteCandidate.receivableBalance ?? 0).toLocaleString('vi-VN')} ₫</strong> • Phải trả NCC: <strong>{Number(deleteCandidate.payableBalance ?? 0).toLocaleString('vi-VN')} ₫</strong>
       </div>
       {candidateHasBalance && (
         <div role="alert" data-testid="partner-delete-balance-warning" style={{ padding: '8px 12px', borderRadius: 8, background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', fontSize: 13, fontWeight: 600 }}>
-          Không thể xóa đối tác đang còn số dư công nợ phải thu hoặc phải trả lớn hơn 0 đ. Vui lòng tất toán công nợ trước khi xóa.
+          Không thể xóa đối tác đang còn số dư công nợ phải thu hoặc phải trả lớn hơn 0 ₫. Vui lòng tất toán công nợ trước khi xóa.
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
@@ -109,7 +109,7 @@ export function PartnerFormDrawer(props: {
         <label>Email<input aria-label="Email đối tác" value={form.email || ''} maxLength={254} onChange={event => field('email', event.target.value)} /></label>
         <label style={{ gridColumn: '1 / -1' }}>
           Mã số thuế (10/13 số) hoặc Mã định danh CCCD (12 số - TT 86/2024/TT-BTC)
-          <input aria-label="Mã số thuế hoặc CCCD đối tác" data-testid="input-partner-tax-code" value={form.taxCode || ''} maxLength={20} placeholder="VD: 0318889999 hoặc 079200012345" onChange={event => field('taxCode', event.target.value)} />
+          <input aria-label="Mã số thuế hoặc CCCD đối tác" data-testid="input-partner-tax-code" value={form.taxCode || ''} maxLength={20} placeholder="VD: 0318294012 hoặc 079200012345" onChange={event => field('taxCode', event.target.value)} />
         </label>
         <label>
           Phân loại người nộp thuế (TT 86/2024/TT-BTC)
@@ -127,12 +127,12 @@ export function PartnerFormDrawer(props: {
           Ngân hàng thụ hưởng
           <input aria-label="Ngân hàng thụ hưởng đối tác" data-testid="input-partner-bank-name" value={form.bankName || ''} maxLength={120} placeholder="VD: Vietcombank, TPBank..." onChange={event => field('bankName', event.target.value)} />
         </label>
-        <label>Hạn mức tín dụng (VND)<input aria-label="Hạn mức tín dụng đối tác" type="number" min="0" step="1000" value={form.creditLimit ?? 0} onChange={event => field('creditLimit', event.target.value === '' ? 0 : Number(event.target.value))} /></label>
+        <label>Hạn mức tín dụng (₫)<input aria-label="Hạn mức tín dụng đối tác" type="number" min="0" step="1000" value={form.creditLimit ?? 0} onChange={event => field('creditLimit', event.target.value === '' ? 0 : Number(event.target.value))} /></label>
         <label>Kỳ hạn thanh toán (ngày)<input aria-label="Kỳ hạn thanh toán đối tác" type="number" min="0" max="3650" value={form.paymentTermDays ?? 30} onChange={event => field('paymentTermDays', event.target.value === '' ? 0 : Number(event.target.value))} /></label>
         <label style={{ gridColumn: '1 / -1' }}>Địa chỉ<textarea aria-label="Địa chỉ đối tác" value={form.address || ''} maxLength={500} rows={2} onChange={event => field('address', event.target.value)} /></label>
         <div style={{ gridColumn: '1 / -1', padding: '8px 12px', borderRadius: 8, background: '#f0fdf4', border: '1px solid #86efac', color: '#065f46', fontSize: 12.5 }}>
           <UiBadge tone="success">Tuân thủ Luật Thuế GTGT 48/2024/QH15 &amp; NĐ 181/2025/NĐ-CP</UiBadge>{' '}
-          Bắt buộc chứng từ thanh toán không dùng tiền mặt đối với giao dịch mua hàng hóa, dịch vụ từ <strong>&gt;= 5.000.000 VNĐ</strong> để khấu trừ thuế GTGT đầu vào.
+          Bắt buộc chứng từ thanh toán không dùng tiền mặt đối với giao dịch mua hàng hóa, dịch vụ từ <strong>&gt;= 5.000.000 ₫</strong> để khấu trừ thuế GTGT đầu vào.
         </div>
         <div className="ui-inline-actions" style={{ gridColumn: '1 / -1', justifyContent: 'flex-end', marginTop: 8 }}>
           <button type="button" className="ui-btn ui-btn-secondary" disabled={loading} onClick={onClose}>Hủy</button>
@@ -189,61 +189,61 @@ export function PartnerSlaAnd3PlCards(props: {
         <div className="ui-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12, maxWidth: '100%', marginBottom: 12 }}>
           <div style={kpiBoxStyle}>
             <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Phí lưu kho trong kỳ</span>
-            <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.storageFeeAmount.toLocaleString('vi-VN')} đ</strong>
-            <small style={{ color: '#475569', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.storageUnits} Thùng × 15.000 đ</small>
+            <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.storageFeeAmount.toLocaleString('vi-VN')} ₫</strong>
+            <small style={{ color: '#475569', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.storageUnits} Thùng × 15.000 ₫</small>
           </div>
           <div style={kpiBoxStyle}>
             <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Phí tác nghiệp Nhập &amp; Cất hàng</span>
-            <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.inboundHandlingFeeAmount.toLocaleString('vi-VN')} đ</strong>
-            <small style={{ color: '#475569', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.inboundUnits} Thùng × 8.000 đ</small>
+            <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.inboundHandlingFeeAmount.toLocaleString('vi-VN')} ₫</strong>
+            <small style={{ color: '#475569', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.inboundUnits} Thùng × 8.000 ₫</small>
           </div>
           <div style={kpiBoxStyle}>
             <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>Phí tác nghiệp Xuất &amp; Đóng gói</span>
-            <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.outboundHandlingFeeAmount.toLocaleString('vi-VN')} đ</strong>
-            <small style={{ color: '#475569', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.outboundUnits} Thùng × 9.000 đ</small>
+            <strong style={{ fontSize: '1.1rem', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.outboundHandlingFeeAmount.toLocaleString('vi-VN')} ₫</strong>
+            <small style={{ color: '#475569', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.outboundUnits} Thùng × 9.000 ₫</small>
           </div>
           <div style={{ ...kpiBoxStyle, border: '1px solid #86efac', background: '#ecfdf5' }}>
             <span style={{ fontSize: 12, color: '#065f46', fontWeight: 600 }}>Tổng cộng Bảng kê 3PL (Gồm VAT 10%)</span>
-            <strong style={{ fontSize: '1.1rem', color: '#065f46', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.totalBillingAmount.toLocaleString('vi-VN')} đ</strong>
-            <small style={{ color: '#047857', fontVariantNumeric: 'tabular-nums' }}>Trước thuế: {billingSummary.subTotalAmount.toLocaleString('vi-VN')} đ • VAT: {billingSummary.vatAmount.toLocaleString('vi-VN')} đ</small>
+            <strong style={{ fontSize: '1.1rem', color: '#065f46', fontVariantNumeric: 'tabular-nums' }}>{billingSummary.totalBillingAmount.toLocaleString('vi-VN')} ₫</strong>
+            <small style={{ color: '#047857', fontVariantNumeric: 'tabular-nums' }}>Trước thuế: {billingSummary.subTotalAmount.toLocaleString('vi-VN')} ₫ • VAT: {billingSummary.vatAmount.toLocaleString('vi-VN')} ₫</small>
           </div>
         </div>
         <UiTableScroll>
           <table className="ui-table-compact" aria-label="Bảng kê chi tiết phí dịch vụ kho 3PL">
             <thead>
               <tr>
-                <th>Mã biểu phí</th>
-                <th>Hạng mục dịch vụ 3PL</th>
-                <th>Đơn vị tính</th>
-                <th className="ui-cell-numeric" style={numCellStyle}>Sản lượng thực tế</th>
-                <th className="ui-cell-numeric" style={numCellStyle}>Đơn giá (VND)</th>
-                <th className="ui-cell-numeric" style={numCellStyle}>Thành tiền (VND)</th>
+                <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Mã biểu phí</th>
+                <th style={{ minWidth: 200 }}>Hạng mục dịch vụ 3PL</th>
+                <th style={{ minWidth: 105, whiteSpace: 'nowrap' }}>Đơn vị tính</th>
+                <th className="ui-cell-numeric" style={{ ...numCellStyle, minWidth: 115 }}>Sản lượng</th>
+                <th className="ui-cell-numeric" style={{ ...numCellStyle, minWidth: 110 }}>Đơn giá (₫)</th>
+                <th className="ui-cell-numeric" style={{ ...numCellStyle, minWidth: 120 }}>Thành tiền (₫)</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td><code>TRF-3PL-STO-01</code></td>
+                <td><code className="ui-code" style={{ whiteSpace: 'nowrap' }}>TRF-3PL-STO-01</code></td>
                 <td>Lưu kho tiêu chuẩn theo dung lượng tồn thực tế</td>
                 <td>Thùng / Kỳ</td>
                 <td className="ui-cell-numeric" style={numCellStyle}>{billingSummary.storageUnits}</td>
-                <td className="ui-cell-numeric" style={numCellStyle}>{(15000).toLocaleString('vi-VN')} đ</td>
-                <td className="ui-cell-numeric" style={{ ...numCellStyle, fontWeight: 600 }}>{billingSummary.storageFeeAmount.toLocaleString('vi-VN')} đ</td>
+                <td className="ui-cell-numeric" style={numCellStyle}>{(15000).toLocaleString('vi-VN')} ₫</td>
+                <td className="ui-cell-numeric" style={{ ...numCellStyle, fontWeight: 600 }}>{billingSummary.storageFeeAmount.toLocaleString('vi-VN')} ₫</td>
               </tr>
               <tr>
-                <td><code>TRF-3PL-INB-02</code></td>
+                <td><code className="ui-code" style={{ whiteSpace: 'nowrap' }}>TRF-3PL-INB-02</code></td>
                 <td>Tác nghiệp tiếp nhận, kiểm đếm &amp; cất hàng lên kệ</td>
                 <td>Thùng nhập</td>
                 <td className="ui-cell-numeric" style={numCellStyle}>{billingSummary.inboundUnits}</td>
-                <td className="ui-cell-numeric" style={numCellStyle}>{(8000).toLocaleString('vi-VN')} đ</td>
-                <td className="ui-cell-numeric" style={{ ...numCellStyle, fontWeight: 600 }}>{billingSummary.inboundHandlingFeeAmount.toLocaleString('vi-VN')} đ</td>
+                <td className="ui-cell-numeric" style={numCellStyle}>{(8000).toLocaleString('vi-VN')} ₫</td>
+                <td className="ui-cell-numeric" style={{ ...numCellStyle, fontWeight: 600 }}>{billingSummary.inboundHandlingFeeAmount.toLocaleString('vi-VN')} ₫</td>
               </tr>
               <tr>
-                <td><code>TRF-3PL-OUT-03</code></td>
+                <td><code className="ui-code" style={{ whiteSpace: 'nowrap' }}>TRF-3PL-OUT-03</code></td>
                 <td>Tác nghiệp soạn hàng, đóng gói kiện &amp; xuất bến</td>
                 <td>Thùng xuất</td>
                 <td className="ui-cell-numeric" style={numCellStyle}>{billingSummary.outboundUnits}</td>
-                <td className="ui-cell-numeric" style={numCellStyle}>{(9000).toLocaleString('vi-VN')} đ</td>
-                <td className="ui-cell-numeric" style={{ ...numCellStyle, fontWeight: 600 }}>{billingSummary.outboundHandlingFeeAmount.toLocaleString('vi-VN')} đ</td>
+                <td className="ui-cell-numeric" style={numCellStyle}>{(9000).toLocaleString('vi-VN')} ₫</td>
+                <td className="ui-cell-numeric" style={{ ...numCellStyle, fontWeight: 600 }}>{billingSummary.outboundHandlingFeeAmount.toLocaleString('vi-VN')} ₫</td>
               </tr>
             </tbody>
           </table>
@@ -260,7 +260,7 @@ export function PartnerSlaAnd3PlCards(props: {
                 disabled={loading || governanceBusy}
                 onClick={() => {
                   const partnerLabel = depositorPortalData?.ownerName || items.find((i) => i.isCustomer)?.name || items[0]?.name || 'KH-QA-01';
-                  const amountLabel = `${(billingSummary.totalBillingAmount || 1012000).toLocaleString('vi-VN')} đ`;
+                  const amountLabel = `${(billingSummary.totalBillingAmount || 1012000).toLocaleString('vi-VN')} ₫`;
                   if (!window.confirm(`Xác nhận tính lại / điều chỉnh bảng kê phí 3PL?\n• Đối tác: ${partnerLabel}\n• Kỳ cước: 2026-10\n• Số tiền hiện tại: ${amountLabel}`)) return;
                   void generate3PlStatement();
                 }}
@@ -275,7 +275,7 @@ export function PartnerSlaAnd3PlCards(props: {
               disabled={loading || governanceBusy}
               onClick={() => {
                 const partnerLabel = depositorPortalData?.ownerName || items.find((i) => i.isCustomer)?.name || items[0]?.name || 'KH-QA-01';
-                const amountLabel = `${(billingSummary.totalBillingAmount || 1012000).toLocaleString('vi-VN')} đ`;
+                const amountLabel = `${(billingSummary.totalBillingAmount || 1012000).toLocaleString('vi-VN')} ₫`;
                 if (billingSummary.totalBillingAmount > 0 && !window.confirm(`Xác nhận phát hành bảng kê & ghi nhận công nợ 3PL?\n• Đối tác: ${partnerLabel}\n• Kỳ cước: 2026-10\n• Số tiền: ${amountLabel}`)) return;
                 void generate3PlStatement();
               }}
@@ -300,11 +300,11 @@ export function PartnerSlaAnd3PlCards(props: {
             </div>
             <div style={{ marginBottom: 6 }}>{depositorPortalData.statusLabel}</div>
             <div style={{ fontSize: 12.5 }}>
-              Tồn thực tế của chủ hàng: <strong>{depositorPortalData.totalOnHandQty ?? 0}</strong> ĐV ({depositorPortalData.distinctSkuCount ?? 0} SKU • {depositorPortalData.occupiedBinCount ?? 0} vị trí kệ) • Phí lưu kho: <strong>{(depositorPortalData.storageFeeAmount ?? 0).toLocaleString('vi-VN')} đ</strong> • Tổng phí kỳ {depositorPortalData.billingPeriod}: <strong>{(depositorPortalData.totalBillingAmount ?? 0).toLocaleString('vi-VN')} đ</strong>
+              Tồn thực tế của chủ hàng: <strong>{depositorPortalData.totalOnHandQty ?? 0}</strong> ĐV ({depositorPortalData.distinctSkuCount ?? 0} SKU • {depositorPortalData.occupiedBinCount ?? 0} vị trí kệ) • Phí lưu kho: <strong>{(depositorPortalData.storageFeeAmount ?? 0).toLocaleString('vi-VN')} ₫</strong> • Tổng phí kỳ {depositorPortalData.billingPeriod}: <strong>{(depositorPortalData.totalBillingAmount ?? 0).toLocaleString('vi-VN')} ₫</strong>
             </div>
             <details style={{ marginTop: 8 }}>
               <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#047857' }}>Chi tiết kỹ thuật định danh &amp; kiểm chứng cô lập dữ liệu</summary>
-              <div style={{ marginTop: 4, fontSize: 12, color: '#065f46' }}>Mã định danh chủ hàng: <code>OwnerId={depositorPortalData.ownerId}</code> • Cơ chế: Cô lập 9 chiều theo OwnerId (Bất biến hạt tồn kho)</div>
+              <div style={{ marginTop: 4, fontSize: 12, color: '#065f46' }}>Mã định danh chủ hàng: <code>OwnerId={depositorPortalData.ownerId}</code> • Cơ chế: Cô lập sổ cái tồn kho theo Chủ hàng (Bất biến số dư)</div>
             </details>
           </div>
         )}

@@ -7,7 +7,8 @@ import {
   Truck, Users, Warehouse, Wrench, Zap,
 } from 'lucide-react';
 import type { ProductionNavItem } from '../config/productionNavigation';
-import type { ActiveImpersonationState } from '../config/portalMode';
+import { CANONICAL_TENANT_DISPLAY_NAME, normalizeTenantDisplayName, type ActiveImpersonationState } from '../config/portalMode';
+import { formatUserDisplayNameVi } from '../services/permissionPresentation';
 
 export const productionIcons: Record<string, LucideIcon> = {
   '/': Home, '/dock-yard': Truck, '/purchase-orders': ShoppingCart, '/asns': Clock,
@@ -76,7 +77,7 @@ export function MainLayoutBanners({
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, minWidth: 0, flex: '1 1 280px' }}>
             <AlertTriangle size={16} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0 }} />
             <span>
-              <strong>Tài khoản doanh nghiệp TENANT-001 (CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO) đang tạm khóa</strong> — Lý do: {suspensionReason}. Dữ liệu tồn kho 9 chiều và sổ cái kế toán được bảo toàn 100%. Vui lòng liên hệ bộ phận Hỗ trợ Quản trị Nền tảng (support@erpkho.vn) để mở khóa lại.
+              <strong>Tài khoản doanh nghiệp TENANT-001 ({CANONICAL_TENANT_DISPLAY_NAME}) đang tạm khóa</strong> — Lý do: {suspensionReason}. Đối soát cân bằng sổ cái tồn kho và dữ liệu kế toán được bảo toàn 100%. Vui lòng liên hệ bộ phận Hỗ trợ Quản trị Nền tảng (support@erpkho.vn) để mở khóa lại.
             </span>
           </span>
           <button
@@ -103,9 +104,7 @@ export function MainLayoutBanners({
               <span>
                 {isTenantSuspended ? 'Đang trong phiên chẩn đoán chỉ đọc (Doanh nghiệp đang tạm khóa)' : 'Đang trong phiên hỗ trợ chỉ đọc'} — Doanh nghiệp:{' '}
                 <strong>{impersonationState.tenantCode || `TENANT-${String(impersonationState.tenantId).padStart(3, '0')}`}</strong> (
-                {!impersonationState.tenantName || impersonationState.tenantName === 'Doanh nghiệp Kho vận ERP_KHO (Tenant 1)'
-                  ? 'CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO'
-                  : impersonationState.tenantName}
+                {normalizeTenantDisplayName(impersonationState.tenantName)}
                 ) • Ticket: <strong>{impersonationState.ticketCode}</strong> •
               </span>
               <span data-testid="impersonation-countdown-timer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#b45309', fontWeight: 700 }}>
@@ -183,14 +182,14 @@ export function MainLayoutTopbar({
           className="topbar-mode-toggle"
           data-testid="wms-complexity-mode-toggle"
           onClick={onToggleComplexityMode}
-          aria-label="Chuyển đổi giữa Chế độ Rút gọn (Express) và Chế độ Đầy đủ (Full WMS)"
-          title="Chuyển đổi giữa Chế độ Rút gọn (Express) và Chế độ Đầy đủ (Full WMS)"
+          aria-label="Chuyển đổi giữa Chế độ Tinh gọn và Gói Quản trị Kho Toàn diện"
+          title="Chuyển đổi giữa Chế độ Tinh gọn và Gói Quản trị Kho Toàn diện"
           style={{ fontSize: 12, padding: '4px 10px', minHeight: 34, whiteSpace: 'nowrap', borderRadius: 6, border: complexityMode === 'EXPRESS' ? '1px solid #1d4ed8' : '1px solid #cbd5e1', background: complexityMode === 'EXPRESS' ? '#eff6ff' : '#f8fafc', color: '#0f172a', fontWeight: 600 }}
         >
           {complexityMode === 'EXPRESS' ? (
-            <><Zap size={14} strokeWidth={2} aria-hidden="true" /> Chế độ Rút gọn (Express)</>
+            <><Zap size={14} strokeWidth={2} aria-hidden="true" /> Chế độ Tinh gọn</>
           ) : (
-            <><Warehouse size={14} strokeWidth={2} aria-hidden="true" /> Chế độ Đầy đủ (Full WMS)</>
+            <><Warehouse size={14} strokeWidth={2} aria-hidden="true" /> Gói Quản trị Kho Toàn diện</>
           )}
         </button>
 
@@ -240,7 +239,7 @@ export function MainLayoutTopbar({
             <span className="runtime-badge ui-readonly-pill" data-testid="topbar-tenant-badge" title="Chi nhánh / Kho làm việc hiện tại">
               {resolvedTenantBadgeLabel}
             </span>
-            <span className="topbar-context-text">{localStorage.getItem('username') || 'Người dùng'}</span>
+            <span className="topbar-context-text">{formatUserDisplayNameVi(localStorage.getItem('username'), localStorage.getItem('role'))}</span>
             <button type="button" onClick={onLogout} title="Đăng xuất" aria-label="Đăng xuất" className="logout-button topbar-logout-btn">
               <LogOut size={16} aria-hidden="true" />
               <span>Đăng xuất</span>

@@ -1,5 +1,7 @@
 import React from 'react';
+import { formatMinLengthCounterVi } from '../../services/permissionPresentation';
 import { UiBadge, UiCard } from '../../ui/ProductionUi';
+import { normalizeTenantLegalNameVi } from './platformBillingHelpers';
 import type { PlatformTenantItem } from './PlatformTenantsAndQuotaSection';
 
 interface PlatformQuotasUtilizationCardProps {
@@ -55,13 +57,13 @@ export const PlatformQuotasUtilizationCard: React.FC<PlatformQuotasUtilizationCa
           <table className="ui-table" data-testid="platform-quotas-utilization-table">
             <thead>
               <tr>
-                <th>Mã DN &amp; Doanh nghiệp</th>
-                <th>Gói cước hiện tại</th>
-                <th>Hạn mức Kho vận hành</th>
-                <th>Hạn mức Tài khoản nhân sự</th>
-                <th>Hạn mức Sản lượng đơn / tháng</th>
-                <th>Phụ lục hợp đồng</th>
-                <th>Thao tác</th>
+                <th style={{ minWidth: 160 }}>Mã DN &amp; Doanh nghiệp</th>
+                <th style={{ minWidth: 112 }}>Gói cước hiện tại</th>
+                <th style={{ minWidth: 132 }}>Hạn mức Kho vận hành</th>
+                <th style={{ minWidth: 140 }}>Hạn mức Tài khoản nhân sự</th>
+                <th style={{ minWidth: 160 }}>Hạn mức Sản lượng đơn / tháng</th>
+                <th style={{ minWidth: 112 }}>Phụ lục hợp đồng</th>
+                <th style={{ minWidth: 120 }}>Thao tác</th>
               </tr>
             </thead>
             <tbody>
@@ -73,12 +75,16 @@ export const PlatformQuotasUtilizationCard: React.FC<PlatformQuotasUtilizationCa
                 const usrPct = Math.min(100, Math.round((rowUsedUsr / Math.max(1, t.maxUsers)) * 100));
                 const rawOrdPct = (t.currentMonthOrderCount / Math.max(1, t.monthlyOrderQuota)) * 100;
                 const orderPctDisplay = rawOrdPct.toLocaleString('vi-VN', { maximumFractionDigits: 1 });
-                const planLabelVi = t.planCode.toUpperCase() === 'ENTERPRISE' ? 'Gói Doanh nghiệp' : 'Gói Tăng trưởng';
+                const planCodeUpper = t.planCode.toUpperCase();
+                const planLabelVi =
+                  planCodeUpper === 'ENTERPRISE' || planCodeUpper === 'FULL_WMS'
+                    ? 'Gói Quản trị Kho Toàn diện'
+                    : 'Gói Tăng trưởng';
                 return (
                   <tr key={t.tenantId} data-testid={`platform-quota-row-${t.tenantId}`}>
                     <td>
-                      <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{t.tenantCode}</div>
-                      <div style={{ fontSize: 12, color: '#475569' }}>{t.companyName}</div>
+                      <div className="ui-code" style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{t.tenantCode}</div>
+                      <div style={{ fontSize: 12, color: '#475569' }}>{normalizeTenantLegalNameVi(t.companyName, t.tenantId, t.tenantCode)}</div>
                     </td>
                     <td className="cell-nowrap"><UiBadge tone="info">{planLabelVi}</UiBadge></td>
                     <td style={{ fontVariantNumeric: 'tabular-nums', minWidth: 145 }}>
@@ -117,7 +123,7 @@ export const PlatformQuotasUtilizationCard: React.FC<PlatformQuotasUtilizationCa
 
       {activeQuotaTarget && !hasDrawerOpen ? (
         <UiCard
-          title={`Điều chỉnh hạn ngạch tài nguyên — ${activeQuotaTarget.tenantCode} (${activeQuotaTarget.companyName})`}
+          title={`Điều chỉnh hạn ngạch tài nguyên — ${activeQuotaTarget.tenantCode} (${normalizeTenantLegalNameVi(activeQuotaTarget.companyName, activeQuotaTarget.tenantId, activeQuotaTarget.tenantCode)})`}
           subtitle="So sánh trực quan hạn mức Trước / Sau và chặn hạ hạn mức thấp hơn mức đang sử dụng thực tế"
         >
           <form onSubmit={onQuotaSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
@@ -134,8 +140,13 @@ export const PlatformQuotasUtilizationCard: React.FC<PlatformQuotasUtilizationCa
               <input id="inline-quota-users" type="number" data-testid="input-quota-max-users" value={quotaUsers} onChange={(e) => setQuotaUsers(Number(e.target.value) || 0)} />
             </div>
             <div className="platform-form-field">
-              <label htmlFor="inline-quota-reason">Lý do điều chỉnh bắt buộc (tối thiểu 10 ký tự)</label>
-              <input id="inline-quota-reason" type="text" data-testid="input-quota-reason" placeholder="Nhập lý do điều chỉnh hạn mức (tối thiểu 10 ký tự)..." value={quotaReason} onChange={(e) => setQuotaReason(e.target.value)} />
+              <label htmlFor="inline-quota-reason" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
+                <span>Lý do điều chỉnh</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: quotaReason.trim().length >= 10 ? '#047857' : '#64748b' }}>
+                  {formatMinLengthCounterVi(quotaReason.trim().length, 10)}
+                </span>
+              </label>
+              <input id="inline-quota-reason" type="text" data-testid="input-quota-reason" placeholder="Nhập lý do điều chỉnh hạn mức..." value={quotaReason} onChange={(e) => setQuotaReason(e.target.value)} />
             </div>
             <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
               <button type="submit" className="platform-btn platform-btn-primary" data-testid="btn-override-quota" disabled={!canWriteQuota || submittingQuota || isBelowUsage || quotaReason.trim().length < 10}>

@@ -133,7 +133,7 @@ export const ReconciliationGovernanceCards: React.FC<ReconciliationGovernanceCar
                 })
                 .catch(() => {
                   setSiteReadinessVerdict(null);
-                  setError('Không thể kiểm định sẵn sàng Mở/Đóng kho và đồng bộ Outbox.');
+                  setError('Không thể kiểm định sẵn sàng Mở/Đóng kho và Hàng đợi đồng bộ đối tác.');
                 });
             }}
           >
@@ -150,12 +150,17 @@ export const ReconciliationGovernanceCards: React.FC<ReconciliationGovernanceCar
                 .then((res) => {
                   const data = (res as { data?: { message?: string } } | undefined)?.data;
                   setRebuildNotice(
-                    (data?.message ? data.message.replace(/Bucket-aware Rebuild/gi, 'Bảo toàn tổng số dư') : '') ||
-                      'Đã tái tính & đồng bộ tồn kho chuẩn 9 chiều từ Sổ cái bất biến (Bảo toàn tổng số dư • Δ = 0)',
+                    (data?.message
+                      ? data.message
+                          .replace(/Bucket-aware Rebuild/gi, 'Bảo toàn tổng số dư')
+                          .replace(/Outbox/gi, 'Hàng đợi đồng bộ đối tác')
+                          .replace(/chuẩn 9 chiều|sổ cái 9 chiều|9 chiều/gi, 'cân bằng sổ cái tồn kho')
+                      : '') ||
+                      'Đã tái tính & thực hiện Đối soát cân bằng sổ cái tồn kho từ Sổ cái bất biến (Bảo toàn tổng số dư • Δ = 0)',
                   );
                 })
                 .catch(() => {
-                  setRebuildNotice('Đã tái tính & đồng bộ tồn kho chuẩn 9 chiều từ Sổ cái bất biến (Bảo toàn tổng số dư • Δ = 0)');
+                  setRebuildNotice('Đã tái tính & thực hiện Đối soát cân bằng sổ cái tồn kho từ Sổ cái bất biến (Bảo toàn tổng số dư • Δ = 0)');
                 });
             }}
           >
@@ -187,11 +192,11 @@ export const ReconciliationGovernanceCards: React.FC<ReconciliationGovernanceCar
           <table className="ui-table-compact" aria-label="Bảng hàng đợi bản tin tích hợp bất đồng bộ">
             <thead>
               <tr>
-                <th>Mã bản tin</th>
-                <th>Loại sự kiện tích hợp</th>
-                <th>Nội dung nghiệp vụ</th>
-                <th>Chứng từ gốc</th>
-                <th>Trạng thái chuyển phát</th>
+                <th style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Mã bản tin</th>
+                <th style={{ minWidth: 160 }}>Loại sự kiện tích hợp</th>
+                <th style={{ minWidth: 160 }}>Nội dung nghiệp vụ</th>
+                <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Chứng từ gốc</th>
+                <th style={{ minWidth: 140, whiteSpace: 'nowrap' }}>Trạng thái chuyển phát</th>
               </tr>
             </thead>
             <tbody>
@@ -202,10 +207,10 @@ export const ReconciliationGovernanceCards: React.FC<ReconciliationGovernanceCar
               ) : (
                 outboxMessages.map((msg) => (
                   <tr key={msg.messageId}>
-                    <td><code>{msg.messageId}</code></td>
+                    <td><code className="ui-code" style={{ whiteSpace: 'nowrap' }}>{msg.messageId}</code></td>
                     <td><strong>{msg.eventType}</strong></td>
                     <td>{msg.channelLabel}</td>
-                    <td><strong>{msg.referenceCode}</strong></td>
+                    <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{msg.referenceCode}</strong></td>
                     <td><UiBadge tone="success">{msg.deliveryStatus}</UiBadge></td>
                   </tr>
                 ))

@@ -11,7 +11,7 @@ import {
   type AsnOption, type Discrepancy, type ImportReceipt, type ImportReceiptDetail, type MacPreviewLine,
   type Partner, type PoOption, type Product, type ReasonCode, type ReceiptDetailForm, type ReceiveLineForm,
   type ResolutionForm, type Warehouse, type WarehouseLocationItem,
-  buildWorkflowPayloadAndValidate, nextShortReceiptCode,
+  buildWorkflowPayloadAndValidate, checkCompactViewport, nextShortReceiptCode,
 } from '../modules/inbound/ImportReceiptTypes';
 import { ImportReceiptScannerSection, ImportReceiptWorkspaceTabs } from '../modules/inbound/ImportReceiptScannerAndCreateSection';
 import { ImportReceiptCreateFormCard } from '../modules/inbound/ImportReceiptCreateFormCard';
@@ -43,6 +43,19 @@ const ImportReceipts = () => {
   const [error, setError] = useState(''), [successMsg, setSuccessMsg] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'receipts' | 'scanner' | 'rma'>('receipts');
+  const [isCompactViewport, setIsCompactViewport] = useState<boolean>(() => checkCompactViewport(640));
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const syncViewport = () => setIsCompactViewport(checkCompactViewport(640));
+    const mq = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 640px)') : null;
+    window.addEventListener('resize', syncViewport);
+    mq?.addEventListener?.('change', syncViewport);
+    return () => {
+      window.removeEventListener('resize', syncViewport);
+      mq?.removeEventListener?.('change', syncViewport);
+    };
+  }, []);
   const [selectedReceipt, setSelectedReceipt] = useState<ImportReceipt | null>(null);
   const [receiveLines, setReceiveLines] = useState<Record<number, ReceiveLineForm>>({});
   const [qcExcludedLines, setQcExcludedLines] = useState<number[]>([]);
@@ -319,25 +332,61 @@ const ImportReceipts = () => {
   return (
     <UiPage>
       <div className="import-receipts" style={{ minWidth: 0, maxWidth: '100%' }}>
-        <UiPageHeader
-          eyebrow="Nhập kho"
-          title="Quản lý nhập kho"
-          description="Tạo và theo dõi phiếu nhập từ nhận hàng, xử lý sai lệch, kiểm tra chất lượng đến ghi nhận tồn kho."
-          actions={
-            canCreate && activeWorkspaceTab === 'receipts' ? (
-              <button type="button" data-testid="btn-header-toggle-create-import" className="ui-btn ui-btn-primary" onClick={() => { if (!showCreateForm && !code.trim()) setCode(nextShortReceiptCode(receipts)); setShowCreateForm(v => !v); }} style={{ background: '#1d4ed8', color: '#ffffff', borderColor: '#1d4ed8', fontWeight: 600 }}>
-                {showCreateForm ? 'Thu gọn biểu mẫu' : '+ Tạo phiếu nhập'}
+        <style>{`@media (max-width: 768px) { .import-receipts .ui-mobile-card-list { display: grid !important; } .import-receipts .ui-desktop-table-wrap { display: none !important; } .import-receipts .import-row-actions-mobile { flex-wrap: nowrap !important; } .import-receipts .import-compact-bar input, .import-receipts .import-compact-bar button { min-height: 40px !important; height: 40px !important; } .import-receipts .import-compact-header button { min-height: 36px !important; height: 36px !important; } }`}</style>
+        {isCompactViewport ? (
+          <div className="import-compact-header no-print" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6, padding: 0, margin: '0 0 6px 0' }}>
+            <h1 style={{ margin: 0, fontSize: 16, fontWeight: 700, lineHeight: 1.25, color: '#0f172a', whiteSpace: 'normal' }}>
+              Quản lý nhập kho
+            </h1>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <button
+                type="button"
+                data-testid="tab-import-scanner"
+                className="ui-btn ui-btn-secondary"
+                onClick={() => setActiveWorkspaceTab(activeWorkspaceTab === 'scanner' ? 'receipts' : 'scanner')}
+                style={{ padding: '0 10px', height: 36, minHeight: 36, fontSize: 12.5, whiteSpace: 'nowrap' }}
+              >
+                {activeWorkspaceTab === 'scanner' ? `Danh sách (${receipts.length})` : 'Trạm quét'}
               </button>
-            ) : undefined
-          }
-        />
+              {canCreate && activeWorkspaceTab === 'receipts' && (
+                <button
+                  type="button"
+                  data-testid="btn-header-toggle-create-import"
+                  className="ui-btn ui-btn-primary"
+                  onClick={() => {
+                    if (!showCreateForm && !code.trim()) setCode(nextShortReceiptCode(receipts));
+                    setShowCreateForm(v => !v);
+                  }}
+                  style={{ padding: '0 10px', height: 36, minHeight: 36, fontSize: 12.5, fontWeight: 600, background: '#1d4ed8', color: '#ffffff', borderColor: '#1d4ed8', whiteSpace: 'nowrap' }}
+                >
+                  {showCreateForm ? 'Thu gọn' : '+ Tạo phiếu'}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <UiPageHeader
+            eyebrow="Nhập kho"
+            title="Quản lý nhập kho"
+            description="Tạo và theo dõi phiếu nhập từ nhận hàng, xử lý sai lệch, kiểm tra chất lượng đến ghi nhận tồn kho."
+            actions={
+              canCreate && activeWorkspaceTab === 'receipts' ? (
+                <button type="button" data-testid="btn-header-toggle-create-import" className="ui-btn ui-btn-primary" onClick={() => { if (!showCreateForm && !code.trim()) setCode(nextShortReceiptCode(receipts)); setShowCreateForm(v => !v); }} style={{ background: '#1d4ed8', color: '#ffffff', borderColor: '#1d4ed8', fontWeight: 600 }}>
+                  {showCreateForm ? 'Thu gọn biểu mẫu' : '+ Tạo phiếu nhập'}
+                </button>
+              ) : undefined
+            }
+          />
+        )}
 
         {error && <p role="alert">{error}</p>}
         {successMsg && !successMsg.includes('RMA') && !successMsg.includes('hàng hoàn trả') && !successMsg.includes('hậu cần thu hồi') && (
-          <div role="status" className="ui-success-text" style={{ marginTop: 8, padding: '10px 14px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#065f46', fontSize: 13, fontWeight: 500 }}>{successMsg}</div>
+          <div role="status" className="ui-success-text" style={{ marginTop: 6, padding: '8px 12px', borderRadius: 8, border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#065f46', fontSize: 13, fontWeight: 500 }}>{successMsg}</div>
         )}
 
-        <ImportReceiptWorkspaceTabs activeWorkspaceTab={activeWorkspaceTab} setActiveWorkspaceTab={setActiveWorkspaceTab} receiptsCount={receipts.length} setReceivingWorkspaceNotice={setReceivingWorkspaceNotice} setReceivingConfirmedSignature={setReceivingConfirmedSignature} />
+        {!isCompactViewport && (
+          <ImportReceiptWorkspaceTabs activeWorkspaceTab={activeWorkspaceTab} setActiveWorkspaceTab={setActiveWorkspaceTab} receiptsCount={receipts.length} setReceivingWorkspaceNotice={setReceivingWorkspaceNotice} setReceivingConfirmedSignature={setReceivingConfirmedSignature} />
+        )}
 
         <ImportReceiptScannerSection
           scannerContainerRef={scannerContainerRef} activeWorkspaceTab={activeWorkspaceTab} warehouseId={warehouseId} warehouses={warehouses} receipts={receipts} creating={creating} workflowId={workflowId}
@@ -348,9 +397,9 @@ const ImportReceipts = () => {
           selectedReceipt={selectedReceipt} setSelectedReceipt={setSelectedReceipt} handleViewDetails={handleViewDetails} focusScannerInput={focusScannerInput} setError={setError}
         />
 
-        <div className="no-print" style={activeWorkspaceTab === 'receipts' ? { display: 'flex', flexDirection: 'column', gap: 16 } : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }}>
-          <ImportReceiptKpiCard receipts={receipts} />
-          {canCreate && (
+        <div className="no-print" style={activeWorkspaceTab === 'receipts' ? { display: 'flex', flexDirection: 'column', gap: isCompactViewport ? 6 : 16 } : { display: 'none' }}>
+          {!isCompactViewport && <ImportReceiptKpiCard receipts={receipts} />}
+          {canCreate && (!isCompactViewport || showCreateForm) && (
             <ImportReceiptCreateFormCard
               showCreateForm={showCreateForm} setShowCreateForm={setShowCreateForm} code={code} setCode={setCode} warehouseId={warehouseId} setWarehouseId={setWarehouseId} note={note} setNote={setNote}
               supplierId={supplierId} setSupplierId={setSupplierId} purchaseOrderId={purchaseOrderId} setPurchaseOrderId={setPurchaseOrderId} asnId={asnId} setAsnId={setAsnId} details={details} setDetails={setDetails}

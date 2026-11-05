@@ -22,6 +22,7 @@ public sealed partial class PlatformControlCenterController
             .Take(100)
             .ToListAsync(ct);
 
+        var saasTenantsById = await db.SaasTenants.AsNoTracking().ToDictionaryAsync(t => t.TenantId, ct);
         var (bankCode, bankName, bankBin, accountNo, accountName, displayAccountVi) = ResolveVietQrBeneficiary();
 
         var invoices = rawInvoices.Select(i =>
@@ -46,9 +47,9 @@ public sealed partial class PlatformControlCenterController
             var creditCarryoverVnd = manualSnap?.CreditCarryoverVnd ?? 0m;
             var varianceStatus = manualSnap?.VarianceStatus ?? (isPaid ? "EXACT_MATCH" : (isPartial ? "PARTIAL_PAYMENT" : "UNPAID"));
             var issuedDateDisplayVi = issuedAtUtc.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
-            var buyerLegalName = !string.IsNullOrWhiteSpace(i.BuyerLegalName)
-                ? i.BuyerLegalName
-                : SaasBillingService.NormalizeTenantLegalName(i.TenantId, null);
+            saasTenantsById.TryGetValue(i.TenantId, out var invTenant);
+            var buyerLegalName = SaasBillingService.NormalizeInvoiceBuyerLegalName(i.TenantId, i.BuyerLegalName, invTenant?.CompanyName, invTenant?.TenantName);
+            var buyerTaxCode = SaasBillingService.NormalizeInvoiceBuyerTaxCode(i.TenantId, i.BuyerTaxCode, i.BuyerLegalName, invTenant?.TaxCode, invTenant?.CompanyName, invTenant?.TenantName);
 
             return new
             {
@@ -78,7 +79,7 @@ public sealed partial class PlatformControlCenterController
                 remainingAmountVnd,
                 creditCarryoverVnd,
                 varianceStatus,
-                buyerTaxCode = i.BuyerTaxCode ?? string.Empty,
+                buyerTaxCode,
                 buyerLegalName,
                 paymentProvider = i.PaymentProvider,
                 status = i.Status,
@@ -104,6 +105,7 @@ public sealed partial class PlatformControlCenterController
                 beneficiaryAccountNumber = accountNo,
                 beneficiaryAccountName = accountName,
                 displayAccountVi,
+                transferContent = SaasBillingService.BuildVietQrTransferContent(i.InvoiceCode),
                 createdAtUtc = issuedAtUtc,
                 issuedAtUtc,
                 issuedDateDisplayVi,
@@ -125,19 +127,33 @@ public sealed partial class PlatformControlCenterController
         var novSnap = novInv is not null ? SaasBillingService.GetManualReconcileSnapshot(db, novInv.Id) : null;
         var currentActorUsername = ResolveActorUsername();
 
-        var activePlatformUsers = await db.Users.IgnoreQueryFilters().AsNoTracking()
+        var rawPlatformUsers = await db.Users.IgnoreQueryFilters().AsNoTracking()
             .Include(u => u.Role)
             .Where(u => u.IsActive && u.SecurityDomain == "PLATFORM" && u.Username != currentActorUsername)
             .OrderBy(u => u.Id)
             .Take(10)
             .Select(u => new
             {
-                username = u.Username,
-                fullName = u.FullName,
-                roleTitleVi = u.Role != null ? u.Role.RoleName : "PlatformOperator",
-                displayLabelVi = string.IsNullOrWhiteSpace(u.FullName) ? u.Username : $"{u.FullName} ({u.Username})"
+                u.Username,
+                u.FullName,
+                u.RoleId,
+                RoleName = u.Role != null ? u.Role.RoleName : null
             })
             .ToListAsync(ct);
+
+        var activePlatformUsers = rawPlatformUsers
+            .Select(u =>
+            {
+                var humanLabel = FormatPlatformAdminActorDisplay(u.Username, u.FullName, u.RoleName, u.RoleId);
+                return new
+                {
+                    username = u.Username,
+                    fullName = humanLabel,
+                    roleTitleVi = u.RoleName ?? "PlatformOperator",
+                    displayLabelVi = humanLabel
+                };
+            })
+            .ToList();
 
         var subs = await db.TenantSubscriptions.IgnoreQueryFilters().AsNoTracking().ToListAsync(ct);
         var mrrGross = subs.Where(s => s.Status is "ACTIVE" or "TRIAL" or "GRACE")
@@ -159,7 +175,7 @@ public sealed partial class PlatformControlCenterController
             currentCyclePaid = isCurrentCyclePaid,
             currentCycleSettlementBannerVi = isCurrentCyclePaid && novInv is not null
                 ? (novSnap?.OwnerAuditStampVi
-                    ?? $"Hóa đơn kỳ 11/2026 ({novInv.InvoiceCode}) đã tất toán đầy đủ ({novInv.AmountVnd:N0} đ)")
+                    ?? $"Hóa đơn kỳ 11/2026 ({novInv.InvoiceCode}) đã tất toán đầy đủ ({novInv.AmountVnd:N0} ₫)")
                 : null,
             currentActorUsername,
             independentApprovers = activePlatformUsers,

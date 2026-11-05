@@ -170,7 +170,7 @@ describe('quyền độc lập trên phiếu nhập', () => {
     await view.findByText('QA_RECEIPT');
     fireEvent.click(view.getByText('Chi tiết'));
     expect(await view.findByText('SP-MASK-01')).toBeTruthy();
-    expect(view.getAllByText('Ẩn theo phân quyền').length).toBeGreaterThanOrEqual(2);
+    expect(view.getAllByText('Ẩn theo quyền').length).toBeGreaterThanOrEqual(2);
 
     expect(view.getByTestId('tab-import-receipts').textContent).toContain('Danh sách phiếu nhập (1)');
     expect(view.getByTestId('tab-import-scanner').textContent).toBe('Trạm quét nhận hàng');

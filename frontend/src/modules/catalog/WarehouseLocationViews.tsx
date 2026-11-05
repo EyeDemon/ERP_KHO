@@ -41,18 +41,18 @@ export function WarehouseLocationCapacityAndSystemSection({
                 <table aria-label="Sức chứa vị trí kho thật" className="ui-table-compact">
                   <thead>
                     <tr>
-                      <th>Vị trí</th>
-                      <th>Phân lớp lưu trữ</th>
-                      <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Trọng lượng</th>
-                      <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Thể tích</th>
-                      <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Quy đổi Pallet</th>
-                      <th>Trạng thái</th>
+                      <th style={{ minWidth: 110 }}>Vị trí</th>
+                      <th style={{ minWidth: 125 }}>Phân lớp lưu trữ</th>
+                      <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 110, whiteSpace: 'nowrap' }}>Trọng lượng</th>
+                      <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 105, whiteSpace: 'nowrap' }}>Thể tích</th>
+                      <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 115, whiteSpace: 'nowrap' }}>Quy đổi Pallet</th>
+                      <th style={{ minWidth: 105, whiteSpace: 'nowrap' }}>Trạng thái</th>
                     </tr>
                   </thead>
                   <tbody>
                     {capacities.map(item => (
                       <tr key={item.locationId}>
-                        <td><strong style={{ whiteSpace: 'nowrap' }}>{item.code}</strong><br /><small>{item.structurePath?.split('/').join(' / ') || item.name}</small></td>
+                        <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.code}</strong><br /><small>{item.structurePath?.split('/').join(' / ') || item.name}</small></td>
                         <td>{item.storageClass === 'AMBIENT' ? 'Nhiệt độ thường' : item.storageClass || 'Không giới hạn phân lớp'}</td>
                         <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{capacityUsage(item.usedWeightKg, item.maxWeightKg, 'kg')}</td>
                         <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{capacityUsage(item.usedVolumeM3, item.maxVolumeM3, 'm³')}</td>
@@ -73,13 +73,13 @@ export function WarehouseLocationCapacityAndSystemSection({
               <table aria-label="Danh sách vị trí kho thật" className="ui-table-compact">
                 <thead>
                   <tr>
-                    <th>Mã</th>
-                    <th>Tên</th>
-                    <th>Đường dẫn cấu trúc</th>
-                    <th>Loại</th>
-                    <th>Trạng thái</th>
-                    <th>Lấy hàng</th>
-                    {canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}
+                    <th style={{ minWidth: 88, whiteSpace: 'nowrap' }}>Mã vị trí</th>
+                    <th style={{ minWidth: 120 }}>Tên vị trí</th>
+                    <th style={{ minWidth: 150 }}>Đường dẫn cấu trúc</th>
+                    <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Phân loại</th>
+                    <th style={{ minWidth: 105, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                    <th style={{ minWidth: 88, whiteSpace: 'nowrap' }}>Lấy hàng</th>
+                    {canManage && <th style={{ minWidth: 84, whiteSpace: 'nowrap' }}>Thao tác</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -87,7 +87,7 @@ export function WarehouseLocationCapacityAndSystemSection({
                     const status = locationStatus(location);
                     return (
                       <tr key={location.id}>
-                        <td><strong style={{ whiteSpace: 'nowrap' }}>{location.code}</strong>{location.isSystemManaged && <><br /><small>Hệ thống quản lý</small></>}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{location.code}</strong>{location.isSystemManaged && <><br /><small>Hệ thống quản lý</small></>}</td>
                         <td>{location.name.replace(/\s*\(RMA\)/gi, '')}</td>
                         <td>{splitStructurePath(location.structurePath)?.join(' / ') || '—'}</td>
                         <td>{locationTypeLabels[location.locationType] || location.locationType}</td>
@@ -118,17 +118,17 @@ export function WarehouseLocationCapacityAndSystemSection({
               <table aria-label="Vị trí hệ thống thật" className="ui-table-compact">
                 <thead>
                   <tr>
-                    <th>Mã</th>
-                    <th>Tên</th>
-                    <th>Loại</th>
-                    <th>Nhận hàng</th>
-                    <th>Lấy hàng</th>
+                    <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Mã vị trí</th>
+                    <th style={{ minWidth: 145 }}>Tên vị trí</th>
+                    <th style={{ minWidth: 115 }}>Phân loại</th>
+                    <th style={{ minWidth: 92, whiteSpace: 'nowrap' }}>Nhận hàng</th>
+                    <th style={{ minWidth: 88, whiteSpace: 'nowrap' }}>Lấy hàng</th>
                   </tr>
                 </thead>
                 <tbody>
                   {systemLocations.map(location => (
                     <tr key={location.id}>
-                      <td style={{ whiteSpace: 'nowrap' }}><strong>{location.code}</strong></td>
+                      <td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{location.code}</strong></td>
                       <td>{location.name.replace(/\s*\(RMA\)/gi, '')}</td>
                       <td>{locationTypeLabels[location.locationType] || location.locationType}</td>
                       <td>{location.isReceivable ? 'Có' : 'Không'}</td>

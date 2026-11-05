@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using ERP.Api.Authorization;
 using ERP.Infrastructure.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -57,8 +56,13 @@ public sealed partial class PlatformControlCenterController
         var arrGrossWithVatVnd = decimal.Round(mrrGrossWithVatVnd * 12m, 2, MidpointRounding.AwayFromZero);
         var expiringSoonTenantsCount = subs.Count(s => s.CurrentPeriodEndUtc >= now && s.CurrentPeriodEndUtc <= now.AddDays(7));
 
+        var primaryTenantEntity = tenants.FirstOrDefault(t => t.TenantId == 1);
+        var primaryTenantLegalName = SaasBillingService.NormalizeTenantLegalName(1, primaryTenantEntity?.CompanyName, primaryTenantEntity?.TenantName);
+
         var tenantUtilizations = allTenantIds.Select(tid =>
         {
+            var tenantEntity = tenants.FirstOrDefault(t => t.TenantId == tid);
+            var tenantLegalName = SaasBillingService.NormalizeTenantLegalName(tid, tenantEntity?.CompanyName, tenantEntity?.TenantName);
             subByTenant.TryGetValue(tid, out var sub);
             var spec = SaasBillingService.ResolvePlanSpec(sub?.PlanCode);
             var maxWarehouses = sub?.MaxWarehouses is > 0 ? sub.MaxWarehouses : spec.MaxWarehouses;
@@ -73,16 +77,23 @@ public sealed partial class PlatformControlCenterController
             var orderPct = monthlyOrderLimit > 0 ? Math.Round((currentMonthOrders * 100m) / monthlyOrderLimit, 1) : 0m;
             var maxPct = Math.Max(warehousePct, Math.Max(userPct, orderPct));
             var dominantVi = maxPct == orderPct ? "sản lượng đơn" : (maxPct == warehousePct ? "giới hạn kho" : "giới hạn nhân sự");
-            return new { TenantCode = $"TENANT-{tid:D3}", MaxPct = maxPct, DominantDimensionVi = dominantVi };
+            return new
+            {
+                TenantCode = $"TENANT-{tid:D3}",
+                TenantDisplayLabel = $"TENANT-{tid:D3} — {tenantLegalName}",
+                MaxPct = maxPct,
+                DominantDimensionVi = dominantVi
+            };
         }).ToList();
 
         var highQuotaUsageTenantsCount = tenantUtilizations.Count(u => u.MaxPct >= 80m);
         var topTenantUsage = tenantUtilizations.OrderByDescending(u => u.MaxPct).FirstOrDefault();
         var highestResourceUtilizationPct = topTenantUsage?.MaxPct ?? 0m;
         var highestPctVi = highestResourceUtilizationPct.ToString("0.#", CultureInfo.GetCultureInfo("vi-VN"));
+        var topTenantLabel = topTenantUsage?.TenantDisplayLabel ?? $"TENANT-001 — {primaryTenantLegalName}";
         var highestResourceSummaryVi = highQuotaUsageTenantsCount > 0
-            ? $"Có {highQuotaUsageTenantsCount} doanh nghiệp chạm ngưỡng ≥ 80% tài nguyên (cao nhất: {highestPctVi}%)"
-            : $"Cao nhất hiện tại: {highestPctVi}% {topTenantUsage?.DominantDimensionVi ?? "sản lượng đơn"} ({topTenantUsage?.TenantCode ?? "TENANT-001"})";
+            ? $"Có {highQuotaUsageTenantsCount} doanh nghiệp chạm ngưỡng ≥ 80% tài nguyên (cao nhất: {highestPctVi}% • {topTenantLabel})"
+            : $"Cao nhất hiện tại: {highestPctVi}% {topTenantUsage?.DominantDimensionVi ?? "sản lượng đơn"} ({topTenantLabel})";
 
         var totalTenantCount = Math.Max(1, Math.Max(tenants.Count, subs.Select(s => s.TenantId).Distinct().Count()));
         var unpaidInvoiceDueLabelVi = BuildUnpaidDueLabelVi(unpaidInvoicesCount);
@@ -92,6 +103,8 @@ public sealed partial class PlatformControlCenterController
         return Ok(new
         {
             securityDomain = "PLATFORM",
+            primaryTenantCode = "TENANT-001",
+            primaryTenantLegalName,
             totalTenants = totalTenantCount,
             activeTenants = tenants.Count > 0 ? tenants.Count(t => t.LifecycleStatus is "ACTIVE" or "TRIAL") : totalTenantCount,
             suspendedTenants = tenants.Count(t => t.LifecycleStatus == "SUSPENDED"),
@@ -167,183 +180,5 @@ public sealed partial class PlatformControlCenterController
         }
 
         return $"Hạn thanh toán: {dueDateVi} (Quá hạn {Math.Max(1, (int)Math.Ceiling((nowLocal - dueEndOfDayLocal).TotalDays))} ngày)";
-    }
-
-    private async Task<IReadOnlyList<PlatformDashboardEventDto>> BuildRecentPlatformEventsAsync(CancellationToken ct)
-    {
-        var auditRows = await db.AuditLogs
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .Where(a => a.SecurityDomain == "PLATFORM"
-                     || a.Action.StartsWith("PLATFORM_")
-                     || a.EntityName == "SaasTenant"
-                     || a.EntityName == "SaasBillingInvoice"
-                     || a.EntityName == "TenantSubscription"
-                     || a.EntityName == "SupportImpersonationSession"
-                     || a.EntityName == "IntegrationOutboxBatch")
-            .OrderByDescending(a => a.Timestamp)
-            .ThenByDescending(a => a.Id)
-            .Take(8)
-            .ToListAsync(ct);
-
-        var actorIds = auditRows.Where(a => a.UserId is > 0).Select(a => a.UserId!.Value).Distinct().ToList();
-        var userRows = actorIds.Count > 0
-            ? await db.Users.IgnoreQueryFilters().AsNoTracking().Where(u => actorIds.Contains(u.Id))
-                .Select(u => new { u.Id, u.Username, u.FullName, u.RoleId }).ToListAsync(ct)
-            : [];
-        var roleNames = userRows.Count > 0 ? await db.Roles.AsNoTracking().ToDictionaryAsync(r => r.Id, r => (string?)r.RoleName, ct) : [];
-        var usersById = userRows.ToDictionary(u => u.Id, u => (u.Username, u.FullName, u.RoleId, RoleName: roleNames.GetValueOrDefault(u.RoleId)));
-
-        var coveredPaidInvoiceIds = new HashSet<int>();
-        var coveredPaidInvoiceCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var events = new List<PlatformDashboardEventDto>(8);
-        foreach (var row in auditRows)
-        {
-            var tsUtc = row.Timestamp.Kind == DateTimeKind.Utc ? row.Timestamp : DateTime.SpecifyKind(row.Timestamp, DateTimeKind.Utc);
-            var action = (row.Action ?? string.Empty).Trim();
-            var entityName = (row.EntityName ?? string.Empty).Trim();
-            var (jsonActor, jsonTarget, jsonStatus, jsonSummary) = ParseDashboardAuditJson(row.NewValues);
-            if (action == "PLATFORM_BILLING_MANUAL_RECONCILE")
-            {
-                if (row.EntityId is > 0) coveredPaidInvoiceIds.Add(row.EntityId.Value);
-                if (!string.IsNullOrWhiteSpace(jsonTarget)) coveredPaidInvoiceCodes.Add(jsonTarget.Trim());
-            }
-
-            string? resolvedUsername = jsonActor;
-            string? resolvedFullName = null;
-            string? resolvedRoleName = null;
-            int? resolvedRoleId = null;
-            if (row.UserId.HasValue && usersById.TryGetValue(row.UserId.Value, out var uInfo))
-            {
-                resolvedUsername ??= uInfo.Username;
-                resolvedFullName = uInfo.FullName;
-                resolvedRoleId = uInfo.RoleId;
-                resolvedRoleName = uInfo.RoleName;
-            }
-
-            var targetCode = !string.IsNullOrWhiteSpace(jsonTarget)
-                ? jsonTarget.Trim()
-                : entityName is "SaasTenant" or "TenantSubscription"
-                    ? $"TENANT-{(row.EntityId is > 0 ? row.EntityId.Value : row.TenantId):D3}"
-                    : $"{entityName}#{(row.EntityId ?? row.Id)}";
-
-            var (eventTypeCode, eventLabelVi, tone) = MapPlatformEventPresentation(action, entityName, jsonStatus, row.Result);
-            var summaryVi = !string.IsNullOrWhiteSpace(jsonSummary)
-                ? jsonSummary.Trim()
-                : (!string.IsNullOrWhiteSpace(row.Reason) ? row.Reason.Trim() : $"{eventLabelVi} trên {targetCode}");
-
-            events.Add(new PlatformDashboardEventDto(
-                id: $"AUD-{row.Id}",
-                timestampUtc: tsUtc,
-                timestampVi: ConvertUtcToVietnamLocal(tsUtc).ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture),
-                eventTypeCode: eventTypeCode,
-                eventLabelVi: eventLabelVi,
-                targetCode: targetCode,
-                actorDisplay: FormatPlatformAdminActorDisplay(resolvedUsername, resolvedFullName, resolvedRoleName, resolvedRoleId),
-                summaryVi: summaryVi,
-                tone: tone));
-        }
-
-        if (events.Count < 5)
-        {
-            var recentInvoices = await db.SaasBillingInvoices.IgnoreQueryFilters().AsNoTracking()
-                .OrderByDescending(i => i.CreatedAtUtc)
-                .Take(5)
-                .ToListAsync(ct);
-            foreach (var inv in recentInvoices)
-            {
-                var isPaid = string.Equals(inv.Status, "PAID", StringComparison.OrdinalIgnoreCase);
-                if (isPaid && (coveredPaidInvoiceIds.Contains(inv.Id) || coveredPaidInvoiceCodes.Contains(inv.InvoiceCode)))
-                {
-                    continue;
-                }
-
-                var milestoneUtc = DateTime.SpecifyKind(isPaid ? (inv.PaidAtUtc ?? inv.CreatedAtUtc) : inv.CreatedAtUtc, DateTimeKind.Utc);
-                events.Add(new PlatformDashboardEventDto(
-                    id: $"INV-{inv.Id}",
-                    timestampUtc: milestoneUtc,
-                    timestampVi: ConvertUtcToVietnamLocal(milestoneUtc).ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture),
-                    eventTypeCode: isPaid ? "BILLING_INVOICE_PAID" : "BILLING_INVOICE_PENDING",
-                    eventLabelVi: isPaid ? "Đã tất toán hóa đơn thuê bao" : "Phát hành hóa đơn chờ thanh toán",
-                    targetCode: inv.InvoiceCode,
-                    actorDisplay: isPaid ? "Hệ thống Thanh toán VietQR" : "Hệ thống Cước phí SaaS",
-                    summaryVi: isPaid ? $"Hóa đơn {inv.InvoiceCode} đã tất toán ({inv.AmountVnd:N0} đ)" : $"Hóa đơn {inv.InvoiceCode} chờ thanh toán ({inv.AmountVnd:N0} đ)",
-                    tone: isPaid ? "success" : "warning"));
-            }
-        }
-
-        return events.OrderByDescending(e => e.timestampUtc).Take(8).ToList();
-    }
-
-    private static (string? Actor, string? Target, string? Status, string? Summary) ParseDashboardAuditJson(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json) || !json.TrimStart().StartsWith('{'))
-        {
-            return (null, null, null, null);
-        }
-
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            var actor = root.TryGetProperty("actorUsername", out var a1) ? a1.GetString()
-                : root.TryGetProperty("startedByUsername", out var a2) ? a2.GetString()
-                : root.TryGetProperty("suspendedBy", out var a3) ? a3.GetString() : null;
-            var target = root.TryGetProperty("invoiceCode", out var t1) ? t1.GetString()
-                : root.TryGetProperty("tenantCode", out var t2) ? t2.GetString()
-                : root.TryGetProperty("sessionId", out var t3) ? t3.GetString() : null;
-            var status = root.TryGetProperty("status", out var s1) ? s1.GetString() : null;
-            var summary = root.TryGetProperty("ownerAuditStampVi", out var m1) ? m1.GetString()
-                : root.TryGetProperty("settlementSummaryVi", out var m2) ? m2.GetString() : null;
-            return (actor, target, status, summary);
-        }
-        catch (JsonException)
-        {
-            return (null, null, null, null);
-        }
-    }
-
-    private static (string Code, string LabelVi, string Tone) MapPlatformEventPresentation(
-        string action, string entityName, string? jsonStatus, string? result) => action switch
-    {
-        "PLATFORM_BILLING_MANUAL_RECONCILE" => ("PLATFORM_BILLING_MANUAL_RECONCILE", "Đối soát thanh toán thủ công", "success"),
-        "PLATFORM_BILLING_RECONCILE_RESET" => ("PLATFORM_BILLING_RECONCILE_RESET", "Đặt lại trạng thái đối soát", "warning"),
-        "PLATFORM_TENANT_QUOTA_UPDATED" => ("PLATFORM_TENANT_QUOTA_UPDATED", "Cập nhật hạn ngạch doanh nghiệp", "info"),
-        "PLATFORM_TENANT_STATUS_CHANGED" => (
-            "PLATFORM_TENANT_STATUS_CHANGED",
-            string.Equals(jsonStatus, "SUSPENDED", StringComparison.OrdinalIgnoreCase) ? "Tạm ngưng doanh nghiệp" : "Cập nhật trạng thái doanh nghiệp",
-            string.Equals(jsonStatus, "SUSPENDED", StringComparison.OrdinalIgnoreCase) ? "danger" : "success"),
-        "PLATFORM_SUPPORT_IMPERSONATION_STARTED" => ("PLATFORM_SUPPORT_IMPERSONATION_STARTED", "Khởi tạo phiên hỗ trợ kỹ thuật", "warning"),
-        "PLATFORM_SUPPORT_IMPERSONATION_STOPPED" => ("PLATFORM_SUPPORT_IMPERSONATION_STOPPED", "Kết thúc phiên hỗ trợ kỹ thuật", "info"),
-        _ when entityName == "IntegrationOutboxBatch" => ("PLATFORM_OUTBOX_BATCH_SYNC", "Đồng bộ hàng đợi tích hợp", "success"),
-        _ => (
-            string.IsNullOrWhiteSpace(action) ? "PLATFORM_AUDIT_EVENT" : action,
-            string.IsNullOrWhiteSpace(action) ? "Sự kiện quản trị nền tảng" : action,
-            string.Equals(result, "Failed", StringComparison.OrdinalIgnoreCase) ? "danger" : "info")
-    };
-
-    private static string FormatPlatformAdminActorDisplay(string? username, string? fullName, string? roleName = null, int? roleId = null)
-    {
-        var cleanUser = (username ?? string.Empty).Trim();
-        var cleanName = (fullName ?? string.Empty).Trim();
-        var isSuperAdmin = roleName is "SuperAdmin" or "PlatformSuperAdmin"
-            || (roleId == 1 && (string.IsNullOrWhiteSpace(roleName) || cleanName == "Quản trị viên Hệ thống"));
-        if (isSuperAdmin && !string.IsNullOrWhiteSpace(cleanUser))
-        {
-            return $"Quản trị viên Cấp cao ({cleanUser})";
-        }
-
-        if (!string.IsNullOrWhiteSpace(cleanName) && !string.IsNullOrWhiteSpace(cleanUser)
-            && !string.Equals(cleanName, cleanUser, StringComparison.OrdinalIgnoreCase))
-        {
-            return $"{cleanName} ({cleanUser})";
-        }
-
-        if (!string.IsNullOrWhiteSpace(cleanUser))
-        {
-            return $"Quản trị viên ({cleanUser})";
-        }
-
-        return "Hệ thống Quản trị Nền tảng";
     }
 }

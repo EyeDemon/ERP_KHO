@@ -73,7 +73,7 @@ export const DashboardMetrics = ({
               ? 'Ẩn theo phân quyền RBAC'
               : `${formatCurrencyVnd(ownerFinance.grossProfit)} • Biên lãi gộp ${String(ownerFinance.grossMarginPct).replace('.', ',')}%`}
           </strong>
-          <div style={{ fontSize: 12, color: '#047857', marginTop: 2 }}>Vốn tồn đọng &gt; 60 ngày: 0 đ • Hàng cận hạn &lt; 30 ngày: 0 lô</div>
+          <div style={{ fontSize: 12, color: '#047857', marginTop: 2 }}>Vốn tồn đọng &gt; 60 ngày: 0 ₫ • Hàng cận hạn &lt; 30 ngày: 0 lô</div>
         </div>
         <div style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #fde68a', background: '#fffbeb', fontVariantNumeric: 'tabular-nums' }}>
           <div style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>Tiền thu hộ COD chờ đối soát</div>

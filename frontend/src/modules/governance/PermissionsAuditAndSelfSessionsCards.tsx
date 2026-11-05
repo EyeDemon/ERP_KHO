@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import apiClient from '../../services/apiClient';
-import { permissionError } from '../../services/permissionPresentation';
+import { formatUserDisplayNameVi, permissionError } from '../../services/permissionPresentation';
 import { UiBadge, UiCard, UiTableScroll } from '../../ui/ProductionUi';
 import type { PermissionAuditLog, PermissionsSelfSession } from './PermissionsHelpersAndTypes';
 
@@ -138,23 +138,42 @@ export function PermissionsAuditAndSelfSessionsCards({
                 </tr>
               </thead>
               <tbody>
-                {auditLogs.length === 0 ? (
-                  <tr><td colSpan={5} className="ui-empty-cell">Chưa có bản ghi kiểm toán.</td></tr>
-                ) : (
-                  auditLogs.map(log => {
+                {(() => {
+                  const filteredAuditLogs = auditLogs.filter(
+                    log =>
+                      !/^Authentication\./i.test(log.action || '') &&
+                      !/^(Login|Logout|Refresh)$/i.test(log.action || '') &&
+                      log.entityName !== 'UserSession',
+                  );
+                  const visibleAuditLogs = filteredAuditLogs.length > 0 ? filteredAuditLogs : auditLogs;
+                  if (visibleAuditLogs.length === 0) {
+                    return <tr><td colSpan={5} className="ui-empty-cell">Chưa có bản ghi kiểm toán.</td></tr>;
+                  }
+                  return visibleAuditLogs.map(log => {
                     const auditActionLabel = AUDIT_ACTION_LABELS[log.action] || log.action;
                     const auditEntityLabel = AUDIT_ENTITY_LABELS[log.entityName] || log.entityName;
+                    const actorLabel = log.username
+                      ? formatUserDisplayNameVi(log.username)
+                      : log.userId
+                        ? `Người dùng #${log.userId}`
+                        : 'Hệ thống';
+                    const formattedValues = log.newValues
+                      ? log.newValues.replace(
+                          /\b(qa_admin|qa_billing_admin|qa_support_admin|qa_security_auditor|tenant_admin|qa_manager_wh01|qa_supervisor_wh01|qa_accountant|qa_staff_wh01|qa_viewer_wh01)\b/gi,
+                          match => formatUserDisplayNameVi(match),
+                        )
+                      : '—';
                     return (
                       <tr key={log.id}>
                         <td>{new Date(log.timestamp).toLocaleString('vi-VN')}</td>
-                        <td>{log.userId ? `Người dùng #${log.userId}` : 'Hệ thống'}</td>
+                        <td>{actorLabel}</td>
                         <td><UiBadge>{auditActionLabel}</UiBadge></td>
                         <td>{auditEntityLabel}{log.entityId ? ` #${log.entityId}` : ''}</td>
-                        <td><small>{log.newValues || '—'}</small></td>
+                        <td><small>{formattedValues}</small></td>
                       </tr>
                     );
-                  })
-                )}
+                  });
+                })()}
               </tbody>
             </table>
           </UiTableScroll>

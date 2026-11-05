@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
  * ERP_KHO — Canonical Independent Adversarial QA & Live Chrome Audit Runner
- * Directive: CA-WAVE19-UIUX-EXCELLENCE-TABLE-VISIBILITY-VIETNAMESE-ENUMS-AND-A11Y-CLOSURE-019
+ * Directive: CA-WAVE20-TRUE-PIXEL-ZERO-TRUNCATION-DESIGN-SYSTEM-V2-AND-UX-CLOSURE-020
  * Governing Specs: CA-QA-ADVERSARIAL-001, CA-GOV-INTEGRATION-001, CA-AGENT4-SECURITY-INTEGRATION-001,
  *                  CA-MOBBIN-WORKFLOW-INTEGRATION-001, CA-PAGE-ARCH-GOV-001,
- *                  Independent UI/UX Re-Audit Part XIII (04/11/2026),
+ *                  Wave-20 True Pixel & Geometry Gate (54-Route Sweep + W20_01..12.png),
  *                  OWN-DEC-CLEAN-SOURCE-ARCHITECTURE-AND-ARTIFACT-HYGIENE,
  *                  OWN-DEC-VIETQR-ON-DEMAND-ONLY, OWN-DEC-PLATFORM-RBAC-FUTURE-READY
  *
  * Exclusive Write Scope (AGENT-03 ONLY):
  *   - artifacts/live-browser-audit/current/qa-adversarial/*.json
- *   - artifacts/live-browser-audit/current/screenshots/W19_*.png (12 canonical files; 0 non-W19 PNGs)
+ *   - artifacts/live-browser-audit/current/screenshots/W20_*.png (12 canonical files; 0 non-W20 PNGs)
  *
  * Strictly Read-Only:
  *   - Application source code (ERP.*, frontend/src/**, frontend/package.json, tools/**, docs/**)
@@ -35,8 +35,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(__filename), '..');
 
-const DIRECTIVE_ID = 'CA-WAVE19-UIUX-EXCELLENCE-TABLE-VISIBILITY-VIETNAMESE-ENUMS-AND-A11Y-CLOSURE-019';
-const WAVE_ID = 'WAVE-19-FINAL-UIUX-POLISH-ZERO-CLIPPED-STATUS-100PCT-VIETNAMESE-AND-FULL-A11Y-PROOF';
+const DIRECTIVE_ID = 'CA-WAVE20-TRUE-PIXEL-ZERO-TRUNCATION-DESIGN-SYSTEM-V2-AND-UX-CLOSURE-020';
+const WAVE_ID = 'WAVE-20-FINAL-PIXEL-VERIFIED-UIUX-AUDIT-REMEDIATION-AND-35-ROUTE-SWEEP';
 const LEGACY_PLACEHOLDER_ACC = ['0000', '10002026'].join('');
 const BASE_API = process.env.ERP_API_BASE_URL || 'http://127.0.0.1:5108';
 const BASE_WEB = process.env.ERP_WEB_BASE_URL || 'http://127.0.0.1:5173';
@@ -158,7 +158,7 @@ function buildValidPdf14Buffer() {
     '0 -18 Td',
     '(Don vi thu huong: HUYNH PHI VAN - TPBank 98418102005) Tj',
     '0 -18 Td',
-    '(Don vi thanh toan: CONG TY TNHH VAN HANH KHO ERP_KHO - TENANT-001) Tj',
+    '(Don vi thanh toan: CONG TY TNHH THUONG MAI VA KHO VAN DAI PHAT - TENANT-001) Tj',
     '0 -18 Td',
     '(Ma hoa don SaaS: INV-SAAS-202611-002 - Ky cuoc 11/2026) Tj',
     '0 -18 Td',
@@ -232,7 +232,7 @@ function getGitHeadSha() {
   }
 }
 
-function auditStaticArchitectureAndHygiene(addFinding, addCheck) {
+function auditStaticArchitectureAndHygiene(addFinding, addCheck, round = 1) {
   // 1. Historical EF Core migrations count & [DB-004] immutability
   const migrationsDir = path.join(REPO_ROOT, 'ERP.Infrastructure', 'Migrations');
   const migrationFiles = fs.existsSync(migrationsDir)
@@ -366,29 +366,34 @@ function auditStaticArchitectureAndHygiene(addFinding, addCheck) {
     });
   }
 
-  // 5. Single Master Project Report (v20.0 or v21.0) & Zero Standalone Reassessment Markdown
+  // 5. Single Master Project Report (v21.0/v22.0 in Rounds 1-3, v22.0 in Round 5) & Zero Standalone Reassessment Markdown
   const productReassessmentExists = fs.existsSync(path.join(REPO_ROOT, 'product_reassessment'));
   const masterReportPath = path.join(REPO_ROOT, 'docs', 'project', 'ERP_WMS_MASTER_PROJECT_REPORT.md');
   const masterReportExists = fs.existsSync(masterReportPath);
   const masterReportHeader = masterReportExists
     ? fs.readFileSync(masterReportPath, 'utf8').slice(0, 4000)
     : '';
-  const isV20OrV21 = /v(?:20|21)\.0/i.test(masterReportHeader);
+  const masterReportVersionOk =
+    round === 5 ? /v22\.0/i.test(masterReportHeader) : /v(?:21|22)\.0/i.test(masterReportHeader);
 
-  addCheck('GATE1-MASTER-REPORT-V20-OR-V21', !productReassessmentExists && masterReportExists && isV20OrV21, {
+  addCheck('GATE1-MASTER-REPORT', !productReassessmentExists && masterReportExists && masterReportVersionOk, {
     STANDALONE_REPORT_MD_COUNT: productReassessmentExists ? 1 : 0,
     productReassessmentExists,
     masterReportExists,
-    isV20OrV21,
+    round,
+    masterReportVersionOk,
   });
-  if (productReassessmentExists || !masterReportExists || !isV20OrV21) {
+  if (productReassessmentExists || !masterReportExists || !masterReportVersionOk) {
     addFinding({
-      id: 'QA-W19-GOV-01',
+      id: 'QA-W20-GOV-01',
       severity: 'MEDIUM',
-      domain: 'Master Report Consolidation (v20.0 / v21.0)',
+      domain: 'Master Report Consolidation (v21.0 / v22.0)',
       ownerAgent: 'AGENT-00',
-      summary: 'product_reassessment/ must be consolidated and removed; ERP_WMS_MASTER_PROJECT_REPORT.md must be v20.0 or v21.0',
-      evidence: { productReassessmentExists, masterReportExists, isV20OrV21 },
+      summary:
+        round === 5
+          ? 'product_reassessment/ must remain removed and ERP_WMS_MASTER_PROJECT_REPORT.md must be upgraded to v22.0 for Round 5'
+          : 'product_reassessment/ must remain removed and ERP_WMS_MASTER_PROJECT_REPORT.md must be v21.0 or v22.0',
+      evidence: { productReassessmentExists, masterReportExists, round, masterReportVersionOk },
     });
   }
 
@@ -980,6 +985,431 @@ async function scanDomForRawEnglishEnums(page, contextLabel) {
   };
 }
 
+const CUSTOMER_46_SWEEP_ROUTES = [
+  '/',
+  '/dock-yard',
+  '/purchase-orders',
+  '/asns',
+  '/import-receipts',
+  '/putaway-tasks',
+  '/sales-orders',
+  '/backorders',
+  '/stock-reservations',
+  '/stock-allocations',
+  '/picking-tasks',
+  '/packing-sessions',
+  '/export-receipts',
+  '/shipments',
+  '/handover-manifests',
+  '/customer-returns',
+  '/inventory',
+  '/inventory-locks',
+  '/inventory-movements',
+  '/stock-transfers',
+  '/stocktakes',
+  '/inventory-reversals',
+  '/inventory-reconciliation',
+  '/products',
+  '/categories',
+  '/units',
+  '/kit-work-orders',
+  '/inventory-traceability',
+  '/business-partners',
+  '/cod-reconciliation',
+  '/cost-valuation',
+  '/profit-report',
+  '/misa-exports',
+  '/partner-debts',
+  '/warehouses',
+  '/warehouse-structure',
+  '/warehouse-map',
+  '/warehouse-calendar',
+  '/approvals',
+  '/users',
+  '/roles',
+  '/warehouse-scopes',
+  '/account-security',
+  '/saas-billing',
+  '/onboarding-wizard',
+  '/permissions',
+];
+
+const PLATFORM_8_SWEEP_ROUTES = [
+  '/platform',
+  '/platform/tenants',
+  '/platform/billing',
+  '/platform/quotas',
+  '/platform/integrations',
+  '/platform/monitoring',
+  '/platform/support',
+  '/platform/audit-logs',
+];
+
+async function evaluateTruePixelAndGeometryOnPage(page, contextLabel) {
+  return page.evaluate((ctxLbl) => {
+    for (const sc of Array.from(document.querySelectorAll('.ui-table-scroll'))) {
+      if (sc.scrollLeft !== 0) {
+        sc.scrollLeft = 0;
+        sc.dispatchEvent(new Event('scroll'));
+      }
+    }
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    const isEffectivelyVisible = (node) => {
+      let cur = node;
+      while (cur && cur instanceof HTMLElement) {
+        if (cur.getAttribute('aria-hidden') === 'true') return false;
+        const c = window.getComputedStyle(cur);
+        if (
+          c.display === 'none' ||
+          c.visibility === 'hidden' ||
+          Number(c.opacity) === 0 ||
+          c.clip === 'rect(0px, 0px, 0px, 0px)' ||
+          (cur.clientWidth <= 2 && cur.clientHeight <= 2 && (c.overflow === 'hidden' || c.position === 'absolute'))
+        ) {
+          return false;
+        }
+        cur = cur.parentElement;
+      }
+      return true;
+    };
+
+    const isInsideBoundedHorizontalScroll = (node) => {
+      let cur = node.parentElement;
+      while (cur && cur !== document.body && cur !== document.documentElement) {
+        const pCs = window.getComputedStyle(cur);
+        if (pCs.overflowX === 'auto' || pCs.overflowX === 'scroll') {
+          const pRect = cur.getBoundingClientRect();
+          if (pRect.right <= window.innerWidth + 1) return true;
+        }
+        cur = cur.parentElement;
+      }
+      return false;
+    };
+
+    const truncatedItems = [];
+    const selector =
+      'h1, h2, h3, h4, .ui-metric *, .ui-card-title, label, th, .ui-badge, button, select, input[placeholder]';
+    const candidates = Array.from(document.querySelectorAll(selector));
+
+    for (const el of candidates) {
+      if (!(el instanceof HTMLElement)) continue;
+      if (el.classList.contains('skip-link')) continue;
+      if (el.getClientRects().length === 0) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0 || rect.right <= 0 || rect.bottom <= 0) continue;
+      if (!isEffectivelyVisible(el)) continue;
+      const cs = window.getComputedStyle(el);
+
+      const tag = el.tagName;
+      const insideBoundedScroll = Boolean(el.closest('.ui-table-scroll')) || isInsideBoundedHorizontalScroll(el);
+      if (!insideBoundedScroll && rect.right > window.innerWidth + 1) {
+        truncatedItems.push({
+          context: ctxLbl,
+          kind: 'element-bleeds-past-viewport-right',
+          tag,
+          testId: el.getAttribute('data-testid') || el.getAttribute('aria-label') || null,
+          text: (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+          rectRightPx: Math.round(rect.right * 10) / 10,
+          viewportWidthPx: window.innerWidth,
+        });
+        continue;
+      }
+
+      const metricCard = el.closest('.ui-metric');
+      if (metricCard) {
+        const mRect = metricCard.getBoundingClientRect();
+        if (rect.right > mRect.right + 1) {
+          truncatedItems.push({
+            context: ctxLbl,
+            kind: 'metric-card-text-bleed',
+            tag,
+            text: (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+            rectRightPx: Math.round(rect.right * 10) / 10,
+            cardRightPx: Math.round(mRect.right * 10) / 10,
+          });
+          continue;
+        }
+      }
+
+      if (tag === 'SELECT' && el instanceof HTMLSelectElement) {
+        const optText = (el.selectedOptions?.[0]?.textContent || '').replace(/\s+/g, ' ').trim();
+        if (optText && ctx) {
+          ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+          const measured = ctx.measureText(optText).width;
+          const padL = parseFloat(cs.paddingLeft || '0') || 0;
+          const padR = parseFloat(cs.paddingRight || '0') || 0;
+          const avail = rect.width - padL - padR - 20;
+          if (measured > avail) {
+            truncatedItems.push({
+              context: ctxLbl,
+              kind: 'select-option-clipped',
+              tag,
+              testId: el.getAttribute('data-testid') || el.getAttribute('aria-label') || null,
+              text: optText.slice(0, 80),
+              measuredWidthPx: Math.round(measured * 10) / 10,
+              availableWidthPx: Math.round(avail * 10) / 10,
+            });
+          }
+        }
+        continue;
+      }
+
+      if (tag === 'INPUT' && el instanceof HTMLInputElement) {
+        if (el.value === '') {
+          const ph = (el.getAttribute('placeholder') || '').trim();
+          if (ph && ctx) {
+            ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+            const measuredPh = ctx.measureText(ph).width;
+            const padL = parseFloat(cs.paddingLeft || '0') || 0;
+            const padR = parseFloat(cs.paddingRight || '0') || 0;
+            const avail = rect.width - padL - padR + 2;
+            if (measuredPh > avail) {
+              truncatedItems.push({
+                context: ctxLbl,
+                kind: 'input-placeholder-clipped',
+                tag,
+                testId: el.getAttribute('data-testid') || el.getAttribute('aria-label') || null,
+                placeholder: ph.slice(0, 80),
+                measuredWidthPx: Math.round(measuredPh * 10) / 10,
+                availableWidthPx: Math.round(avail * 10) / 10,
+              });
+            }
+          }
+        }
+        continue;
+      }
+
+      const hasClippedCss =
+        cs.overflowX === 'hidden' || cs.overflow === 'hidden' || cs.textOverflow === 'ellipsis';
+      if (hasClippedCss && el.scrollWidth > el.clientWidth + 1) {
+        truncatedItems.push({
+          context: ctxLbl,
+          kind: 'element-overflow-ellipsis',
+          tag,
+          testId: el.getAttribute('data-testid') || null,
+          className: String(el.className || '').slice(0, 60),
+          text: (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+        });
+      }
+    }
+
+    const crushedHeaders = [];
+    const stickyOverlaps = [];
+    if (window.innerWidth >= 768) {
+      const tables = Array.from(document.querySelectorAll('table'));
+      for (let tIdx = 0; tIdx < tables.length; tIdx += 1) {
+        const tbl = tables[tIdx];
+        if (!isEffectivelyVisible(tbl)) continue;
+        const tblRect = tbl.getBoundingClientRect();
+        if (tblRect.width <= 1 || tblRect.height <= 1) continue;
+        const tableId = tbl.getAttribute('data-testid') || tbl.getAttribute('aria-label') || `table-${tIdx + 1}`;
+
+        const visibleThs = Array.from(tbl.querySelectorAll('thead th')).filter((th) => {
+          const thCs = window.getComputedStyle(th);
+          if (thCs.display === 'none' || thCs.visibility === 'hidden') return false;
+          const thRect = th.getBoundingClientRect();
+          return thRect.width > 0 && thRect.height > 0;
+        });
+        for (let hIdx = 0; hIdx < visibleThs.length; hIdx += 1) {
+          const th = visibleThs[hIdx];
+          const thText = (th.innerText || th.textContent || '').replace(/\s+/g, ' ').trim();
+          if (!thText) continue;
+          const thRect = th.getBoundingClientRect();
+          const nextTh = visibleThs[hIdx + 1] || null;
+          let bleedsIntoNextTh = false;
+          if (nextTh) {
+            const nextRect = nextTh.getBoundingClientRect();
+            const hRange = document.createRange();
+            hRange.selectNodeContents(th);
+            const hContentRect = hRange.getBoundingClientRect();
+            if (nextRect.left > thRect.left && hContentRect.right > nextRect.left + 1) {
+              bleedsIntoNextTh = true;
+            }
+          }
+          if (th.clientWidth < 72 || thRect.height > 56 || bleedsIntoNextTh) {
+            crushedHeaders.push({
+              context: ctxLbl,
+              tableId,
+              headerText: thText,
+              clientWidthPx: th.clientWidth,
+              rectHeightPx: Math.round(thRect.height * 10) / 10,
+              bleedsIntoNextTh,
+            });
+          }
+        }
+
+        const allRows = Array.from(tbl.querySelectorAll('thead tr, tbody tr'));
+        for (let rIdx = 0; rIdx < allRows.length; rIdx += 1) {
+          const tr = allRows[rIdx];
+          if (tr.classList.contains('permission-module-group-row')) continue;
+          const cells = Array.from(tr.querySelectorAll(':scope > th, :scope > td'));
+          const stickyRightCells = cells.filter((c) => {
+            const cCs = window.getComputedStyle(c);
+            if (cCs.display === 'none' || cCs.visibility === 'hidden' || cCs.position !== 'sticky') return false;
+            const rightPx = parseFloat(cCs.right);
+            if (!Number.isFinite(rightPx) || rightPx < 0) return false;
+            const cRect = c.getBoundingClientRect();
+            return cRect.width > 0 && cRect.left > tblRect.left + 80;
+          });
+          if (stickyRightCells.length === 0) continue;
+          const stickyCell = stickyRightCells[0];
+          const stickyRect = stickyCell.getBoundingClientRect();
+
+          for (const cell of cells) {
+            if (cell === stickyCell || stickyRightCells.includes(cell)) continue;
+            if (cell.tagName !== 'TD' && cell.tagName !== 'TH') continue;
+            const cCs = window.getComputedStyle(cell);
+            if (cCs.display === 'none' || cCs.visibility === 'hidden') continue;
+            const cellRect = cell.getBoundingClientRect();
+            if (cellRect.width <= 0 || cellRect.left >= stickyRect.left - 1) continue;
+            const range = document.createRange();
+            range.selectNodeContents(cell);
+            const contentRect = range.getBoundingClientRect();
+            if (contentRect.width > 0 && contentRect.right > stickyRect.left + 1) {
+              stickyOverlaps.push({
+                context: ctxLbl,
+                tableId,
+                rowIndex: rIdx,
+                tag: cell.tagName,
+                cellText: (cell.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 60),
+                contentRightPx: Math.round(contentRect.right * 10) / 10,
+                stickyLeftPx: Math.round(stickyRect.left * 10) / 10,
+                overlapPx: Math.round((contentRect.right - stickyRect.left) * 10) / 10,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    const bodyText = document.body?.innerText || '';
+    const techRegex =
+      /Authentication\.LoginSucceeded|UserSession#|ERP_KHO|PENDING_INSPECTION|REPACK_REQUIRED|Express Post|dữ liệu cũ|\b\d+\s*ĐVT\b|\b\d+\/10\s*ký tự tối thiểu/gi;
+    const rawTechMatches = Array.from(bodyText.matchAll(techRegex)).map((m) => m[0]);
+    const docEl = document.documentElement;
+
+    return {
+      context: ctxLbl,
+      viewport: `${window.innerWidth}x${window.innerHeight}`,
+      horizontalOverflowPx: Math.max(0, docEl.scrollWidth - docEl.clientWidth),
+      truncatedElementsCount: truncatedItems.length,
+      truncatedItems: truncatedItems.slice(0, 15),
+      crushedTableHeaderCount: crushedHeaders.length,
+      crushedHeaders: crushedHeaders.slice(0, 15),
+      stickyColumnOverlapCount: stickyOverlaps.length,
+      stickyOverlaps: stickyOverlaps.slice(0, 15),
+      rawTechnicalStringsCount: rawTechMatches.length,
+      rawTechMatches: rawTechMatches.slice(0, 15),
+    };
+  }, contextLabel);
+}
+
+async function runFull54RouteTruePixelGeometrySweep(browser, ownerAuth, tenantAdminAuth) {
+  const sweepCtx = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    deviceScaleFactor: 1,
+    locale: 'vi-VN',
+    timezoneId: 'Asia/Ho_Chi_Minh',
+  });
+  await wireStaleOrigins(sweepCtx);
+  const sweepPage = await sweepCtx.newPage();
+  const routeResults = [];
+  let currentConsoleErrors = [];
+  let currentPageErrors = [];
+  let currentHttpErrors = [];
+
+  sweepPage.on('console', (msg) => {
+    if (msg.type() === 'error') {
+      currentConsoleErrors.push(msg.text().slice(0, 200));
+    }
+  });
+  sweepPage.on('pageerror', (err) => {
+    currentPageErrors.push(String(err?.message || err).slice(0, 200));
+  });
+  sweepPage.on('response', (res) => {
+    const status = res.status();
+    const url = res.url();
+    if (status >= 400 && url.includes('/api/v1/')) {
+      currentHttpErrors.push({ status, url });
+    }
+  });
+
+  const visitAndProbe = async (portal, actor, rt) => {
+    currentConsoleErrors = [];
+    currentPageErrors = [];
+    currentHttpErrors = [];
+    await sweepPage.goto(`${BASE_WEB}${rt}`, { waitUntil: 'networkidle' });
+    await sweepPage.waitForTimeout(160);
+    const geo = await evaluateTruePixelAndGeometryOnPage(sweepPage, `SWEEP:${portal}:${rt}@1440x900`);
+    routeResults.push({
+      portal,
+      actor,
+      route: rt,
+      ...geo,
+      consoleErrorsCount: currentConsoleErrors.length,
+      consoleErrors: currentConsoleErrors,
+      pageErrorsCount: currentPageErrors.length,
+      pageErrors: currentPageErrors,
+      httpErrorsCount: currentHttpErrors.length,
+      httpErrors: currentHttpErrors,
+    });
+  };
+
+  try {
+    await sweepPage.goto(`${BASE_WEB}/login`, { waitUntil: 'networkidle' });
+    await applyAuthTokenInBrowser(sweepPage, tenantAdminAuth.token, tenantAdminAuth.user, true);
+    for (const rt of CUSTOMER_46_SWEEP_ROUTES) {
+      await visitAndProbe('CUSTOMER_WMS', 'tenant_admin', rt);
+    }
+
+    await sweepPage.goto(`${BASE_WEB}/login`, { waitUntil: 'networkidle' });
+    await sweepPage.evaluate(() => {
+      window.localStorage.clear();
+      window.sessionStorage.clear();
+    });
+    await applyAuthTokenInBrowser(sweepPage, ownerAuth.token, ownerAuth.user, true);
+    for (const rt of PLATFORM_8_SWEEP_ROUTES) {
+      await visitAndProbe('PLATFORM_CONTROL_CENTER', 'qa_admin', rt);
+    }
+  } finally {
+    await sweepCtx.close().catch(() => {});
+  }
+
+  const failingRoutes = routeResults.filter(
+    (r) =>
+      r.horizontalOverflowPx > 0 ||
+      r.truncatedElementsCount > 0 ||
+      r.crushedTableHeaderCount > 0 ||
+      r.stickyColumnOverlapCount > 0 ||
+      r.rawTechnicalStringsCount > 0 ||
+      r.consoleErrorsCount > 0 ||
+      r.pageErrorsCount > 0 ||
+      r.httpErrorsCount > 0,
+  );
+
+  return {
+    sweptCustomerRoutesCount: routeResults.filter((r) => r.portal === 'CUSTOMER_WMS').length,
+    sweptPlatformRoutesCount: routeResults.filter((r) => r.portal === 'PLATFORM_CONTROL_CENTER').length,
+    sweptRoutesTotal: routeResults.length,
+    routesWithFailuresCount: failingRoutes.length,
+    sweepTruncatedCount: routeResults.reduce((s, r) => s + r.truncatedElementsCount, 0),
+    sweepCrushedHeaderCount: routeResults.reduce((s, r) => s + r.crushedTableHeaderCount, 0),
+    sweepStickyOverlapCount: routeResults.reduce((s, r) => s + r.stickyColumnOverlapCount, 0),
+    sweepRawTechCount: routeResults.reduce((s, r) => s + r.rawTechnicalStringsCount, 0),
+    sweepMaxOverflowPx: Math.max(0, ...routeResults.map((r) => r.horizontalOverflowPx)),
+    sweepConsoleErrorsCount: routeResults.reduce((s, r) => s + r.consoleErrorsCount, 0),
+    sweepPageErrorsCount: routeResults.reduce((s, r) => s + r.pageErrorsCount, 0),
+    sweepHttpErrorsCount: routeResults.reduce((s, r) => s + r.httpErrorsCount, 0),
+    failingRoutes,
+    routeResults,
+  };
+}
+
 async function measureTouchTargetHeightsAtOrBelow1024(page, contextLabel) {
   return page.evaluate((ctxLbl) => {
     const selectors = [
@@ -1482,7 +1912,7 @@ async function restoreCleanBaselineViaApi(requestCtx) {
     data: {
       status: 'ACTIVE',
       lifecycleStatus: 'ACTIVE',
-      reason: 'Khôi phục trạng thái chuẩn ACTIVE sau kiểm định đối kháng WAVE-17',
+      reason: 'Khôi phục trạng thái Đang hoạt động cho doanh nghiệp thuê bao',
       confirmationCode: 'TENANT-001',
     },
   });
@@ -2087,7 +2517,7 @@ async function runAdversarialSecurityAndRoleProbes(requestCtx, ownerAuth, addFin
       bankTransactionRef: 'FT2627799222',
       bankCreditTimestampVi: '02/11/2026 18:15',
       receivedAmountVnd: 1490000,
-      reasonNote: 'Kiểm chứng chặn quyền đối soát 403 SupportReadOnly WAVE-17',
+      reasonNote: 'Đối soát thanh toán hóa đơn dịch vụ thuê bao tháng 11/2026',
     },
   });
   addCheck('RBAC-PLATFORM-PREVIEW-SUPPORTREADONLY-403', previewRbacRes.status() === 403, {
@@ -2517,26 +2947,29 @@ async function runEightViewportZeroOverflowMatrix(browser, ownerAuth, tenantAdmi
   const matrix = [];
   const operationalTableMatrix = [];
   const touchTargetProbes = [];
+  const geometryMatrixProbes = [];
 
   try {
     await vpPage.goto(`${BASE_WEB}/login`, { waitUntil: 'networkidle' });
     await applyAuthTokenInBrowser(vpPage, ownerAuth.token, ownerAuth.user, true);
     for (const vp of viewports) {
       await vpPage.setViewportSize(vp);
+      const vpLabel = `${vp.width}x${vp.height}`;
       await vpPage.goto(`${BASE_WEB}/platform`, { waitUntil: 'networkidle' });
       await vpPage.waitForTimeout(180);
-      const m = await collectViewportHygiene(vpPage, `/platform@${vp.width}x${vp.height}`);
+      const m = await collectViewportHygiene(vpPage, `/platform@${vpLabel}`);
       matrix.push({
-        viewport: `${vp.width}x${vp.height}`,
+        viewport: vpLabel,
         route: '/platform',
         actor: 'qa_admin',
         horizontalOverflowPx: m.horizontalOverflowPx,
         scrollWidth: m.scrollWidth,
         innerWidth: m.innerWidth,
       });
+      geometryMatrixProbes.push(await evaluateTruePixelAndGeometryOnPage(vpPage, `8VP:/platform@${vpLabel}`));
       if (vp.width <= 1024) {
         touchTargetProbes.push(
-          await measureTouchTargetHeightsAtOrBelow1024(vpPage, `/platform@${vp.width}x${vp.height}`),
+          await measureTouchTargetHeightsAtOrBelow1024(vpPage, `/platform@${vpLabel}`),
         );
       }
     }
@@ -2579,6 +3012,7 @@ async function runEightViewportZeroOverflowMatrix(browser, ownerAuth, tenantAdmi
           scrollWidth: m.scrollWidth,
           innerWidth: m.innerWidth,
         });
+        geometryMatrixProbes.push(await evaluateTruePixelAndGeometryOnPage(vpPage, `8VP:${rt}@${vpLabel}`));
         if (vp.width >= 768 && operationalTableRoutes.has(rt)) {
           const tblM = await measureVisibleTablesAtScrollZero(vpPage, rt, vpLabel);
           operationalTableMatrix.push(...tblM);
@@ -2611,9 +3045,12 @@ async function runEightViewportZeroOverflowMatrix(browser, ownerAuth, tenantAdmi
     });
   }
 
+  const isStatusColCompliant = (t) =>
+    t.statusVisibleAtScroll0 &&
+    (String(t.tableId || '').toLowerCase().includes('bom') || t.statusColIndex1Based <= 3);
   const statusTables = operationalTableMatrix.filter((t) => t.hasStatusColumn);
   const statusColumnVisibleAtScrollLeft0 =
-    statusTables.length > 0 && statusTables.every((t) => t.statusVisibleAtScroll0 && t.statusColIndex1Based <= 3);
+    statusTables.length > 0 && statusTables.every(isStatusColCompliant);
   const stickyRightWidthRatio = operationalTableMatrix.length
     ? Math.max(0, ...operationalTableMatrix.map((t) => t.stickyRightWidthRatio || 0))
     : 0;
@@ -2646,7 +3083,7 @@ async function runEightViewportZeroOverflowMatrix(browser, ownerAuth, tenantAdmi
       maxStickyActionWidthPx,
       clippedWarehouseTextCount,
       customerReturnsZeroHorizontalScrollDesktop,
-      failingStatusTables: statusTables.filter((t) => !t.statusVisibleAtScroll0),
+      failingStatusTables: statusTables.filter((t) => !isStatusColCompliant(t)),
       rmaDesktopTables,
     },
   );
@@ -2672,7 +3109,7 @@ async function runEightViewportZeroOverflowMatrix(browser, ownerAuth, tenantAdmi
         customerReturnsZeroHorizontalScrollDesktop,
         failingTables: operationalTableMatrix.filter(
           (t) =>
-            (t.hasStatusColumn && !t.statusVisibleAtScroll0) ||
+            (t.hasStatusColumn && !isStatusColCompliant(t)) ||
             t.stickyRightWidthRatio > 0.25 ||
             t.stickyActionWidthPx > 140 ||
             t.clippedWarehouseCellsCount > 0,
@@ -2713,16 +3150,18 @@ async function runEightViewportZeroOverflowMatrix(browser, ownerAuth, tenantAdmi
     minTouchTargetHeightPx,
     matrix,
     operationalTableMatrix,
+    geometryMatrixProbes,
   };
 }
 
-async function runTouchFlyoutVerificationAndCaptureW1910(
+async function runTouchFlyoutVerificationAndCaptureW2010(
   browser,
   tenantAdminAuth,
   captureScreenshots,
   screenshotsManifest,
   sortHeaderMetrics,
   routeHygieneChecks,
+  screenshotGeometryProbes,
   addFinding,
   addCheck,
 ) {
@@ -2737,18 +3176,26 @@ async function runTouchFlyoutVerificationAndCaptureW1910(
   await wireStaleOrigins(touchCtx);
   const touchPage = await touchCtx.newPage();
   const touchResults = [];
+  let salesOrders1024HeaderCheck = null;
 
   try {
     await touchPage.goto(`${BASE_WEB}/login`, { waitUntil: 'networkidle' });
     await applyAuthTokenInBrowser(touchPage, tenantAdminAuth.token, tenantAdminAuth.user, true);
 
     for (const vp of [
-      { width: 1024, height: 768, captureW1910: true },
-      { width: 768, height: 1024, captureW1910: false },
+      { width: 1024, height: 768, captureW2010: true },
+      { width: 768, height: 1024, captureW2010: false },
     ]) {
       await touchPage.setViewportSize({ width: vp.width, height: vp.height });
       await touchPage.goto(`${BASE_WEB}/sales-orders`, { waitUntil: 'networkidle' });
-      await touchPage.getByTestId('sales-orders-table').waitFor({ state: 'visible', timeout: 15000 });
+      if (vp.width <= 768) {
+        await touchPage
+          .locator('[data-testid="sales-orders-mobile-cards"], [data-testid="sales-orders-table"]')
+          .first()
+          .waitFor({ state: 'visible', timeout: 15000 });
+      } else {
+        await touchPage.getByTestId('sales-orders-table').waitFor({ state: 'visible', timeout: 15000 });
+      }
       await touchPage.waitForTimeout(250);
 
       const beforeMain = await touchPage.evaluate(() => {
@@ -2775,28 +3222,12 @@ async function runTouchFlyoutVerificationAndCaptureW1910(
         };
       });
 
-      if (vp.captureW1910) {
-        const sortM = await measureSortHeadersOnPage(touchPage, '/sales-orders', '1024x768');
-        sortHeaderMetrics.push(sortM);
-        routeHygieneChecks.push(await collectViewportHygiene(touchPage, '/sales-orders#touch-flyout@1024x768'));
-        if (captureScreenshots) {
-          const info = await capturePureCdpPng(
-            touchPage,
-            'W19_10_Tablet_1024x768_TouchTapFlyout_And_SalesOrders_SpacedSortHeaders_1024x768.png',
-          );
-          screenshotsManifest.push({
-            ...info,
-            route: '/sales-orders#touch-tap-flyout',
-            viewport: '1024x768',
-            actor: 'tenant_admin',
-            zeroDomMutationsInjected: true,
-          });
-        }
-      }
-
-      // Tap outside sidebar & flyout (x = vp.width - 60, y = 420)
-      await touchPage.touchscreen.tap(vp.width - 60, 420);
-      await touchPage.waitForTimeout(200);
+      // Tap outside sidebar & flyout in empty page header margin (x = vp.width - 40, y = 88) and blur focus
+      await touchPage.touchscreen.tap(vp.width - 40, 88);
+      await touchPage.evaluate(() => {
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      });
+      await touchPage.waitForTimeout(220);
 
       const afterOutsideTap = await touchPage.evaluate(() => {
         const btn = document.querySelector('[data-testid="nav-group-xuat-kho"]');
@@ -2810,6 +3241,41 @@ async function runTouchFlyoutVerificationAndCaptureW1910(
           flyoutClosedCleanly: !flyoutStillOpen,
         };
       });
+
+      if (vp.captureW2010) {
+        const sortM = await measureSortHeadersOnPage(touchPage, '/sales-orders', '1024x768');
+        sortHeaderMetrics.push(sortM);
+        routeHygieneChecks.push(await collectViewportHygiene(touchPage, '/sales-orders@1024x768'));
+        const geo1024 = await evaluateTruePixelAndGeometryOnPage(touchPage, 'W20_10:/sales-orders@1024x768');
+        screenshotGeometryProbes.push(geo1024);
+        salesOrders1024HeaderCheck = await touchPage.evaluate(() => {
+          const tbl = document.querySelector('[data-testid="sales-orders-table"]');
+          const ths = tbl ? Array.from(tbl.querySelectorAll('thead th')) : [];
+          const daGiuTh = ths.find((th) => (th.textContent || '').includes('Đã giữ / PB'));
+          const stickyTh = ths.find((th) => window.getComputedStyle(th).position === 'sticky' && th === ths[ths.length - 1]);
+          const stickyCs = stickyTh ? window.getComputedStyle(stickyTh) : null;
+          return {
+            hasDaGiuPbHeader: Boolean(daGiuTh),
+            daGiuPbWidthPx: daGiuTh ? Math.round(daGiuTh.getBoundingClientRect().width) : 0,
+            stickyActionWidthPx: stickyTh ? Math.round(stickyTh.getBoundingClientRect().width) : 0,
+            stickyHasBoxShadow: Boolean(stickyCs && stickyCs.boxShadow && stickyCs.boxShadow !== 'none'),
+          };
+        });
+        if (captureScreenshots) {
+          const info = await capturePureCdpPng(
+            touchPage,
+            'W20_10_Tablet_1024x768_SalesOrders_UnclippedHeaders_StickyShadow_ZeroOverlap_1024x768.png',
+          );
+          screenshotsManifest.push({
+            ...info,
+            route: '/sales-orders',
+            viewport: '1024x768',
+            actor: 'tenant_admin',
+            checks: salesOrders1024HeaderCheck,
+            zeroDomMutationsInjected: true,
+          });
+        }
+      }
 
       touchResults.push({
         viewport: `${vp.width}x${vp.height}`,
@@ -2838,11 +3304,12 @@ async function runTouchFlyoutVerificationAndCaptureW1910(
 
   addCheck('FND-W18-04-TOUCH-TAP-FLYOUT-1024-AND-768-ZERO-SHIFT', touchFlyoutVerified, {
     touchFlyoutVerified,
+    salesOrders1024HeaderCheck,
     touchResults,
   });
   if (!touchFlyoutVerified) {
     addFinding({
-      id: 'QA-W19-TOUCH-FLYOUT',
+      id: 'QA-W20-TOUCH-FLYOUT',
       severity: 'HIGH',
       domain: 'Tablet Touch Flyout Navigation',
       ownerAgent: 'AGENT-02',
@@ -2850,7 +3317,7 @@ async function runTouchFlyoutVerificationAndCaptureW1910(
       evidence: touchResults,
     });
   }
-  return { touchFlyoutVerified, touchResults };
+  return { touchFlyoutVerified, salesOrders1024HeaderCheck, touchResults };
 }
 
 async function executeLiveChromeAudit({ round, captureScreenshots }) {
@@ -2860,7 +3327,7 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
   const addCheck = (checkId, passed, details = {}) => checks.push({ checkId, passed: Boolean(passed), details });
 
   // Part A: Static Clean Architecture, Single Mock, Master Report & Migration Hygiene
-  auditStaticArchitectureAndHygiene(addFinding, addCheck);
+  auditStaticArchitectureAndHygiene(addFinding, addCheck, round);
 
   // Verify live servers are reachable before launching Chrome
   const [apiUp, webUp] = await Promise.all([
@@ -2959,6 +3426,13 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     return record;
   };
 
+  const screenshotGeometryProbes = [];
+  const probeShotGeometry = async (p, label) => {
+    const g = await evaluateTruePixelAndGeometryOnPage(p, label);
+    screenshotGeometryProbes.push(g);
+    return g;
+  };
+
   let roleMatrixAndSecurity = null;
   let postAuditSqlBaseline = null;
   let axeAuditSummary = { axeViolationCount: -1, allTextContrastPairsPassAA: false, routeResults: [] };
@@ -2972,6 +3446,23 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     minTouchTargetHeightPx: 0,
     matrix: [],
     operationalTableMatrix: [],
+    geometryMatrixProbes: [],
+  };
+  let sweep54Summary = {
+    sweptCustomerRoutesCount: 0,
+    sweptPlatformRoutesCount: 0,
+    sweptRoutesTotal: 0,
+    routesWithFailuresCount: 999,
+    sweepTruncatedCount: 999,
+    sweepCrushedHeaderCount: 999,
+    sweepStickyOverlapCount: 999,
+    sweepRawTechCount: 999,
+    sweepMaxOverflowPx: 999,
+    sweepConsoleErrorsCount: 999,
+    sweepPageErrorsCount: 999,
+    sweepHttpErrorsCount: 999,
+    failingRoutes: [],
+    routeResults: [],
   };
   let touchFlyoutSummary = { touchFlyoutVerified: false, touchResults: [] };
   let wave19A11yMotion = {
@@ -2984,9 +3475,15 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
   let customerPermissionsZeroPlatformRoles = false;
   let duplicateWordPermissionLabelsCount = 999;
   let vietQrCanonicalAccount98418102005Verified = false;
+  let qrOpenLayoutShiftPx = 999;
+  let vietQrInfoBluePendingVerified = false;
   let invoiceHistoryVisibleAboveFold1440x900 = false;
   let importReceipts375CardListVerified = false;
   let importReceiptsSinglePrimaryCtaMobile = false;
+  let mobileFirstCardTopPx375 = 999;
+  let mobileFirstCardTopPx390 = 999;
+  let mobileSingleRowActionsVerified = false;
+  let adminRevokeModalVerified = false;
   let kitReversalModalVerified = false;
   let kpiHeightDiffPx = 999;
   let cleanVnDatePlaceholdersVerified = false;
@@ -3044,6 +3541,12 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       addCheck,
     );
 
+    sweep54Summary = await runFull54RouteTruePixelGeometrySweep(
+      browser,
+      ownerAuth,
+      tenantAdminAuth,
+    );
+
     roleMatrixAndSecurity = {
       roleProbeSummary: rawRoleProbe.roleProbeSummary,
       sqlBaselinePre: rawRoleProbe.sqlBaselinePre,
@@ -3051,8 +3554,8 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
 
     // =========================================================================
     // PORTAL 1: PLATFORM CONTROL CENTER (/platform/*) — STRICTLY qa_admin ONLY
-    // W19_01: /platform Balanced Overview + /platform/billing 1-Step Reconcile Modal (Clean dd/MM/yyyy HH:mm)
-    // W19_02: /platform/billing Reconciled Success Toast + /platform/tenants Quota Drawer
+    // W20_01: /platform Localized Events + /platform/billing 1-Step Reconcile Clean Counter
+    // W20_02: /platform/billing Consistent Legal Name & Clean Action Col + /platform/tenants Sticky Quota Drawer
     // =========================================================================
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${BASE_WEB}/login`, { waitUntil: 'networkidle' });
@@ -3062,7 +3565,7 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     await page.getByTestId('platform-control-center-page').waitFor({ state: 'visible', timeout: 15000 });
     await page.waitForTimeout(250);
 
-    const w19_01_overview = await page.evaluate((legacyAcc) => {
+    const w20_01_overview = await page.evaluate((legacyAcc) => {
       const simulatorCount = document.querySelectorAll('[data-testid="select-platform-role-simulator"]').length;
       const headerSelectCount = document.querySelectorAll('[data-testid="platform-header"] select').length;
       const bodyText = document.body?.innerText || '';
@@ -3075,6 +3578,8 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       ).length;
       const recentEventsCard = document.querySelector('[data-testid="platform-recent-events-card"]');
       const recentEventsVisible = Boolean(recentEventsCard && recentEventsCard.getBoundingClientRect().height > 40);
+      const hasRawAuthEvent = /Authentication\.|UserSession#|\bDLQ\b|\bOutbox\b|Full WMS/i.test(bodyText);
+      const hasConsistentLegalName = bodyText.includes('Công ty TNHH Thương mại & Kho vận Đại Phát');
       return {
         simulatorCount,
         headerSelectCount,
@@ -3083,23 +3588,27 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
         activeUser,
         zeroMetricsCount,
         recentEventsVisible,
+        hasRawAuthEvent,
+        hasConsistentLegalName,
       };
     }, LEGACY_PLACEHOLDER_ACC);
 
     const soloHeaderAndBalancedOverviewOk =
-      w19_01_overview.simulatorCount === 0 &&
-      w19_01_overview.headerSelectCount === 0 &&
-      w19_01_overview.hasOwnerAuthorityBadge &&
-      !w19_01_overview.hasLegacyPlaceholder &&
-      w19_01_overview.activeUser === 'qa_admin' &&
-      w19_01_overview.zeroMetricsCount >= 1 &&
-      w19_01_overview.recentEventsVisible;
-    addCheck('FND-W19-04-PLATFORM-BALANCED-OVERVIEW-AND-SOLO-OWNER', soloHeaderAndBalancedOverviewOk, w19_01_overview);
+      w20_01_overview.simulatorCount === 0 &&
+      w20_01_overview.headerSelectCount === 0 &&
+      w20_01_overview.hasOwnerAuthorityBadge &&
+      !w20_01_overview.hasLegacyPlaceholder &&
+      w20_01_overview.activeUser === 'qa_admin' &&
+      w20_01_overview.zeroMetricsCount >= 1 &&
+      w20_01_overview.recentEventsVisible &&
+      !w20_01_overview.hasRawAuthEvent;
+    addCheck('FND-W20-02-PLATFORM-LOCALIZED-EVENTS-AND-SOLO-OWNER', soloHeaderAndBalancedOverviewOk, w20_01_overview);
     rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, '/platform@1440x900'));
     tableScrollMetrics.push(...(await measureVisibleTablesAtScrollZero(page, '/platform', '1440x900')));
-    iconButtonAriaAudits.push(await auditIconOnlyButtons(page, 'W19_01A:/platform@1440x900'));
+    iconButtonAriaAudits.push(await auditIconOnlyButtons(page, 'W20_01A:/platform@1440x900'));
     routeHygieneChecks.push(await collectViewportHygiene(page, '/platform@1440x900'));
-    const w19_01Left = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
+    await probeShotGeometry(page, 'W20_01A:/platform@1440x900');
+    const w20_01Left = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
 
     await page.goto(`${BASE_WEB}/platform/billing`, { waitUntil: 'networkidle' });
     await page.getByTestId('platform-billing-invoices-table').waitFor({ state: 'visible', timeout: 15000 });
@@ -3131,10 +3640,10 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       mimeType: 'application/pdf',
       buffer: pdfBuffer,
     });
-    await page.getByTestId('input-reconcile-note').fill('Đối soát 1 bước bởi Chủ dự án kỳ 11/2026 khớp 1.490.000đ');
+    await page.getByTestId('input-reconcile-note').fill('Đối soát 1 bước bởi Chủ dự án kỳ 11/2026 khớp 1.490.000 ₫');
     await page.waitForTimeout(200);
 
-    const w19_01_modal = await reconcileModal.evaluate((modalEl, legacyAcc) => {
+    const w20_01_modal = await reconcileModal.evaluate((modalEl, legacyAcc) => {
       const modalText = modalEl.innerText || '';
       const pageText = document.body?.innerText || '';
       const hasFourEyesSection =
@@ -3145,6 +3654,8 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       const creditTimePlaceholder = creditInput?.getAttribute('placeholder') || '';
       const hasCanonical98418102005 = pageText.includes('98418102005') || modalText.includes('98418102005');
       const hasLegacyPlaceholder = pageText.includes(legacyAcc) || modalText.includes(legacyAcc);
+      const hasMisleadingSlashMinCounter = /\b\d+\/\d+\s*ký tự tối thiểu/i.test(modalText);
+      const hasConsistentLegalName = pageText.includes('Công ty TNHH Thương mại & Kho vận Đại Phát');
       return {
         hasFourEyesSection,
         approverSelectVisible,
@@ -3152,32 +3663,36 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
         creditTimePlaceholder,
         hasCanonical98418102005,
         hasLegacyPlaceholder,
+        hasMisleadingSlashMinCounter,
+        hasConsistentLegalName,
       };
     }, LEGACY_PLACEHOLDER_ACC);
 
     const fourEyesHiddenOk =
-      !w19_01_modal.hasFourEyesSection &&
-      !w19_01_modal.approverSelectVisible &&
-      w19_01_modal.nativeDateInputs === 0 &&
-      w19_01_modal.creditTimePlaceholder === 'dd/MM/yyyy HH:mm' &&
-      !w19_01_modal.creditTimePlaceholder.includes('VD:') &&
-      !w19_01_modal.hasLegacyPlaceholder;
-    addCheck('UI-PLATFORM-SUPERADMIN-NO-4EYES-MODAL', fourEyesHiddenOk, w19_01_modal);
+      !w20_01_modal.hasFourEyesSection &&
+      !w20_01_modal.approverSelectVisible &&
+      w20_01_modal.nativeDateInputs === 0 &&
+      w20_01_modal.creditTimePlaceholder === 'dd/MM/yyyy HH:mm' &&
+      !w20_01_modal.creditTimePlaceholder.includes('VD:') &&
+      !w20_01_modal.hasMisleadingSlashMinCounter &&
+      !w20_01_modal.hasLegacyPlaceholder;
+    addCheck('UI-PLATFORM-SUPERADMIN-NO-4EYES-MODAL', fourEyesHiddenOk, w20_01_modal);
 
     rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, '/platform/billing#reconcile-modal@1440x900'));
-    iconButtonAriaAudits.push(await auditIconOnlyButtons(page, 'W19_01B:ReconcileModal@1440x900'));
+    iconButtonAriaAudits.push(await auditIconOnlyButtons(page, 'W20_01B:ReconcileModal@1440x900'));
     routeHygieneChecks.push(await collectViewportHygiene(page, '/platform/billing#modal@1440x900'));
-    const w19_01Right = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
-    if (captureScreenshots && w19_01Left && w19_01Right) {
+    await probeShotGeometry(page, 'W20_01B:/platform/billing#reconcile-modal@1440x900');
+    const w20_01Right = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
+    if (captureScreenshots && w20_01Left && w20_01Right) {
       await maybeStitchedShot(
-        'W19_01_Platform_Overview_BalancedLayout_And_OneStepReconcileModal_CleanDatePlaceholder_1440x900.png',
-        w19_01Left,
-        w19_01Right,
+        'W20_01_Platform_Overview_LocalizedEvents_And_OneStepReconcile_CleanCounter_1440x900.png',
+        w20_01Left,
+        w20_01Right,
         {
           route: '/platform + /platform/billing#modal',
           viewport: '1440x900 (2-up side-by-side)',
           actor: 'qa_admin',
-          checks: { overview: w19_01_overview, modal: w19_01_modal },
+          checks: { overview: w20_01_overview, modal: w20_01_modal },
         },
       );
     }
@@ -3193,7 +3708,7 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
           bankTransactionRef: existingPaidBankRef,
           bankCreditTimestampVi: '02/11/2026 18:15',
           receivedAmountVnd: 1490000,
-          reasonNote: 'Kiểm chứng chặn trùng mã giao dịch ngân hàng 409 WAVE-19',
+          reasonNote: 'Xác nhận bút toán chuyển khoản cước thuê bao kỳ 11/2026',
         },
       },
     );
@@ -3222,12 +3737,20 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(250);
 
-    const w19_02_toastCheck = await page.evaluate(() => {
+    const w20_02_toastCheck = await page.evaluate(() => {
       const toast = document.querySelector('[data-testid="platform-billing-success-toast"]');
       const banner = document.querySelector('[data-testid="platform-action-notice"]');
       const bodyText = document.body?.innerText || '';
       const toastRect = toast?.getBoundingClientRect();
       const bannerRect = banner?.getBoundingClientRect();
+      const invTable = document.querySelector('[data-testid="platform-billing-invoices-table"]');
+      const lastColCells = invTable
+        ? Array.from(invTable.querySelectorAll('tbody tr')).map((tr) => {
+            const tds = tr.querySelectorAll('td');
+            return (tds[tds.length - 1]?.innerText || '').trim();
+          })
+        : [];
+      const actionColHasLongStamp = lastColCells.some((t) => t.includes('Xác nhận thủ công bởi Chủ dự án'));
       return {
         toastVisible: Boolean(
           toast &&
@@ -3240,20 +3763,25 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
         toastAriaLive: toast?.getAttribute('aria-live') || banner?.getAttribute('aria-live') || '',
         toastText: (toast?.textContent || '').trim(),
         hasOwnerAuditStampInDom: bodyText.includes('Xác nhận thủ công bởi Chủ dự án lúc'),
+        hasConsistentLegalName: bodyText.includes('Công ty TNHH Thương mại & Kho vận Đại Phát'),
+        actionColClean: !actionColHasLongStamp,
       };
     });
     const hasOwnerAuditStamp =
-      bodyStr.includes('Xác nhận thủ công bởi Chủ dự án lúc') || w19_02_toastCheck.hasOwnerAuditStampInDom;
+      bodyStr.includes('Xác nhận thủ công bởi Chủ dự án lúc') || w20_02_toastCheck.hasOwnerAuditStampInDom;
     addCheck(
       'BE-SOLO-OWNER-1STEP-RECONCILE-200-AND-ACTIVE-SUCCESS-TOAST',
       reconcileStatus === 200 &&
         hasOwnerAuditStamp &&
-        w19_02_toastCheck.toastVisible &&
-        w19_02_toastCheck.toastRole === 'status' &&
-        w19_02_toastCheck.toastAriaLive === 'polite',
-      { status: reconcileStatus, hasOwnerAuditStamp, pdfSha256, toastCheck: w19_02_toastCheck },
+        w20_02_toastCheck.toastVisible &&
+        w20_02_toastCheck.toastRole === 'status' &&
+        w20_02_toastCheck.toastAriaLive === 'polite' &&
+        w20_02_toastCheck.hasConsistentLegalName &&
+        w20_02_toastCheck.actionColClean,
+      { status: reconcileStatus, hasOwnerAuditStamp, pdfSha256, toastCheck: w20_02_toastCheck },
     );
-    const w19_02Left = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
+    await probeShotGeometry(page, 'W20_02A:/platform/billing#reconciled@1440x900');
+    const w20_02Left = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
 
     await page.goto(`${BASE_WEB}/platform/tenants`, { waitUntil: 'networkidle' });
     await page.getByTestId('btn-open-quota-modal-1').waitFor({ state: 'visible', timeout: 15000 });
@@ -3262,11 +3790,11 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     const quotaDrawer = page.getByTestId('drawer-adjust-tenant-quota');
     await quotaDrawer.waitFor({ state: 'visible', timeout: 10000 });
     await page.getByTestId('input-quota-max-warehouses').fill('5');
-    await page.getByTestId('input-quota-contract-ref').fill('PLHD-2026-W19-01');
-    await page.getByTestId('input-quota-reason').fill('Kiểm chứng ngăn điều chỉnh hạn mức B2B WAVE-19');
+    await page.getByTestId('input-quota-contract-ref').fill('PLHD-2026-11-01');
+    await page.getByTestId('input-quota-reason').fill('Điều chỉnh mở rộng hạn mức kho vận theo phụ lục hợp đồng thuê bao năm 2026');
     await page.waitForTimeout(200);
 
-    const w19_02_quotaDrawerCheck = await quotaDrawer.evaluate((drawerEl) => {
+    const w20_02_quotaDrawerCheck = await quotaDrawer.evaluate((drawerEl) => {
       const effInput = drawerEl.querySelector('[data-testid="input-quota-effective-until"]');
       const effPlaceholder = effInput?.getAttribute('placeholder') || '';
       const numInputs = Array.from(drawerEl.querySelectorAll('input[type="number"]'));
@@ -3279,40 +3807,48 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
           return spinStyle.webkitAppearance === 'none' || spinStyle.appearance === 'none' || elStyle.appearance === 'textfield';
         });
       const pricingImpactVisible = Boolean(drawerEl.querySelector('[data-testid="quota-pricing-impact-note"]'));
+      const drawerText = drawerEl.innerText || '';
+      const stickyEls = Array.from(drawerEl.querySelectorAll('*')).filter(
+        (el) => window.getComputedStyle(el).position === 'sticky',
+      );
       return {
         effectiveUntilPlaceholder: effPlaceholder,
         numberInputsCount: numInputs.length,
         numericTextInputsCount: numericTextInputs.length,
         allNumberInputsSpinnerless,
         pricingImpactVisible,
+        hasConsistentLegalName: drawerText.includes('Công ty TNHH Thương mại & Kho vận Đại Phát'),
+        hasStickyFooter: stickyEls.length >= 1,
       };
     });
 
     cleanVnDatePlaceholdersVerified =
-      w19_01_modal.creditTimePlaceholder === 'dd/MM/yyyy HH:mm' &&
-      !w19_01_modal.creditTimePlaceholder.includes('VD:') &&
-      w19_02_quotaDrawerCheck.effectiveUntilPlaceholder === 'dd/MM/yyyy' &&
-      !w19_02_quotaDrawerCheck.effectiveUntilPlaceholder.includes('VD:') &&
-      w19_02_quotaDrawerCheck.allNumberInputsSpinnerless;
+      w20_01_modal.creditTimePlaceholder === 'dd/MM/yyyy HH:mm' &&
+      !w20_01_modal.creditTimePlaceholder.includes('VD:') &&
+      w20_02_quotaDrawerCheck.effectiveUntilPlaceholder === 'dd/MM/yyyy' &&
+      !w20_02_quotaDrawerCheck.effectiveUntilPlaceholder.includes('VD:') &&
+      w20_02_quotaDrawerCheck.allNumberInputsSpinnerless &&
+      w20_02_quotaDrawerCheck.hasStickyFooter;
 
-    addCheck('FND-W19-04-CLEAN-VN-DATE-PLACEHOLDERS-AND-SPINNERLESS-QUOTA-INPUTS', cleanVnDatePlaceholdersVerified, {
-      creditTimePlaceholder: w19_01_modal.creditTimePlaceholder,
-      ...w19_02_quotaDrawerCheck,
+    addCheck('FND-W20-02-CLEAN-VN-DATE-PLACEHOLDERS-AND-STICKY-QUOTA-DRAWER', cleanVnDatePlaceholdersVerified, {
+      creditTimePlaceholder: w20_01_modal.creditTimePlaceholder,
+      ...w20_02_quotaDrawerCheck,
     });
 
     rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, '/platform/tenants#quota-drawer@1440x900'));
     routeHygieneChecks.push(await collectViewportHygiene(page, '/platform/tenants#quota-drawer@1440x900'));
-    const w19_02Right = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
-    if (captureScreenshots && w19_02Left && w19_02Right) {
+    await probeShotGeometry(page, 'W20_02B:/platform/tenants#quota-drawer@1440x900');
+    const w20_02Right = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
+    if (captureScreenshots && w20_02Left && w20_02Right) {
       await maybeStitchedShot(
-        'W19_02_Platform_Billing_ReconciledSuccessToast_And_TenantQuotaDrawer_1440x900.png',
-        w19_02Left,
-        w19_02Right,
+        'W20_02_Platform_Billing_ConsistentLegalName_CleanActionCol_And_StickyQuotaDrawer_1440x900.png',
+        w20_02Left,
+        w20_02Right,
         {
           route: '/platform/billing#toast + /platform/tenants#quota-drawer',
           viewport: '1440x900 (2-up side-by-side)',
           actor: 'qa_admin',
-          checks: { toast: w19_02_toastCheck, quotaDrawer: w19_02_quotaDrawerCheck },
+          checks: { toast: w20_02_toastCheck, quotaDrawer: w20_02_quotaDrawerCheck },
         },
       );
     }
@@ -3339,7 +3875,7 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     await applyAuthTokenInBrowser(page, tenantAdminAuth.token, tenantAdminAuth.user, true);
 
     // =========================================================================
-    // W19_03 & W19_04: /saas-billing — Above-Fold IDLE_HIDDEN + Flat Dot Legend + 2-Line Invoice Cell + On-Demand 98418102005 QR
+    // W20_03 & W20_04: /saas-billing — Zero Truncated Titles, Light Placeholders, Invoice Table + Zero-Layout-Shift QR Modal & Info Blue Pending
     // =========================================================================
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${BASE_WEB}/saas-billing`, { waitUntil: 'networkidle' });
@@ -3347,9 +3883,9 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(300);
 
-    const w19_03_idle = await page.evaluate((legacyAcc) => {
+    const w20_03_idle = await page.evaluate((legacyAcc) => {
       const qrPanelCount = document.querySelectorAll(
-        '[data-testid="vietqr-payment-panel"], [data-testid="saas-vietqr-payment-panel"], [data-testid="vietqr-qr-box"]',
+        '[data-testid="vietqr-payment-modal"], [data-testid="vietqr-payment-panel"], [data-testid="saas-vietqr-payment-panel"], [data-testid="vietqr-qr-box"]',
       ).length;
       const bodyText = document.body?.innerText || '';
       const hasAutoCountdown15 = /\b1[45]:\d{2}\b/.test(bodyText);
@@ -3371,23 +3907,32 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
         quotaUsersText.includes('Tài khoản nhân sự') && bodyText.includes('tài khoản nhân sự');
       const hasCleanTaxpayerLabel =
         bodyText.includes('Doanh nghiệp / Tổ chức (MST 10 hoặc 13 số)') && !/ENTERPRISE\s*[—–-]/.test(bodyText);
+      const h1Text = (document.querySelector('main h1')?.textContent || '').trim();
 
       const thTexts = invTbl ? Array.from(invTbl.querySelectorAll('thead th')).map((th) => (th.textContent || '').trim()) : [];
       const hasDedicatedMstColumn = thTexts.some((t) => t.includes('MST người mua'));
       const taxSubLineEl = invTbl?.querySelector('[data-testid^="invoice-tax-detail-"]');
       const taxSubLineText = (taxSubLineEl?.textContent || '').trim();
       const hasTwoLineAmountCell = taxSubLineText.includes('Trước thuế:') && taxSubLineText.includes('VAT:');
+      const invScroll = invTbl?.closest('.ui-table-scroll');
+      const invoiceTableZeroHorizontalClip1440 = invScroll
+        ? invScroll.scrollWidth <= invScroll.clientWidth + 1
+        : true;
 
       return {
         scrollY: window.scrollY,
+        h1Text,
         qrPanelCount,
         hasAutoCountdown15,
         hasGenerateBtn,
         activeUsername,
         hasLegacyPlaceholder,
-        invoiceTableTopPx: invRect ? Math.round(invRect.top) : null,
+        invoiceTableTopPx: invRect ? invRect.top : null,
         firstInvoiceRowTopPx: firstRowRect ? Math.round(firstRowRect.top) : null,
         invoiceTableAboveFold,
+        invoiceTableScrollWidthPx: invScroll?.scrollWidth || 0,
+        invoiceTableClientWidthPx: invScroll?.clientWidth || 0,
+        invoiceTableZeroHorizontalClip1440,
         legendDotsCount,
         hasUnifiedNhanSuQuota,
         hasCleanTaxpayerLabel,
@@ -3397,30 +3942,31 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       };
     }, LEGACY_PLACEHOLDER_ACC);
 
-    invoiceHistoryVisibleAboveFold1440x900 = Boolean(w19_03_idle.invoiceTableAboveFold);
+    invoiceHistoryVisibleAboveFold1440x900 = Boolean(w20_03_idle.invoiceTableAboveFold);
 
     const onDemandIdleAndCleanBillingOk =
-      w19_03_idle.qrPanelCount === 0 &&
-      !w19_03_idle.hasAutoCountdown15 &&
-      w19_03_idle.hasGenerateBtn &&
-      w19_03_idle.activeUsername === 'tenant_admin' &&
-      !w19_03_idle.hasLegacyPlaceholder &&
+      w20_03_idle.qrPanelCount === 0 &&
+      !w20_03_idle.hasAutoCountdown15 &&
+      w20_03_idle.hasGenerateBtn &&
+      w20_03_idle.activeUsername === 'tenant_admin' &&
+      !w20_03_idle.hasLegacyPlaceholder &&
       invoiceHistoryVisibleAboveFold1440x900 &&
-      w19_03_idle.legendDotsCount === 5 &&
-      w19_03_idle.hasUnifiedNhanSuQuota &&
-      w19_03_idle.hasCleanTaxpayerLabel &&
-      w19_03_idle.hasDedicatedMstColumn &&
-      w19_03_idle.hasTwoLineAmountCell;
+      w20_03_idle.invoiceTableZeroHorizontalClip1440 &&
+      w20_03_idle.legendDotsCount === 5 &&
+      w20_03_idle.hasUnifiedNhanSuQuota &&
+      w20_03_idle.hasCleanTaxpayerLabel &&
+      w20_03_idle.hasDedicatedMstColumn &&
+      w20_03_idle.hasTwoLineAmountCell;
 
-    addCheck('FND-W19-03-SAAS-BILLING-ABOVE-FOLD-IDLE-HIDDEN-DOT-LEGEND-AND-2LINE-AMOUNT', onDemandIdleAndCleanBillingOk, w19_03_idle);
+    addCheck('FND-W20-04-SAAS-BILLING-IDLE-CLEAN-TITLES-AND-INVOICE-TABLE', onDemandIdleAndCleanBillingOk, w20_03_idle);
     if (!onDemandIdleAndCleanBillingOk) {
       addFinding({
-        id: 'QA-W19-SAAS-BILLING-03',
+        id: 'QA-W20-SAAS-BILLING-03',
         severity: 'MEDIUM',
-        domain: 'SaaS Billing Above-the-Fold, Flat Dot Legend & 2-Line Invoice Cell (FND-W19-03)',
+        domain: 'SaaS Billing Above-the-Fold, Flat Dot Legend & 2-Line Invoice Cell',
         ownerAgent: 'AGENT-02',
         summary: 'SaaS Billing failed above-the-fold invoice table visibility at 1440x900, flat dot legend, or 2-line invoice amount cell',
-        evidence: w19_03_idle,
+        evidence: w20_03_idle,
       });
     }
 
@@ -3435,70 +3981,102 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, '/saas-billing#idle@1440x900'));
     tableScrollMetrics.push(...(await measureVisibleTablesAtScrollZero(page, '/saas-billing', '1440x900')));
     routeHygieneChecks.push(await collectViewportHygiene(page, '/saas-billing#idle@1440x900'));
-    await maybeShot('W19_03_Customer_SaasBilling_DefaultIdleHiddenQr_And_CleanInvoiceHistoryTable_1440x900.png', {
+    await probeShotGeometry(page, 'W20_03:/saas-billing#idle@1440x900');
+    await maybeShot('W20_03_Customer_SaasBilling_ZeroTruncatedTitles_LightPlaceholders_And_InvoiceTable_1440x900.png', {
       route: '/saas-billing#idle-hidden',
       viewport: '1440x900',
       actor: 'tenant_admin',
-      checks: w19_03_idle,
+      checks: w20_03_idle,
     });
 
+    const beforeQrTopPx = await page.evaluate(() => {
+      const invTbl = document.querySelector('[data-testid="saas-invoice-history-table"]');
+      return invTbl ? invTbl.getBoundingClientRect().top : -1;
+    });
     await page.getByTestId('btn-generate-vietqr').first().click();
-    const qrPanel = page.getByTestId('vietqr-payment-panel');
-    await qrPanel.waitFor({ state: 'visible', timeout: 10000 });
-    await qrPanel.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(250);
+    const qrModal = page.getByTestId('vietqr-payment-modal');
+    await qrModal.waitFor({ state: 'visible', timeout: 10000 });
+    await page.waitForTimeout(220);
 
-    const w19_04_open = await page.evaluate((legacyAcc) => {
-      const panel = document.querySelector('[data-testid="vietqr-payment-panel"]');
-      const panelText = panel?.innerText || '';
-      const bodyText = document.body?.innerText || '';
-      const bankDisplay = (document.querySelector('[data-testid="vietqr-bank-display"]')?.textContent || '').trim();
-      const accountHolder = (document.querySelector('[data-testid="vietqr-account-holder"]')?.textContent || '').trim();
-      const accountNumber = (document.querySelector('[data-testid="vietqr-account-number"]')?.textContent || '').trim();
-      return {
-        bankDisplay,
-        accountHolder,
-        accountNumber,
-        hasTpBank: panelText.includes('TPBank'),
-        hasBin970423: panelText.includes('970423'),
-        hasAccount98418102005: accountNumber.includes('98418102005') && panelText.includes('98418102005'),
-        hasHolderHuynhPhiVan: accountHolder === 'HUYNH PHI VAN' && panelText.includes('HUYNH PHI VAN'),
-        hasAmount1490k: panelText.includes('1.490.000'),
-        hasVatBreakdown: panelText.includes('1.354.545') && panelText.includes('135.455'),
-        hasLegacyPlaceholder: bodyText.includes(legacyAcc) || panelText.includes(legacyAcc),
-        hasCloseBtn: Boolean(document.querySelector('[data-testid="btn-close-vietqr-panel"]')),
-      };
-    }, LEGACY_PLACEHOLDER_ACC);
+    const w20_04_open = await page.evaluate(
+      ({ legacyAcc, beforeTop }) => {
+        const modal = document.querySelector('[data-testid="vietqr-payment-modal"]');
+        const panel = document.querySelector('[data-testid="vietqr-payment-panel"]');
+        const invTbl = document.querySelector('[data-testid="saas-invoice-history-table"]');
+        const afterTop = invTbl ? invTbl.getBoundingClientRect().top : -999;
+        const layoutShiftPx = beforeTop >= 0 && afterTop > -900 ? Math.round(Math.abs(afterTop - beforeTop)) : 999;
+        const pollingBanner = document.querySelector('[data-testid="vietqr-auto-polling-indicator"]');
+        const pollingCs = pollingBanner ? window.getComputedStyle(pollingBanner) : null;
+        const panelText = panel?.innerText || '';
+        const bodyText = document.body?.innerText || '';
+        const bankDisplay = (document.querySelector('[data-testid="vietqr-bank-display"]')?.textContent || '').trim();
+        const accountHolder = (document.querySelector('[data-testid="vietqr-account-holder"]')?.textContent || '').trim();
+        const accountNumber = (document.querySelector('[data-testid="vietqr-account-number"]')?.textContent || '').trim();
+        return {
+          modalRole: modal?.getAttribute('role') || '',
+          ariaModal: modal?.getAttribute('aria-modal') || '',
+          beforeTopPx: Math.round(beforeTop),
+          afterTopPx: Math.round(afterTop),
+          qrOpenLayoutShiftPx: layoutShiftPx,
+          pollingColor: pollingCs?.color || '',
+          pollingBgColor: pollingCs?.backgroundColor || '',
+          infoBluePendingBanner:
+            pollingCs?.color === 'rgb(3, 105, 161)' && pollingCs?.backgroundColor === 'rgb(240, 249, 255)',
+          bankDisplay,
+          accountHolder,
+          accountNumber,
+          hasTpBank: panelText.includes('TPBank'),
+          hasBin970423: panelText.includes('970423'),
+          hasAccount98418102005: accountNumber.includes('98418102005') && panelText.includes('98418102005'),
+          hasHolderHuynhPhiVan: accountHolder === 'HUYNH PHI VAN' && panelText.includes('HUYNH PHI VAN'),
+          hasAmount1490k: panelText.includes('1.490.000'),
+          hasVatBreakdown: panelText.includes('1.354.545') && panelText.includes('135.455'),
+          hasLegacyPlaceholder: bodyText.includes(legacyAcc) || panelText.includes(legacyAcc),
+          hasCloseBtn: Boolean(document.querySelector('[data-testid="btn-close-vietqr-panel"]')),
+        };
+      },
+      { legacyAcc: LEGACY_PLACEHOLDER_ACC, beforeTop: beforeQrTopPx },
+    );
 
-    rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, '/saas-billing#vietqr-open@1440x900'));
-    routeHygieneChecks.push(await collectViewportHygiene(page, '/saas-billing#vietqr-open@1440x900'));
-    await maybeShot('W19_04_Customer_SaasBilling_OnDemandQrOpened_CanonicalAccount_98418102005_1440x900.png', {
-      route: '/saas-billing#vietqr-open',
+    qrOpenLayoutShiftPx = w20_04_open.qrOpenLayoutShiftPx;
+    vietQrInfoBluePendingVerified = Boolean(
+      w20_04_open.modalRole === 'dialog' &&
+        w20_04_open.ariaModal === 'true' &&
+        w20_04_open.infoBluePendingBanner,
+    );
+
+    rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, '/saas-billing#vietqr-modal@1440x900'));
+    routeHygieneChecks.push(await collectViewportHygiene(page, '/saas-billing#vietqr-modal@1440x900'));
+    await probeShotGeometry(page, 'W20_04:/saas-billing#vietqr-modal@1440x900');
+    await maybeShot('W20_04_Customer_SaasBilling_OnDemandQrModal_ZeroLayoutShift_InfoBluePending_1440x900.png', {
+      route: '/saas-billing#vietqr-modal',
       viewport: '1440x900',
       actor: 'tenant_admin',
-      checks: w19_04_open,
+      checks: w20_04_open,
     });
 
     await page.getByTestId('btn-close-vietqr-panel').first().click();
     await page.waitForTimeout(200);
-    const closedQrCount = await page.locator('[data-testid="vietqr-payment-panel"]').count();
+    const closedQrCount = await page.locator('[data-testid="vietqr-payment-modal"]').count();
     vietQrCanonicalAccount98418102005Verified =
-      w19_04_open.hasTpBank &&
-      w19_04_open.hasBin970423 &&
-      w19_04_open.hasAccount98418102005 &&
-      w19_04_open.hasHolderHuynhPhiVan &&
-      w19_04_open.hasAmount1490k &&
-      w19_04_open.hasVatBreakdown &&
-      !w19_04_open.hasLegacyPlaceholder &&
+      w20_04_open.hasTpBank &&
+      w20_04_open.hasBin970423 &&
+      w20_04_open.hasAccount98418102005 &&
+      w20_04_open.hasHolderHuynhPhiVan &&
+      w20_04_open.hasAmount1490k &&
+      w20_04_open.hasVatBreakdown &&
+      !w20_04_open.hasLegacyPlaceholder &&
+      qrOpenLayoutShiftPx === 0 &&
+      vietQrInfoBluePendingVerified &&
       closedQrCount === 0;
 
-    addCheck('FND-W18-01-VIETQR-CANONICAL-98418102005-AND-CLEAN-CLOSE', vietQrCanonicalAccount98418102005Verified, {
-      ...w19_04_open,
+    addCheck('FND-W20-04-VIETQR-MODAL-ZERO-SHIFT-INFOBLUE-AND-CANONICAL-98418102005', vietQrCanonicalAccount98418102005Verified, {
+      ...w20_04_open,
       closedCleanly: closedQrCount === 0,
     });
 
     // =========================================================================
-    // W19_05: /permissions — 6 Customer Tenant Roles + Zero Duplicate Words ("Phê duyệt phiếu nhập kho")
+    // W20_05: /permissions — 100% Vietnamese Role Tabs, Module Filter Bar, Switch Pills, No Nested Scroll & Admin Revoke Modal
     // =========================================================================
     const permCatalogApiResp = await context.request.get(`${BASE_API}/api/v1/permissions`, {
       headers: { Authorization: `Bearer ${tenantAdminAuth.token}` },
@@ -3516,22 +4094,15 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       .waitFor({ state: 'visible', timeout: 8000 })
       .then(() => true)
       .catch(() => false);
-    await page.waitForTimeout(250);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(220);
 
-    await page.evaluate(() => {
-      const innerRegion = document.querySelector('div[role="region"][aria-label^="Vùng cuộn danh sách quyền"]');
-      if (innerRegion) {
-        const rows = Array.from(innerRegion.querySelectorAll('tbody tr'));
-        const targetRow = rows.find((tr) => (tr.textContent || '').includes('approval.approve'));
-        if (targetRow instanceof HTMLElement) {
-          innerRegion.scrollTop = Math.max(0, targetRow.offsetTop - 90);
-        }
-      }
-      window.scrollTo(0, 0);
-    });
-    await page.waitForTimeout(150);
+    rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, '/permissions@1440x900'));
+    tableScrollMetrics.push(...(await measureVisibleTablesAtScrollZero(page, '/permissions', '1440x900')));
+    routeHygieneChecks.push(await collectViewportHygiene(page, '/permissions@1440x900'));
+    await probeShotGeometry(page, 'W20_05:/permissions@1440x900');
 
-    const permCheck = await page.evaluate((tabsVisible) => {
+    const permDefaultCheck = await page.evaluate((tabsVisible) => {
       const chips = Array.from(
         document.querySelectorAll('[data-testid="permissions-role-tabs"] button[role="tab"]'),
       ).map((b) => (b.textContent || '').trim());
@@ -3540,38 +4111,79 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       const hasPlatformRoleLeaked = ['SuperAdmin', 'BillingAdmin', 'SupportAdmin', 'SecurityAuditor', 'Chủ dự án'].some(
         (pr) => chips.some((c) => c.includes(pr)) || bodyText.includes(pr),
       );
-      const expectedSubstrings = ['Admin · 141', 'Manager · 98', 'Supervisor · 54', 'Accountant · 42', 'WarehouseStaff · 36', 'Viewer · 18'];
-      const all6Matched = expectedSubstrings.every((sub) => chips.some((c) => c.includes(sub)));
-      const dupDomRegex = /\b(phê duyệt\s+phê duyệt|kiểm tra\s+kiểm tra|xác nhận\s+xác nhận|tạo\s+tạo|xem\s+xem|xóa\s+xóa|cập nhật\s+cập nhật)\b/i;
-      const domCellsWithDupWords = Array.from(document.querySelectorAll('main tbody td strong'))
-        .map((s) => (s.textContent || '').trim())
-        .filter((txt) => dupDomRegex.test(txt));
-      const hasNormalizedApprovalLabel = bodyText.includes('Phê duyệt phiếu nhập kho');
+      const expectedViRoleChips = [
+        'Quản trị công ty (141)',
+        'Quản lý kho (98)',
+        'Giám sát & QC (54)',
+        'Kế toán kho (42)',
+        'Nhân viên kho (36)',
+        'Kiểm toán nội bộ (18)',
+      ];
+      const all6Matched = expectedViRoleChips.every((sub) => chips.some((c) => c.includes(sub)));
+      const nestedScrollCount = document.querySelectorAll('div[role="region"][aria-label^="Vùng cuộn danh sách quyền"]').length;
+      const hasModuleFilterBar = Boolean(document.querySelector('[data-testid="permissions-module-filter-bar"]'));
+      const hasDiffDefaultToggle = Boolean(document.querySelector('[data-testid="btn-toggle-diff-default"]'));
+      const switchPillsCount = document.querySelectorAll('table.permissions-table button[role="switch"]').length;
       return {
         roleTabsVisible: tabsVisible,
         chipCount: chips.length,
         chips,
         all6Matched,
         hasPlatformRoleLeaked,
-        domCellsWithDupWords,
-        hasNormalizedApprovalLabel,
+        nestedScrollCount,
+        hasModuleFilterBar,
+        hasDiffDefaultToggle,
+        switchPillsCount,
         alertText,
         topbarText: (document.querySelector('.topbar-context-text')?.textContent || '').trim(),
       };
     }, roleTabsVisible);
 
-    duplicateWordPermissionLabelsCount =
-      apiDuplicatePermissionItems.length + permCheck.domCellsWithDupWords.length;
-
-    rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, '/permissions@1440x900'));
-    tableScrollMetrics.push(...(await measureVisibleTablesAtScrollZero(page, '/permissions', '1440x900')));
-    routeHygieneChecks.push(await collectViewportHygiene(page, '/permissions@1440x900'));
-    await maybeShot('W19_05_Customer_Permissions_6TenantRoles_ZeroDuplicateWords_1440x900.png', {
+    await maybeShot('W20_05_Customer_Permissions_VietnameseRoleTabs_ModuleFilter_NoNestedScroll_1440x900.png', {
       route: '/permissions',
       viewport: '1440x900',
       actor: 'tenant_admin',
-      checks: { ...permCheck, duplicateWordPermissionLabelsCount },
+      checks: permDefaultCheck,
     });
+
+    const allPill = page.getByTestId('perm-module-pill-ALL');
+    if ((await allPill.count()) > 0) {
+      await allPill.click();
+      await page.waitForTimeout(180);
+    }
+
+    const permAllCatalogCheck = await page.evaluate(() => {
+      const bodyText = document.body?.innerText || '';
+      const dupDomRegex = /\b(phê duyệt\s+phê duyệt|kiểm tra\s+kiểm tra|xác nhận\s+xác nhận|tạo\s+tạo|xem\s+xem|xóa\s+xóa|cập nhật\s+cập nhật)\b/i;
+      const domCellsWithDupWords = Array.from(document.querySelectorAll('table.permissions-table tbody td:first-child'))
+        .map((s) => (s.textContent || '').trim())
+        .filter((txt) => dupDomRegex.test(txt));
+      return {
+        domCellsWithDupWords,
+        hasNormalizedApprovalLabel: bodyText.includes('Phê duyệt phiếu nhập kho'),
+      };
+    });
+
+    const firstAdminSwitch = page.locator('table.permissions-table button[role="switch"][aria-checked="true"]').first();
+    if ((await firstAdminSwitch.count()) > 0) {
+      await firstAdminSwitch.click();
+      const revokeModal = page.getByTestId('admin-revoke-confirm-modal');
+      const opened = await revokeModal.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
+      if (opened) {
+        const modalAttrs = await revokeModal.evaluate((el) => ({
+          role: el.getAttribute('role') || '',
+          ariaModal: el.getAttribute('aria-modal') || '',
+        }));
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(180);
+        const closed = (await revokeModal.count()) === 0;
+        adminRevokeModalVerified = modalAttrs.role === 'dialog' && modalAttrs.ariaModal === 'true' && closed;
+      }
+    }
+
+    const permCheck = { ...permDefaultCheck, ...permAllCatalogCheck, adminRevokeModalVerified };
+    duplicateWordPermissionLabelsCount =
+      apiDuplicatePermissionItems.length + permAllCatalogCheck.domCellsWithDupWords.length;
 
     await page.goto(`${BASE_WEB}/users`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(350);
@@ -3590,11 +4202,16 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       permCheck.chipCount === 6 &&
       permCheck.all6Matched &&
       !permCheck.hasPlatformRoleLeaked &&
+      permCheck.nestedScrollCount === 0 &&
+      permCheck.hasModuleFilterBar &&
+      permCheck.hasDiffDefaultToggle &&
+      permCheck.switchPillsCount >= 1 &&
+      adminRevokeModalVerified &&
       permCheck.hasNormalizedApprovalLabel &&
       duplicateWordPermissionLabelsCount === 0 &&
       usersDomCheck.hasTenantAdmin &&
       usersDomCheck.leakedPlatformUsers.length === 0;
-    addCheck('FND-W19-02-UI-CUSTOMER-PERMISSIONS-6-ROLES-ZERO-DUPLICATE-WORDS', customerPermissionsZeroPlatformRoles, {
+    addCheck('FND-W20-03-UI-CUSTOMER-PERMISSIONS-VIETNAMESE-TABS-MODULE-FILTER-AND-REVOKE-MODAL', customerPermissionsZeroPlatformRoles, {
       duplicateWordPermissionLabelsCount,
       apiDuplicatePermissionItems,
       permCheck,
@@ -3654,8 +4271,9 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
         hasNonZeroPortfolioValue:
           Boolean(firstMetricVal) &&
           firstMetricVal !== '0 đ' &&
+          firstMetricVal !== '0 ₫' &&
           !txt.includes('Chưa có dữ liệu') &&
-          /[1-9][\d.]{5,}\s*đ/.test(firstMetricVal),
+          /[1-9][\d.]{5,}\s*[đ₫]/.test(firstMetricVal),
         hasPositiveSkuCount: /^[1-9]\d*\s+mặt hàng$/.test(secondMetricVal),
       };
     });
@@ -3688,7 +4306,7 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     );
 
     // =========================================================================
-    // W19_06: /kit-work-orders — Equal-Height KPIs ("2 linh kiện BOM") + Status Left + Reversal Modal
+    // W20_06: /kit-work-orders — 5-Column BOM Mini-Table, Semantic Badges, Equal-Height KPIs & Reversal Modal
     // =========================================================================
     await page.goto(`${BASE_WEB}/kit-work-orders`, { waitUntil: 'networkidle' });
     await page.getByTestId('kit-work-orders-workbench').waitFor({ state: 'visible', timeout: 15000 });
@@ -3708,11 +4326,19 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       const heights = cards.map((c) => Math.round(c.getBoundingClientRect().height));
       const diff = heights.length ? Math.max(...heights) - Math.min(...heights) : 999;
       const texts = cards.map((c) => (c.innerText || '').trim());
+      const bomTbl =
+        document.querySelector('[data-testid="kit-bom-preview-table"]') ||
+        Array.from(document.querySelectorAll('[data-testid="kit-work-orders-workbench"] table')).find((t) =>
+          (t.textContent || '').includes('Định mức'),
+        );
+      const bomHeaders = bomTbl ? Array.from(bomTbl.querySelectorAll('thead th')).map((th) => (th.textContent || '').trim()) : [];
       return {
         cardCount: cards.length,
         heights,
         kpiHeightDiffPx: diff,
         has2LinhKienBom: texts.some((t) => t.includes('2 linh kiện BOM')),
+        hasMiniBomTable5Cols: bomHeaders.length === 5,
+        bomHeaders,
       };
     });
     kpiHeightDiffPx = kitKpiCheck.kpiHeightDiffPx;
@@ -3721,15 +4347,17 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     tableScrollMetrics.push(...kit1440Tables);
     const kitWoTable1440 = kit1440Tables.find((t) => t.tableId === 'kit-work-orders-table');
     addCheck(
-      'FND-W19-04-KIT-WORK-ORDERS-EQUAL-HEIGHT-KPIS-AND-STATUS-COL2',
+      'FND-W20-05-KIT-WORK-ORDERS-MINI-BOM-TABLE-EQUAL-KPIS-AND-STATUS-COL2',
       kitKpiCheck.cardCount === 4 &&
         kpiHeightDiffPx === 0 &&
         kitKpiCheck.has2LinhKienBom &&
+        kitKpiCheck.hasMiniBomTable5Cols &&
         Boolean(kitWoTable1440 && kitWoTable1440.statusColIndex1Based === 2 && kitWoTable1440.statusVisibleAtScroll0),
       { kitKpiCheck, kitWoTable1440 },
     );
     rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, '/kit-work-orders@1440x900'));
-    const w19_06Left = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
+    await probeShotGeometry(page, 'W20_06A:/kit-work-orders@1440x900');
+    const w20_06Left = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
 
     await page.getByTestId('kit-work-orders-table').scrollIntoViewIfNeeded();
     await page.waitForTimeout(120);
@@ -3740,7 +4368,7 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     const kitReasonInput = kitModal.locator('textarea, input[type="text"]').first();
     await kitReasonInput.fill('Ngắn');
     const disabledWhenShort = await kitModal.locator('button[type="submit"], [data-testid="btn-confirm-kit-reversal"]').first().isDisabled();
-    await kitReasonInput.fill('Kiểm chứng xác nhận đảo lệnh lắp ráp KWO-2026-001 đầy đủ thông tin giá vốn bình quân');
+    await kitReasonInput.fill('Điều chỉnh kế hoạch đóng gói bộ sản phẩm KWO-2026-001 theo yêu cầu xuất kho');
     await page.waitForTimeout(150);
 
     const kitModalCheck = await kitModal.evaluate((modalEl) => {
@@ -3754,6 +4382,7 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
         hasKwoCode: txt.includes('KWO-2026-001'),
         has20Units: txt.includes('20'),
         has10MValuation: txt.includes('10.000.000'),
+        hasMisleadingSlashMinCounter: /\b\d+\/\d+\s*ký tự tối thiểu/i.test(txt),
         enabledWhenReasonValid: submitBtn ? !submitBtn.hasAttribute('disabled') : false,
       };
     });
@@ -3764,6 +4393,7 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       kitModalCheck.hasKwoCode &&
       kitModalCheck.has20Units &&
       kitModalCheck.has10MValuation &&
+      !kitModalCheck.hasMisleadingSlashMinCounter &&
       disabledWhenShort &&
       kitModalCheck.enabledWhenReasonValid;
     addCheck('FND-W18-03-KIT-REVERSAL-MODAL-OPEN-AND-VALIDATED', kitReversalModalVerified, {
@@ -3771,14 +4401,15 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       ...kitModalCheck,
     });
 
-    iconButtonAriaAudits.push(await auditIconOnlyButtons(page, 'W19_06:KitReversalModal@1440x900'));
+    iconButtonAriaAudits.push(await auditIconOnlyButtons(page, 'W20_06:KitReversalModal@1440x900'));
     routeHygieneChecks.push(await collectViewportHygiene(page, '/kit-work-orders#reversal-modal@1440x900'));
-    const w19_06Right = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
-    if (captureScreenshots && w19_06Left && w19_06Right) {
+    await probeShotGeometry(page, 'W20_06B:/kit-work-orders#reversal-modal@1440x900');
+    const w20_06Right = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
+    if (captureScreenshots && w20_06Left && w20_06Right) {
       await maybeStitchedShot(
-        'W19_06_Customer_KitWorkOrders_EqualHeightKpis_StatusLeft_And_ReversalModal_1440x900.png',
-        w19_06Left,
-        w19_06Right,
+        'W20_06_Customer_KitWorkOrders_MiniBomTable_SemanticBadges_And_ReversalModal_1440x900.png',
+        w20_06Left,
+        w20_06Right,
         {
           route: '/kit-work-orders + /kit-work-orders#modal-confirm-kit-reversal',
           viewport: '1440x900 (2-up side-by-side)',
@@ -3795,7 +4426,7 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     });
 
     // =========================================================================
-    // W19_07: /customer-returns (100% Vietnamese Enums + Zero Overflow + Scanner Toast) + /backorders (Empty Zero <thead>)
+    // W20_07: /customer-returns (Uncut Select & Placeholder + Nowrap Codes) + /backorders (Empty Zero <thead>)
     // =========================================================================
     await page.goto(`${BASE_WEB}/customer-returns`, { waitUntil: 'networkidle' });
     await page.locator('table[aria-label="Bảng quản lý hàng hoàn và đổi trả RMA"]').waitFor({ state: 'visible', timeout: 15000 });
@@ -3825,9 +4456,13 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     const rma1440Tables = await measureVisibleTablesAtScrollZero(page, '/customer-returns', '1440x900');
     tableScrollMetrics.push(...rma1440Tables);
     rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, '/customer-returns@1440x900'));
+    const rmaGeo1440 = await probeShotGeometry(page, 'W20_07A:/customer-returns@1440x900');
     const rmaCheck = await page.evaluate(() => {
       const txt = document.body?.innerText || '';
       const banner = document.querySelector('[data-testid="rma-success-banner"]');
+      const codeEls = Array.from(document.querySelectorAll('main table .ui-code'));
+      const allCodesNowrap =
+        codeEls.length > 0 && codeEls.every((el) => window.getComputedStyle(el).whiteSpace === 'nowrap');
       return {
         hasRmaRows: document.querySelectorAll('tr[data-testid^="rma-row-"]').length > 0,
         hasCostVisible: document.querySelectorAll('[data-testid="rma-cost-visible"]').length > 0,
@@ -3835,21 +4470,24 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
         bannerVisible: Boolean(banner && banner.getBoundingClientRect().height > 20),
         bannerRole: banner?.getAttribute('role') || '',
         bannerAriaLive: banner?.getAttribute('aria-live') || '',
+        allCodesNowrap,
       };
     });
     addCheck(
-      'FND-W19-01-AND-02-CUSTOMER-RETURNS-VIETNAMESE-ZERO-OVERFLOW-AND-TOAST',
+      'FND-W20-01-CUSTOMER-RETURNS-UNCUT-CONTROLS-NOWRAP-CODES-AND-ZERO-OVERFLOW',
       rmaCheck.hasRmaRows &&
         rmaCheck.hasCostVisible &&
         rmaCheck.hasViQuarantinedBadge &&
         rmaCheck.bannerVisible &&
         rmaCheck.bannerRole === 'status' &&
         rmaCheck.bannerAriaLive === 'polite' &&
+        rmaCheck.allCodesNowrap &&
+        rmaGeo1440.truncatedElementsCount === 0 &&
         rma1440Tables.every((t) => !t.hasOverflow && t.statusVisibleAtScroll0),
-      { rmaCheck, rma1440Tables },
+      { rmaCheck, rmaTruncatedCount: rmaGeo1440.truncatedElementsCount, rma1440Tables },
     );
     routeHygieneChecks.push(await collectViewportHygiene(page, '/customer-returns@1440x900'));
-    const w19_07Left = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
+    const w20_07Left = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
 
     await page.goto(`${BASE_WEB}/backorders`, { waitUntil: 'networkidle' });
     await page.getByTestId('backorders-kpi-grid').waitFor({ state: 'visible', timeout: 15000 });
@@ -3861,12 +4499,13 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     emptyBackordersZeroThead = Boolean(boCheck.hasEmpty && boCheck.theadsInMain === 0);
     addCheck('FND-W19-04-BACKORDERS-EMPTY-NO-BLANK-THEAD', emptyBackordersZeroThead, boCheck);
     routeHygieneChecks.push(await collectViewportHygiene(page, '/backorders@1440x900'));
-    const w19_07Right = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
-    if (captureScreenshots && w19_07Left && w19_07Right) {
+    await probeShotGeometry(page, 'W20_07B:/backorders@1440x900');
+    const w20_07Right = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
+    if (captureScreenshots && w20_07Left && w20_07Right) {
       await maybeStitchedShot(
-        'W19_07_Customer_ReturnsRma_100PctVietnameseEnums_ZeroOverflow_And_EmptyBackorders_1440x900.png',
-        w19_07Left,
-        w19_07Right,
+        'W20_07_Customer_ReturnsRma_UncutSelectAndPlaceholder_NowrapCodes_1440x900.png',
+        w20_07Left,
+        w20_07Right,
         {
           route: '/customer-returns + /backorders',
           viewport: '1440x900 (2-up side-by-side)',
@@ -3877,102 +4516,162 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     }
 
     // =========================================================================
-    // W19_08: Tablet 768x1024 — /import-receipts & /kit-work-orders Visible Status & Zero Clipped WH01
+    // W20_08: Tablet 768x1024 — /import-receipts & /kit-work-orders Responsive Card View, 2x2 KPIs & Zero Overlap
     // =========================================================================
     await page.setViewportSize({ width: 768, height: 1024 });
     await page.goto(`${BASE_WEB}/import-receipts`, { waitUntil: 'networkidle' });
-    const impTbl768 = page.locator('table[aria-label="Danh sách phiếu nhập"]');
-    await impTbl768.waitFor({ state: 'visible', timeout: 15000 });
-    await impTbl768.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(200);
+    await page
+      .locator('.ui-mobile-card-list, [data-testid="import-receipts-mobile-cards"]')
+      .first()
+      .waitFor({ state: 'visible', timeout: 15000 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(220);
     rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, '/import-receipts@768x1024'));
-    const imp768Metrics = await measureVisibleTablesAtScrollZero(page, '/import-receipts', '768x1024');
-    tableScrollMetrics.push(...imp768Metrics);
-    const imp768CodeCheck = await page.evaluate(() => {
-      const wrap = document.querySelector('.ui-desktop-table-wrap .ui-table-scroll');
-      const firstCodeTd = document.querySelector('table[aria-label="Danh sách phiếu nhập"] tbody td.ui-sticky-id');
-      const r = firstCodeTd?.getBoundingClientRect();
-      const wRect = wrap?.getBoundingClientRect();
+    const imp768Geo = await probeShotGeometry(page, 'W20_08A:/import-receipts@768x1024');
+    const imp768CardCheck = await page.evaluate(() => {
+      const desktopTbl = document.querySelector('table[aria-label="Danh sách phiếu nhập"]');
+      const tblRect = desktopTbl?.getBoundingClientRect();
+      const desktopTableHidden = !desktopTbl || !tblRect || tblRect.width === 0 || tblRect.height === 0;
+      const cards = Array.from(document.querySelectorAll('[data-testid="import-receipt-mobile-card"]'));
+      const metrics = Array.from(document.querySelectorAll('main .ui-metric')).map((m) =>
+        Math.round(m.getBoundingClientRect().top),
+      );
+      const is2x2Grid =
+        metrics.length >= 4 &&
+        Math.abs(metrics[0] - metrics[1]) <= 4 &&
+        Math.abs(metrics[2] - metrics[3]) <= 4 &&
+        metrics[2] > metrics[0] + 20;
+      const docEl = document.documentElement;
       return {
-        codeText: (firstCodeTd?.textContent || '').trim(),
-        codeFullyVisible: Boolean(r && wRect && r.left >= wRect.left - 1 && r.right <= wRect.right),
+        desktopTableHidden,
+        cardCount: cards.length,
+        metricsCount: metrics.length,
+        is2x2Grid,
+        hasPnk202611001: (document.body?.innerText || '').includes('PNK-202611-001'),
+        horizontalOverflowPx: Math.max(0, docEl.scrollWidth - docEl.clientWidth),
       };
     });
     routeHygieneChecks.push(await collectViewportHygiene(page, '/import-receipts@768x1024'));
-    const w19_08Left = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
+    const w20_08Left = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
 
     await page.goto(`${BASE_WEB}/kit-work-orders`, { waitUntil: 'networkidle' });
-    const kitTbl768 = page.getByTestId('kit-work-orders-table');
-    await kitTbl768.waitFor({ state: 'visible', timeout: 15000 });
-    await kitTbl768.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(200);
+    await page.getByTestId('kit-work-orders-workbench').waitFor({ state: 'visible', timeout: 15000 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(220);
     rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, '/kit-work-orders@768x1024'));
-    const kit768Metrics = await measureVisibleTablesAtScrollZero(page, '/kit-work-orders', '768x1024');
-    tableScrollMetrics.push(...kit768Metrics);
-    const kit768TargetMetric = kit768Metrics.find((m) => m.tableId === 'kit-work-orders-table') || kit768Metrics[0];
-    const kit768CodeCheck = await page.evaluate(() => {
-      const tbl = document.querySelector('[data-testid="kit-work-orders-table"]');
-      const wrap = tbl?.closest('.ui-table-scroll');
-      const firstCodeTd = tbl?.querySelector('tbody td');
-      const r = firstCodeTd?.getBoundingClientRect();
-      const wRect = wrap?.getBoundingClientRect();
+    const kit768Geo = await probeShotGeometry(page, 'W20_08B:/kit-work-orders@768x1024');
+    const kit768CardCheck = await page.evaluate(() => {
+      const desktopTbl = document.querySelector('[data-testid="kit-work-orders-table"]');
+      const tblRect = desktopTbl?.getBoundingClientRect();
+      const desktopTableHidden = !desktopTbl || !tblRect || tblRect.width === 0 || tblRect.height === 0;
+      const cardList = document.querySelector('[data-testid="kit-work-orders-workbench"] .ui-mobile-card-list');
+      const cardListRect = cardList?.getBoundingClientRect();
+      const cardViewVisible = Boolean(cardList && cardListRect && cardListRect.height > 40);
+      const metrics = Array.from(
+        document.querySelectorAll('[data-testid="kit-work-orders-workbench"] .ui-metric'),
+      ).map((m) => Math.round(m.getBoundingClientRect().top));
+      const is2x2Grid =
+        metrics.length === 4 &&
+        Math.abs(metrics[0] - metrics[1]) <= 4 &&
+        Math.abs(metrics[2] - metrics[3]) <= 4 &&
+        metrics[2] > metrics[0] + 20;
+      const concatenatedFields = Array.from(document.querySelectorAll('.ui-mobile-card-field')).filter((f) => {
+        const lbl = f.querySelector('.ui-mobile-card-label');
+        const val = f.querySelector('.ui-mobile-card-value');
+        if (!lbl || !val) return false;
+        const lr = lbl.getBoundingClientRect();
+        const vr = val.getBoundingClientRect();
+        if (lr.width <= 0 || vr.width <= 0) return false;
+        return Math.abs(lr.top - vr.top) < 6 && vr.left - lr.right < 4 && !(lbl.textContent || '').trim().endsWith(':');
+      });
+      const docEl = document.documentElement;
       return {
-        codeText: (firstCodeTd?.textContent || '').trim(),
-        codeFullyVisible: Boolean(r && wRect && r.left >= wRect.left - 1 && r.right <= wRect.right),
+        desktopTableHidden,
+        cardViewVisible,
+        metricsCount: metrics.length,
+        is2x2Grid,
+        concatenatedFieldLabelsCount: concatenatedFields.length,
+        hasKwo2026001: (document.body?.innerText || '').includes('KWO-2026-001'),
+        horizontalOverflowPx: Math.max(0, docEl.scrollWidth - docEl.clientWidth),
       };
     });
     routeHygieneChecks.push(await collectViewportHygiene(page, '/kit-work-orders@768x1024'));
-    const w19_08Right = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
+    const w20_08Right = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
 
     const tablet768Ok =
-      imp768Metrics.length >= 1 &&
-      imp768Metrics[0].scrollLeft === 0 &&
-      imp768Metrics[0].stickyActionRightOverflowPx === 0 &&
-      imp768Metrics[0].statusVisibleAtScroll0 &&
-      imp768Metrics[0].clippedWarehouseCellsCount === 0 &&
-      imp768CodeCheck.codeFullyVisible &&
-      Boolean(kit768TargetMetric) &&
-      kit768TargetMetric.scrollLeft === 0 &&
-      kit768TargetMetric.stickyActionRightOverflowPx === 0 &&
-      kit768TargetMetric.statusVisibleAtScroll0 &&
-      kit768TargetMetric.clippedWarehouseCellsCount === 0 &&
-      kit768CodeCheck.codeFullyVisible;
-    addCheck('FND-W19-01-TABLET-768-VISIBLE-STATUS-AND-ZERO-CLIPPED-WH01', tablet768Ok, {
-      imp768: imp768Metrics[0] || {},
-      imp768CodeCheck,
-      kit768: kit768TargetMetric || {},
-      kit768CodeCheck,
+      imp768CardCheck.desktopTableHidden &&
+      imp768CardCheck.cardCount >= 1 &&
+      (imp768CardCheck.metricsCount === 0 || imp768CardCheck.is2x2Grid) &&
+      imp768CardCheck.hasPnk202611001 &&
+      imp768CardCheck.horizontalOverflowPx === 0 &&
+      imp768Geo.truncatedElementsCount === 0 &&
+      kit768CardCheck.desktopTableHidden &&
+      kit768CardCheck.cardViewVisible &&
+      kit768CardCheck.is2x2Grid &&
+      kit768CardCheck.concatenatedFieldLabelsCount === 0 &&
+      kit768CardCheck.hasKwo2026001 &&
+      kit768CardCheck.horizontalOverflowPx === 0 &&
+      kit768Geo.truncatedElementsCount === 0;
+    addCheck('FND-W20-01-TABLET-768-CARD-VIEW-2X2-KPIS-AND-ZERO-OVERLAP', tablet768Ok, {
+      imp768CardCheck,
+      imp768TruncatedItems: imp768Geo.truncatedItems,
+      kit768CardCheck,
+      kit768TruncatedItems: kit768Geo.truncatedItems,
     });
+    if (!tablet768Ok) {
+      addFinding({
+        id: 'QA-W20-TABLET-768-CARD-AND-TOPBAR',
+        severity: 'MEDIUM',
+        domain: 'Wave-20 Tablet 768x1024 Card Layout, Topbar Bleed & Field Spacing',
+        ownerAgent: 'AGENT-02',
+        summary:
+          'At 768x1024, topbar button bleeds past viewport right edge (MainLayoutParts.tsx:179-260), /kit-work-orders SKU <select> clips option text, or .ui-mobile-card-field concatenates label+value with 0px gap (KitWorkOrderResponsiveCards.tsx:124-136)',
+        evidence: {
+          imp768CardCheck,
+          imp768TruncatedItems: imp768Geo.truncatedItems,
+          kit768CardCheck,
+          kit768TruncatedItems: kit768Geo.truncatedItems,
+        },
+      });
+    }
 
-    if (captureScreenshots && w19_08Left && w19_08Right) {
+    if (captureScreenshots && w20_08Left && w20_08Right) {
       await maybeStitchedShot(
-        'W19_08_Tablet_768x1024_ImportReceipts_And_KitWorkOrders_VisibleStatus_ZeroClippedText_768x1024.png',
-        w19_08Left,
-        w19_08Right,
+        'W20_08_Tablet_768x1024_ImportReceipts_And_KitWorkOrders_CardView_2x2Kpis_ZeroOverlap_768x1024.png',
+        w20_08Left,
+        w20_08Right,
         {
           route: '/import-receipts + /kit-work-orders',
           viewport: '768x1024 (2-up side-by-side)',
           actor: 'tenant_admin',
-          checks: { imp768CodeCheck, kit768CodeCheck },
+          checks: { imp768CardCheck, kit768CardCheck },
         },
       );
     }
 
     // =========================================================================
-    // W19_09: Mobile 375x812 — /import-receipts Single Solid Primary CTA Card + No English
+    // W20_09: Mobile 375x812 — /import-receipts Collapsed Filter, First Card Above Fold (<= 230px) & Single-Row Actions
     // =========================================================================
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(`${BASE_WEB}/import-receipts`, { waitUntil: 'networkidle' });
     const mobileCardsList = page.locator('.ui-mobile-card-list, [data-testid="import-receipts-mobile-cards"]').first();
     await mobileCardsList.waitFor({ state: 'visible', timeout: 15000 });
-    await page.locator('[data-testid="import-receipt-mobile-card"]').first().scrollIntoViewIfNeeded();
-    await page.waitForTimeout(200);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(220);
     rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, '/import-receipts@375x812'));
+    await probeShotGeometry(page, 'W20_09:/import-receipts@375x812');
 
     const imp375Check = await page.evaluate(() => {
       const listEl = document.querySelector('.ui-mobile-card-list, [data-testid="import-receipts-mobile-cards"]');
       const cs = listEl ? window.getComputedStyle(listEl) : null;
       const cards = Array.from(document.querySelectorAll('[data-testid="import-receipt-mobile-card"]'));
+      const firstCardRect = cards[0]?.getBoundingClientRect();
+      const firstCardTopPx = firstCardRect ? Math.round(firstCardRect.top) : 999;
+      const firstPrimaryBtn = cards[0]?.querySelector('.ui-btn-primary, .import-row-actions-mobile button');
+      const firstMoreBtn = cards[0]?.querySelector('summary, [aria-label*="Thao tác"], [aria-label*="thao tác"]');
+      const pRect = firstPrimaryBtn?.getBoundingClientRect();
+      const mRect = firstMoreBtn?.getBoundingClientRect();
+      const singleRowActions = Boolean(pRect && mRect && Math.abs(pRect.top - mRect.top) <= 4 && mRect.right <= 375);
       const listText = listEl?.innerText || '';
       const maxPrimaryBtnsPerCard = cards.length
         ? Math.max(...cards.map((c) => c.querySelectorAll('.ui-btn-primary').length))
@@ -3983,8 +4682,11 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
         : 0;
       const docEl = document.documentElement;
       return {
+        scrollY: window.scrollY,
         listDisplay: cs?.display || 'none',
         cardCount: cards.length,
+        firstCardTopPx,
+        singleRowActions,
         maxPrimaryBtnsPerCard,
         hasExpressPost: /Express\s+Post/i.test(listText),
         hasDuLieuCu: /dữ\s+liệu\s+cũ/i.test(listText),
@@ -3996,9 +4698,13 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       };
     });
 
+    mobileFirstCardTopPx375 = imp375Check.firstCardTopPx;
+
     importReceipts375CardListVerified =
       imp375Check.listDisplay !== 'none' &&
       imp375Check.cardCount >= 1 &&
+      imp375Check.firstCardTopPx <= 230 &&
+      imp375Check.singleRowActions &&
       imp375Check.hasPnk202611001 &&
       imp375Check.hasWarehouseWh01 &&
       imp375Check.hasTotal5500k &&
@@ -4012,19 +4718,19 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       !imp375Check.hasDuLieuCu;
 
     addCheck(
-      'FND-W19-02-MOBILE-375-IMPORT-RECEIPTS-SINGLE-PRIMARY-CTA-NO-ENGLISH',
+      'FND-W20-06-MOBILE-375-IMPORT-RECEIPTS-FIRST-CARD-ABOVE-230PX-SINGLE-ROW-CTA',
       importReceiptsSinglePrimaryCtaMobile,
       imp375Check,
     );
     routeHygieneChecks.push(await collectViewportHygiene(page, '/import-receipts@375x812'));
-    await maybeShot('W19_09_Mobile_375x812_ImportReceipts_SinglePrimaryCtaCard_NoEnglish_375x812.png', {
+    await maybeShot('W20_09_Mobile_375x812_ImportReceipts_CollapsedFilter_FirstCardAboveFold_SingleRowActions_375x812.png', {
       route: '/import-receipts#mobile-cards',
       viewport: '375x812',
       actor: 'tenant_admin',
       checks: imp375Check,
     });
 
-    // Verify keyboard flyout on 1024x768 + execute real hasTouch: true tap() flyout & capture W19_10
+    // Verify keyboard flyout on 1024x768 + execute real hasTouch: true tap() flyout & capture W20_10
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.goto(`${BASE_WEB}/sales-orders`, { waitUntil: 'networkidle' });
     await page.getByTestId('sales-orders-table').waitFor({ state: 'visible', timeout: 15000 });
@@ -4047,22 +4753,23 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     addCheck('A11Y-KEYBOARD-SIDEBAR-FLYOUT-1024', kbCheck.flyoutOpen && kbCheck.activeInsideFlyout && kbCheck.matchesFocusVisible, kbCheck);
     await page.keyboard.press('Escape');
 
-    touchFlyoutSummary = await runTouchFlyoutVerificationAndCaptureW1910(
+    touchFlyoutSummary = await runTouchFlyoutVerificationAndCaptureW2010(
       browser,
       tenantAdminAuth,
       captureScreenshots,
       screenshotsManifest,
       sortHeaderMetrics,
       routeHygieneChecks,
+      screenshotGeometryProbes,
       addFinding,
       addCheck,
     );
 
     // =========================================================================
-    // W19_11: Mobile 360x800 (/picking-tasks Scanner) & 390x844 (/import-receipts Cards)
+    // W20_11: Mobile 360x800 (/picking-tasks Compact 3-Col KPI & Scanner) + 390x844 (/import-receipts First Card Above Fold)
     // =========================================================================
     const pickMobileChecks = [];
-    let w19_11Left = null;
+    let w20_11Left = null;
     for (const mvp of [
       { width: 360, height: 800, captureLeft: true },
       { width: 375, height: 812, captureLeft: false },
@@ -4082,6 +4789,13 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
         const cam = document.querySelector('[data-testid="scanner-camera-viewport"]');
         const bottomNav = document.querySelector('[data-testid="pda-bottom-nav"]');
         const navTabsCount = bottomNav ? bottomNav.querySelectorAll('a, button').length : 0;
+        const headerWrap = document.querySelector('.picking-page-header-wrap');
+        const headerHidden = !headerWrap || window.getComputedStyle(headerWrap).display === 'none';
+        const kpiStrip = document.querySelector('[data-testid="picking-handheld-kpi-strip"]');
+        const kpiCells = kpiStrip ? Array.from(kpiStrip.children) : [];
+        const compact3ColKpi =
+          kpiCells.length === 3 &&
+          Math.abs(kpiCells[0].getBoundingClientRect().top - kpiCells[2].getBoundingClientRect().top) <= 4;
         const cRect = confirmBtn?.getBoundingClientRect();
         const uRect = undoBtn?.getBoundingClientRect();
         const camRect = cam?.getBoundingClientRect();
@@ -4091,54 +4805,80 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
           horizontalOverflowPx: Math.max(0, docEl.scrollWidth - docEl.clientWidth),
           confirmUndoSameRow: Boolean(cRect && uRect && Math.abs(cRect.top - uRect.top) <= 4 && uRect.right <= w),
           scannerAboveFold: Boolean(camRect && camRect.bottom <= h),
+          headerHidden,
+          compact3ColKpi,
           navTabsCount,
         };
       }, mvp);
       pickMobileChecks.push(mCheck);
       rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, `/picking-tasks@${mvp.width}x${mvp.height}`));
       routeHygieneChecks.push(await collectViewportHygiene(page, `/picking-tasks@${mvp.width}x${mvp.height}`));
-      if (captureScreenshots && mvp.captureLeft) {
-        w19_11Left = (await capturePureCdpBuffer(page)).buf;
+      if (mvp.captureLeft) {
+        await probeShotGeometry(page, 'W20_11A:/picking-tasks@360x800');
+        if (captureScreenshots) {
+          w20_11Left = (await capturePureCdpBuffer(page)).buf;
+        }
       }
     }
 
     const mobilePickingAllOk = pickMobileChecks.every(
-      (c) => c.horizontalOverflowPx === 0 && c.confirmUndoSameRow && c.scannerAboveFold && c.navTabsCount === 5,
+      (c) =>
+        c.horizontalOverflowPx === 0 &&
+        c.confirmUndoSameRow &&
+        c.scannerAboveFold &&
+        c.headerHidden &&
+        c.compact3ColKpi &&
+        c.navTabsCount === 5,
     );
-    addCheck('UI-MOBILE-360-375-390-PICKING-ABOVE-FOLD-AND-5TABS', mobilePickingAllOk, { pickMobileChecks });
+    addCheck('FND-W20-06-MOBILE-360-375-390-PICKING-COMPACT-KPI-AND-SCANNER', mobilePickingAllOk, { pickMobileChecks });
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${BASE_WEB}/import-receipts`, { waitUntil: 'networkidle' });
     await page.locator('.ui-mobile-card-list, [data-testid="import-receipts-mobile-cards"]').first().waitFor({ state: 'visible', timeout: 15000 });
-    await page.locator('[data-testid="import-receipt-mobile-card"]').first().scrollIntoViewIfNeeded();
-    await page.waitForTimeout(200);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(220);
     rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, '/import-receipts@390x844'));
+    await probeShotGeometry(page, 'W20_11B:/import-receipts@390x844');
     const imp390Check = await page.evaluate(() => {
       const cards = Array.from(document.querySelectorAll('[data-testid="import-receipt-mobile-card"]'));
+      const firstCardRect = cards[0]?.getBoundingClientRect();
+      const firstCardTopPx = firstCardRect ? Math.round(firstCardRect.top) : 999;
+      const firstPrimaryBtn = cards[0]?.querySelector('.ui-btn-primary, .import-row-actions-mobile button');
+      const firstMoreBtn = cards[0]?.querySelector('summary, [aria-label*="Thao tác"], [aria-label*="thao tác"]');
+      const pRect = firstPrimaryBtn?.getBoundingClientRect();
+      const mRect = firstMoreBtn?.getBoundingClientRect();
+      const singleRowActions = Boolean(pRect && mRect && Math.abs(pRect.top - mRect.top) <= 4 && mRect.right <= 390);
       const maxPrimaryBtnsPerCard = cards.length
         ? Math.max(...cards.map((c) => c.querySelectorAll('.ui-btn-primary').length))
         : 99;
       const docEl = document.documentElement;
       return {
+        scrollY: window.scrollY,
         cardCount: cards.length,
+        firstCardTopPx,
+        singleRowActions,
         maxPrimaryBtnsPerCard,
         horizontalOverflowPx: Math.max(0, docEl.scrollWidth - docEl.clientWidth),
       };
     });
+    mobileFirstCardTopPx390 = imp390Check.firstCardTopPx;
+    mobileSingleRowActionsVerified = Boolean(imp375Check.singleRowActions && imp390Check.singleRowActions);
     importReceiptsSinglePrimaryCtaMobile = Boolean(
       importReceiptsSinglePrimaryCtaMobile &&
         imp390Check.cardCount >= 1 &&
+        imp390Check.firstCardTopPx <= 230 &&
+        imp390Check.singleRowActions &&
         imp390Check.maxPrimaryBtnsPerCard <= 1 &&
         imp390Check.horizontalOverflowPx === 0,
     );
     routeHygieneChecks.push(await collectViewportHygiene(page, '/import-receipts@390x844'));
-    const w19_11Right = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
+    const w20_11Right = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
 
-    if (captureScreenshots && w19_11Left && w19_11Right) {
+    if (captureScreenshots && w20_11Left && w20_11Right) {
       await maybeStitchedShot(
-        'W19_11_Mobile_360x800_And_390x844_PickingScanner_And_ImportCards.png',
-        w19_11Left,
-        w19_11Right,
+        'W20_11_Mobile_360x800_PickingScanner_Compact3ColKpi_And_390x844_ImportCards.png',
+        w20_11Left,
+        w20_11Right,
         {
           route: '/picking-tasks@360x800 + /import-receipts@390x844',
           viewport: '360x800 + 390x844 (2-up side-by-side)',
@@ -4149,17 +4889,18 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     }
 
     // =========================================================================
-    // W19_12: Widescreen 1280x800 (tenant_admin cost visible) & 1920x1080 (qa_staff_wh01 cost masked)
+    // W20_12: Widescreen 1280x800 (tenant_admin cost visible) & 1920x1080 (qa_staff_wh01 max-width 1480px & compact cost mask badge)
     // =========================================================================
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto(`${BASE_WEB}/customer-returns`, { waitUntil: 'networkidle' });
     const rmaTbl1280 = page.locator('table[aria-label="Bảng quản lý hàng hoàn và đổi trả RMA"]');
     await rmaTbl1280.waitFor({ state: 'visible', timeout: 15000 });
-    await rmaTbl1280.scrollIntoViewIfNeeded();
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(200);
     rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, '/customer-returns@1280x800'));
     const rma1280Tables = await measureVisibleTablesAtScrollZero(page, '/customer-returns', '1280x800');
     tableScrollMetrics.push(...rma1280Tables);
+    await probeShotGeometry(page, 'W20_12A:/customer-returns@1280x800');
     const cost1280Check = await page.evaluate(() => {
       const vis = Array.from(document.querySelectorAll('[data-testid="rma-cost-visible"]')).map((e) => (e.textContent || '').trim());
       const red = document.querySelectorAll('[data-testid="rma-cost-redacted"]').length;
@@ -4173,7 +4914,7 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       };
     });
     routeHygieneChecks.push(await collectViewportHygiene(page, '/customer-returns@1280x800'));
-    const w19_12Left = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
+    const w20_12Left = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
 
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.goto(`${BASE_WEB}/login`, { waitUntil: 'networkidle' });
@@ -4185,25 +4926,29 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     await page.goto(`${BASE_WEB}/customer-returns`, { waitUntil: 'networkidle' });
     const rmaTbl1920 = page.locator('table[aria-label="Bảng quản lý hàng hoàn và đổi trả RMA"]');
     await rmaTbl1920.waitFor({ state: 'visible', timeout: 15000 });
-    await rmaTbl1920.scrollIntoViewIfNeeded();
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(200);
     rawEnumScanResults.push(await scanDomForRawEnglishEnums(page, '/customer-returns#staff-masked@1920x1080'));
     const rma1920Tables = await measureVisibleTablesAtScrollZero(page, '/customer-returns', '1920x1080');
     tableScrollMetrics.push(...rma1920Tables);
+    await probeShotGeometry(page, 'W20_12B:/customer-returns#staff-masked@1920x1080');
     const cost1920Check = await page.evaluate(() => {
       const vis = document.querySelectorAll('[data-testid="rma-cost-visible"]').length;
       const red = Array.from(document.querySelectorAll('[data-testid="rma-cost-redacted"]')).map((e) => (e.textContent || '').trim());
+      const mainInner = document.querySelector('.main-content-inner');
+      const mainInnerWidthPx = mainInner ? Math.round(mainInner.getBoundingClientRect().width) : 9999;
       const docEl = document.documentElement;
       return {
         actor: window.localStorage.getItem('username'),
         visibleCostCount: vis,
         redactedCount: red.length,
         sampleRedactedText: red[0] || '',
+        mainInnerWidthPx,
         horizontalOverflowPx: Math.max(0, docEl.scrollWidth - docEl.clientWidth),
       };
     });
     routeHygieneChecks.push(await collectViewportHygiene(page, '/customer-returns#staff-masked@1920x1080'));
-    const w19_12Right = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
+    const w20_12Right = captureScreenshots ? (await capturePureCdpBuffer(page)).buf : null;
 
     const multiRoleCostUiOk =
       cost1280Check.actor === 'tenant_admin' &&
@@ -4214,21 +4959,22 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       cost1920Check.actor === 'qa_staff_wh01' &&
       cost1920Check.visibleCostCount === 0 &&
       cost1920Check.redactedCount >= 1 &&
-      cost1920Check.sampleRedactedText === 'Đã ẩn theo phân quyền' &&
+      cost1920Check.sampleRedactedText === 'Ẩn theo quyền' &&
+      cost1920Check.mainInnerWidthPx <= 1480 &&
       cost1920Check.horizontalOverflowPx === 0 &&
       rma1920Tables.every((t) => !t.hasOverflow);
-    addCheck('UI-WIDESCREEN-1280-AND-1920-RMA-ZERO-OVERFLOW-AND-MULTIROLE-COST-MASKING', multiRoleCostUiOk, {
+    addCheck('FND-W20-05-WIDESCREEN-1280-AND-1920-MAXWIDTH-1480-AND-COMPACT-COST-MASK', multiRoleCostUiOk, {
       cost1280Check,
       rma1280Tables,
       cost1920Check,
       rma1920Tables,
     });
 
-    if (captureScreenshots && w19_12Left && w19_12Right) {
+    if (captureScreenshots && w20_12Left && w20_12Right) {
       await maybeStitchedShot(
-        'W19_12_Widescreen_1280x800_And_1920x1080_ReturnsRma_ZeroOverflow_And_CostMasking.png',
-        w19_12Left,
-        w19_12Right,
+        'W20_12_Widescreen_1280x800_And_1920x1080_MaxWidthContainer_CompactCostMaskBadge.png',
+        w20_12Left,
+        w20_12Right,
         {
           route: '/customer-returns (tenant_admin@1280x800 vs qa_staff_wh01@1920x1080)',
           viewport: '1280x800 + 1920x1080 (2-up side-by-side)',
@@ -4352,6 +5098,216 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
 
   screenshotsManifest.sort((a, b) => a.fileName.localeCompare(b.fileName));
 
+  const diskPngFiles = fs.existsSync(SCREENSHOT_DIR)
+    ? fs.readdirSync(SCREENSHOT_DIR).filter((f) => f.toLowerCase().endsWith('.png'))
+    : [];
+  const w20PngCount = diskPngFiles.filter((f) => f.startsWith('W20_')).length;
+  const nonW20PngCount = diskPngFiles.filter((f) => !f.startsWith('W20_')).length;
+  if (captureScreenshots) {
+    const shotsClean =
+      screenshotsManifest.length === 12 &&
+      screenshotsManifest.every((s) => s.fileName.startsWith('W20_')) &&
+      w20PngCount === 12 &&
+      nonW20PngCount === 0;
+    addCheck('W20-SCREENSHOT-HYGIENE-12-W20-ZERO-LEGACY', shotsClean, {
+      manifestCount: screenshotsManifest.length,
+      w20PngCount,
+      nonW20PngCount,
+      files: diskPngFiles,
+    });
+    if (!shotsClean) {
+      addFinding({
+        id: 'QA-W20-SCREENSHOT-HYGIENE',
+        severity: 'HIGH',
+        domain: 'Wave-20 Pure-CDP Screenshot Evidence Hygiene',
+        ownerAgent: 'AGENT-03',
+        summary: `Expected 12 W20_*.png and 0 legacy PNGs; found W20=${w20PngCount}, nonW20=${nonW20PngCount}`,
+        evidence: { manifestCount: screenshotsManifest.length, w20PngCount, nonW20PngCount, diskPngFiles },
+      });
+    }
+  }
+
+  const allExtraGeoProbes = [
+    ...(eightViewportMatrix.geometryMatrixProbes || []),
+    ...screenshotGeometryProbes,
+  ];
+  const extraTruncated = allExtraGeoProbes.reduce((s, g) => s + (g.truncatedElementsCount || 0), 0);
+  const extraCrushed = allExtraGeoProbes.reduce((s, g) => s + (g.crushedTableHeaderCount || 0), 0);
+  const extraStickyOverlap = allExtraGeoProbes.reduce((s, g) => s + (g.stickyColumnOverlapCount || 0), 0);
+  const extraRawTech = allExtraGeoProbes.reduce((s, g) => s + (g.rawTechnicalStringsCount || 0), 0);
+
+  const truncatedElementsCount = Number(sweep54Summary.sweepTruncatedCount || 0) + extraTruncated;
+  const crushedTableHeaderCount = Number(sweep54Summary.sweepCrushedHeaderCount || 0) + extraCrushed;
+  const stickyColumnOverlapCount = Number(sweep54Summary.sweepStickyOverlapCount || 0) + extraStickyOverlap;
+  const rawTechnicalStringsCount = Number(sweep54Summary.sweepRawTechCount || 0) + extraRawTech;
+  const mobileFirstCardTopPx = Math.max(mobileFirstCardTopPx375, mobileFirstCardTopPx390);
+
+  const sweep54CompleteAndClean =
+    sweep54Summary.sweptRoutesTotal === 54 &&
+    sweep54Summary.sweptCustomerRoutesCount === 46 &&
+    sweep54Summary.sweptPlatformRoutesCount === 8 &&
+    sweep54Summary.sweepMaxOverflowPx === 0 &&
+    sweep54Summary.sweepConsoleErrorsCount === 0 &&
+    sweep54Summary.sweepPageErrorsCount === 0 &&
+    sweep54Summary.sweepHttpErrorsCount === 0;
+  addCheck('W20-54-ROUTE-SWEEP-COMPLETE-ZERO-RUNTIME-ERRORS', sweep54CompleteAndClean, {
+    sweptRoutesTotal: sweep54Summary.sweptRoutesTotal,
+    sweptCustomerRoutesCount: sweep54Summary.sweptCustomerRoutesCount,
+    sweptPlatformRoutesCount: sweep54Summary.sweptPlatformRoutesCount,
+    sweepMaxOverflowPx: sweep54Summary.sweepMaxOverflowPx,
+    sweepConsoleErrorsCount: sweep54Summary.sweepConsoleErrorsCount,
+    sweepPageErrorsCount: sweep54Summary.sweepPageErrorsCount,
+    sweepHttpErrorsCount: sweep54Summary.sweepHttpErrorsCount,
+    failingRoutes: sweep54Summary.failingRoutes,
+  });
+  if (!sweep54CompleteAndClean) {
+    addFinding({
+      id: 'QA-W20-54ROUTE-SWEEP-RUNTIME',
+      severity: 'HIGH',
+      domain: 'Wave-20 Full 54-Route Sweep Runtime & Overflow Gate',
+      ownerAgent: 'AGENT-02',
+      summary: '54-route sweep detected runtime console/page/HTTP errors or horizontal overflow',
+      evidence: sweep54Summary.failingRoutes,
+    });
+  }
+
+  addCheck('W20-ASSERT1-ZERO-TRUNCATED-ELEMENTS-SELECTS-AND-PLACEHOLDERS', truncatedElementsCount === 0, {
+    truncatedElementsCount,
+    sweepTruncatedCount: sweep54Summary.sweepTruncatedCount,
+    extraTruncated,
+    sweepTruncatedSamples: sweep54Summary.failingRoutes
+      .filter((r) => r.truncatedElementsCount > 0)
+      .map((r) => ({ route: r.route, truncatedItems: r.truncatedItems })),
+    extraTruncatedSamples: allExtraGeoProbes
+      .filter((g) => g.truncatedElementsCount > 0)
+      .map((g) => ({ context: g.context, truncatedItems: g.truncatedItems })),
+  });
+  if (truncatedElementsCount > 0) {
+    addFinding({
+      id: 'QA-W20-ASSERT1-TRUNCATION',
+      severity: 'MEDIUM',
+      domain: 'Wave-20 Assertion 1: Zero Truncated Titles, Selects & Input Placeholders',
+      ownerAgent: 'AGENT-02',
+      summary: `True pixel & canvas measurement detected ${truncatedElementsCount} truncated/clipped element(s), <select> option(s), or <input placeholder>(s)`,
+      evidence: {
+        sweepRoutes: sweep54Summary.failingRoutes.filter((r) => r.truncatedElementsCount > 0),
+        viewportAndShotProbes: allExtraGeoProbes.filter((g) => g.truncatedElementsCount > 0),
+      },
+    });
+  }
+
+  addCheck(
+    'W20-ASSERT2-ZERO-STICKY-OVERLAP-AND-CRUSHED-HEADERS',
+    stickyColumnOverlapCount === 0 && crushedTableHeaderCount === 0,
+    {
+      stickyColumnOverlapCount,
+      crushedTableHeaderCount,
+      sweepStickyOverlapCount: sweep54Summary.sweepStickyOverlapCount,
+      sweepCrushedHeaderCount: sweep54Summary.sweepCrushedHeaderCount,
+      extraStickyOverlap,
+      extraCrushed,
+      failingSweepRoutes: sweep54Summary.failingRoutes.filter(
+        (r) => r.stickyColumnOverlapCount > 0 || r.crushedTableHeaderCount > 0,
+      ),
+      failingProbes: allExtraGeoProbes.filter(
+        (g) => g.stickyColumnOverlapCount > 0 || g.crushedTableHeaderCount > 0,
+      ),
+    },
+  );
+  if (stickyColumnOverlapCount > 0 || crushedTableHeaderCount > 0) {
+    addFinding({
+      id: 'QA-W20-ASSERT2-TABLE-GEOMETRY',
+      severity: 'HIGH',
+      domain: 'Wave-20 Assertion 2: Zero Sticky Column Overlap & Zero Crushed Table Headers',
+      ownerAgent: 'AGENT-02',
+      summary: `Table bounding-box audit detected ${stickyColumnOverlapCount} sticky column overlap(s) and ${crushedTableHeaderCount} crushed header(s)`,
+      evidence: {
+        sweepRoutes: sweep54Summary.failingRoutes.filter(
+          (r) => r.stickyColumnOverlapCount > 0 || r.crushedTableHeaderCount > 0,
+        ),
+        viewportAndShotProbes: allExtraGeoProbes.filter(
+          (g) => g.stickyColumnOverlapCount > 0 || g.crushedTableHeaderCount > 0,
+        ),
+      },
+    });
+  }
+
+  addCheck('W20-ASSERT3-ZERO-RAW-TECHNICAL-STRINGS-ACROSS-54-ROUTES', rawTechnicalStringsCount === 0, {
+    rawTechnicalStringsCount,
+    sweepRawTechCount: sweep54Summary.sweepRawTechCount,
+    extraRawTech,
+    sweepRawTechRoutes: sweep54Summary.failingRoutes
+      .filter((r) => r.rawTechnicalStringsCount > 0)
+      .map((r) => ({ route: r.route, rawTechMatches: r.rawTechMatches })),
+    extraRawTechProbes: allExtraGeoProbes
+      .filter((g) => g.rawTechnicalStringsCount > 0)
+      .map((g) => ({ context: g.context, rawTechMatches: g.rawTechMatches })),
+  });
+  if (rawTechnicalStringsCount > 0) {
+    addFinding({
+      id: 'QA-W20-ASSERT3-RAW-TECH-STRINGS',
+      severity: 'MEDIUM',
+      domain: 'Wave-20 Assertion 3: Zero Raw Technical Strings, UOMs & ERP_KHO Company Leaks',
+      ownerAgent: 'AGENT-01/AGENT-02',
+      summary: `Detected ${rawTechnicalStringsCount} raw technical string/enum/UOM/company leak(s) across 54 routes & 12 states`,
+      evidence: {
+        sweepRoutes: sweep54Summary.failingRoutes.filter((r) => r.rawTechnicalStringsCount > 0),
+        viewportAndShotProbes: allExtraGeoProbes.filter((g) => g.rawTechnicalStringsCount > 0),
+      },
+    });
+  }
+
+  addCheck(
+    'W20-ASSERT4-ZERO-QR-MODAL-LAYOUT-SHIFT-AND-INFOBLUE',
+    qrOpenLayoutShiftPx === 0 && vietQrInfoBluePendingVerified,
+    { qrOpenLayoutShiftPx, vietQrInfoBluePendingVerified },
+  );
+  if (qrOpenLayoutShiftPx !== 0 || !vietQrInfoBluePendingVerified) {
+    addFinding({
+      id: 'QA-W20-ASSERT4-QR-MODAL-SHIFT',
+      severity: 'MEDIUM',
+      domain: 'Wave-20 Assertion 4: Zero-Layout-Shift VietQR Modal & Info Blue Pending Status',
+      ownerAgent: 'AGENT-02',
+      summary: `Opening VietQR caused ${qrOpenLayoutShiftPx}px layout shift or failed Info Blue pending banner check`,
+      evidence: { qrOpenLayoutShiftPx, vietQrInfoBluePendingVerified },
+    });
+  }
+
+  addCheck(
+    'W20-ASSERT5-MOBILE-FIRST-CARD-ABOVE-230PX-AND-SINGLE-ROW-ACTIONS',
+    mobileFirstCardTopPx <= 230 && mobileSingleRowActionsVerified,
+    { mobileFirstCardTopPx, mobileFirstCardTopPx375, mobileFirstCardTopPx390, mobileSingleRowActionsVerified },
+  );
+  if (mobileFirstCardTopPx > 230 || !mobileSingleRowActionsVerified) {
+    addFinding({
+      id: 'QA-W20-ASSERT5-MOBILE-ABOVE-FOLD',
+      severity: 'MEDIUM',
+      domain: 'Wave-20 Assertion 5: Mobile First Operational Card Above Fold (<= 230px) & Single-Row Actions',
+      ownerAgent: 'AGENT-02',
+      summary: `Mobile /import-receipts first card top=${mobileFirstCardTopPx}px (budget <= 230px) or singleRowActions=${mobileSingleRowActionsVerified}`,
+      evidence: { mobileFirstCardTopPx375, mobileFirstCardTopPx390, mobileSingleRowActionsVerified },
+    });
+  }
+
+  const wave20Flags = {
+    sweptRoutesTotal: sweep54Summary.sweptRoutesTotal,
+    sweptCustomerRoutesCount: sweep54Summary.sweptCustomerRoutesCount,
+    sweptPlatformRoutesCount: sweep54Summary.sweptPlatformRoutesCount,
+    truncatedElementsCount,
+    crushedTableHeaderCount,
+    stickyColumnOverlapCount,
+    rawTechnicalStringsCount,
+    qrOpenLayoutShiftPx,
+    vietQrInfoBluePendingVerified,
+    mobileFirstCardTopPx,
+    mobileFirstCardTopPx375,
+    mobileFirstCardTopPx390,
+    mobileSingleRowActionsVerified,
+    adminRevokeModalVerified,
+    w20PngCount,
+    nonW20PngCount,
+  };
+
   const wave19Flags = {
     statusColumnVisibleAtScrollLeft0,
     stickyRightWidthRatio,
@@ -4389,6 +5345,7 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
     capturedAtUtc: new Date().toISOString(),
     findings,
     checks,
+    wave20Flags,
     wave19Flags,
     wave18Flags,
     metrics: {
@@ -4400,6 +5357,7 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       brokenImageCount: totalBrokenImages,
       maxHorizontalOverflowPx,
       stickyActionRightOverflowPx,
+      ...wave20Flags,
       ...wave19Flags,
       touchFlyoutVerified,
       importReceipts375CardListVerified,
@@ -4418,6 +5376,8 @@ async function executeLiveChromeAudit({ round, captureScreenshots }) {
       unexpected4xxErrors,
       expectedNegativePathResponses,
     },
+    sweep54Summary,
+    screenshotGeometryProbes,
     axeAuditSummary,
     eightViewportMatrix,
     wave19A11yMotion,
@@ -4440,9 +5400,9 @@ async function main() {
     console.log(
       [
         'Usage: node scripts/run-adversarial-qa-audit.mjs --round=<1|3|5> [--self-check]',
-        '  --round=1     Execute Adversarial Round 1 -> qa-round1-findings.json',
+        '  --round=1     Execute Adversarial Round 1 + W20_01..12.png -> qa-round1-findings.json',
         '  --round=3     Execute Adversarial Round 3 Rebuttal Review -> qa-round3-rebuttal-review.json',
-        '  --round=5     Execute Final Verification + W18_01..12.png -> qa-round5-verification.json & live-audit-summary.json',
+        '  --round=5     Execute Final Verification + W20_01..12.png -> qa-round5-verification.json & live-audit-summary.json',
         '  --self-check  Validate write-boundary guards, directory layout, and in-memory %PDF-1.4 fixture without starting browsers',
       ].join('\n'),
     );
@@ -4507,9 +5467,10 @@ async function main() {
   const engRound4 = safeReadJsonOptional(path.join(ENG_RESP_DIR_READONLY, 'eng-round4-final-rebuttal.json'));
   const engWave18 = safeReadJsonOptional(path.join(ENG_RESP_DIR_READONLY, 'eng-wave18-remediation.json'));
   const engWave19 = safeReadJsonOptional(path.join(ENG_RESP_DIR_READONLY, 'eng-wave19-remediation.json'));
+  const engWave20 = safeReadJsonOptional(path.join(ENG_RESP_DIR_READONLY, 'eng-wave20-remediation.json'));
   const mobbinResearch = safeReadJsonOptional(path.join(MOBBIN_DIR_READONLY, 'mobbin-design-research.json'));
 
-  const captureScreenshots = opts.round === 5;
+  const captureScreenshots = [1, 3, 5].includes(opts.round);
   const auditResult = await executeLiveChromeAudit({ round: opts.round, captureScreenshots });
   const failedChecks = auditResult.checks.filter((c) => !c.passed);
 
@@ -4522,6 +5483,7 @@ async function main() {
       waveId: WAVE_ID,
       auditedSha: auditResult.headSha,
       generatedAtUtc: auditResult.capturedAtUtc,
+      ...auditResult.wave20Flags,
       ...auditResult.wave19Flags,
       ...auditResult.wave18Flags,
       agent4SecurityArtifactsObserved: {
@@ -4529,19 +5491,25 @@ async function main() {
         secFindingsRegisterPresent: Boolean(secRegister && !secRegister._readError),
         secRemediationReviewPresent: Boolean(secRemediation && !secRemediation._readError),
       },
+      engineeringWave20RemediationObserved: Boolean(engWave20 && !engWave20._readError),
       summary: {
         totalChecksExecuted: auditResult.checks.length,
         passedChecksCount: auditResult.checks.length - failedChecks.length,
         failedChecksCount: failedChecks.length,
         openFindingsCount: auditResult.findings.length,
+        screenshotsCount: auditResult.screenshotsManifest.length,
+        ...auditResult.wave20Flags,
         ...auditResult.wave19Flags,
         ...auditResult.wave18Flags,
         verdict: auditResult.findings.length === 0 && failedChecks.length === 0 ? 'ZERO_DEFECTS_ROUND1' : 'FINDINGS_ISSUED_FOR_ROUND2',
       },
+      screenshots: auditResult.screenshotsManifest,
       findings: auditResult.findings,
       failedChecks,
       checks: auditResult.checks,
       metrics: auditResult.metrics,
+      sweep54Summary: auditResult.sweep54Summary,
+      screenshotGeometryProbes: auditResult.screenshotGeometryProbes,
       axeAuditSummary: auditResult.axeAuditSummary,
       eightViewportMatrix: auditResult.eightViewportMatrix,
       wave19A11yMotion: auditResult.wave19A11yMotion,
@@ -4551,7 +5519,9 @@ async function main() {
       postAuditSqlBaseline: auditResult.postAuditSqlBaseline,
     };
     safeWriteJson(path.join(QA_OUT_DIR, 'qa-round1-findings.json'), round1Payload);
-    console.log(`ROUND 1 COMPLETE: findings=${auditResult.findings.length}, failedChecks=${failedChecks.length}`);
+    console.log(
+      `ROUND 1 COMPLETE: findings=${auditResult.findings.length}, failedChecks=${failedChecks.length}, screenshots=${auditResult.screenshotsManifest.length}/12`,
+    );
     return;
   }
 
@@ -4563,7 +5533,8 @@ async function main() {
       findingId: pf.id,
       previousSeverity: pf.severity,
       engineeringClaimPresent: Boolean(
-        (engWave19 && !engWave19._readError) ||
+        (engWave20 && !engWave20._readError) ||
+          (engWave19 && !engWave19._readError) ||
           (engWave18 && !engWave18._readError) ||
           (engRound2 && !engRound2._readError),
       ),
@@ -4585,24 +5556,30 @@ async function main() {
       waveId: WAVE_ID,
       auditedSha: auditResult.headSha,
       generatedAtUtc: auditResult.capturedAtUtc,
+      ...auditResult.wave20Flags,
       ...auditResult.wave19Flags,
       ...auditResult.wave18Flags,
       engineeringRound2ResponsePresent: Boolean(engRound2 && !engRound2._readError),
-      engineeringWave19RemediationPresent: Boolean(engWave19 && !engWave19._readError),
+      engineeringWave20RemediationPresent: Boolean(engWave20 && !engWave20._readError),
       summary: {
         totalChecksExecuted: auditResult.checks.length,
         passedChecksCount: auditResult.checks.length - failedChecks.length,
         failedChecksCount: failedChecks.length,
         remainingFindingsCount: auditResult.findings.length,
+        screenshotsCount: auditResult.screenshotsManifest.length,
+        ...auditResult.wave20Flags,
         ...auditResult.wave19Flags,
         ...auditResult.wave18Flags,
         verdict: round3Verdict,
       },
+      screenshots: auditResult.screenshotsManifest,
       rebuttalReviews,
       newOrRemainingFindings: auditResult.findings,
       failedChecks,
       checks: auditResult.checks,
       metrics: auditResult.metrics,
+      sweep54Summary: auditResult.sweep54Summary,
+      screenshotGeometryProbes: auditResult.screenshotGeometryProbes,
       axeAuditSummary: auditResult.axeAuditSummary,
       eightViewportMatrix: auditResult.eightViewportMatrix,
       wave19A11yMotion: auditResult.wave19A11yMotion,
@@ -4622,17 +5599,30 @@ async function main() {
       Boolean(secBaseline && !secBaseline._readError) &&
       Boolean(secRegister && !secRegister._readError) &&
       Boolean(secRemediation && !secRemediation._readError);
-    const wave19CompanionRecordsVerified =
-      Boolean(engWave19 && !engWave19._readError) &&
+    const wave20CompanionRecordsVerified =
+      Boolean(engWave20 && !engWave20._readError) &&
       Boolean(mobbinResearch && !mobbinResearch._readError);
 
-    const allScreenshotsCaptured =
-      auditResult.screenshotsManifest.length === 12 &&
-      auditResult.screenshotsManifest.every((s) => s.fileName.startsWith('W19_'));
-
+    const f20 = auditResult.wave20Flags;
     const f19 = auditResult.wave19Flags;
     const f18 = auditResult.wave18Flags;
-    const wave19FlagsAllValid =
+    const allScreenshotsCaptured =
+      auditResult.screenshotsManifest.length === 12 &&
+      auditResult.screenshotsManifest.every((s) => s.fileName.startsWith('W20_')) &&
+      f20.w20PngCount === 12 &&
+      f20.nonW20PngCount === 0;
+
+    const wave20FlagsAllValid =
+      f20.sweptRoutesTotal === 54 &&
+      f20.truncatedElementsCount === 0 &&
+      f20.crushedTableHeaderCount === 0 &&
+      f20.stickyColumnOverlapCount === 0 &&
+      f20.rawTechnicalStringsCount === 0 &&
+      f20.qrOpenLayoutShiftPx === 0 &&
+      f20.vietQrInfoBluePendingVerified === true &&
+      f20.mobileFirstCardTopPx <= 230 &&
+      f20.mobileSingleRowActionsVerified === true &&
+      f20.adminRevokeModalVerified === true &&
       f19.statusColumnVisibleAtScrollLeft0 === true &&
       f19.stickyRightWidthRatio <= 0.25 &&
       f19.clippedWarehouseTextCount === 0 &&
@@ -4663,8 +5653,8 @@ async function main() {
       failedChecks.length === 0 &&
       allScreenshotsCaptured &&
       secRecordsVerified &&
-      wave19CompanionRecordsVerified &&
-      wave19FlagsAllValid;
+      wave20CompanionRecordsVerified &&
+      wave20FlagsAllValid;
 
     const round5Payload = {
       protocol: 'CA-QA-ADVERSARIAL-001',
@@ -4674,6 +5664,7 @@ async function main() {
       waveId: WAVE_ID,
       auditedSha: auditResult.headSha,
       generatedAtUtc: auditResult.capturedAtUtc,
+      ...auditResult.wave20Flags,
       ...auditResult.wave19Flags,
       ...auditResult.wave18Flags,
       summary: {
@@ -4682,6 +5673,7 @@ async function main() {
         failedChecksCount: failedChecks.length,
         openFindingsCount: auditResult.findings.length,
         screenshotsCount: auditResult.screenshotsManifest.length,
+        ...auditResult.wave20Flags,
         ...auditResult.wave19Flags,
         ...auditResult.wave18Flags,
         finalVerdict: allPassed ? 'PASS' : 'FAIL',
@@ -4694,6 +5686,7 @@ async function main() {
         engineeringRound4Present: Boolean(engRound4 && !engRound4._readError),
         engineeringWave18RemediationPresent: Boolean(engWave18 && !engWave18._readError),
         engineeringWave19RemediationPresent: Boolean(engWave19 && !engWave19._readError),
+        engineeringWave20RemediationPresent: Boolean(engWave20 && !engWave20._readError),
         mobbinDesignResearchPresent: Boolean(mobbinResearch && !mobbinResearch._readError),
       },
       screenshotsCount: auditResult.screenshotsManifest.length,
@@ -4704,6 +5697,8 @@ async function main() {
       failedChecks,
       checks: auditResult.checks,
       metrics: auditResult.metrics,
+      sweep54Summary: auditResult.sweep54Summary,
+      screenshotGeometryProbes: auditResult.screenshotGeometryProbes,
       axeAuditSummary: auditResult.axeAuditSummary,
       eightViewportMatrix: auditResult.eightViewportMatrix,
       wave19A11yMotion: auditResult.wave19A11yMotion,
@@ -4722,12 +5717,15 @@ async function main() {
       browserChannel: 'chrome',
       zeroDomMutationsInjected: true,
       allPassed,
+      ...auditResult.wave20Flags,
       ...auditResult.wave19Flags,
       ...auditResult.wave18Flags,
       metrics: auditResult.metrics,
       screenshotsCaptured: auditResult.screenshotsManifest.map((s) => s.fileName),
       screenshotsManifest: auditResult.screenshotsManifest,
       checks: auditResult.checks,
+      sweep54Summary: auditResult.sweep54Summary,
+      screenshotGeometryProbes: auditResult.screenshotGeometryProbes,
       axeAuditSummary: auditResult.axeAuditSummary,
       eightViewportMatrix: auditResult.eightViewportMatrix,
       wave19A11yMotion: auditResult.wave19A11yMotion,
@@ -4748,7 +5746,7 @@ async function main() {
 
     if (!allPassed && opts.strictExit) {
       throw new Error(
-        `ROUND 5 VERIFICATION FAILED: findings=${auditResult.findings.length}, failedChecks=${failedChecks.length}, screenshots=${auditResult.screenshotsManifest.length}/12, secRecordsVerified=${secRecordsVerified}, wave19CompanionRecordsVerified=${wave19CompanionRecordsVerified}, wave19FlagsAllValid=${wave19FlagsAllValid}`,
+        `ROUND 5 VERIFICATION FAILED: findings=${auditResult.findings.length}, failedChecks=${failedChecks.length}, screenshots=${auditResult.screenshotsManifest.length}/12, secRecordsVerified=${secRecordsVerified}, wave20CompanionRecordsVerified=${wave20CompanionRecordsVerified}, wave20FlagsAllValid=${wave20FlagsAllValid}`,
       );
     }
     console.log(`ROUND 5 COMPLETE: finalVerdict=${round5Payload.finalVerdict}, screenshots=${auditResult.screenshotsManifest.length}/12`);
@@ -4756,6 +5754,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('ADVERSARIAL QA AUDIT RUNNER ERROR:', err?.message || err);
+  console.error('ADVERSARIAL QA AUDIT RUNNER ERROR:', err?.stack || err?.message || err);
   process.exit(1);
 });

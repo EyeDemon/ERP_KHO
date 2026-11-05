@@ -142,7 +142,7 @@ export function PackingWorkbenchTab({
 
   return (
     <div style={active ? { display: 'contents' } : hiddenTabStyle}>
-      <UiCard title="⚡ Trạm Đóng Gói Hợp Nhất 1 Màn Hình (Quét Đơn • Gợi Ý Thùng • Ghi Hình SHA-256 • In Tem Nhiệt AWB)">
+      <UiCard title="Trạm Đóng Gói Hợp Nhất 1 Màn Hình (Quét Đơn • Gợi Ý Thùng • Ghi Hình SHA-256 • In Tem Nhiệt AWB)">
         <div data-testid="unified-packing-station-card" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
           <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -191,7 +191,7 @@ export function PackingWorkbenchTab({
               </div>
               {cartonRecommendation.dimWeightKg > cartonRecommendation.grossWeightKg && (
                 <div data-testid="dim-weight-warning-badge" style={{ marginTop: 4, padding: '3px 8px', borderRadius: 6, background: '#fffbeb', border: '1px solid #f59e0b', color: '#92400e', fontSize: 11, fontWeight: 700 }}>
-                  ⚠️ Cảnh báo Cước Quy Đổi (Trọng lượng quy đổi &gt; Trọng lượng thực tế)
+                  Cảnh báo Cước Quy Đổi (Trọng lượng quy đổi &gt; Trọng lượng thực tế)
                 </div>
               )}
             </div>

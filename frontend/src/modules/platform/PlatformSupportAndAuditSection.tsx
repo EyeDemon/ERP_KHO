@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Headset, Lock } from 'lucide-react';
+import { formatMinLengthCounterVi, formatUserDisplayNameVi } from '../../services/permissionPresentation';
 import { UiBadge, UiCard } from '../../ui/ProductionUi';
+import { CANONICAL_TENANT1_LEGAL_NAME, normalizeTenantLegalNameVi } from './platformBillingHelpers';
 import type { PlatformTenantItem } from './PlatformTenantsAndQuotaSection';
 import { PlatformAuditLogsTableCard } from './PlatformAuditLogsTableCard';
 
@@ -8,6 +10,7 @@ export interface PlatformAuditLogItem {
   id: number;
   tenantId: number;
   userId?: number | null;
+  username?: string | null;
   impersonatedBySupportUserId?: number | null;
   securityDomain: string;
   action: string;
@@ -132,12 +135,7 @@ export const PlatformSupportAndAuditSection: React.FC<Props> = ({
           <div data-testid="platform-impersonation-card">
             <form
               onSubmit={handleSubmit}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-                gap: 8,
-                alignItems: 'end',
-              }}
+              className="platform-impersonation-form-grid"
             >
               <div className="platform-form-field" style={{ marginBottom: 0 }}>
                 <label htmlFor="select-impersonation-tenant" style={{ whiteSpace: 'nowrap', minHeight: 20 }}>
@@ -150,11 +148,11 @@ export const PlatformSupportAndAuditSection: React.FC<Props> = ({
                   onChange={(e) => setTargetTenantId(Number(e.target.value) || 1)}
                 >
                   {tenants.length === 0 ? (
-                    <option value={1}>TENANT-001 — CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO</option>
+                    <option value={1}>TENANT-001 — {CANONICAL_TENANT1_LEGAL_NAME}</option>
                   ) : (
                     tenants.map((t) => (
                       <option key={t.tenantId} value={t.tenantId}>
-                        {t.tenantCode} — {t.companyName === 'Doanh nghiệp Kho vận ERP_KHO (Tenant 1)' ? 'CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO' : t.companyName}
+                        {t.tenantCode} — {normalizeTenantLegalNameVi(t.companyName, t.tenantId, t.tenantCode)}
                       </option>
                     ))
                   )}
@@ -193,14 +191,17 @@ export const PlatformSupportAndAuditSection: React.FC<Props> = ({
               </div>
 
               <div className="platform-form-field" style={{ marginBottom: 0 }}>
-                <label htmlFor="input-impersonation-reason" style={{ whiteSpace: 'nowrap', minHeight: 20 }}>
-                  Lý do truy cập hỗ trợ (tối thiểu 10 ký tự)
+                <label htmlFor="input-impersonation-reason" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6, flexWrap: 'wrap', minHeight: 20 }}>
+                  <span>Lý do truy cập hỗ trợ</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: reason.trim().length >= 10 ? '#047857' : '#64748b', fontVariantNumeric: 'tabular-nums' }}>
+                    {formatMinLengthCounterVi(reason.trim().length, 10)}
+                  </span>
                 </label>
                 <input
                   id="input-impersonation-reason"
                   type="text"
                   data-testid="input-impersonation-reason"
-                  placeholder="Nhập lý do hỗ trợ kỹ thuật theo yêu cầu khách hàng (tối thiểu 10 ký tự)..."
+                  placeholder="Nhập lý do hỗ trợ kỹ thuật..."
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                 />
@@ -250,28 +251,30 @@ export const PlatformSupportAndAuditSection: React.FC<Props> = ({
                 <table className="ui-table" data-testid="active-impersonation-sessions-table" style={{ fontSize: 12 }}>
                   <thead>
                     <tr>
-                      <th style={{ whiteSpace: 'nowrap' }}>Mã phiên</th>
-                      <th style={{ minWidth: 145, maxWidth: 165 }}>Doanh nghiệp</th>
-                      <th style={{ whiteSpace: 'nowrap' }}>Mã phiếu</th>
-                      <th style={{ minWidth: 155, maxWidth: 175 }}>Lý do hỗ trợ</th>
-                      <th style={{ whiteSpace: 'nowrap' }}>Người mở</th>
-                      <th style={{ whiteSpace: 'nowrap' }}>Bắt đầu</th>
-                      <th style={{ whiteSpace: 'nowrap' }}>Chế độ</th>
-                      <th style={{ whiteSpace: 'nowrap' }}>Còn lại</th>
-                      <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>
+                      <th style={{ minWidth: 88, whiteSpace: 'nowrap' }}>Mã phiên</th>
+                      <th style={{ minWidth: 160 }}>Doanh nghiệp</th>
+                      <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Mã phiếu</th>
+                      <th style={{ minWidth: 155 }}>Lý do hỗ trợ</th>
+                      <th style={{ minWidth: 112, whiteSpace: 'nowrap' }}>Người mở</th>
+                      <th style={{ minWidth: 80, whiteSpace: 'nowrap' }}>Bắt đầu</th>
+                      <th style={{ minWidth: 80, whiteSpace: 'nowrap' }}>Chế độ</th>
+                      <th style={{ minWidth: 76, whiteSpace: 'nowrap' }}>Còn lại</th>
+                      <th style={{ minWidth: 88, whiteSpace: 'nowrap' }}>Thao tác</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td style={{ fontWeight: 700, fontFamily: 'monospace', fontSize: 11.5, whiteSpace: 'nowrap' }}>
+                      <td className="ui-code" style={{ fontWeight: 700, fontSize: 11.5, whiteSpace: 'nowrap' }}>
                         {activeSession.sessionId}
                       </td>
-                      <td style={{ minWidth: 145, maxWidth: 165 }}>
-                        {activeSession.targetTenantCode} — {!activeSession.targetTenantName || activeSession.targetTenantName === 'Doanh nghiệp Kho vận ERP_KHO (Tenant 1)' ? 'CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO' : activeSession.targetTenantName}
+                      <td style={{ minWidth: 160 }}>
+                        {activeSession.targetTenantCode} — {normalizeTenantLegalNameVi(activeSession.targetTenantName, activeSession.targetTenantId, activeSession.targetTenantCode)}
                       </td>
                       <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{activeSession.ticketCode}</td>
-                      <td style={{ minWidth: 155, maxWidth: 175 }}>{activeSession.reason}</td>
-                      <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{activeSession.startedByUsername || currentActor}</td>
+                      <td style={{ minWidth: 155 }}>{activeSession.reason}</td>
+                      <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        {formatUserDisplayNameVi(activeSession.startedByUsername || currentActor, 'SuperAdmin')}
+                      </td>
                       <td style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                         {formatStartTime(activeSession.startedAtUtc)}
                       </td>

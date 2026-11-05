@@ -254,13 +254,13 @@ export default function InventoryReversals(){
       {!loading&&<p role="status" className="ui-muted-text">{'Trang '+page+' / '+Math.max(1,totalPages)+' • '+totalRecords+' giao dịch'}</p>}
       {loading && rows.length === 0 ? <p role="status">Đang tải giao dịch...</p> : <UiTableScroll>
         <table className="ui-table-compact" aria-label="Danh sách giao dịch có thể đảo">
-          <thead><tr><th>Giao dịch</th><th>Sản phẩm</th><th>Kho</th><th>Chi tiết theo dõi</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>Số lượng</th><th>Thời gian</th><th style={{whiteSpace:'nowrap'}}>Trạng thái đảo</th>{canReverse&&<th style={{whiteSpace:'nowrap'}}>Thao tác</th>}</tr></thead>
+          <thead><tr><th style={{minWidth:120,whiteSpace:'nowrap'}}>Giao dịch</th><th style={{minWidth:120}}>Sản phẩm</th><th style={{minWidth:110}}>Kho</th><th style={{minWidth:150}}>Chi tiết theo dõi</th><th style={{textAlign:'right',fontVariantNumeric:'tabular-nums',minWidth:88,whiteSpace:'nowrap'}}>Số lượng</th><th style={{minWidth:125,whiteSpace:'nowrap'}}>Thời gian</th><th style={{minWidth:110,whiteSpace:'nowrap'}}>Trạng thái đảo</th>{canReverse&&<th style={{minWidth:115,whiteSpace:'nowrap'}}>Thao tác</th>}</tr></thead>
           <tbody>{rows.length===0?<tr><td colSpan={canReverse?8:7} className="ui-empty-cell">Không có giao dịch phù hợp.</td></tr>:
             rows.map(x=>{
               const reversed=x.isReversed;
               return <tr key={x.id}>
                 <td style={{whiteSpace:'nowrap'}}><strong>{transactionTypeLabel(x.transactionType)}</strong><br/><small>#{x.id}</small></td>
-                <td style={{ whiteSpace: 'nowrap' }}>{x.productCode??('#'+x.productId)}<br/><small>{x.productName??''}</small></td>
+                <td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{x.productCode??('#'+x.productId)}</strong><br/><small>{x.productName??''}</small></td>
                 <td>{x.warehouseName??('#'+x.warehouseId)}</td>
                 <td>{x.lotNumber??'không có lô'} / {x.serialNumber??'không có sê-ri'}<br/><small>{x.fromInventoryStatus&&x.toInventoryStatus?(inventoryStatusLabel(x.fromInventoryStatus)+' → '+inventoryStatusLabel(x.toInventoryStatus)):inventoryStatusLabel(x.inventoryStatus)}</small></td>
                 <td style={{textAlign:'right',fontVariantNumeric:'tabular-nums',whiteSpace:'nowrap'}}>{x.quantity}</td>
@@ -296,7 +296,7 @@ export default function InventoryReversals(){
           </select>
         </UiToolbarField>
         <UiToolbarField label="Lý do đảo giao dịch">
-          <input aria-label="Lý do đảo giao dịch tồn kho" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Lý do / bằng chứng bắt buộc (tối đa 400 ký tự)" maxLength={400} required/>
+          <input aria-label="Lý do đảo giao dịch tồn kho" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Nhập lý do & bằng chứng đảo..." maxLength={400} required/>
         </UiToolbarField>
         <div className="ui-inline-actions">
           <button type="submit" disabled={busy||!reason.trim()||!reasonCode||reversalReasons.length===0}>Xác nhận đảo giao dịch</button>

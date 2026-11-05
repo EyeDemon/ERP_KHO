@@ -53,6 +53,21 @@ export function resolvePortalMode(pathname?: string): PortalMode {
   return 'UNIFIED_DEV';
 }
 
+export const CANONICAL_TENANT_DISPLAY_NAME = 'Công ty TNHH Thương mại & Kho vận Đại Phát';
+
+export function normalizeTenantDisplayName(raw?: string | null): string {
+  const trimmed = String(raw ?? '').trim();
+  if (
+    !trimmed ||
+    trimmed === 'CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO' ||
+    trimmed === 'Doanh nghiệp Kho vận ERP_KHO (Tenant 1)' ||
+    /erp_kho/i.test(trimmed)
+  ) {
+    return CANONICAL_TENANT_DISPLAY_NAME;
+  }
+  return trimmed;
+}
+
 function normalizeImpersonationState(parsed: Partial<ActiveImpersonationState> | null): ActiveImpersonationState | null {
   const resolvedSessionCode = parsed?.sessionCode ?? parsed?.impersonationToken ?? parsed?.token;
   if (!parsed || !resolvedSessionCode || parsed.tenantId === undefined) {
@@ -63,7 +78,7 @@ function normalizeImpersonationState(parsed: Partial<ActiveImpersonationState> |
     impersonationToken: String(parsed.impersonationToken ?? resolvedSessionCode),
     tenantId: parsed.tenantId,
     tenantCode: parsed.tenantCode ? String(parsed.tenantCode) : `TENANT-${String(parsed.tenantId).padStart(3, '0')}`,
-    tenantName: parsed.tenantName ? String(parsed.tenantName) : 'CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO',
+    tenantName: normalizeTenantDisplayName(parsed.tenantName ? String(parsed.tenantName) : undefined),
     ticketCode: String(parsed.ticketCode ?? 'SUP-TICKET'),
     reason: parsed.reason ? String(parsed.reason) : undefined,
     startedByUsername: parsed.startedByUsername ? String(parsed.startedByUsername) : undefined,

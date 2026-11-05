@@ -4,6 +4,7 @@ import {
   buildPlanDowngradeWarning,
   formatDateTimeVi,
   formatDateVi,
+  normalizeSaasTaxCode,
   resolveInvoiceStatusBadge,
   SAAS_PLAN_CATALOG,
   sanitizeCustomerSettlementSummary,
@@ -55,7 +56,7 @@ export const SaasBillingPlanCardsGrid: React.FC<SaasBillingPlanCardsGridProps> =
                 <strong style={{ fontSize: 15, color: '#0f172a' }}>{plan.title}</strong>
                 {isCurrentPlan ? <UiBadge tone="success">Đang sử dụng</UiBadge> : isSelected && <UiBadge tone="info">Đang chọn</UiBadge>}
               </div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#1d4ed8', marginTop: 6, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{plan.price}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', marginTop: 6, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{plan.price}</div>
               <ul style={{ margin: '8px 0 0 0', paddingLeft: 16, fontSize: 12, color: '#334155', lineHeight: 1.6 }}>
                 <li>Tối đa {plan.maxWarehouses.toLocaleString('vi-VN')} kho vận hành</li>
                 <li>Tối đa {plan.maxUsers.toLocaleString('vi-VN')} tài khoản nhân sự</li>
@@ -128,95 +129,140 @@ export const SaasBillingInvoiceHistoryCard: React.FC<SaasBillingInvoiceHistoryCa
           Chưa có hóa đơn thanh toán nào trong kỳ hiện tại. Bấm &ldquo;Cập nhật / Tạo mã VietQR cho gói đang chọn&rdquo; để khởi tạo lệnh thanh toán mới.
         </p>
       ) : (
-        <UiTableScroll>
-          <table className="ui-table ui-table-compact" data-testid="saas-invoice-history-table" style={{ width: '100%', minWidth: 0 }}>
-            <thead>
-              <tr>
-                <th style={{ padding: '4px 5px', whiteSpace: 'nowrap' }}>Mã hóa đơn</th>
-                <th style={{ padding: '4px 5px', maxWidth: 150, whiteSpace: 'nowrap' }}>Trạng thái</th>
-                <th style={{ padding: '4px 5px', maxWidth: 112, whiteSpace: 'normal', lineHeight: 1.2 }}>Gói dịch vụ</th>
-                <th style={{ padding: '4px 5px', whiteSpace: 'normal', lineHeight: 1.2 }}>MST người mua</th>
-                <th style={{ padding: '4px 5px', maxWidth: 138, whiteSpace: 'normal', lineHeight: 1.2 }}>Kỳ cước áp dụng</th>
-                <th style={{ padding: '4px 5px', textAlign: 'right', whiteSpace: 'nowrap' }}>Số tiền</th>
-                <th style={{ padding: '4px 5px', maxWidth: 132, whiteSpace: 'normal', lineHeight: 1.2 }}>Nội dung chuyển khoản</th>
-                <th style={{ padding: '4px 5px', maxWidth: 96, whiteSpace: 'normal', lineHeight: 1.2 }}>Ngày phát hành</th>
-                <th style={{ padding: '4px 5px', maxWidth: 102, whiteSpace: 'normal', lineHeight: 1.2 }}>Thời điểm thanh toán</th>
-              </tr>
-            </thead>
-            <tbody>
-              {billing.recentInvoices.map((inv) => {
-                const isOctInv = inv.invoiceCode.includes('202610') || inv.billingPeriod === '10/2026';
-                const effectiveStatus = inv.status;
-                const badge = resolveInvoiceStatusBadge(effectiveStatus);
-                const isPaidInv = effectiveStatus.toUpperCase() === 'PAID';
-                const novRangeText = nextCycle.shortRange || currentCycleText;
-                const dueText = isOctInv ? '05/10/2026' : (inv.dueDateVi && inv.dueDateVi !== '02/11/2026' ? inv.dueDateVi : (nextCycle.dueDateText || '05/11/2026'));
-                const issuedDateDisplay = isOctInv
-                  ? '01/10/2026'
-                  : inv.invoiceCode.includes('202611')
-                    ? '01/11/2026'
-                    : (inv.issuedDateVi || formatDateVi(inv.createdAtUtc));
-                const paidTimeDisplay = isPaidInv
-                  ? isOctInv
-                    ? '03/10/2026 16:15'
-                    : (inv.confirmedAtVi || (inv.paidAtUtc ? formatDateTimeVi(inv.paidAtUtc) : '02/11/2026 18:30'))
-                  : 'Chưa thanh toán';
-                const periodCellText = isOctInv ? '01/10/2026 – 31/10/2026 (Kỳ 10/2026)' : novRangeText;
-                const periodCellTooltip = `${periodCellText} • Hạn: ${dueText}`;
-                const resolvedTotal = Number(inv.amountVnd || 1490000);
-                const resolvedSubTotal = inv.subTotalVnd && inv.vatAmountVnd && inv.subTotalVnd + inv.vatAmountVnd === resolvedTotal ? inv.subTotalVnd : Math.round(resolvedTotal / 1.1);
-                const resolvedVat = resolvedTotal - resolvedSubTotal;
-                const buyerMst = inv.buyerTaxCode || billing.taxCode || '0312345678';
-                const paidSummaryText = sanitizeCustomerSettlementSummary(
-                  inv.settlementSummaryVi,
-                  'FT2630698418102',
-                  isOctInv,
-                );
-                return (
-                  <tr key={inv.invoiceCode}>
-                    <td style={{ padding: '4px 5px', fontWeight: 600, fontSize: 11.5, whiteSpace: 'nowrap' }}>{inv.invoiceCode}</td>
-                    <td style={{ padding: '4px 5px', maxWidth: 150, whiteSpace: 'normal', lineHeight: 1.25 }}>
-                      <UiBadge tone={badge.tone}>{badge.label}</UiBadge>
-                      <small style={{ display: 'block', color: isPaidInv ? '#166534' : '#92400e', fontSize: 10.5, marginTop: 1 }}>
-                        {isPaidInv ? paidSummaryText : 'Chờ đối soát'}
-                      </small>
-                    </td>
-                    <td style={{ padding: '4px 5px', maxWidth: 112, whiteSpace: 'normal', lineHeight: 1.25 }}>{inv.planName}</td>
-                    <td style={{ padding: '4px 5px', fontVariantNumeric: 'tabular-nums', fontSize: 11.5, whiteSpace: 'nowrap', color: '#334155' }}>
-                      {buyerMst}
-                    </td>
-                    <td
-                      style={{ padding: '4px 5px', fontVariantNumeric: 'tabular-nums', fontSize: 11.5, color: '#334155', whiteSpace: 'normal', maxWidth: 138, lineHeight: 1.25 }}
-                      title={periodCellTooltip}
-                    >
-                      {periodCellText}
-                    </td>
-                    <td style={{ padding: '4px 5px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                      <div style={{ fontWeight: 700, color: '#0f172a' }}>{resolvedTotal.toLocaleString('vi-VN')} ₫</div>
-                      <div
-                        data-testid={`invoice-tax-detail-${inv.invoiceCode}`}
-                        title={`Trước thuế: ${resolvedSubTotal.toLocaleString('vi-VN')} ₫ • Thuế GTGT (${inv.vatRatePercent ?? 10}%): ${resolvedVat.toLocaleString('vi-VN')} ₫ • MST: ${buyerMst}`}
-                        style={{ fontSize: 11, color: '#475569', marginTop: 1 }}
-                      >
-                        {`Trước thuế: ${resolvedSubTotal.toLocaleString('vi-VN')} ₫ • VAT: ${resolvedVat.toLocaleString('vi-VN')} ₫`}
-                      </div>
-                    </td>
-                    <td style={{ padding: '4px 5px', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 11, fontWeight: 700, color: '#1d4ed8', maxWidth: 132, whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.25 }}>
-                      {inv.transferContent}
-                    </td>
-                    <td style={{ padding: '4px 5px', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', fontSize: 11.5 }}>
-                      <div>{issuedDateDisplay}</div>
-                      <small style={{ color: '#475569', fontSize: 10.5, display: 'block' }}>• Hạn: {dueText}</small>
-                    </td>
-                    <td style={{ padding: '4px 5px', fontVariantNumeric: 'tabular-nums', maxWidth: 102, whiteSpace: 'normal', fontSize: 11.5, lineHeight: 1.25, color: isPaidInv ? '#0f172a' : '#475569' }}>
-                      {paidTimeDisplay}
-                    </td>
+        <>
+          <div className="saas-invoice-desktop-wrap">
+            <UiTableScroll>
+              <table className="ui-table ui-table-compact" data-testid="saas-invoice-history-table" style={{ width: '100%', minWidth: 0 }}>
+                <thead>
+                  <tr>
+                    <th style={{ minWidth: 116, padding: '5px 6px', whiteSpace: 'nowrap', lineHeight: 1.2 }}>Mã hóa đơn</th>
+                    <th style={{ minWidth: 110, padding: '5px 6px', whiteSpace: 'nowrap', lineHeight: 1.2 }}>Trạng thái</th>
+                    <th style={{ minWidth: 92, padding: '5px 6px', whiteSpace: 'nowrap', lineHeight: 1.2 }}>Gói cước</th>
+                    <th style={{ minWidth: 92, padding: '5px 6px', whiteSpace: 'nowrap', lineHeight: 1.2 }}>MST người mua</th>
+                    <th style={{ minWidth: 108, padding: '5px 6px', whiteSpace: 'nowrap', lineHeight: 1.2 }}>Kỳ cước</th>
+                    <th style={{ minWidth: 112, padding: '5px 6px', textAlign: 'right', whiteSpace: 'nowrap', lineHeight: 1.2 }}>Số tiền</th>
+                    <th style={{ minWidth: 112, padding: '5px 6px', whiteSpace: 'nowrap', lineHeight: 1.2 }}>Nội dung CK</th>
+                    <th style={{ minWidth: 92, padding: '5px 6px', whiteSpace: 'nowrap', lineHeight: 1.2 }}>Phát hành</th>
+                    <th style={{ minWidth: 114, padding: '5px 10px 5px 6px', position: 'static', whiteSpace: 'nowrap', lineHeight: 1.2 }}>Thanh toán</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </UiTableScroll>
+                </thead>
+                <tbody>
+                  {billing.recentInvoices.map((inv) => {
+                    const isOctInv = inv.invoiceCode.includes('202610') || inv.billingPeriod === '10/2026';
+                    const effectiveStatus = inv.status;
+                    const badge = resolveInvoiceStatusBadge(effectiveStatus);
+                    const isPaidInv = effectiveStatus.toUpperCase() === 'PAID';
+                    const novRangeText = nextCycle.shortRange || currentCycleText;
+                    const dueText = isOctInv ? '05/10/2026' : (inv.dueDateVi && inv.dueDateVi !== '02/11/2026' ? inv.dueDateVi : (nextCycle.dueDateText || '05/11/2026'));
+                    const issuedDateDisplay = isOctInv
+                      ? '01/10/2026'
+                      : inv.invoiceCode.includes('202611')
+                        ? '01/11/2026'
+                        : (inv.issuedDateVi || formatDateVi(inv.createdAtUtc));
+                    const paidTimeDisplay = isPaidInv
+                      ? isOctInv
+                        ? '03/10/2026 16:15'
+                        : (inv.confirmedAtVi || (inv.paidAtUtc ? formatDateTimeVi(inv.paidAtUtc) : '02/11/2026 18:30'))
+                      : 'Chưa thanh toán';
+                    const periodCellText = isOctInv ? '01/10/2026 – 31/10/2026 (Kỳ 10/2026)' : novRangeText;
+                    const periodCellTooltip = `${periodCellText} • Hạn: ${dueText}`;
+                    const resolvedTotal = Number(inv.amountVnd || 1490000);
+                    const resolvedSubTotal = inv.subTotalVnd && inv.vatAmountVnd && inv.subTotalVnd + inv.vatAmountVnd === resolvedTotal ? inv.subTotalVnd : Math.round(resolvedTotal / 1.1);
+                    const resolvedVat = resolvedTotal - resolvedSubTotal;
+                    const buyerMst = normalizeSaasTaxCode(inv.buyerTaxCode || billing.taxCode);
+                    const paidSummaryText = sanitizeCustomerSettlementSummary(
+                      inv.settlementSummaryVi,
+                      'FT2630698418102',
+                      isOctInv,
+                    );
+                    return (
+                      <tr key={inv.invoiceCode}>
+                        <td style={{ padding: '4px 6px', whiteSpace: 'nowrap' }}>
+                          <code className="ui-code" style={{ fontWeight: 600, fontSize: 11.5, whiteSpace: 'nowrap' }}>{inv.invoiceCode}</code>
+                        </td>
+                        <td style={{ padding: '4px 6px', maxWidth: 152, whiteSpace: 'normal', lineHeight: 1.25 }}>
+                          <UiBadge tone={badge.tone}>{badge.label}</UiBadge>
+                          <small style={{ display: 'block', color: isPaidInv ? '#166534' : '#0369A1', fontSize: 10.5, marginTop: 1 }}>
+                            {isPaidInv ? paidSummaryText : 'Chờ đối soát'}
+                          </small>
+                        </td>
+                        <td style={{ padding: '4px 6px', maxWidth: 120, whiteSpace: 'normal', lineHeight: 1.25 }}>{inv.planName}</td>
+                        <td style={{ padding: '4px 6px', fontVariantNumeric: 'tabular-nums', fontSize: 11.5, whiteSpace: 'nowrap', color: '#334155' }}>
+                          {buyerMst}
+                        </td>
+                        <td
+                          style={{ padding: '4px 6px', maxWidth: 140, fontVariantNumeric: 'tabular-nums', fontSize: 11.5, color: '#334155', whiteSpace: 'normal', lineHeight: 1.25 }}
+                          title={periodCellTooltip}
+                        >
+                          {periodCellText}
+                        </td>
+                        <td style={{ padding: '4px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', maxWidth: 156 }}>
+                          <div style={{ fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>{resolvedTotal.toLocaleString('vi-VN')} ₫</div>
+                          <div
+                            data-testid={`invoice-tax-detail-${inv.invoiceCode}`}
+                            title={`Trước thuế: ${resolvedSubTotal.toLocaleString('vi-VN')} ₫ • Thuế GTGT (${inv.vatRatePercent ?? 10}%): ${resolvedVat.toLocaleString('vi-VN')} ₫ • MST: ${buyerMst}`}
+                            style={{ fontSize: 10.5, color: '#475569', marginTop: 1, lineHeight: 1.25, whiteSpace: 'normal' }}
+                          >
+                            {`Trước thuế: ${resolvedSubTotal.toLocaleString('vi-VN')} ₫ • VAT: ${resolvedVat.toLocaleString('vi-VN')} ₫`}
+                          </div>
+                        </td>
+                        <td style={{ padding: '4px 6px', whiteSpace: 'nowrap' }}>
+                          <code className="ui-code" style={{ fontSize: 11, fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>
+                            {inv.transferContent}
+                          </code>
+                        </td>
+                        <td style={{ padding: '4px 6px', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', fontSize: 11.5 }}>
+                          <div>{issuedDateDisplay}</div>
+                          <small style={{ color: '#475569', fontSize: 10.5, display: 'block' }}>• Hạn: {dueText}</small>
+                        </td>
+                        <td style={{ padding: '4px 10px 4px 6px', position: 'static', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', fontSize: 11.5, color: isPaidInv ? '#0f172a' : '#475569' }}>
+                          {paidTimeDisplay}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </UiTableScroll>
+          </div>
+          <div className="ui-mobile-card-list saas-invoice-mobile-cards" aria-label="Danh sách hóa đơn thuê bao rút gọn">
+            {billing.recentInvoices.map((inv) => {
+              const isOctInv = inv.invoiceCode.includes('202610') || inv.billingPeriod === '10/2026';
+              const badge = resolveInvoiceStatusBadge(inv.status);
+              const isPaidInv = inv.status.toUpperCase() === 'PAID';
+              const resolvedTotal = Number(inv.amountVnd || 1490000);
+              const buyerMst = normalizeSaasTaxCode(inv.buyerTaxCode || billing.taxCode);
+              const paidTimeDisplay = isPaidInv
+                ? (isOctInv ? '03/10/2026 16:15' : (inv.confirmedAtVi || (inv.paidAtUtc ? formatDateTimeVi(inv.paidAtUtc) : '02/11/2026 18:30')))
+                : 'Chưa thanh toán';
+              return (
+                <article key={`card-${inv.invoiceCode}`} className="ui-mobile-card">
+                  <div className="ui-mobile-card-head">
+                    <div>
+                      <div className="ui-mobile-card-title"><code className="ui-code" style={{ whiteSpace: 'nowrap' }}>{inv.invoiceCode}</code></div>
+                      <div className="ui-mobile-card-subtitle">{inv.planName} • MST: {buyerMst}</div>
+                    </div>
+                    <UiBadge tone={badge.tone}>{badge.label}</UiBadge>
+                  </div>
+                  <div className="ui-mobile-card-grid">
+                    <div className="ui-mobile-card-field">
+                      <span className="ui-mobile-card-label">Số tiền (gồm VAT)</span>
+                      <span className="ui-mobile-card-value" style={{ fontVariantNumeric: 'tabular-nums' }}>{resolvedTotal.toLocaleString('vi-VN')} ₫</span>
+                    </div>
+                    <div className="ui-mobile-card-field">
+                      <span className="ui-mobile-card-label">Thanh toán</span>
+                      <span className="ui-mobile-card-value" style={{ fontVariantNumeric: 'tabular-nums' }}>{paidTimeDisplay}</span>
+                    </div>
+                    <div className="ui-mobile-card-field" style={{ gridColumn: '1 / -1' }}>
+                      <span className="ui-mobile-card-label">Nội dung chuyển khoản</span>
+                      <span className="ui-mobile-card-value"><code className="ui-code" style={{ whiteSpace: 'nowrap' }}>{inv.transferContent}</code></span>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </>
       )}
     </UiCard>
   );

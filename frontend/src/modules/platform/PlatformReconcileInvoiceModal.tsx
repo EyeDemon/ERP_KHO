@@ -1,9 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, X } from 'lucide-react';
+import { formatUserDisplayNameVi } from '../../services/permissionPresentation';
 import { useDialogFocusTrap } from '../../ui/useDialogFocusTrap';
 import type { PlatformBillingInvoiceItem } from './PlatformHealthAndWorkersSection';
 import { PlatformReconcileFormSections } from './PlatformReconcileFormSections';
-import { parseViDateTimeStrict, requiresFourEyesBillingApproval } from './platformBillingHelpers';
+import {
+  normalizeTenantLegalNameVi,
+  parseViDateTimeStrict,
+  requiresFourEyesBillingApproval,
+} from './platformBillingHelpers';
 
 export interface ManualReconcilePayload {
   bankTransactionRef: string;
@@ -99,10 +104,7 @@ export const PlatformReconcileInvoiceModal: React.FC<PlatformReconcileInvoiceMod
       ? invoice.subTotalVnd
       : Math.round(total / 1.1);
   const vat = total - sub;
-  const buyerName =
-    !invoice.buyerLegalName || invoice.buyerLegalName === 'Doanh nghiệp Kho vận ERP_KHO (Tenant 1)'
-      ? 'CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO'
-      : invoice.buyerLegalName;
+  const buyerName = normalizeTenantLegalNameVi(invoice.buyerLegalName, Number(invoice.tenantId) || 1);
 
   const handleReceivedAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const rawDigits = e.target.value.replace(/\D/g, '');
@@ -216,10 +218,10 @@ export const PlatformReconcileInvoiceModal: React.FC<PlatformReconcileInvoiceMod
       <div ref={modalCardRef} tabIndex={-1} className="platform-modal-card" style={{ padding: '16px 20px', maxWidth: 640, maxHeight: '92vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <h2 id="modal-reconcile-invoice-title" style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <CheckCircle2 size={20} strokeWidth={2} color="#1d4ed8" aria-hidden="true" />
+            <CheckCircle2 size={20} strokeWidth={2} color="#047857" aria-hidden="true" />
             <span>Đối soát thanh toán chuyển khoản thủ công</span>
           </h2>
-          <button type="button" className="platform-btn platform-btn-secondary" data-testid="btn-close-reconcile-modal" onClick={requestClose}>
+          <button type="button" aria-label="Đóng hộp thoại" className="platform-btn platform-btn-secondary" data-testid="btn-close-reconcile-modal" onClick={requestClose}>
             <X size={15} strokeWidth={2} aria-hidden="true" />
             <span>Đóng</span>
           </button>
@@ -227,17 +229,19 @@ export const PlatformReconcileInvoiceModal: React.FC<PlatformReconcileInvoiceMod
 
         <div className="platform-diff-box" data-testid="reconcile-invoice-summary-box" style={{ marginBottom: 10, lineHeight: 1.45 }}>
           <div>
-            <strong>Mã hóa đơn:</strong> <code>{code}</code> • <strong>Doanh nghiệp:</strong>{' '}
-            <code>TENANT-001</code> ({buyerName})
+            <strong>Mã hóa đơn:</strong> <code className="ui-code">{code}</code> • <strong>Doanh nghiệp:</strong>{' '}
+            <code className="ui-code">TENANT-001</code> ({buyerName})
           </div>
           <div style={{ fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>
             <strong>Số tiền hóa đơn:</strong>{' '}
-            <strong style={{ color: '#1d4ed8' }}>{total.toLocaleString('vi-VN')} ₫</strong> (Trước thuế:{' '}
+            <strong style={{ color: '#0F172A', fontWeight: 700 }}>{total.toLocaleString('vi-VN')} ₫</strong> (Trước thuế:{' '}
             {sub.toLocaleString('vi-VN')} ₫ + VAT 10%: {vat.toLocaleString('vi-VN')} ₫)
           </div>
           <div style={{ marginTop: 3, fontSize: 12, color: '#334155' }}>
             <strong>Người lập đối soát (Phiên hiện tại):</strong>{' '}
-            <code data-testid="reconcile-actor-readonly">{currentActor}</code>
+            <span data-testid="reconcile-actor-readonly" style={{ fontWeight: 700, color: '#0F172A' }}>
+              {formatUserDisplayNameVi(currentActor.trim().toLowerCase() === 'billing_admin' ? 'qa_billing_admin' : currentActor, requiresFourEyes ? 'BillingAdmin' : 'SuperAdmin')}
+            </span>
           </div>
         </div>
 

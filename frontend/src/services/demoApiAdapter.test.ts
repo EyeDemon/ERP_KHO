@@ -109,8 +109,10 @@ describe('Read-only demo API adapter & Single Canonical Mock Dataset', () => {
     }
   });
 
-  it('reconciles ERP_KHO SaaS billing, 128.62M VND WH01 inventory valuation, SO-202611-001/002, 0 backorders, and KWO-2026-001', async () => {
+  it('reconciles Đại Phát SaaS billing, 128.62M VND WH01 inventory valuation, SO-202611-001/002, 0 backorders, and KWO-2026-001', async () => {
     expect(canonicalTenantSubscription.tenantCode).toBe('TENANT-001');
+    expect(canonicalTenantSubscription.companyName).toBe('Công ty TNHH Thương mại & Kho vận Đại Phát');
+    expect(canonicalTenantSubscription.taxCode).toBe('0318294012');
     expect(canonicalTenantSubscription.status).toBe('ACTIVE');
     expect(canonicalTenantSubscription.maxWarehouses).toBe(3);
     expect(canonicalTenantSubscription.beneficiary).toEqual({

@@ -96,13 +96,13 @@ describe('Dashboard production UI & Wave-45 shop owner analytics', () => {
       ),
     ).toBeTruthy();
 
-    expect(await view.findByText('85.000.000 đ')).toBeTruthy();
+    expect(await view.findByText('85.000.000 ₫')).toBeTruthy();
     expect(view.getByText('Giá vốn hàng bán bình quân')).toBeTruthy();
     expect(view.container.textContent).not.toContain('(COGS)');
-    expect(view.getByText('51.000.000 đ')).toBeTruthy();
-    expect(view.getByText('24.500.000 đ • Biên lãi gộp 28,8%')).toBeTruthy();
-    expect(view.getByText('19.500.000 đ • 2 cảnh báo lệch phí/chậm hoàn')).toBeTruthy();
-    expect(view.getByText('Thực nhận từ ĐVVC: 18.200.000 đ • Đối soát 3 chiều')).toBeTruthy();
+    expect(view.getByText('51.000.000 ₫')).toBeTruthy();
+    expect(view.getByText('24.500.000 ₫ • Biên lãi gộp 28,8%')).toBeTruthy();
+    expect(view.getByText('19.500.000 ₫ • 2 cảnh báo lệch phí/chậm hoàn')).toBeTruthy();
+    expect(view.getByText('Thực nhận từ ĐVVC: 18.200.000 ₫ • Đối soát 3 chiều')).toBeTruthy();
     expect(view.container.textContent).not.toContain('148.500.000');
     expect(view.container.textContent).not.toContain('36.800.000');
 

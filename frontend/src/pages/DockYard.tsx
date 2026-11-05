@@ -301,7 +301,7 @@ const DockYard = () => {
             </select>
           </UiToolbarField>
           <UiToolbarField label="Tìm kiếm">
-            <input aria-label="Tìm lịch hẹn" value={search} onChange={event => setSearch(event.target.value)} placeholder="Mã, đơn vị vận chuyển, xe, tài xế, cửa kho..." />
+            <input aria-label="Tìm lịch hẹn" style={{ minWidth: 235 }} value={search} onChange={event => setSearch(event.target.value)} placeholder="Tìm mã hẹn, xe, tài xế, cửa..." />
           </UiToolbarField>
           <button type="button" onClick={() => void refresh()} disabled={!warehouseId || loading}>Làm mới</button>
         </UiToolbar>

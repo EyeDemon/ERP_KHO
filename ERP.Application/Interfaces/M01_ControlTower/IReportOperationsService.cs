@@ -264,6 +264,11 @@ public static class ReportOperationsTextAndFallbackHelper
             "QA SUPERVISOR WH01" or "QA_SUPERVISOR_WH01" or "QA VIEWER WH01" or "QA_VIEWER_WH01" => "Giám sát Kho WH01",
             "QA SYSTEM ADMIN" or "QA ADMIN" or "QA_ADMIN" => "Quản trị viên Hệ thống",
             "QA_ADMIN_LOCAL" or "QA ADMIN LOCAL" => "Quản trị viên Nội bộ",
+            "TENANT_ADMIN" or "TENANT ADMIN" => "Quản trị viên Đại Phát",
+            "QA_ACCOUNTANT" or "QA ACCOUNTANT" => "Kế toán Kho Đại Phát",
+            "QA_BILLING_ADMIN" or "QA BILLING ADMIN" => "Quản trị Cước phí SaaS",
+            "QA_SUPPORT_ADMIN" or "QA SUPPORT ADMIN" => "Chuyên viên Hỗ trợ Kỹ thuật",
+            "QA_SECURITY_AUDITOR" or "QA SECURITY AUDITOR" => "Kiểm toán An toàn Thông tin",
             _ => trimmed
         };
     }

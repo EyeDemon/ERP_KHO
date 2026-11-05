@@ -163,12 +163,12 @@ export const StocktakesDetailSection: React.FC<StocktakesDetailSectionProps> = (
           <table className="ui-table-compact stocktake-detail-table" aria-label={'Chi tiết kiểm kê ' + currentDetail.code}>
             <thead>
               <tr>
-                <th>Mã SP</th><th>Tên sản phẩm</th><th>Đơn vị</th>
-                <th className="ui-cell-numeric" style={rightNumStyle}>Tồn hệ thống</th>
-                <th className="ui-cell-numeric" style={rightNumStyle}>Thực đếm</th>
-                <th className="ui-cell-numeric" style={rightNumStyle}>Chênh lệch</th>
-                <th>Ghi chú</th>
-                {statusCode === 0 && <th>Hành động</th>}
+                <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Mã SP</th><th style={{ minWidth: 150 }}>Tên sản phẩm</th><th style={{ minWidth: 78, whiteSpace: 'nowrap' }}>Đơn vị</th>
+                <th className="ui-cell-numeric" style={{ ...rightNumStyle, minWidth: 105, whiteSpace: 'nowrap' }}>Tồn hệ thống</th>
+                <th className="ui-cell-numeric" style={{ ...rightNumStyle, minWidth: 92, whiteSpace: 'nowrap' }}>Thực đếm</th>
+                <th className="ui-cell-numeric" style={{ ...rightNumStyle, minWidth: 96, whiteSpace: 'nowrap' }}>Chênh lệch</th>
+                <th style={{ minWidth: 150 }}>Ghi chú</th>
+                {statusCode === 0 && <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Hành động</th>}
               </tr>
             </thead>
             <tbody>
@@ -178,11 +178,11 @@ export const StocktakesDetailSection: React.FC<StocktakesDetailSectionProps> = (
                 return (
                   <tr key={row.id}>
                     <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap' }}>
-                      <strong style={{ whiteSpace: 'nowrap' }}>{row.productCode}</strong>
-                      {row.locationCode && <><br /><small style={{ whiteSpace: 'nowrap' }}>{row.locationCode}</small></>}
+                      <strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{row.productCode}</strong>
+                      {row.locationCode && <><br /><small className="ui-code" style={{ whiteSpace: 'nowrap' }}>{row.locationCode}</small></>}
                     </td>
                     <td>{row.productName}</td>
-                    <td>{row.unitName === 'QA_UNIT' || row.unitName === 'QA-PCS' ? 'THÙNG' : row.unitName}</td>
+                    <td>{!row.unitName || row.unitName.trim().toUpperCase() === 'ĐVT' ? 'Cái' : (row.unitName === 'QA_UNIT' || row.unitName === 'QA-PCS' ? 'THÙNG' : row.unitName)}</td>
                     <td className="ui-cell-numeric" style={rightNumStyle}>
                       {isBlindDraft ? <span className="ui-muted-text">Ẩn (Kiểm kê mù)</span> : row.systemQuantity}
                     </td>

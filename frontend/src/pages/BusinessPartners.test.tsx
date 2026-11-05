@@ -13,7 +13,7 @@ describe('BusinessPartners (mocked API)',()=>{
   it('prevents a double submit while a create is pending',async()=>{let done!:()=>void;post.mockReturnValue(new Promise(r=>{done=()=>r({data:{}} as never)}));const v=render(<BusinessPartners/>);await v.findByText('BP01');fireEvent.click(v.getByText('Thêm đối tác'));fireEvent.change(v.getByLabelText('Mã đối tác'),{target:{value:' new-1 '}});fireEvent.change(v.getByLabelText('Tên đối tác'),{target:{value:'Mới'}});const save=v.getByText('Lưu');fireEvent.click(save);fireEvent.click(save);expect(post).toHaveBeenCalledTimes(1);done();await waitFor(()=>expect(v.queryByText('Đang lưu...')).toBeNull())});
   it('keeps code disabled and sends rowVersion on edit',async()=>{put.mockResolvedValue({} as never);const v=render(<BusinessPartners/>);await v.findByText('BP01');fireEvent.click(v.getByText('Sửa'));expect((v.getByLabelText('Mã đối tác') as HTMLInputElement).disabled).toBe(true);fireEvent.click(v.getByText('Lưu'));await waitFor(()=>expect(put).toHaveBeenCalledWith('/api/v1/business-partners/1',expect.objectContaining({rowVersion:'AQ=='}))) });
   it('instructs reload after a stale update conflict',async()=>{put.mockRejectedValue({response:{status:409,data:{message:'Đối tác đã được thay đổi đồng thời.'}}});const v=render(<BusinessPartners/>);await v.findByText('BP01');fireEvent.click(v.getByText('Sửa'));fireEvent.click(v.getByText('Lưu'));expect(await v.findByText(/Vui lòng tải lại danh sách/)).toBeTruthy()});
-  it('renders 3PL billing summary card and tariff code TRF-3PL-STO-01',async()=>{const v=render(<BusinessPartners/>);expect(await v.findByText('Hợp đồng Dịch vụ Logistics 3PL & Bảng kê Tính phí Lưu kho / Tác nghiệp')).toBeTruthy();expect(v.getByText('CÔNG NỢ HIỆN TẠI')).toBeTruthy();expect(v.getByText('HẠN MỨC & KỲ HẠN TT')).toBeTruthy();expect(v.getByText(/Tổng số trên trang:/)).toBeTruthy();expect(v.getByText('TRF-3PL-STO-01')).toBeTruthy();expect(v.getByText('Phát hành Bảng kê & Ghi nhận Công nợ 3PL')).toBeTruthy();expect(v.getByRole('button',{name:'Mở Cổng chủ hàng 3PL'})).toBeTruthy();});
+  it('renders 3PL billing summary card and tariff code TRF-3PL-STO-01',async()=>{const v=render(<BusinessPartners/>);expect(await v.findByText('Hợp đồng Dịch vụ Logistics 3PL & Bảng kê Tính phí Lưu kho / Tác nghiệp')).toBeTruthy();expect(v.getByText('Công nợ hiện tại')).toBeTruthy();expect(v.getByText('Hạn mức & Kỳ hạn')).toBeTruthy();expect(v.getByText(/Tổng số trên trang:/)).toBeTruthy();expect(v.getByText('TRF-3PL-STO-01')).toBeTruthy();expect(v.getByText('Phát hành Bảng kê & Ghi nhận Công nợ 3PL')).toBeTruthy();expect(v.getByRole('button',{name:'Mở Cổng chủ hàng 3PL'})).toBeTruthy();});
   it('enforces 3PL statement safety lock, secondary recalculate with confirm, and credit limit exceeded badge (FIND-W650-3PL-SAFE-001)',async()=>{
     get.mockImplementation((async (url: string) => {
       if (url === '/api/v1/business-partners/3pl-billing-summary') {
@@ -45,9 +45,9 @@ describe('BusinessPartners (mocked API)',()=>{
     const v = render(<BusinessPartners />);
     await v.findByText('BP01');
     expect((v.getByRole('columnheader', { name: 'Vai trò' }) as HTMLElement).style.minWidth).toBe('145px');
-    expect((v.getByRole('columnheader', { name: 'Sản lượng thực tế' }) as HTMLElement).className).toContain('ui-cell-numeric');
-    expect((v.getByRole('columnheader', { name: 'Đơn giá (VND)' }) as HTMLElement).className).toContain('ui-cell-numeric');
-    expect((v.getByRole('columnheader', { name: 'Thành tiền (VND)' }) as HTMLElement).className).toContain('ui-cell-numeric');
+    expect((v.getByRole('columnheader', { name: 'Sản lượng' }) as HTMLElement).className).toContain('ui-cell-numeric');
+    expect((v.getByRole('columnheader', { name: 'Đơn giá (₫)' }) as HTMLElement).className).toContain('ui-cell-numeric');
+    expect((v.getByRole('columnheader', { name: 'Thành tiền (₫)' }) as HTMLElement).className).toContain('ui-cell-numeric');
     fireEvent.click(v.getByRole('button', { name: 'Xóa' }));
     expect(v.getByTestId('partner-delete-confirm-modal')).toBeTruthy();
     expect(v.getByTestId('partner-delete-balance-warning')).toBeTruthy();

@@ -55,8 +55,12 @@ public sealed partial class SaasBillingService
             }
 
             var tenantProfile = await _db.SaasTenants.AsNoTracking().IgnoreQueryFilters().FirstOrDefaultAsync(t => t.TenantId == tenantId, cancellationToken);
-            var buyerTaxCode = !string.IsNullOrWhiteSpace(request?.TaxCode) ? request.TaxCode.Trim() : tenantProfile?.TaxCode;
-            var buyerLegalName = !string.IsNullOrWhiteSpace(request?.CompanyName) ? request.CompanyName.Trim() : tenantProfile?.TenantName;
+            var buyerLegalName = !string.IsNullOrWhiteSpace(request?.CompanyName)
+                ? request.CompanyName.Trim()
+                : NormalizeTenantLegalName(tenantId, tenantProfile?.CompanyName, tenantProfile?.TenantName);
+            var buyerTaxCode = !string.IsNullOrWhiteSpace(request?.TaxCode)
+                ? request.TaxCode.Trim()
+                : NormalizeTenantTaxCode(tenantId, tenantProfile?.TaxCode, tenantProfile?.CompanyName, tenantProfile?.TenantName);
             var (subTotalVnd, vatRatePercent, vatAmountVnd, normalizedTotalVnd) = ComputeVatBreakdownVnd(amountVnd);
             amountVnd = normalizedTotalVnd;
 
@@ -192,6 +196,7 @@ public sealed partial class SaasBillingService
                 {
                     TenantId = tenantId,
                     TenantCode = $"TENANT-{tenantId:D3}",
+                    CompanyName = companyName,
                     TenantName = companyName,
                     TaxCode = taxCode,
                     TaxpayerType = taxpayerType,
@@ -203,6 +208,7 @@ public sealed partial class SaasBillingService
             }
             else
             {
+                tenant.CompanyName = companyName;
                 tenant.TenantName = companyName;
                 tenant.TaxCode = taxCode;
                 tenant.TaxpayerType = taxpayerType;

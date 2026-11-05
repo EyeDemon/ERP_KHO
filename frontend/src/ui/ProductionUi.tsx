@@ -1,8 +1,9 @@
-import { Children, cloneElement, isValidElement, useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { Children, cloneElement, isValidElement, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react';
+import { Lock } from 'lucide-react';
 import { useDialogFocusTrap } from './useDialogFocusTrap';
 
-export const UiPage = ({ children, className = '' }: { children: ReactNode; className?: string }) => (
-  <section className={('ui-page ' + className).trim()}>{children}</section>
+export const UiPage = ({ children, className = '', style }: { children: ReactNode; className?: string; style?: CSSProperties }) => (
+  <section className={('ui-page ' + className).trim()} style={style}>{children}</section>
 );
 
 export const UiPageHeader = ({
@@ -69,8 +70,14 @@ export const UiBadge = ({
 }: {
   children: ReactNode; tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'info'; title?: string;
 }) => (
-  <span className={'ui-badge ' + (tone === 'neutral' ? '' : tone)} title={title}>
+  <span className={'ui-badge ' + (tone === 'neutral' ? 'neutral' : tone)} title={title}>
     {children}
+  </span>
+);
+
+export const UiCostMaskedBadge = ({ 'data-testid': testId }: { 'data-testid'?: string }) => (
+  <span data-testid={testId} className="ui-cost-masked-badge" style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+    <Lock size={12} aria-hidden="true" /> Ẩn theo quyền
   </span>
 );
 
@@ -315,11 +322,12 @@ export const UiDrawer = ({
           <button
             type="button"
             className="ui-drawer-close"
-            aria-label="Đóng ngăn trượt"
+            aria-label="Đóng hộp thoại"
+            title="Đóng hộp thoại"
             disabled={busy}
             onClick={onClose}
           >
-            ✕
+            ×
           </button>
         </header>
         <div className="ui-drawer-body">{children}</div>

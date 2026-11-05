@@ -16,11 +16,11 @@ public sealed partial class SaasBillingService
 
     public static IReadOnlyList<SaasPlanSpec> CanonicalPlans { get; } =
     [
-        new SaasPlanSpec("FREE_TRIAL", "Gói Dùng thử 14 Ngày — 0 đ/tháng", 0m, 300, 1, 3, 500),
-        new SaasPlanSpec("STARTER", "Gói Khởi đầu — 490.000 đ/tháng", 490000m, 1500, 1, 5, 2000),
-        new SaasPlanSpec("GROWTH", "Gói Tăng trưởng — 1.490.000 đ/tháng", 1490000m, 10000, 3, 20, 20000),
-        new SaasPlanSpec("PRO", "Gói Tăng trưởng — 1.490.000 đ/tháng", 1490000m, 10000, 3, 20, 20000),
-        new SaasPlanSpec("ENTERPRISE", "Gói Doanh nghiệp — 3.490.000 đ/tháng", 3490000m, 100000, 20, 100, 100000)
+        new SaasPlanSpec("FREE_TRIAL", "Gói Dùng thử 14 Ngày — 0 ₫/tháng", 0m, 300, 1, 3, 500),
+        new SaasPlanSpec("STARTER", "Gói Khởi đầu — 490.000 ₫/tháng", 490000m, 1500, 1, 5, 2000),
+        new SaasPlanSpec("GROWTH", "Gói Tăng trưởng — 1.490.000 ₫/tháng", 1490000m, 10000, 3, 20, 20000),
+        new SaasPlanSpec("PRO", "Gói Tăng trưởng — 1.490.000 ₫/tháng", 1490000m, 10000, 3, 20, 20000),
+        new SaasPlanSpec("ENTERPRISE", "Gói Doanh nghiệp — 3.490.000 ₫/tháng", 3490000m, 100000, 20, 100, 100000)
     ];
 
     public static SaasPlanSpec ResolvePlanSpec(string? rawPlanCode)
@@ -33,7 +33,7 @@ public sealed partial class SaasBillingService
         {
             "FREE_TRIAL" or "TRIAL" => new SaasPlanSpec(
                 "FREE_TRIAL",
-                "Gói Dùng thử 14 Ngày — 0 đ/tháng",
+                "Gói Dùng thử 14 Ngày — 0 ₫/tháng",
                 0m,
                 300,
                 1,
@@ -41,7 +41,7 @@ public sealed partial class SaasBillingService
                 ERP.Application.Services.ProductService.ResolveMaxSkusForPlan("FREE_TRIAL")),
             "ENTERPRISE" or "ENTERPRISE_SAAS" => new SaasPlanSpec(
                 "ENTERPRISE",
-                "Gói Doanh nghiệp — 3.490.000 đ/tháng",
+                "Gói Doanh nghiệp — 3.490.000 ₫/tháng",
                 3490000m,
                 100000,
                 20,
@@ -49,7 +49,7 @@ public sealed partial class SaasBillingService
                 ERP.Application.Services.ProductService.ResolveMaxSkusForPlan("ENTERPRISE")),
             "GROWTH" or "GROWTH_TIER" => new SaasPlanSpec(
                 "GROWTH",
-                "Gói Tăng trưởng — 1.490.000 đ/tháng",
+                "Gói Tăng trưởng — 1.490.000 ₫/tháng",
                 1490000m,
                 10000,
                 3,
@@ -57,7 +57,7 @@ public sealed partial class SaasBillingService
                 ERP.Application.Services.ProductService.ResolveMaxSkusForPlan("GROWTH")),
             "PRO" => new SaasPlanSpec(
                 "PRO",
-                "Gói Tăng trưởng — 1.490.000 đ/tháng",
+                "Gói Tăng trưởng — 1.490.000 ₫/tháng",
                 1490000m,
                 10000,
                 3,
@@ -65,7 +65,7 @@ public sealed partial class SaasBillingService
                 ERP.Application.Services.ProductService.ResolveMaxSkusForPlan("PRO")),
             _ => new SaasPlanSpec(
                 "STARTER",
-                "Gói Khởi đầu — 490.000 đ/tháng",
+                "Gói Khởi đầu — 490.000 ₫/tháng",
                 490000m,
                 1500,
                 1,
@@ -134,6 +134,16 @@ public sealed partial class SaasBillingService
                     healedAny = true;
                 }
 
+                var healedBuyerName = NormalizeInvoiceBuyerLegalName(inv.TenantId, inv.BuyerLegalName, tenantProfile?.CompanyName, tenantProfile?.TenantName);
+                var healedBuyerTax = NormalizeInvoiceBuyerTaxCode(inv.TenantId, inv.BuyerTaxCode, inv.BuyerLegalName, tenantProfile?.TaxCode, tenantProfile?.CompanyName, tenantProfile?.TenantName);
+                if (!string.Equals(inv.BuyerLegalName, healedBuyerName, StringComparison.Ordinal)
+                    || !string.Equals(inv.BuyerTaxCode, healedBuyerTax, StringComparison.Ordinal))
+                {
+                    inv.BuyerLegalName = healedBuyerName;
+                    inv.BuyerTaxCode = healedBuyerTax;
+                    healedAny = true;
+                }
+
                 if (inv.InvoiceCode.Contains("202610", StringComparison.OrdinalIgnoreCase))
                 {
                     var octIssued = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -163,6 +173,7 @@ public sealed partial class SaasBillingService
         }
 
         var normalizedBuyerName = NormalizeTenantLegalName(tenantId, tenantProfile?.CompanyName, tenantProfile?.TenantName);
+        var normalizedBuyerTax = NormalizeTenantTaxCode(tenantId, tenantProfile?.TaxCode, tenantProfile?.CompanyName, tenantProfile?.TenantName);
         if (_db == null && rawInvoices.Count == 0)
         {
             rawInvoices =
@@ -177,7 +188,7 @@ public sealed partial class SaasBillingService
                     VatRatePercent = 10.00m,
                     VatAmountVnd = 135455m,
                     AmountVnd = 1490000m,
-                    BuyerTaxCode = "0312345678",
+                    BuyerTaxCode = normalizedBuyerTax,
                     BuyerLegalName = normalizedBuyerName,
                     PaymentProvider = "VIETQR",
                     Status = "PAID",
@@ -194,7 +205,7 @@ public sealed partial class SaasBillingService
                     VatRatePercent = 10.00m,
                     VatAmountVnd = 135455m,
                     AmountVnd = 1490000m,
-                    BuyerTaxCode = "0312345678",
+                    BuyerTaxCode = normalizedBuyerTax,
                     BuyerLegalName = normalizedBuyerName,
                     PaymentProvider = "VIETQR",
                     Status = "UNPAID",
@@ -219,13 +230,15 @@ public sealed partial class SaasBillingService
             var creditCarryoverVnd = manualSnap?.CreditCarryoverVnd ?? 0m;
             var varianceStatus = manualSnap?.VarianceStatus ?? (isPaid ? "EXACT_MATCH" : (isPartial ? "PARTIAL_PAYMENT" : "UNPAID"));
             var issuedDateDisplayVi = issuedAtUtc.ToString("dd/MM/yyyy", System.Globalization.CultureInfo.InvariantCulture);
+            var resolvedBuyerName = NormalizeInvoiceBuyerLegalName(i.TenantId, i.BuyerLegalName, tenantProfile?.CompanyName, tenantProfile?.TenantName);
+            var resolvedBuyerTax = NormalizeInvoiceBuyerTaxCode(i.TenantId, i.BuyerTaxCode, i.BuyerLegalName, tenantProfile?.TaxCode, tenantProfile?.CompanyName, tenantProfile?.TenantName);
             return new
             {
                 id = i.Id,
                 invoiceId = i.Id,
                 tenantId = i.TenantId,
                 tenantCode = i.TenantId == 1 ? "TENANT-001" : $"TENANT-{i.TenantId:D3}",
-                companyName = !string.IsNullOrWhiteSpace(i.BuyerLegalName) ? i.BuyerLegalName : normalizedBuyerName,
+                companyName = resolvedBuyerName,
                 invoiceCode = i.InvoiceCode,
                 invoiceNumber = i.InvoiceCode,
                 planCode = i.PlanCode,
@@ -247,8 +260,8 @@ public sealed partial class SaasBillingService
                 remainingAmountVnd,
                 creditCarryoverVnd,
                 varianceStatus,
-                buyerTaxCode = i.BuyerTaxCode ?? tenantProfile?.TaxCode ?? string.Empty,
-                buyerLegalName = !string.IsNullOrWhiteSpace(i.BuyerLegalName) ? i.BuyerLegalName : normalizedBuyerName,
+                buyerTaxCode = resolvedBuyerTax,
+                buyerLegalName = resolvedBuyerName,
                 paymentProvider = i.PaymentProvider,
                 status = i.Status,
                 statusLabelVi = isPaid ? "Đã tất toán VietQR" : (isPartial ? "Thanh toán một phần" : "Chờ thanh toán"),
@@ -307,7 +320,7 @@ public sealed partial class SaasBillingService
             dueDateDisplayVi = "05/11/2026",
             currentCyclePaid = isCurrentCyclePaid,
             currentCycleSettlementBannerVi = isCurrentCyclePaid
-                ? $"Hóa đơn kỳ 11/2026 ({novCodeDisplay}) đã tất toán đầy đủ (1.490.000 đ) • Xác nhận lúc: {novReconciledAtVi}"
+                ? $"Hóa đơn kỳ 11/2026 ({novCodeDisplay}) đã tất toán đầy đủ (1.490.000 ₫) • Xác nhận lúc: {novReconciledAtVi}"
                 : null,
             accountName = effectiveAccountName,
             beneficiaryName = effectiveAccountName,

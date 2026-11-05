@@ -103,11 +103,26 @@
   /* ------------------------------------------------------------------------
      LAYER 3: COMPONENT TOKENS (Table, KPI Card, Badge, Barcode Scanner Bar)
      ------------------------------------------------------------------------ */
-  --table-cell-padding-y: 10px;
-  --table-cell-padding-x: 12px;
+  --table-cell-padding-y: 8px;
+  --table-cell-padding-x: 8px;
   --kpi-card-radius: var(--erp-radius-lg);
   --kpi-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
   --badge-font-size: 12px;
+  --badge-neutral-fg: #475569;
+  --badge-neutral-bg: #F1F5F9;
+  --badge-neutral-border: #CBD5E1;
+  --badge-info-fg: #0369A1;
+  --badge-info-bg: #F0F9FF;
+  --badge-info-border: #BAE6FD;
+  --badge-warning-fg: #92400E;
+  --badge-warning-bg: #FEF3C7;
+  --badge-warning-border: #FCD34D;
+  --badge-success-fg: #047857;
+  --badge-success-bg: #ECFDF5;
+  --badge-success-border: #6EE7B7;
+  --badge-danger-fg: #B91C1C;
+  --badge-danger-bg: #FEF2F2;
+  --badge-danger-border: #FECACA;
   --scanner-bar-bg: var(--erp-color-slate-900);
 }
 
@@ -122,6 +137,7 @@ th[data-numeric="true"],
 .stat-value,
 .ui-stat-value,
 .ui-metric-value,
+.ui-code,
 .ui-badge {
   font-variant-numeric: tabular-nums;
 }

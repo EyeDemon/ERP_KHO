@@ -48,7 +48,7 @@ public static partial class GhnLiveGatewayHelper
         var effCod = (int)Math.Clamp(Math.Round(request.CodAmountVnd), 0m, 50_000_000m);
         var effInsurance = (int)Math.Clamp(Math.Round(request.OrderValueVnd), 0m, 5_000_000m);
         var effToName = string.IsNullOrWhiteSpace(request.RecipientName)
-            ? "Khách Hàng Nhận Kiện ERP_KHO"
+            ? "Khách hàng nhận kiện Đại Phát"
             : request.RecipientName.Trim();
         var effToAddress = string.IsNullOrWhiteSpace(normalizedAddress)
             ? "123 Lê Lợi, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh"
@@ -71,7 +71,7 @@ public static partial class GhnLiveGatewayHelper
         var payload = new
         {
             payment_type_id = 1,
-            note = "Đơn hàng xuất kho ERP_KHO",
+            note = "Đơn hàng xuất kho Đại Phát",
             required_note = "KHONGCHOXEMHANG",
             client_order_code = clientOrderCode,
             from_name = "Kho Trung tâm (WH01)",
@@ -88,7 +88,7 @@ public static partial class GhnLiveGatewayHelper
             to_ward_code = effToWard,
             to_district_id = effToDistrict,
             cod_amount = effCod,
-            content = "Kiện hàng xuất kho ERP_KHO",
+            content = "Kiện hàng xuất kho Đại Phát",
             weight = effWeight,
             length = 20,
             width = 15,
@@ -99,7 +99,7 @@ public static partial class GhnLiveGatewayHelper
             {
                 new
                 {
-                    name = "Kiện hàng xuất kho ERP_KHO",
+                    name = "Kiện hàng xuất kho Đại Phát",
                     code = "SKU-WMS-01",
                     quantity = 1,
                     price = 100000,

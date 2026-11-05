@@ -157,15 +157,15 @@ export const InventoryAnalyticsTab: React.FC<InventoryAnalyticsTabProps> = ({
               <table aria-label="Bảng vòng quay tồn kho và số ngày tồn" className="ui-table-compact">
                 <thead>
                   <tr>
-                    <th>Mã SP</th>
-                    <th>Tên SP</th>
-                    <th>ĐVT</th>
-                    <th className="inventory-numeric" style={rightNumStyle}>Tồn hiện tại</th>
-                    <th className="inventory-numeric" style={rightNumStyle}>Nhập trong kỳ</th>
-                    <th className="inventory-numeric" style={rightNumStyle}>Xuất trong kỳ</th>
-                    <th className="inventory-numeric" style={rightNumStyle}>Hệ số vòng quay</th>
-                    <th className="inventory-numeric" style={rightNumStyle}>Số ngày tồn</th>
-                    <th>Phân nhóm tốc độ</th>
+                    <th style={{ minWidth: 92, whiteSpace: 'nowrap' }}>Mã SP</th>
+                    <th style={{ minWidth: 150 }}>Tên SP</th>
+                    <th style={{ minWidth: 78, whiteSpace: 'nowrap' }}>Đơn vị</th>
+                    <th className="inventory-numeric" style={{ ...rightNumStyle, minWidth: 96, whiteSpace: 'nowrap' }}>Tồn hiện tại</th>
+                    <th className="inventory-numeric" style={{ ...rightNumStyle, minWidth: 105, whiteSpace: 'nowrap' }}>Nhập trong kỳ</th>
+                    <th className="inventory-numeric" style={{ ...rightNumStyle, minWidth: 105, whiteSpace: 'nowrap' }}>Xuất trong kỳ</th>
+                    <th className="inventory-numeric" style={{ ...rightNumStyle, minWidth: 115, whiteSpace: 'nowrap' }}>Hệ số vòng quay</th>
+                    <th className="inventory-numeric" style={{ ...rightNumStyle, minWidth: 96, whiteSpace: 'nowrap' }}>Số ngày tồn</th>
+                    <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Phân nhóm tốc độ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -176,7 +176,7 @@ export const InventoryAnalyticsTab: React.FC<InventoryAnalyticsTabProps> = ({
                   ) : (
                     analyticsReport.turnoverAndDaysOnHand.map((item) => (
                       <tr key={item.productId}>
-                        <td><strong>{item.productCode}</strong></td>
+                        <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.productCode}</strong></td>
                         <td>{item.productName}</td>
                         <td>{formatUnitName(item.unitName)}</td>
                         <td className="inventory-numeric" style={rightNumStyle}>{item.onHandQuantity}</td>

@@ -56,7 +56,7 @@ public sealed partial class SalesOrderOperationsService
             totalCount = mapped.Count,
             items = mapped,
             rules = mapped,
-            statusLabel = "Đã tải quy tắc tự động đính kèm quà tặng khuyến mãi (0đ)"
+            statusLabel = "Đã tải quy tắc tự động đính kèm quà tặng khuyến mãi (0 ₫)"
         });
     }
 
@@ -92,7 +92,7 @@ public sealed partial class SalesOrderOperationsService
             : $"GIFT-{now:yyMMddHHmmss}";
         var ruleName = !string.IsNullOrWhiteSpace(request?.RuleName)
             ? request.RuleName.Trim()
-            : $"Quà tặng khuyến mãi 0đ ({ruleCode})";
+            : $"Quà tặng khuyến mãi 0 ₫ ({ruleCode})";
 
         var rule = new PromotionGiftRule
         {
@@ -152,7 +152,7 @@ public sealed partial class SalesOrderOperationsService
             new PromotionGiftRule
             {
                 RuleCode = "GIFT-ORDER-500K",
-                RuleName = "Đơn từ 500.000đ tặng 1 Túi Canvas / Sample Mini",
+                RuleName = "Đơn từ 500.000 ₫ tặng 1 Túi Canvas / Sample Mini",
                 MinOrderAmount = 500000m,
                 GiftProductId = defaultGiftProductId,
                 GiftQuantity = 1m,
@@ -257,11 +257,11 @@ public sealed partial class SalesOrderOperationsService
                     quantity = giftQty,
                     unitPrice = 0m,
                     isPromotionalGift = true,
-                    note = "Quà tặng khuyến mãi 0đ (Tự động đính kèm)"
+                    note = "Quà tặng khuyến mãi 0 ₫ (Tự động đính kèm)"
                 }
                 : null,
             statusLabel = giftAttached
-                ? "Đã tự động đính kèm dòng quà tặng 0đ vào đơn hàng"
+                ? "Đã tự động đính kèm dòng quà tặng 0 ₫ vào đơn hàng"
                 : "Tồn kho quà tặng đã hết (0) — Tự động bỏ qua quà tặng để không làm kẹt đơn hàng chính"
         });
     }

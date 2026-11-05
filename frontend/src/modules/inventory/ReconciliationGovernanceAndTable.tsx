@@ -105,15 +105,15 @@ export const ReconciliationGovernanceAndTable: React.FC<ReconciliationGovernance
           <table className="reconciliation-table" aria-label="Bảng đối chiếu tồn kho và sổ cái">
             <thead>
               <tr>
-                <th>Kho</th>
-                <th>Sản phẩm</th>
-                <th style={rightNumStyle}>Tồn hiện tại</th>
-                <th style={rightNumStyle}>Sổ cái kỳ vọng</th>
-                <th style={rightNumStyle}>Chênh lệch</th>
-                <th>Trạng thái khả dụng</th>
-                <th>Đối chiếu 8 trạng thái</th>
-                <th>Thành phần biến động</th>
-                <th>Bằng chứng</th>
+                <th style={{ minWidth: 115 }}>Kho</th>
+                <th style={{ minWidth: 150 }}>Sản phẩm</th>
+                <th style={{ ...rightNumStyle, minWidth: 96, whiteSpace: 'nowrap' }}>Tồn hiện tại</th>
+                <th style={{ ...rightNumStyle, minWidth: 105, whiteSpace: 'nowrap' }}>Sổ cái kỳ vọng</th>
+                <th style={{ ...rightNumStyle, minWidth: 92, whiteSpace: 'nowrap' }}>Chênh lệch</th>
+                <th style={{ minWidth: 115 }}>Trạng thái khả dụng</th>
+                <th style={{ minWidth: 145 }}>Đối chiếu 8 trạng thái</th>
+                <th style={{ minWidth: 155 }}>Thành phần biến động</th>
+                <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Bằng chứng</th>
               </tr>
             </thead>
             <tbody>
@@ -130,7 +130,7 @@ export const ReconciliationGovernanceAndTable: React.FC<ReconciliationGovernance
                     >
                       <td>{row.warehouseName}</td>
                       <td>
-                        <strong style={{ whiteSpace: 'nowrap', display: 'inline-block' }}>{row.productCode}</strong>
+                        <strong className="ui-code" style={{ whiteSpace: 'nowrap', display: 'inline-block' }}>{row.productCode}</strong>
                         <span className="reconciliation-product-name">{row.productName}</span>
                       </td>
                       <td style={rightNumStyle}>{numberFormat.format(row.currentQuantity)}</td>

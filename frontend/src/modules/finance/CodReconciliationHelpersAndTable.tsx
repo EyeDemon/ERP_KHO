@@ -25,7 +25,7 @@ export const extractCodErrorText = (err: any, fallback: string) => {
   return `${msg}${code ? ` [${code}]` : ''}${corr ? ` (CorrelationId: ${corr})` : ''}`;
 };
 
-export const formatCodCurrencyVnd = (amount: number) => `${Math.round(amount).toLocaleString('vi-VN')} đ`;
+export const formatCodCurrencyVnd = (amount: number) => `${Math.round(amount).toLocaleString('vi-VN')} ₫`;
 
 const statusBadgeTone = (status: string) => {
   const upper = status.toUpperCase();
@@ -173,35 +173,25 @@ export function CodReconciliationLedgerTable({
           <table
             className="ui-table-compact"
             aria-label="Bảng chi tiết đối soát vận đơn COD"
-            style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}
+            style={{ width: '100%', minWidth: 1020, borderCollapse: 'collapse' }}
           >
-            <colgroup>
-              <col style={{ width: '13%' }} />
-              <col style={{ width: '6%' }} />
-              <col style={{ width: '11%' }} />
-              <col style={{ width: '11%' }} />
-              <col style={{ width: '20%' }} />
-              <col style={{ width: '10%' }} />
-              <col style={{ width: '13%' }} />
-              <col style={{ width: '16%' }} />
-            </colgroup>
             <thead>
               <tr>
-                <th>MÃ VẬN ĐƠN</th>
-                <th>ĐVVC</th>
-                <th style={{ textAlign: 'right' }}>COD PHẢI THU</th>
-                <th style={{ textAlign: 'right' }}>COD THỰC NHẬN</th>
-                <th style={{ textAlign: 'right', whiteSpace: 'normal', lineHeight: 1.25 }}>Thuế khấu trừ 1,5% &amp; Phí cố định</th>
-                <th style={{ textAlign: 'right' }}>LỆCH PHÍ VC</th>
-                <th>TRẠNG THÁI</th>
-                <th>Cân nặng &amp; Bằng chứng Video</th>
+                <th style={{ minWidth: 125, whiteSpace: 'nowrap' }}>Mã vận đơn</th>
+                <th style={{ minWidth: 78, whiteSpace: 'nowrap' }}>ĐVVC</th>
+                <th style={{ minWidth: 110, whiteSpace: 'nowrap', textAlign: 'right' }}>COD phải thu</th>
+                <th style={{ minWidth: 110, whiteSpace: 'nowrap', textAlign: 'right' }}>COD thực nhận</th>
+                <th style={{ minWidth: 145, whiteSpace: 'nowrap', textAlign: 'right' }}>Thuế 1,5% &amp; Phí</th>
+                <th style={{ minWidth: 105, whiteSpace: 'nowrap', textAlign: 'right' }}>Lệch phí VC</th>
+                <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                <th style={{ minWidth: 155, whiteSpace: 'nowrap' }}>Cân nặng &amp; Video</th>
               </tr>
             </thead>
             <tbody>
               {ledgers.map(row => (
                 <tr key={`${row.trackingNumber}-${row.id}`}>
-                  <td style={{ wordBreak: 'break-word' }}>
-                    <strong>{row.trackingNumber}</strong>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{row.trackingNumber}</strong>
                   </td>
                   <td>
                     <UiBadge>{row.carrierCode}</UiBadge>

@@ -86,12 +86,12 @@ export function InventoryTraceabilityResults(props: {
           <table className="ui-table-compact" aria-label="Nhóm tồn kho hiện tại phục vụ truy vết">
             <thead>
               <tr>
-                <th>Sản phẩm</th>
-                <th>Kho / Vị trí</th>
-                <th>Trạng thái</th>
-                <th>Lô / Sê-ri</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Tồn thực tế</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Đã giữ</th>
+                <th style={{ minWidth: 130 }}>Sản phẩm</th>
+                <th style={{ minWidth: 120 }}>Kho / Vị trí</th>
+                <th style={{ minWidth: 100, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                <th style={{ minWidth: 120 }}>Lô / Sê-ri</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 96, whiteSpace: 'nowrap' }}>Tồn thực tế</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 84, whiteSpace: 'nowrap' }}>Đã giữ</th>
               </tr>
             </thead>
             <tbody>
@@ -100,11 +100,11 @@ export function InventoryTraceabilityResults(props: {
               ) : (
                 result.currentBuckets.map((x) => (
                   <tr key={x.inventoryStockId}>
-                    <td><strong style={{ whiteSpace: 'nowrap' }}>{x.productCode}</strong><br /><small>{x.productName}</small></td>
-                    <td>{x.warehouseName}<br /><small style={{ whiteSpace: 'nowrap' }}>{locationCodeLabel(x.locationCode)}</small></td>
+                    <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{x.productCode}</strong><br /><small>{x.productName}</small></td>
+                    <td>{x.warehouseName}<br /><small className="ui-code" style={{ whiteSpace: 'nowrap' }}>{locationCodeLabel(x.locationCode)}</small></td>
                     <td style={{ whiteSpace: 'nowrap' }}><UiBadge>{inventoryStatusLabel(x.inventoryStatus)}</UiBadge></td>
-                    <td>
-                      {x.lotNumber ?? '—'} / {x.serialNumber ?? '—'}
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <span className="ui-code" style={{ whiteSpace: 'nowrap' }}>{x.lotNumber ?? '—'}</span> / <span className="ui-code" style={{ whiteSpace: 'nowrap' }}>{x.serialNumber ?? '—'}</span>
                       {x.expiryDate && <><br /><small>HSD {new Date(x.expiryDate).toLocaleDateString('vi-VN')}</small></>}
                     </td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{x.onHandQuantity}</td>
@@ -141,22 +141,22 @@ export function InventoryTraceabilityResults(props: {
         </p>
         {result.eventsTruncated && (
           <p role="status" className="ui-muted-text">
-            Chỉ lấy các sự kiện mới nhất trong giới hạn truy vấn và các sự kiện liên quan để đủ chuỗi đảo. Lịch sử còn dữ liệu cũ hơn; dùng “Sự kiện sau” để xem trang kế tiếp hoặc thu hẹp điều kiện tìm kiếm.
+            Chỉ lấy các sự kiện mới nhất trong giới hạn truy vấn và các sự kiện liên quan để đủ chuỗi đảo. Lịch sử còn các bản ghi trước đó; dùng “Sự kiện sau” để xem trang kế tiếp hoặc thu hẹp điều kiện tìm kiếm.
           </p>
         )}
         <UiTableScroll>
           <table className="ui-table-compact" aria-label="Dòng thời gian sổ cái phục vụ truy vết">
             <thead>
               <tr>
-                <th>Thời gian</th>
-                <th>Sự kiện</th>
-                <th>Sản phẩm</th>
-                <th>Vị trí / Trạng thái</th>
-                <th>Lô / Sê-ri</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Số lượng</th>
-                <th>Tham chiếu</th>
-                <th>Chuỗi đảo giao dịch</th>
-                <th>Người thực hiện / Ghi chú</th>
+                <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Thời gian</th>
+                <th style={{ minWidth: 110 }}>Sự kiện</th>
+                <th style={{ minWidth: 110 }}>Sản phẩm</th>
+                <th style={{ minWidth: 130 }}>Vị trí / Trạng thái</th>
+                <th style={{ minWidth: 110 }}>Lô / Sê-ri</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 88, whiteSpace: 'nowrap' }}>Số lượng</th>
+                <th style={{ minWidth: 110 }}>Tham chiếu</th>
+                <th style={{ minWidth: 110 }}>Chuỗi đảo</th>
+                <th style={{ minWidth: 140 }}>Người thực hiện</th>
               </tr>
             </thead>
             <tbody>
@@ -165,12 +165,12 @@ export function InventoryTraceabilityResults(props: {
               ) : (
                 result.events.map((x) => (
                   <tr key={x.transactionId}>
-                    <td>{new Date(x.transactionDate).toLocaleString('vi-VN')}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{new Date(x.transactionDate).toLocaleString('vi-VN')}</td>
                     <td>
                       <UiBadge tone={tone(x)}>{transactionTypeLabel(x.transactionType)}</UiBadge><br />
                       <small>#{x.transactionId}{x.isReversed ? ' • đã đảo' : ''}{x.reversalOfTransactionId ? ' • đảo #' + x.reversalOfTransactionId : ''}</small>
                     </td>
-                    <td>{x.productCode}<br /><small>{x.warehouseName}</small></td>
+                    <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{x.productCode}</strong><br /><small>{x.warehouseName}</small></td>
                     <td>
                       {x.fromLocationCode && x.toLocationCode ? locationCodeLabel(x.fromLocationCode) + ' → ' + locationCodeLabel(x.toLocationCode) : locationCodeLabel(x.locationCode)}<br />
                       <small>{x.fromInventoryStatus && x.toInventoryStatus ? inventoryStatusLabel(x.fromInventoryStatus) + ' → ' + inventoryStatusLabel(x.toInventoryStatus) : inventoryStatusLabel(x.inventoryStatus)}</small>

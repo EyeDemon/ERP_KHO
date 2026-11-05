@@ -120,13 +120,13 @@ export function ProductChannelMappingSection({
           <table aria-label="Bảng ánh xạ mã hàng đa sàn TMĐT" className="ui-table-compact" style={{ marginTop: 12, width: '100%' }}>
             <thead>
               <tr>
-                <th>Kênh bán</th>
-                <th>Gian hàng</th>
-                <th>Mã SKU trên Sàn</th>
-                <th>Mã SKU Kho Nội Bộ</th>
-                <th>Tên sản phẩm</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Hệ số quy đổi (Combo/Lẻ)</th>
-                <th>Trạng thái đồng bộ</th>
+                <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Kênh bán</th>
+                <th style={{ minWidth: 135 }}>Gian hàng</th>
+                <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Mã SKU trên Sàn</th>
+                <th style={{ minWidth: 135, whiteSpace: 'nowrap' }}>Mã SKU Kho Nội Bộ</th>
+                <th style={{ minWidth: 165 }}>Tên sản phẩm</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 110, whiteSpace: 'nowrap' }}>Hệ số quy đổi</th>
+                <th style={{ minWidth: 135, whiteSpace: 'nowrap' }}>Trạng thái đồng bộ</th>
               </tr>
             </thead>
             <tbody>
@@ -136,8 +136,8 @@ export function ProductChannelMappingSection({
                 <tr key={row.id}>
                   <td><UiBadge>{row.channelCode}</UiBadge></td>
                   <td>{row.shopName}</td>
-                  <td><strong>{row.externalSkuCode}</strong></td>
-                  <td><strong>{row.internalProductCode}</strong></td>
+                  <td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{row.externalSkuCode}</strong></td>
+                  <td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{row.internalProductCode}</strong></td>
                   <td>{row.externalSkuName || row.internalProductName}</td>
                   <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{`×${row.conversionFactor}`}</td>
                   <td><UiBadge tone="success">{row.syncStatus === 'ACTIVE' || row.syncStatus === 'SYNCED' ? 'Đã đồng bộ tự động' : row.syncStatus}</UiBadge></td>

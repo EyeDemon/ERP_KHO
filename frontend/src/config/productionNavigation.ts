@@ -37,7 +37,7 @@ export const productionNavigation: ProductionNavItem[] = [
   { path: '/sales-orders', label: 'Đơn bán hàng', section: 'Xuất kho', description: 'Tiếp nhận đơn bán và giữ chỗ tồn.', permission: 'sales_order.read', expressMode: true },
   { path: '/backorders', label: 'Đơn thiếu hàng', section: 'Xuất kho', description: 'Theo dõi và cấp phát bù đơn thiếu.', permission: 'backorder.read', expressMode: true },
   { path: '/stock-reservations', label: 'Giữ hàng tồn kho', section: 'Xuất kho', description: 'Theo dõi lượng tồn cam kết giữ chỗ.', permission: 'inventory.read', expressMode: false },
-  { path: '/stock-allocations', label: 'Phân bổ vị trí lấy', section: 'Xuất kho', description: 'Phân bổ vị trí lấy theo FEFO FIFO.', permission: 'allocation.read', expressMode: false },
+  { path: '/stock-allocations', label: 'Phân bổ vị trí lấy', section: 'Xuất kho', description: 'Phân bổ vị trí lấy theo Ưu tiên Hạn dùng / Nhập trước.', permission: 'allocation.read', expressMode: false },
   { path: '/picking-tasks', label: 'Lấy hàng tại kệ', section: 'Xuất kho', description: 'Thực thi lấy hàng bằng quét mã vạch.', permission: 'picking.read', expressMode: false },
   { path: '/packing-sessions', label: 'Trạm đóng gói đơn hàng', section: 'Xuất kho', description: 'Đóng gói đơn hàng vào thùng carton.', permission: 'packing.read', expressMode: true },
   { path: '/export-receipts', label: 'Phiếu xuất kho', section: 'Xuất kho', description: 'Chứng từ xuất kho và xác nhận rời.', permission: 'export_receipt.read', expressMode: true },
@@ -50,7 +50,7 @@ export const productionNavigation: ProductionNavItem[] = [
   { path: '/customer-returns', label: 'Xử lý hàng hoàn RMA', section: 'Hàng hoàn', description: 'Tiếp nhận và kiểm định hàng hoàn.', permission: 'receipt.read', expressMode: true },
 
   // 6. Tồn kho (7)
-  { path: '/inventory', label: 'Tra cứu tồn kho', section: 'Tồn kho', description: 'Tra cứu tồn khả dụng theo 9 chiều.', permission: 'inventory.read', expressMode: true },
+  { path: '/inventory', label: 'Tra cứu tồn kho', section: 'Tồn kho', description: 'Tra cứu tồn khả dụng theo vị trí và lô.', permission: 'inventory.read', expressMode: true },
   { path: '/inventory-locks', label: 'Khóa tồn kho trạng thái', section: 'Tồn kho', description: 'Phong tỏa và mở khóa lô hàng tồn.', permission: 'inventory_lock.read', expressMode: false },
   { path: '/inventory-movements', label: 'Chuyển vị trí nội bộ', section: 'Tồn kho', description: 'Di chuyển tồn giữa các kệ nội bộ.', permission: 'inventory.read', expressMode: false },
   { path: '/stock-transfers', label: 'Chuyển kho liên chi nhánh', section: 'Tồn kho', description: 'Luân chuyển hàng giữa các điểm kho.', permission: 'inventory.read', expressMode: false },

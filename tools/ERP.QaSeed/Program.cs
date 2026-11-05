@@ -193,8 +193,9 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
         {
             TenantId = 1,
             TenantCode = "TENANT-001",
-            CompanyName = "CÔNG TY TNHH THƯƠNG MẠI & DỊCH VỤ KHO VẬN ĐẠI PHÁT",
-            TaxCode = "0312345678",
+            CompanyName = "Công ty TNHH Thương mại & Kho vận Đại Phát",
+            TenantName = "Công ty TNHH Thương mại & Kho vận Đại Phát",
+            TaxCode = "0318294012",
             TaxpayerType = "ENTERPRISE",
             OwnerEmail = "admin@daiphat-logistics.vn",
             ContactPhone = "0909123456",
@@ -208,6 +209,12 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     else
     {
         tenantOne.TenantCode = "TENANT-001";
+        tenantOne.CompanyName = "Công ty TNHH Thương mại & Kho vận Đại Phát";
+        tenantOne.TenantName = "Công ty TNHH Thương mại & Kho vận Đại Phát";
+        tenantOne.TaxCode = "0318294012";
+        tenantOne.TaxpayerType = "ENTERPRISE";
+        tenantOne.OwnerEmail = "admin@daiphat-logistics.vn";
+        tenantOne.LegalRegisteredAddress = "Quận 7, TP. Hồ Chí Minh";
         tenantOne.LifecycleStatus = "ACTIVE";
         tenantOne.SuspensionReason = null;
         tenantOne.AllowSupportAccess = true;
@@ -281,7 +288,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
             TenantId = 1,
             SecurityDomain = "PLATFORM",
             Username = "qa_admin",
-            FullName = "Quản trị viên Hệ thống",
+            FullName = "Chủ dự án (SuperAdmin)",
             Role = roles["SuperAdmin"],
             PasswordHash = hasher.HashPassword("QaAdmin@123456!"),
             IsActive = true,
@@ -299,7 +306,7 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
     {
         qaAdmin.TenantId = 1;
         qaAdmin.SecurityDomain = "PLATFORM";
-        qaAdmin.FullName = "Quản trị viên Hệ thống";
+        qaAdmin.FullName = "Chủ dự án (SuperAdmin)";
         qaAdmin.Role = roles["SuperAdmin"];
         qaAdmin.PasswordHash = hasher.HashPassword("QaAdmin@123456!");
         qaAdmin.IsActive = true;
@@ -314,16 +321,16 @@ static async Task ApplyQaSeedToDatabaseAsync(ErpKhoDbContext context, string dat
 
     var definitions = new[]
     {
-        new AccountDefinition("qa_billing_admin", "Quản trị Đối soát Nền tảng", roles["BillingAdmin"], "PLATFORM", false, false),
-        new AccountDefinition("qa_support_admin", "Chuyên viên Hỗ trợ Nền tảng", roles["SupportAdmin"], "PLATFORM", false, false),
-        new AccountDefinition("qa_security_auditor", "Kiểm toán An ninh Nền tảng", roles["SecurityAuditor"], "PLATFORM", false, false),
+        new AccountDefinition("qa_billing_admin", "Quản trị Cước phí SaaS", roles["BillingAdmin"], "PLATFORM", false, false),
+        new AccountDefinition("qa_support_admin", "Chuyên viên Hỗ trợ Kỹ thuật", roles["SupportAdmin"], "PLATFORM", false, false),
+        new AccountDefinition("qa_security_auditor", "Kiểm toán An toàn Thông tin", roles["SecurityAuditor"], "PLATFORM", false, false),
         new AccountDefinition("qa_admin_local", "Quản trị viên Nội bộ", roles["Admin"], "CUSTOMER_TENANT", true, true),
-        new AccountDefinition("tenant_admin", "Quản trị viên Công ty Đại Phát", roles["Admin"], "CUSTOMER_TENANT", true, true, "owner@erpkho.vn"),
-        new AccountDefinition("qa_manager_wh01", "Quản lý Kho WH01", roles["Manager"], "CUSTOMER_TENANT", true, false),
-        new AccountDefinition("qa_supervisor_wh01", "Giám sát Tầng Kho WH01", roles["Supervisor"], "CUSTOMER_TENANT", true, false),
-        new AccountDefinition("qa_accountant", "Kế toán Kho Nội bộ", roles["Accountant"], "CUSTOMER_TENANT", true, true),
-        new AccountDefinition("qa_staff_wh01", "Nhân viên Kho WH01", roles["WarehouseStaff"], "CUSTOMER_TENANT", true, false),
-        new AccountDefinition("qa_viewer_wh01", "Người xem Kho WH01", roles["Viewer"], "CUSTOMER_TENANT", true, false)
+        new AccountDefinition("tenant_admin", "Quản trị viên Đại Phát", roles["Admin"], "CUSTOMER_TENANT", true, true, "owner@erpkho.vn"),
+        new AccountDefinition("qa_manager_wh01", "Quản lý kho WH01", roles["Manager"], "CUSTOMER_TENANT", true, false),
+        new AccountDefinition("qa_supervisor_wh01", "Giám sát & QC WH01", roles["Supervisor"], "CUSTOMER_TENANT", true, false),
+        new AccountDefinition("qa_accountant", "Kế toán kho Đại Phát", roles["Accountant"], "CUSTOMER_TENANT", true, true),
+        new AccountDefinition("qa_staff_wh01", "Nhân viên kho WH01", roles["WarehouseStaff"], "CUSTOMER_TENANT", true, false),
+        new AccountDefinition("qa_viewer_wh01", "Kiểm toán nội bộ WH01", roles["Viewer"], "CUSTOMER_TENANT", true, false)
     };
     var users = new Dictionary<string, User>(StringComparer.Ordinal);
     var seededPasswordHash = hasher.HashPassword("QaSeed!LocalOnly#2026");
@@ -4352,29 +4359,37 @@ WHERE m.TotalPackages <= 0;
 DELETE FROM dbo.SaasPlans;
 INSERT INTO dbo.SaasPlans (PlanCode, PlanName, MonthlyPriceVnd, MonthlyOrderQuota, MaxWarehouses, MaxUsers, IsActive)
 VALUES
-(N'FREE_TRIAL', N'Dùng thử Miễn phí 14 ngày', 0, 300, 1, 3, 1),
-(N'STARTER', N'Gói Khởi đầu — 490.000 đ/tháng', 490000, 1500, 1, 5, 1),
-(N'GROWTH', N'Gói Tăng trưởng — 1.490.000 đ/tháng', 1490000, 10000, 3, 20, 1),
-(N'PRO', N'Gói Tăng trưởng — 1.490.000 đ/tháng', 1490000, 10000, 3, 20, 1),
-(N'ENTERPRISE', N'Gói Doanh nghiệp — 3.490.000 đ/tháng', 3490000, 100000, 20, 100, 1);
+(N'FREE_TRIAL', N'Gói Dùng thử 14 Ngày — 0 ₫/tháng', 0, 300, 1, 3, 1),
+(N'STARTER', N'Gói Khởi đầu — 490.000 ₫/tháng', 490000, 1500, 1, 5, 1),
+(N'GROWTH', N'Gói Tăng trưởng — 1.490.000 ₫/tháng', 1490000, 10000, 3, 20, 1),
+(N'PRO', N'Gói Tăng trưởng — 1.490.000 ₫/tháng', 1490000, 10000, 3, 20, 1),
+(N'ENTERPRISE', N'Gói Doanh nghiệp — 3.490.000 ₫/tháng', 3490000, 100000, 20, 100, 1);
 
 DELETE FROM dbo.TenantSubscriptions WHERE TenantId = 1;
 INSERT INTO dbo.TenantSubscriptions (TenantId, PlanCode, Status, MonthlyOrderQuota, CurrentMonthOrderCount, MaxWarehouses, MaxUsers, TrialEndsAtUtc, CurrentPeriodStartUtc, CurrentPeriodEndUtc, UpdatedAtUtc)
 VALUES
 (1, N'GROWTH', N'ACTIVE', 10000, 6420, 3, 20, NULL, '2026-11-01T00:00:00Z', '2026-11-30T23:59:59Z', SYSUTCDATETIME());
 
-DELETE FROM dbo.AuditLogs WHERE Action = N'PLATFORM_BILLING_MANUAL_RECONCILE';
+DELETE FROM dbo.AuditLogs WHERE Action IN (N'PLATFORM_BILLING_MANUAL_RECONCILE', N'PLATFORM_TENANT_QUOTA_UPDATED', N'PLATFORM_SUPPORT_IMPERSONATION_STARTED');
 DELETE FROM dbo.SaasBillingInvoices WHERE TenantId = 1;
 INSERT INTO dbo.SaasBillingInvoices (TenantId, InvoiceCode, PlanCode, SubTotalVnd, VatRatePercent, VatAmountVnd, AmountVnd, BuyerTaxCode, BuyerLegalName, PaymentProvider, Status, QrPayload, PaidAtUtc, CreatedAtUtc)
 VALUES
-(1, N'INV-SAAS-202610-001', N'GROWTH', 1354545, 10.00, 135455, 1490000, N'0312345678', N'CÔNG TY TNHH THƯƠNG MẠI & DỊCH VỤ KHO VẬN ĐẠI PHÁT', N'VIETQR', N'PAID', N'00020101021238550010A000000727012500069704230111984181020050208QRIBFTTA5303704540714900005802VN62290825ERPKHO T1 INVSAAS2026100016304A1B2', '2026-10-03T09:15:00Z', '2026-10-01T00:00:00Z'),
-(1, N'INV-SAAS-202611-002', N'GROWTH', 1354545, 10.00, 135455, 1490000, N'0312345678', N'CÔNG TY TNHH THƯƠNG MẠI & DỊCH VỤ KHO VẬN ĐẠI PHÁT', N'VIETQR', N'UNPAID', N'00020101021238550010A000000727012500069704230111984181020050208QRIBFTTA5303704540714900005802VN62290825ERPKHO T1 INVSAAS2026110026304C3D4', NULL, '2026-11-01T00:00:00Z');
+(1, N'INV-SAAS-202610-001', N'GROWTH', 1354545, 10.00, 135455, 1490000, N'0318294012', N'Công ty TNHH Thương mại & Kho vận Đại Phát', N'VIETQR', N'PAID', N'00020101021238550010A000000727012500069704230111984181020050208QRIBFTTA5303704540714900005802VN62290825ERPKHO T1 INVSAAS2026100016304A1B2', '2026-10-03T09:15:00Z', '2026-10-01T00:00:00Z'),
+(1, N'INV-SAAS-202611-002', N'GROWTH', 1354545, 10.00, 135455, 1490000, N'0318294012', N'Công ty TNHH Thương mại & Kho vận Đại Phát', N'VIETQR', N'UNPAID', N'00020101021238550010A000000727012500069704230111984181020050208QRIBFTTA5303704540714900005802VN62290825ERPKHO T1 INVSAAS2026110026304C3D4', NULL, '2026-11-01T00:00:00Z');
+
+UPDATE dbo.SaasBillingInvoices
+SET BuyerLegalName = N'Công ty TNHH Thương mại & Kho vận Đại Phát',
+    BuyerTaxCode = N'0318294012'
+WHERE TenantId = 1;
 
 DECLARE @octSaasInvId int = (SELECT TOP 1 Id FROM dbo.SaasBillingInvoices WHERE TenantId = 1 AND InvoiceCode = N'INV-SAAS-202610-001');
 IF @octSaasInvId IS NOT NULL
 BEGIN
-    INSERT INTO dbo.AuditLogs (TenantId, UserId, WarehouseId, Action, EntityName, EntityId, OldValues, NewValues, Reason, Result, Timestamp, IpAddress)
-    VALUES (1, {qaAdmin.Id}, NULL, N'PLATFORM_BILLING_MANUAL_RECONCILE', N'SaasBillingInvoice', @octSaasInvId, N'UNPAID', N'{{""invoiceCode"":""INV-SAAS-202610-001"",""bankTransactionRef"":""FT2627690123"",""bankCreditTimestampVi"":""03/10/2026 16:15"",""receivedAmountVnd"":1490000,""attachmentReference"":""UNC_TPB_20261003_1490k.pdf"",""auditStampVi"":""Xác nhận thủ công bởi Chủ dự án lúc 16:15 03/10/2026 (UNC: FT2627690123)""}}', N'Đối soát thủ công kỳ 10/2026 khớp 1.490.000đ', N'Success', '2026-10-03T09:15:00Z', N'127.0.0.1');
+    INSERT INTO dbo.AuditLogs (TenantId, SecurityDomain, UserId, WarehouseId, Action, EntityName, EntityId, OldValues, NewValues, Reason, Result, Timestamp, IpAddress)
+    VALUES
+    (1, N'PLATFORM', {qaAdmin.Id}, NULL, N'PLATFORM_BILLING_MANUAL_RECONCILE', N'SaasBillingInvoice', @octSaasInvId, N'UNPAID', N'{{""invoiceCode"":""INV-SAAS-202610-001"",""actorUsername"":""qa_admin"",""bankTransactionRef"":""FT2627690123"",""bankCreditTimestampVi"":""03/10/2026 16:15"",""receivedAmountVnd"":1490000,""attachmentReference"":""Bien_lai_TPB_20261003_1490k.pdf"",""ownerAuditStampVi"":""Đối soát hóa đơn INV-SAAS-202610-001 (1.490.000 ₫) • Mã giao dịch: FT2627690123""}}', N'Đối soát hóa đơn INV-SAAS-202610-001 (1.490.000 ₫)', N'Success', '2026-10-03T09:15:00Z', N'127.0.0.1'),
+    (1, N'PLATFORM', {qaAdmin.Id}, NULL, N'PLATFORM_TENANT_QUOTA_UPDATED', N'TenantSubscription', 1, N'{{""planCode"":""STARTER"",""monthlyOrderQuota"":1500}}', N'{{""tenantCode"":""TENANT-001"",""actorUsername"":""qa_admin"",""planCode"":""GROWTH"",""monthlyOrderQuota"":10000,""contractReference"":""PLHD-2026-001""}}', N'Cập nhật hạn ngạch gói Tăng trưởng (10.000 đơn/tháng — PLHD-2026-001)', N'Success', '2026-11-01T01:30:00Z', N'127.0.0.1'),
+    (1, N'PLATFORM', {qaAdmin.Id}, NULL, N'PLATFORM_SUPPORT_IMPERSONATION_STARTED', N'SupportImpersonationSession', 1, N'{{""sessionActive"":false}}', N'{{""tenantCode"":""TENANT-001"",""startedByUsername"":""qa_support_admin"",""ticketCode"":""SUP-VN-2026-001""}}', N'Khởi tạo phiên hỗ trợ kỹ thuật chỉ đọc theo phiếu SUP-VN-2026-001', N'Success', DATEADD(MINUTE, -10, SYSUTCDATETIME()), N'127.0.0.1');
 END;
 
 DELETE FROM dbo.KitWorkOrderComponentLines WHERE TenantId = 1;
@@ -4411,8 +4426,8 @@ VALUES
 DELETE FROM dbo.PromotionGiftRules WHERE TenantId = 1;
 INSERT INTO dbo.PromotionGiftRules (TenantId, RuleCode, RuleName, WarehouseId, TriggerProductId, MinOrderAmount, MinTriggerQuantity, GiftProductId, GiftQuantity, GiftUnitPrice, AutoSkipWhenOutOfStock, IsActive, CreatedAtUtc)
 VALUES
-(1, N'PROMO-10-10-GIFT', N'Tặng 1 Cảm biến QA-02 cho đơn hàng từ 5.000.000đ', {primaryWarehouse.Id}, {product.Id}, 5000000, 1, {lotProduct.Id}, 1, 0, 1, 1, SYSUTCDATETIME()),
-(1, N'GIFT-ORDER-500K', N'Đơn từ 500.000đ tặng 1 Túi Canvas / Sample Mini (0đ)', {primaryWarehouse.Id}, NULL, 500000, 1, {lotProduct.Id}, 1, 0, 1, 1, SYSUTCDATETIME());
+(1, N'PROMO-10-10-GIFT', N'Tặng 1 Cảm biến QA-02 cho đơn hàng từ 5.000.000 ₫', {primaryWarehouse.Id}, {product.Id}, 5000000, 1, {lotProduct.Id}, 1, 0, 1, 1, SYSUTCDATETIME()),
+(1, N'GIFT-ORDER-500K', N'Đơn từ 500.000 ₫ tặng 1 Túi Canvas / Sample Mini (0 ₫)', {primaryWarehouse.Id}, NULL, 500000, 1, {lotProduct.Id}, 1, 0, 1, 1, SYSUTCDATETIME());
 
 DECLARE @packSessionId int = (SELECT TOP 1 Id FROM dbo.PackingSessions ORDER BY Id DESC);
 DELETE FROM dbo.PackingVideoEvidences WHERE TenantId = 1;
@@ -4476,7 +4491,7 @@ WHERE Note LIKE N'%chua kiểm định%';
 DELETE FROM dbo.StocktakeAdjustmentProposals WHERE TenantId = 1;
 INSERT INTO dbo.StocktakeAdjustmentProposals (TenantId, ProposalCode, WarehouseId, StocktakeId, ProductId, LocationId, ReasonCode, SystemQuantity, CountedQuantity, DeltaQuantity, UnitCost, VariancePct, VarianceValue, IsAutoApproved, Status, CreatedBy, CreatedAtUtc, ApprovedBy, ApprovedAtUtc, Note)
 VALUES
-(1, N'ADJ-20261022-001', {primaryWarehouse.Id}, {stocktake.Id}, {product.Id}, {storageBin.Id}, N'COUNT_VARIANCE', 200, 199, -1, 120000, 0.5000, 120000, 1, N'APPROVED', {qaAdmin.Id}, DATEADD(HOUR, -2, SYSUTCDATETIME()), {qaAdmin.Id}, DATEADD(HOUR, -2, SYSUTCDATETIME()), N'AUTO_APPROVE_UNDER_1PCT_500K | Tự động duyệt lệch kiểm kê < 1% và <= 500.000đ');
+(1, N'ADJ-20261022-001', {primaryWarehouse.Id}, {stocktake.Id}, {product.Id}, {storageBin.Id}, N'COUNT_VARIANCE', 200, 199, -1, 120000, 0.5000, 120000, 1, N'APPROVED', {qaAdmin.Id}, DATEADD(HOUR, -2, SYSUTCDATETIME()), {qaAdmin.Id}, DATEADD(HOUR, -2, SYSUTCDATETIME()), N'AUTO_APPROVE_UNDER_1PCT_500K | Tự động duyệt lệch kiểm kê < 1% và <= 500.000 ₫');
 
 IF NOT EXISTS (SELECT 1 FROM dbo.VnAdministrativeUnits)
 BEGIN
@@ -4546,7 +4561,7 @@ VALUES
     }
 
     await context.Database.ExecuteSqlRawAsync(
-        "DELETE FROM AuditLogs WHERE IpAddress = '10.0.10.25' OR (EntityName = 'UserSession' AND (Action LIKE '%Refresh%' OR Action LIKE N'%Làm mới%')) OR EntityName = 'LocalQaOperationalSeed' OR Action LIKE 'QA.%';");
+        "DELETE FROM AuditLogs WHERE IpAddress = '10.0.10.25' OR EntityName = 'UserSession' OR Action LIKE 'Authentication.%' OR Action LIKE 'Auth.%' OR EntityName = 'LocalQaOperationalSeed' OR Action LIKE 'QA.%';");
 
     context.AuditLogs.Add(new AuditLog
     {

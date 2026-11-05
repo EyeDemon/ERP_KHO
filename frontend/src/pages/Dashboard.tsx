@@ -3,6 +3,7 @@ import { Boxes, ClipboardCheck, PackageSearch, Warehouse } from 'lucide-react';
 import { productionNavigation } from '../config/productionNavigation';
 import apiClient from '../services/apiClient';
 import { canViewApprovals, canViewStocktakes, hasPermission, usePermissionSet } from '../services/authorization';
+import { formatUserDisplayNameVi } from '../services/permissionPresentation';
 import { isReadOnlyDemoRuntime } from '../services/runtimeMode';
 import { UiPage, UiPageHeader } from '../ui/ProductionUi';
 import DashboardMetrics from '../components/dashboard/DashboardMetrics';
@@ -60,7 +61,7 @@ const Dashboard = () => {
     receivedCodAmount: 0,
     codWarningCount: 0,
   });
-  const formatCurrencyVnd = (amount: number) => `${Math.round(amount).toLocaleString('vi-VN')} đ`;
+  const formatCurrencyVnd = (amount: number) => `${Math.round(amount).toLocaleString('vi-VN')} ₫`;
 
   const acknowledgeException = async (code: string) => {
     if (acknowledgingCode === code) return;
@@ -247,10 +248,28 @@ const Dashboard = () => {
 
   const visibleProductionNavigation = productionNavigation.filter(item => item.path !== '/' && canAccessNavItem(item));
   const rawRecentActivities = liveSummary?.recentActivities ?? [];
-  const operationalRecentActivities = rawRecentActivities.filter(
-    item => item.action !== 'Authentication.RefreshRotated' && item.action !== 'Refresh' && item.entityName !== 'UserSession',
-  );
-  const visibleRecentActivities = operationalRecentActivities.length > 0 ? operationalRecentActivities : rawRecentActivities;
+  const visibleRecentActivities = rawRecentActivities
+    .filter(
+      item =>
+        !/^Authentication\./i.test(item.action || '') &&
+        !/^(Login|Logout|Refresh|LoginSucceeded|LoginFailed)$/i.test(item.action || '') &&
+        item.entityName !== 'UserSession',
+    )
+    .map(item => ({
+      ...item,
+      referenceCode: item.referenceCode
+        ? item.referenceCode.replace(
+            /\b(qa_admin|qa_billing_admin|qa_support_admin|qa_security_auditor|tenant_admin|qa_manager_wh01|qa_supervisor_wh01|qa_accountant|qa_staff_wh01|qa_viewer_wh01)\b/gi,
+            match => formatUserDisplayNameVi(match),
+          )
+        : item.referenceCode,
+      result: item.result
+        ? item.result.replace(
+            /\b(qa_admin|qa_billing_admin|qa_support_admin|qa_security_auditor|tenant_admin|qa_manager_wh01|qa_supervisor_wh01|qa_accountant|qa_staff_wh01|qa_viewer_wh01)\b/gi,
+            match => formatUserDisplayNameVi(match),
+          )
+        : item.result,
+    }));
 
   return (
     <UiPage>

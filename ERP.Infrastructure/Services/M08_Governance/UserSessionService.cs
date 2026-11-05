@@ -342,8 +342,28 @@ public sealed class UserSessionService(
         if (!currentUser.IsAuthenticated) throw new UnauthorizedAccessException("Yêu cầu đăng nhập.");
     }
 
-    public async Task<object?> GetAuthenticatedUserProfileAsync(int userId, CancellationToken cancellationToken = default) =>
-        await context.Users.IgnoreQueryFilters().AsNoTracking()
+    public static string ResolveCanonicalUserFullName(string? username, string? rawFullName)
+    {
+        var cleanUser = (username ?? string.Empty).Trim();
+        return cleanUser.ToLowerInvariant() switch
+        {
+            "qa_admin" => "Chủ dự án (SuperAdmin)",
+            "tenant_admin" => "Quản trị viên Đại Phát",
+            "qa_staff_wh01" => "Nhân viên kho WH01",
+            "qa_manager_wh01" => "Quản lý kho WH01",
+            "qa_supervisor_wh01" => "Giám sát & QC WH01",
+            "qa_accountant" => "Kế toán kho Đại Phát",
+            "qa_viewer_wh01" => "Kiểm toán nội bộ WH01",
+            "qa_billing_admin" => "Quản trị Cước phí SaaS",
+            "qa_support_admin" => "Chuyên viên Hỗ trợ Kỹ thuật",
+            "qa_security_auditor" => "Kiểm toán An toàn Thông tin",
+            _ => !string.IsNullOrWhiteSpace(rawFullName) ? rawFullName.Trim() : cleanUser
+        };
+    }
+
+    public async Task<object?> GetAuthenticatedUserProfileAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        var raw = await context.Users.IgnoreQueryFilters().AsNoTracking()
             .Where(x => x.Id == userId && x.IsActive && (!x.LockoutEnd.HasValue || x.LockoutEnd <= DateTime.UtcNow))
             .Select(x => new
             {
@@ -364,6 +384,24 @@ public sealed class UserSessionService(
                 WarehouseIds = x.WarehouseAccesses.Select(w => w.WarehouseId).OrderBy(id => id).ToArray()
             })
             .SingleOrDefaultAsync(cancellationToken);
+
+        if (raw is null)
+        {
+            return null;
+        }
+
+        return new
+        {
+            raw.Id,
+            raw.Username,
+            FullName = ResolveCanonicalUserFullName(raw.Username, raw.FullName),
+            raw.TenantId,
+            raw.SecurityDomain,
+            raw.Role,
+            raw.Permissions,
+            raw.WarehouseIds
+        };
+    }
 
     private static string? Truncate(string? value, int max) => value is { Length: > 0 } ? value[..Math.Min(value.Length, max)] : null;
 }

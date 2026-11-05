@@ -180,7 +180,7 @@ public sealed partial class ProductOperationsService
                 allowOverDelivery = r.OverageAllowed,
                 requireApprovalOnExceed = r.RequiresApprovalOutsideTolerance,
                 isActive = r.IsActive,
-                toleranceSummary = $"Dung sai ±{displayPct:0.##}% (Tối đa ±{r.AbsoluteQuantityTolerance:0.##} ĐVT)",
+                toleranceSummary = $"Dung sai ±{displayPct:0.##}% (Tối đa ±{r.AbsoluteQuantityTolerance:0.##} đơn vị)",
                 createdAtUtc = r.EffectiveFromUtc
             };
         }).ToList();

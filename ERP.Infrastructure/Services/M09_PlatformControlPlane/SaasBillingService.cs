@@ -13,7 +13,24 @@ public sealed partial class SaasBillingService : ISaasBillingService
     public const string DefaultVietQrAccountName = "HUYNH PHI VAN";
     public const string UnconfiguredVietQrAccountNo = "CHUA_CAU_HINH_TAI_KHOAN_NHAN";
     public const string UnconfiguredVietQrAccountName = "TAI KHOAN DOANH NGHIEP ERP KHO";
-    public const string CanonicalTenant1LegalName = "CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO";
+    public const string CanonicalTenant1LegalName = "Công ty TNHH Thương mại & Kho vận Đại Phát";
+    public const string CanonicalTenant1TaxCode = "0318294012";
+
+    private static readonly HashSet<string> LegacyTenant1LegalNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO",
+        "CÔNG TY TNHH THƯƠNG MẠI & DỊCH VỤ KHO VẬN ĐẠI PHÁT",
+        "Công ty TNHH Thương mại Điện tử ERP_KHO",
+        "Hệ thống Quản trị Kho ERP_KHO",
+        "Hệ thống Kho Vận Doanh Nghiệp",
+        "Doanh nghiệp Kho vận ERP_KHO (Tenant 1)",
+        "Hệ thống Kho Vận Doanh Nghiệp (Tenant Chính)",
+        "Doanh nghiệp Thuê bao #1",
+        "Tenant Mặc Định",
+        "Default Tenant",
+        "Tenant 1",
+        "ERP_KHO"
+    };
 
     public static readonly SemaphoreSlim VietQrWebhookGate = new(1, 1);
     private readonly ErpKhoDbContext? _db;
@@ -25,23 +42,86 @@ public sealed partial class SaasBillingService : ISaasBillingService
         _configuration = configuration;
     }
 
+    public static bool IsLegacyOrDefaultTenant1Name(string? name) =>
+        string.IsNullOrWhiteSpace(name)
+        || LegacyTenant1LegalNames.Contains(name.Trim())
+        || string.Equals(name.Trim(), CanonicalTenant1LegalName, StringComparison.OrdinalIgnoreCase);
+
     public static string NormalizeTenantLegalName(int tenantId, string? rawCompanyName, string? rawTenantName = null)
     {
-        var candidate = !string.IsNullOrWhiteSpace(rawCompanyName) ? rawCompanyName.Trim() : rawTenantName?.Trim();
+        var primary = rawCompanyName?.Trim();
+        var secondary = rawTenantName?.Trim();
         if (tenantId == 1)
         {
-            if (string.IsNullOrWhiteSpace(candidate)
-                || string.Equals(candidate, "Doanh nghiệp Kho vận ERP_KHO (Tenant 1)", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(candidate, "Hệ thống Kho Vận Doanh Nghiệp (Tenant Chính)", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(candidate, "Tenant 1", StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(primary) && !LegacyTenant1LegalNames.Contains(primary))
             {
-                return CanonicalTenant1LegalName;
+                return primary;
+            }
+            if (!string.IsNullOrWhiteSpace(secondary) && !LegacyTenant1LegalNames.Contains(secondary))
+            {
+                return secondary;
+            }
+            return CanonicalTenant1LegalName;
+        }
+
+        var candidate = !string.IsNullOrWhiteSpace(primary) ? primary : secondary;
+        return !string.IsNullOrWhiteSpace(candidate) ? candidate : $"Doanh nghiệp Thuê bao #{tenantId}";
+    }
+
+    public static string NormalizeTenantTaxCode(int tenantId, string? rawTaxCode, string? rawCompanyName = null, string? rawTenantName = null)
+    {
+        var trimmedTax = rawTaxCode?.Trim();
+        if (tenantId == 1)
+        {
+            var hasCustomCompany = (!string.IsNullOrWhiteSpace(rawCompanyName) && !IsLegacyOrDefaultTenant1Name(rawCompanyName))
+                || (!string.IsNullOrWhiteSpace(rawTenantName) && !IsLegacyOrDefaultTenant1Name(rawTenantName));
+            if (string.IsNullOrWhiteSpace(trimmedTax)
+                || (!hasCustomCompany && (string.Equals(trimmedTax, "0312345678", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(trimmedTax, "0109887766", StringComparison.OrdinalIgnoreCase))))
+            {
+                return CanonicalTenant1TaxCode;
             }
         }
 
-        return !string.IsNullOrWhiteSpace(candidate)
-            ? candidate
-            : (tenantId == 1 ? CanonicalTenant1LegalName : $"Doanh nghiệp Thuê bao #{tenantId}");
+        return trimmedTax ?? string.Empty;
+    }
+
+    public static string NormalizeInvoiceBuyerLegalName(int tenantId, string? rawBuyerLegalName, string? tenantCompanyName = null, string? tenantName = null)
+    {
+        var trimmedBuyer = rawBuyerLegalName?.Trim();
+        if (tenantId == 1 && (string.IsNullOrWhiteSpace(trimmedBuyer) || LegacyTenant1LegalNames.Contains(trimmedBuyer)))
+        {
+            return NormalizeTenantLegalName(1, tenantCompanyName, tenantName);
+        }
+
+        return !string.IsNullOrWhiteSpace(trimmedBuyer)
+            ? trimmedBuyer
+            : NormalizeTenantLegalName(tenantId, tenantCompanyName, tenantName);
+    }
+
+    public static string NormalizeInvoiceBuyerTaxCode(
+        int tenantId,
+        string? rawBuyerTaxCode,
+        string? rawBuyerLegalName = null,
+        string? tenantTaxCode = null,
+        string? tenantCompanyName = null,
+        string? tenantName = null)
+    {
+        var candidateTax = !string.IsNullOrWhiteSpace(rawBuyerTaxCode) ? rawBuyerTaxCode.Trim() : tenantTaxCode?.Trim();
+        if (tenantId == 1)
+        {
+            var hasCustomBuyer = (!string.IsNullOrWhiteSpace(rawBuyerLegalName) && !IsLegacyOrDefaultTenant1Name(rawBuyerLegalName))
+                || (!string.IsNullOrWhiteSpace(tenantCompanyName) && !IsLegacyOrDefaultTenant1Name(tenantCompanyName))
+                || (!string.IsNullOrWhiteSpace(tenantName) && !IsLegacyOrDefaultTenant1Name(tenantName));
+            if (string.IsNullOrWhiteSpace(candidateTax)
+                || (!hasCustomBuyer && (string.Equals(candidateTax, "0312345678", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(candidateTax, "0109887766", StringComparison.OrdinalIgnoreCase))))
+            {
+                return CanonicalTenant1TaxCode;
+            }
+        }
+
+        return candidateTax ?? string.Empty;
     }
 
     private static string? FirstConfiguredValue(params string?[] candidates)

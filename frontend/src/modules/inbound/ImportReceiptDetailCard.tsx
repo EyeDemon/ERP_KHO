@@ -1,4 +1,5 @@
 import React from 'react';
+import { Lock } from 'lucide-react';
 import ReceiptInventoryIdentityEditor from '../../components/ReceiptInventoryIdentityEditor';
 import { roundQty4 } from '../../pages/productCatalog';
 import { UiBadge, UiCard, UiTableScroll } from '../../ui/ProductionUi';
@@ -98,8 +99,8 @@ export const ImportReceiptDetailViewCard: React.FC<ImportReceiptDetailViewCardPr
           <div>
             <strong>Tổng giá trị:</strong>{' '}
             {selectedReceipt.totalAmount === null || selectedReceipt.details.some(d => d.unitPrice === null)
-              ? 'Ẩn theo phân quyền'
-              : `${Number(selectedReceipt.totalAmount ?? 0).toLocaleString('vi-VN')} VND`}
+              ? <span className="ui-cost-masked-badge" style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#475569', fontSize: 12, fontWeight: 600 }}><Lock size={12} aria-hidden="true" /> Ẩn theo quyền</span>
+              : `${Number(selectedReceipt.totalAmount ?? 0).toLocaleString('vi-VN')} ₫`}
           </div>
         )}
       </div>
@@ -108,10 +109,10 @@ export const ImportReceiptDetailViewCard: React.FC<ImportReceiptDetailViewCardPr
         <table aria-label={'Chi tiết phiếu nhập ' + selectedReceipt.code}>
           <thead>
             <tr>
-              <th style={{ textAlign: 'center', width: 48 }}>STT</th>
+              <th style={{ textAlign: 'center', width: 76, minWidth: 76 }}>STT</th>
               <th>Mã SP</th>
               <th>Tên SP</th>
-              <th style={{ textAlign: 'center' }}>ĐVT</th>
+              <th style={{ minWidth: 78, textAlign: 'center' }}>Đơn vị</th>
               <th className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Dự kiến</th>
               <th className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Nhận / Chấp nhận</th>
               <th className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đơn vị cơ sở</th>
@@ -128,10 +129,15 @@ export const ImportReceiptDetailViewCard: React.FC<ImportReceiptDetailViewCardPr
               const lineTotal = d.unitPrice === null || d.lineTotalAmount === null
                 ? null
                 : (d.lineTotalAmount !== undefined ? Number(d.lineTotalAmount) : effQty * Number(d.unitPrice ?? 0));
+              const maskedBadge = (
+                <span className="ui-cost-masked-badge" style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#475569', fontSize: 12, fontWeight: 600 }}>
+                  <Lock size={12} aria-hidden="true" /> Ẩn theo quyền
+                </span>
+              );
               return (
                 <tr key={d.id}>
                   <td style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{idx + 1}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}><strong>{d.productCode}</strong></td>
+                  <td style={{ whiteSpace: 'nowrap' }}><span className="ui-code" style={{ whiteSpace: 'nowrap', fontWeight: 700 }}>{d.productCode}</span></td>
                   <td>{d.productName}<br /><small>Kiểm tra chất lượng: {d.requiresQc ? 'Bắt buộc · ' + statusLabel(d.qcState) + ' · chính sách ' + (d.qcPolicyId ?? '—') + ' phiên bản ' + (d.qcPolicyVersion ?? '—') : 'Không yêu cầu'}</small></td>
                   <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{opUnit || '—'}</td>
                   <td className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.expectedQuantity} {opUnit}</td>
@@ -162,8 +168,8 @@ export const ImportReceiptDetailViewCard: React.FC<ImportReceiptDetailViewCardPr
                     <span style={{ fontSize: 12, color: '#475569' }}>Quy đổi: 1 {(opUnit || 'thùng').toLowerCase()} = {d.conversionFactor} ĐV cơ sở</span><br />
                     <strong>{selectedReceipt.status === 'Draft' ? roundQty4((receiveLines[d.id]?.acceptedQuantity ?? d.expectedQuantity) * d.conversionFactor) : d.baseAcceptedQuantity || d.baseExpectedQuantity} {baseUnit}</strong>
                   </td>
-                  <td className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.unitPrice === null ? 'Ẩn theo phân quyền' : `${Number(d.unitPrice ?? 0).toLocaleString('vi-VN')} VND`}</td>
-                  <td className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{lineTotal === null ? 'Ẩn theo phân quyền' : `${lineTotal.toLocaleString('vi-VN')} VND`}</td>
+                  <td className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{d.unitPrice === null ? maskedBadge : `${Number(d.unitPrice ?? 0).toLocaleString('vi-VN')} ₫`}</td>
+                  <td className="import-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{lineTotal === null ? maskedBadge : `${lineTotal.toLocaleString('vi-VN')} ₫`}</td>
                   <td>{d.note}</td>
                 </tr>
               );
@@ -201,17 +207,24 @@ export const ImportReceiptDetailViewCard: React.FC<ImportReceiptDetailViewCardPr
                   </tr>
                 </thead>
                 <tbody>
-                  {macPreviewLines.map(line => (
-                    <tr key={line.productCode}>
-                      <td><strong>{line.productCode}</strong> — {line.productName}</td>
-                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{line.currentOnHandQty}</td>
-                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>+{line.incomingBaseQty}</td>
-                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{line.currentMacUnitCost === null ? 'Ẩn theo phân quyền' : `${line.currentMacUnitCost.toLocaleString('vi-VN')} VND`}</td>
-                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{line.incomingUnitPrice === null ? 'Ẩn theo phân quyền' : `${line.incomingUnitPrice.toLocaleString('vi-VN')} VND`}</td>
-                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: '#1e3a8a' }}>{line.projectedMacUnitCost === null ? 'Ẩn theo phân quyền' : `${line.projectedMacUnitCost.toLocaleString('vi-VN')} VND`}</td>
-                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: (line.deltaMacCost ?? 0) > 0 ? '#b45309' : '#065f46' }}>{line.deltaMacCost === null ? 'Ẩn theo phân quyền' : `${line.deltaMacCost >= 0 ? '+' : ''}${line.deltaMacCost.toLocaleString('vi-VN')} VND`}</td>
-                    </tr>
-                  ))}
+                  {macPreviewLines.map(line => {
+                    const maskedMac = (
+                      <span className="ui-cost-masked-badge" style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#475569', fontSize: 12, fontWeight: 600 }}>
+                        <Lock size={12} aria-hidden="true" /> Ẩn theo quyền
+                      </span>
+                    );
+                    return (
+                      <tr key={line.productCode}>
+                        <td><span className="ui-code" style={{ whiteSpace: 'nowrap', fontWeight: 700 }}>{line.productCode}</span> — {line.productName}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{line.currentOnHandQty}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>+{line.incomingBaseQty}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{line.currentMacUnitCost === null ? maskedMac : `${line.currentMacUnitCost.toLocaleString('vi-VN')} ₫`}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{line.incomingUnitPrice === null ? maskedMac : `${line.incomingUnitPrice.toLocaleString('vi-VN')} ₫`}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: '#1e3a8a', whiteSpace: 'nowrap' }}>{line.projectedMacUnitCost === null ? maskedMac : `${line.projectedMacUnitCost.toLocaleString('vi-VN')} ₫`}</td>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: (line.deltaMacCost ?? 0) > 0 ? '#b45309' : '#065f46', whiteSpace: 'nowrap' }}>{line.deltaMacCost === null ? maskedMac : `${line.deltaMacCost >= 0 ? '+' : ''}${line.deltaMacCost.toLocaleString('vi-VN')} ₫`}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </UiTableScroll>

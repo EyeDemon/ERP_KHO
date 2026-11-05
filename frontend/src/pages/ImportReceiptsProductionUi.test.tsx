@@ -49,7 +49,7 @@ describe('ImportReceipts shared production UI', () => {
 
     expect(await view.findByText('IR-2026-0011')).toBeTruthy();
     expect(view.getByRole('table', { name: 'Danh sách phiếu nhập' })).toBeTruthy();
-    expect(view.getByText('Nháp')).toBeTruthy();
+    expect(view.getAllByText('Nháp').length).toBeGreaterThanOrEqual(1);
     expect(view.queryByText('Tạo Phiếu Nhập (Nháp)')).toBeNull();
     expect(view.queryByText('Hủy')).toBeNull();
     expect(view.queryByText('Ghi nhận số lượng thực tế')).toBeNull();

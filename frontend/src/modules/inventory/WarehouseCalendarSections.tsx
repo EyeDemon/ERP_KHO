@@ -51,41 +51,27 @@ export const WarehouseShiftsSection: React.FC<WarehouseShiftsSectionProps> = ({
         )}
       </div>
       <UiTableScroll>
-        <table aria-label="Ca làm việc và capacity" className="ui-table-compact" style={{ tableLayout: 'fixed', width: '100%' }}>
-          <colgroup>
-            <col style={{ width: canManage ? '17%' : '19%' }} />
-            <col style={{ width: canManage ? '10%' : '12%' }} />
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '8.5%' }} />
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '6.5%' }} />
-            <col style={{ width: '8.5%' }} />
-            <col style={{ width: '7.5%' }} />
-            <col style={{ width: '6%' }} />
-            <col style={{ width: '7%' }} />
-            {canManage && <col style={{ width: '6%' }} />}
-          </colgroup>
+        <table aria-label="Ca làm việc và capacity" className="ui-table-compact" style={{ minWidth: 1080, width: '100%' }}>
           <thead>
             <tr>
-              <th style={{ whiteSpace: 'normal', lineHeight: 1.25 }}>Ca</th>
-              <th style={{ whiteSpace: 'normal', lineHeight: 1.25 }}>Khung giờ</th>
-              <th style={rightNumHeaderStyle}>Nhân sự</th>
-              <th style={rightNumHeaderStyle}>Pallet nhập/giờ</th>
-              <th style={rightNumHeaderStyle}>Đơn xuất/giờ</th>
-              <th style={rightNumHeaderStyle}>Cửa nhận/xuất</th>
-              <th style={rightNumHeaderStyle}>Giờ công</th>
-              <th style={rightNumHeaderStyle}>Sức chứa tập kết</th>
-              <th style={rightNumHeaderStyle}>Trạm đóng gói</th>
-              <th style={rightNumHeaderStyle}>Thiết bị</th>
-              <th style={{ whiteSpace: 'normal', lineHeight: 1.25 }}>Trạng thái</th>
-              {canManage && <th style={{ whiteSpace: 'normal', lineHeight: 1.25 }}>Thao tác</th>}
+              <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Ca trực</th>
+              <th style={{ minWidth: 115, whiteSpace: 'nowrap' }}>Khung giờ</th>
+              <th style={{ ...rightNumHeaderStyle, minWidth: 82, whiteSpace: 'nowrap' }}>Nhân sự</th>
+              <th style={{ ...rightNumHeaderStyle, minWidth: 92, whiteSpace: 'nowrap' }}>Pallet/giờ</th>
+              <th style={{ ...rightNumHeaderStyle, minWidth: 88, whiteSpace: 'nowrap' }}>Đơn/giờ</th>
+              <th style={{ ...rightNumHeaderStyle, minWidth: 88, whiteSpace: 'nowrap' }}>Cửa kho</th>
+              <th style={{ ...rightNumHeaderStyle, minWidth: 84, whiteSpace: 'nowrap' }}>Giờ công</th>
+              <th style={{ ...rightNumHeaderStyle, minWidth: 88, whiteSpace: 'nowrap' }}>Tập kết</th>
+              <th style={{ ...rightNumHeaderStyle, minWidth: 88, whiteSpace: 'nowrap' }}>Đóng gói</th>
+              <th style={{ ...rightNumHeaderStyle, minWidth: 82, whiteSpace: 'nowrap' }}>Thiết bị</th>
+              <th style={{ minWidth: 92, whiteSpace: 'nowrap' }}>Trạng thái</th>
+              {canManage && <th style={{ minWidth: 84, whiteSpace: 'nowrap' }}>Thao tác</th>}
             </tr>
           </thead>
           <tbody>
             {calendar.shifts.map((shift) => (
               <tr key={shift.id}>
-                <td><strong style={{ whiteSpace: 'nowrap' }}>{shift.code}</strong><br /><small>{shift.name}</small></td>
+                <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{shift.code}</strong><br /><small>{shift.name}</small></td>
                 <td>{shift.startTimeLocal}–{shift.endTimeLocal}{shift.overnight ? ' • +1 ngày' : ''}<br /><small>Nghỉ {shift.breakMinutes} phút</small></td>
                 <td style={rightNumCellStyle}>{shift.plannedHeadcount}</td>
                 <td style={rightNumCellStyle}>{shift.inboundPalletsPerHour ?? '—'}</td>
@@ -232,10 +218,10 @@ export const WarehouseExceptionsSection: React.FC<WarehouseExceptionsSectionProp
       <table aria-label="Danh sách ngoại lệ lịch vận hành" className="ui-table-compact">
         <thead>
           <tr>
-            <th>Loại ngoại lệ</th>
-            <th>Khung thời gian áp dụng</th>
-            <th>Lý do điều hành</th>
-            <th>Thời điểm ghi nhận</th>
+            <th style={{ minWidth: 130 }}>Loại ngoại lệ</th>
+            <th style={{ minWidth: 160 }}>Khung thời gian áp dụng</th>
+            <th style={{ minWidth: 180 }}>Lý do điều hành</th>
+            <th style={{ minWidth: 135, whiteSpace: 'nowrap' }}>Thời điểm ghi nhận</th>
           </tr>
         </thead>
         <tbody>

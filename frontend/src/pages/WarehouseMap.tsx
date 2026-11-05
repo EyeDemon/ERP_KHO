@@ -239,14 +239,14 @@ const WarehouseMap = () => {
           </select>
         </UiToolbarField>
         <UiToolbarField label="Tìm vị trí">
-          <input aria-label="Tìm vị trí trên bản đồ" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Mã, tên, đường dẫn, phân lớp" />
+          <input aria-label="Tìm vị trí trên bản đồ" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Mã hoặc tên vị trí..." />
         </UiToolbarField>
         <button type="button" onClick={() => void loadMap(warehouseId)} disabled={!warehouseId || loading}>Làm mới</button>
       </UiToolbar>
 
       <p className={ageMinutes != null && ageMinutes > 5 ? 'warehouse-map-freshness stale' : 'warehouse-map-freshness'}>
         Ảnh chụp dữ liệu: {generatedAt ? generatedAt.toLocaleString('vi-VN') : '—'} • Tuổi dữ liệu: {ageMinutes == null ? '—' : ageMinutes + ' phút'}
-        {ageMinutes != null && ageMinutes > 5 ? ' • Dữ liệu cũ, cần làm mới trước khi điều phối.' : ''}
+        {ageMinutes != null && ageMinutes > 5 ? ' • Bản chụp đã quá 5 phút, cần làm mới trước khi điều phối.' : ''}
       </p>
 
       {loading ? (

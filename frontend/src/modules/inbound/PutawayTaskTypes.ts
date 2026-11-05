@@ -81,7 +81,7 @@ export const PUTAWAY_RULE_LABELS: Record<string, string> = {
   '3_REMAINING_CAPACITY_FIT': '3. Đủ sức chứa còn lại',
   '4_PROXIMITY_PICK_FACE': '4. Gần vị trí lấy hàng',
   '4_PICK_FACE_PROXIMITY': '4. Gần vị trí lấy hàng',
-  '5_FEFO_LOT_CONSOLIDATION': '5. Gom lô FEFO',
+  '5_FEFO_LOT_CONSOLIDATION': '5. Gom lô cùng hạn dùng',
   ACTIVE_BIN_ONLY: 'Kệ đang hoạt động',
   UNBLOCKED_BIN_ONLY: 'Kệ không bị khóa',
   NO_STOCKTAKE_FREEZE: 'Không vướng khóa kiểm kê',

@@ -264,6 +264,9 @@ describe('Wave-5 Frontend Remediation (W5-12, W5-13, W5-22, W5-23, W5-24, W5-30)
       </MemoryRouter>,
     );
 
+    const sessionsTab = await screen.findByTestId('tab-packing-sessions-hu');
+    fireEvent.click(sessionsTab);
+
     const openBtn = await screen.findByRole('button', { name: 'PACK-007' });
     fireEvent.click(openBtn);
 

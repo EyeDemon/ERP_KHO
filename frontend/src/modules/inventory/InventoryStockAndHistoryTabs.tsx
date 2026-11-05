@@ -112,14 +112,14 @@ export const InventoryStockTab: React.FC<InventoryStockTabProps> = ({
         <table aria-label="Tồn kho hiện tại" className="ui-table-compact inventory-table-wide">
           <thead>
             <tr>
-              <th>Mã SP</th>
-              <th>Tên SP</th>
-              <th>ĐVT</th>
-              <th>Kho</th>
-              <th className="inventory-numeric" style={rightNumStyle}>Tồn thực tế</th>
-              <th className="inventory-numeric" style={rightNumStyle}>Đã giữ</th>
-              <th className="inventory-numeric" style={rightNumStyle}>Khả dụng</th>
-              <th>Cập nhật lần cuối</th>
+              <th style={{ minWidth: 92, whiteSpace: 'nowrap' }}>Mã SP</th>
+              <th style={{ minWidth: 150 }}>Tên SP</th>
+              <th style={{ minWidth: 78, whiteSpace: 'nowrap' }}>Đơn vị</th>
+              <th style={{ minWidth: 115 }}>Kho</th>
+              <th className="inventory-numeric" style={{ ...rightNumStyle, minWidth: 96, whiteSpace: 'nowrap' }}>Tồn thực tế</th>
+              <th className="inventory-numeric" style={{ ...rightNumStyle, minWidth: 84, whiteSpace: 'nowrap' }}>Đã giữ</th>
+              <th className="inventory-numeric" style={{ ...rightNumStyle, minWidth: 92, whiteSpace: 'nowrap' }}>Khả dụng</th>
+              <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Cập nhật lần cuối</th>
             </tr>
           </thead>
           <tbody>
@@ -128,7 +128,7 @@ export const InventoryStockTab: React.FC<InventoryStockTabProps> = ({
             ) : (
               paginatedStocks.map((item, index) => (
                 <tr key={item.productId + '-' + item.warehouseId + '-' + index}>
-                  <td><strong>{item.productCode}</strong></td>
+                  <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.productCode}</strong></td>
                   <td>{item.productName}</td>
                   <td>{formatUnitName(item.unitName)}</td>
                   <td>{formatWarehouseLabel(item.warehouseName, undefined, item.warehouseId)}</td>
@@ -229,15 +229,15 @@ export const InventoryHistoryTab: React.FC<InventoryHistoryTabProps> = ({
           <table aria-label="Lịch sử giao dịch tồn kho" className="ui-table-compact">
             <thead>
               <tr>
-                <th>Ngày GD</th>
-                <th>Loại GD</th>
-                <th>Kho</th>
-                <th>Sản phẩm</th>
-                <th>Trạng thái</th>
-                <th>Lô / Sê-ri</th>
-                <th className="inventory-numeric" style={{ ...rightNumStyle, whiteSpace: 'nowrap' }}>SL</th>
-                <th>Tham chiếu</th>
-                <th>Ghi chú</th>
+                <th style={{ minWidth: 115, whiteSpace: 'nowrap' }}>Ngày GD</th>
+                <th style={{ minWidth: 115 }}>Loại GD</th>
+                <th style={{ minWidth: 110 }}>Kho</th>
+                <th style={{ minWidth: 150 }}>Sản phẩm</th>
+                <th style={{ minWidth: 105 }}>Trạng thái</th>
+                <th style={{ minWidth: 105 }}>Lô / Sê-ri</th>
+                <th className="inventory-numeric" style={{ ...rightNumStyle, minWidth: 92, whiteSpace: 'nowrap' }}>Số lượng</th>
+                <th style={{ minWidth: 115 }}>Tham chiếu</th>
+                <th style={{ minWidth: 135 }}>Ghi chú</th>
               </tr>
             </thead>
             <tbody>
@@ -250,10 +250,10 @@ export const InventoryHistoryTab: React.FC<InventoryHistoryTabProps> = ({
                   const quantityClass = increase ? 'inventory-qty-increase' : neutral ? '' : 'inventory-qty-decrease';
                   return (
                     <tr key={item.id}>
-                      <td>{new Date(item.transactionDate).toLocaleString('vi-VN')}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{new Date(item.transactionDate).toLocaleString('vi-VN')}</td>
                       <td>{transactionTypeLabel(item.transactionType).replace(/\[?HandlingUnitLpnMove\]?/gi, '[Di chuyển kiện LPN]')}</td>
                       <td>{formatWarehouseLabel(item.warehouseName, undefined, item.warehouseId)}</td>
-                      <td>{item.productCode} - {item.productName}</td>
+                      <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.productCode}</strong> - {item.productName}</td>
                       <td>
                         {item.fromInventoryStatus && item.toInventoryStatus ? (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexWrap: 'nowrap' }}>

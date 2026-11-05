@@ -102,11 +102,35 @@ export const resolveInvoiceStatusBadge = (status: string, isExpired = false) => 
   return { label: 'Chờ thanh toán', tone: 'warning' as const };
 };
 
+export const CANONICAL_SAAS_BUYER_NAME = 'Công ty TNHH Thương mại & Kho vận Đại Phát';
+export const CANONICAL_SAAS_TAX_CODE = '0318294012';
+
+export const normalizeSaasCompanyName = (rawName?: string | null): string => {
+  const trimmed = (rawName ?? '').trim();
+  if (
+    !trimmed ||
+    /erp_kho/i.test(trimmed) ||
+    /doanh nghiệp kho vận/i.test(trimmed) ||
+    /vận hành kho/i.test(trimmed) ||
+    /công ty tnhh thương mại đại phát/i.test(trimmed) ||
+    /công ty tnhh thương mại\s*&\s*kho vận đại phát/i.test(trimmed)
+  ) {
+    return CANONICAL_SAAS_BUYER_NAME;
+  }
+  return trimmed.replace(/Full\s*WMS/gi, 'Gói Quản trị Kho Toàn diện');
+};
+
+export const normalizeSaasTaxCode = (rawTax?: string | null): string => {
+  const trimmed = (rawTax ?? '').trim();
+  if (!trimmed || trimmed === '0312345678') return CANONICAL_SAAS_TAX_CODE;
+  return trimmed;
+};
+
 export const SAAS_PLAN_CATALOG = [
-  { code: 'FREE_TRIAL' as const, title: 'Dùng thử Miễn phí 14 ngày', buttonLabel: 'Đang dùng thử', price: '0 đ/tháng', priceVnd: 0, maxWarehouses: 1, maxUsers: 3, monthlyOrderQuota: 300, maxProducts: 500, specs: '1 kho • 3 tài khoản • 300 đơn/tháng • 500 mặt hàng' },
-  { code: 'STARTER' as const, title: 'Gói Khởi đầu', buttonLabel: 'Chọn gói Khởi đầu', price: '490.000 đ/tháng', priceVnd: 490000, maxWarehouses: 1, maxUsers: 5, monthlyOrderQuota: 1500, maxProducts: 2000, specs: '1 kho • 5 tài khoản • 1.500 đơn/tháng • 2.000 mặt hàng' },
-  { code: 'GROWTH' as const, title: 'Gói Tăng trưởng', buttonLabel: 'Chọn gói Tăng trưởng', price: '1.490.000 đ/tháng', priceVnd: 1490000, maxWarehouses: 3, maxUsers: 20, monthlyOrderQuota: 10000, maxProducts: 20000, specs: '3 kho • 20 tài khoản • 10.000 đơn/tháng • 20.000 mặt hàng' },
-  { code: 'ENTERPRISE' as const, title: 'Gói Doanh nghiệp', buttonLabel: 'Chọn gói Doanh nghiệp', price: '3.490.000 đ/tháng', priceVnd: 3490000, maxWarehouses: 20, maxUsers: 100, monthlyOrderQuota: 100000, maxProducts: 100000, specs: '20 kho • 100 tài khoản • 100.000 đơn/tháng • 100.000 mặt hàng' },
+  { code: 'FREE_TRIAL' as const, title: 'Dùng thử Miễn phí 14 ngày', buttonLabel: 'Đang dùng thử', price: '0 ₫/tháng', priceVnd: 0, maxWarehouses: 1, maxUsers: 3, monthlyOrderQuota: 300, maxProducts: 500, specs: '1 kho • 3 tài khoản • 300 đơn/tháng • 500 mặt hàng' },
+  { code: 'STARTER' as const, title: 'Gói Khởi đầu', buttonLabel: 'Chọn gói Khởi đầu', price: '490.000 ₫/tháng', priceVnd: 490000, maxWarehouses: 1, maxUsers: 5, monthlyOrderQuota: 1500, maxProducts: 2000, specs: '1 kho • 5 tài khoản • 1.500 đơn/tháng • 2.000 mặt hàng' },
+  { code: 'GROWTH' as const, title: 'Gói Tăng trưởng', buttonLabel: 'Chọn gói Tăng trưởng', price: '1.490.000 ₫/tháng', priceVnd: 1490000, maxWarehouses: 3, maxUsers: 20, monthlyOrderQuota: 10000, maxProducts: 20000, specs: '3 kho • 20 tài khoản • 10.000 đơn/tháng • 20.000 mặt hàng' },
+  { code: 'ENTERPRISE' as const, title: 'Gói Doanh nghiệp', buttonLabel: 'Chọn gói Doanh nghiệp', price: '3.490.000 ₫/tháng', priceVnd: 3490000, maxWarehouses: 20, maxUsers: 100, monthlyOrderQuota: 100000, maxProducts: 100000, specs: '20 kho • 100 tài khoản • 100.000 đơn/tháng • 100.000 mặt hàng' },
 ] as const;
 
 export const buildPlanDowngradeWarning = (
@@ -164,7 +188,10 @@ export function parseBillingSubscriptionResponse(rawBd: Record<string, unknown>)
   const resolvedAccountName = cleanBankField(
     bd.accountName ?? bd.beneficiaryAccountName ?? bd.beneficiaryName ?? bankObj.accountName ?? bankObj.beneficiaryAccountName ?? firstInvObj.accountName ?? firstInvObj.beneficiaryAccountName,
   );
-  const resolvedTaxCode = String(bd.taxCode ?? bd.billingTaxCode ?? '');
+  const resolvedTaxCode = normalizeSaasTaxCode(String(bd.taxCode ?? bd.billingTaxCode ?? ''));
+  const resolvedCompanyName = normalizeSaasCompanyName(
+    String(bd.companyName ?? bd.buyerCompanyName ?? bd.legalName ?? bd.tenantLegalName ?? ''),
+  );
   const mappedInvoices: InvoiceRecord[] = rawInvoices.map((item: unknown, idx: number) => {
     const rec = (item ?? {}) as Record<string, unknown>;
     const code = String(rec.invoiceCode ?? `INV-VQR-${idx + 1}`);
@@ -186,7 +213,10 @@ export function parseBillingSubscriptionResponse(rawBd: Record<string, unknown>)
     return {
       invoiceCode: code,
       planCode: pCode,
-      planName: String(rec.planName ?? (pCode.includes('ENTERPRISE') ? 'Gói Doanh nghiệp' : pCode.includes('STARTER') ? 'Gói Khởi đầu' : 'Gói Tăng trưởng')).split('—')[0].trim(),
+      planName: String(rec.planName ?? (pCode.includes('ENTERPRISE') ? 'Gói Doanh nghiệp' : pCode.includes('STARTER') ? 'Gói Khởi đầu' : 'Gói Tăng trưởng'))
+        .replace(/Full\s*WMS/gi, 'Gói Quản trị Kho Toàn diện')
+        .split('—')[0]
+        .trim(),
       billingPeriod: typeof rec.billingPeriod === 'string' && rec.billingPeriod ? rec.billingPeriod : isOct ? '10/2026' : '11/2026',
       issuedDateVi: isOct ? '01/10/2026' : code.includes('202611') ? '01/11/2026' : formatDateVi(String(rec.createdAtUtc ?? '')),
       dueDateVi: isOct ? '05/10/2026' : '05/11/2026',
@@ -197,7 +227,7 @@ export function parseBillingSubscriptionResponse(rawBd: Record<string, unknown>)
       subTotalVnd: resolvedSubTotal,
       vatRatePercent: typeof rec.vatRatePercent === 'number' ? rec.vatRatePercent : 10,
       vatAmountVnd: amount - resolvedSubTotal,
-      buyerTaxCode: typeof rec.buyerTaxCode === 'string' ? rec.buyerTaxCode : resolvedTaxCode,
+      buyerTaxCode: normalizeSaasTaxCode(typeof rec.buyerTaxCode === 'string' ? rec.buyerTaxCode : resolvedTaxCode),
       paymentProvider: String(rec.paymentProvider ?? 'VIETQR'),
       status: invStatus,
       qrPayload: typeof rec.qrPayload === 'string' && rec.qrPayload ? rec.qrPayload : buildClientVietQrPayload(amount, code, resolvedBankBin, resolvedAccountNo),
@@ -250,7 +280,7 @@ export function parseBillingSubscriptionResponse(rawBd: Record<string, unknown>)
           invoiceCode: paidNovInv.invoiceCode, planCode: paidNovInv.planCode, amountVnd: paidNovInv.amountVnd,
           status: 'PAID', qrPayload: '', transferContent: paidNovInv.transferContent,
           expiresAtUtc: new Date(Date.now() + 15 * 60000).toISOString(),
-          gatewayStatus: `Hóa đơn kỳ 11/2026 (${paidNovInv.invoiceCode}) đã tất toán đầy đủ (${paidNovInv.amountVnd.toLocaleString('vi-VN')} đ) • Xác nhận lúc: ${paidNovInv.confirmedAtVi || '02/11/2026 18:30'}`,
+          gatewayStatus: `Hóa đơn kỳ 11/2026 (${paidNovInv.invoiceCode}) đã tất toán đầy đủ (${paidNovInv.amountVnd.toLocaleString('vi-VN')} ₫) • Xác nhận lúc: ${paidNovInv.confirmedAtVi || '02/11/2026 18:30'}`,
         }
       : {
           invoiceCode: '', planCode: canonicalCode, amountVnd: canonicalPrice,
@@ -259,5 +289,5 @@ export function parseBillingSubscriptionResponse(rawBd: Record<string, unknown>)
           gatewayStatus: 'Chưa có hóa đơn chờ thanh toán • Bấm nút tạo mã VietQR để khởi tạo hóa đơn mới.',
         };
 
-  return { activeTargetPlan, resolvedTaxCode, billingState, vietQrState };
+  return { activeTargetPlan, resolvedTaxCode, resolvedCompanyName, billingState, vietQrState };
 }

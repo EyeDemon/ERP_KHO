@@ -160,7 +160,7 @@ export function OutboundMarketplaceAddressCard({
               aria-label="Địa chỉ giao hàng cần chuẩn hóa"
               value={rawVnAddress}
               onChange={e => setRawVnAddress(e.target.value)}
-              placeholder="Nhập địa chỉ viết tắt, VD: P. Bến Nghé, Q.1, TP.HCM"
+              placeholder="VD: P. Bến Nghé, Q.1, TP.HCM"
               style={{ marginTop: 0, width: '100%' }}
             />
           </label>

@@ -7,10 +7,30 @@ namespace ERP.Infrastructure.Services;
 
 public sealed partial class ImportReceiptOperationsService
 {
+    internal static string NormalizeVietnameseUnitLabel(string? rawUnit)
+    {
+        if (string.IsNullOrWhiteSpace(rawUnit))
+        {
+            return "Cái";
+        }
+
+        return rawUnit.Trim().ToUpperInvariant() switch
+        {
+            "PCS" or "PC" or "EA" or "EACH" or "UNIT" or "ĐVT" or "DVT" or "CAI" or "CÁI" => "Cái",
+            "BOX" or "HOP" or "HỘP" => "Hộp",
+            "CTN" or "CARTON" or "CASE" or "THUNG" or "THÙNG" => "Thùng",
+            "SET" or "BO" or "BỘ" => "Bộ",
+            "PAIR" or "CAP" or "CẶP" => "Cặp",
+            "PACK" or "PK" or "GOI" or "GÓI" => "Gói",
+            "BOTTLE" or "BTL" or "CHAI" => "Chai",
+            _ => rawUnit.Trim()
+        };
+    }
+
     private object MapCustomerReturnDto(
         ERP.Domain.Entities.CustomerReturn r,
         bool canReadCost,
-        IReadOnlyDictionary<int, (string Code, string Name)> productMap,
+        IReadOnlyDictionary<int, (string Code, string Name, string UnitName)> productMap,
         IReadOnlyDictionary<int, string> locationMap,
         IReadOnlyDictionary<int, string>? warehouseMap = null,
         string? inspectionVideoUrl = null)
@@ -36,6 +56,8 @@ public sealed partial class ImportReceiptOperationsService
         var mappedLines = orderedLines.Select(l =>
         {
             productMap.TryGetValue(l.ProductId, out var prodInfo);
+            var resolvedUnit = NormalizeVietnameseUnitLabel(
+                !string.IsNullOrWhiteSpace(prodInfo.UnitName) ? prodInfo.UnitName : (l.TransactionUomCode ?? l.BaseUomCode));
             var qLocId = l.QuarantineLocationId ?? r.QuarantineLocationId;
             var qLocCode = qLocId.HasValue && locationMap.TryGetValue(qLocId.Value, out var qCode) ? qCode : "QUARANTINE";
             var rLocId = l.RestockLocationId ?? l.TargetLocationId;
@@ -49,6 +71,8 @@ public sealed partial class ImportReceiptOperationsService
                 productId = l.ProductId,
                 productCode = prodInfo.Code ?? $"SKU-{l.ProductId}",
                 productName = prodInfo.Name ?? $"Sản phẩm #{l.ProductId}",
+                unitName = resolvedUnit,
+                unit = resolvedUnit,
                 lotId = l.LotId,
                 serialId = l.SerialId,
                 expiryDate = l.ExpiryDate,
@@ -73,11 +97,13 @@ public sealed partial class ImportReceiptOperationsService
         }).ToList();
 
         var firstLine = orderedLines.FirstOrDefault();
-        (string Code, string Name) firstProdInfo = default;
+        (string Code, string Name, string UnitName) firstProdInfo = default;
         if (firstLine != null)
         {
             productMap.TryGetValue(firstLine.ProductId, out firstProdInfo);
         }
+        var primaryUnitName = NormalizeVietnameseUnitLabel(
+            !string.IsNullOrWhiteSpace(firstProdInfo.UnitName) ? firstProdInfo.UnitName : (firstLine?.TransactionUomCode ?? firstLine?.BaseUomCode));
 
         var firstQLocId = firstLine?.QuarantineLocationId ?? r.QuarantineLocationId;
         var primaryQuarantineLocationCode = firstQLocId.HasValue && locationMap.TryGetValue(firstQLocId.Value, out var primaryQCode)
@@ -117,6 +143,8 @@ public sealed partial class ImportReceiptOperationsService
             productId = firstLine?.ProductId ?? 0,
             productCode = firstProdInfo.Code ?? (firstLine != null ? $"SKU-{firstLine.ProductId}" : string.Empty),
             productName = firstProdInfo.Name ?? (firstLine != null ? $"Sản phẩm #{firstLine.ProductId}" : string.Empty),
+            unitName = primaryUnitName,
+            unit = primaryUnitName,
             quantity = orderedLines.Count > 0 ? orderedLines.Sum(l => l.Quantity) : 0m,
             unitCost = canReadCost ? (decimal?)(firstLine?.UnitCost ?? 0m) : null,
             condition = firstLine?.Condition ?? "GOOD",

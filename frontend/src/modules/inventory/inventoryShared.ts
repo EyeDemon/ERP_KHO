@@ -143,8 +143,11 @@ export interface DecisionPolicyAuditResult {
   status: string;
 }
 
-export const formatUnitName = (unit?: string | null) =>
-  !unit || unit === 'QA_UNIT' || unit === 'QA-PCS' ? 'THÙNG' : unit;
+export const formatUnitName = (unit?: string | null) => {
+  if (!unit || unit.trim().toUpperCase() === 'ĐVT') return 'Cái';
+  if (unit === 'QA_UNIT' || unit === 'QA-PCS') return 'THÙNG';
+  return unit;
+};
 
 export const referenceTypeLabel = (value?: string | null) =>
   ({
@@ -290,7 +293,7 @@ export const parseAnalyticsSummaryResponse = (raw: Record<string, unknown> | nul
       productId: Number(item.productId ?? 0),
       productCode: String(item.productCode ?? ''),
       productName: String(item.productName ?? ''),
-      unitName: String(item.unitName ?? 'ĐVT'),
+      unitName: String(item.unitName ?? 'Cái'),
       onHandQuantity: Number(item.onHandQuantity ?? item.currentOnHand ?? 0),
       periodInQuantity: Number(item.periodInQuantity ?? 0),
       periodOutQuantity: Number(item.periodOutQuantity ?? item.issuedLastPeriod ?? 0),

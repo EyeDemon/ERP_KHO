@@ -81,7 +81,7 @@ export function PermissionsSupportImpersonationCard({
         raw.map((item: Record<string, unknown>, idx: number) => ({
           id: Number(item.id ?? item.sessionId ?? idx + 1),
           targetUserId: Number(item.targetUserId ?? item.userId ?? 1),
-          supportAgentName: String(item.supportAgentName ?? 'Chuyên viên Kỹ thuật ERP KHO'),
+          supportAgentName: String(item.supportAgentName ?? 'Chuyên viên Kỹ thuật ERP KHO').replace(/ERP_KHO/g, 'ERP KHO'),
           ticketReference: String(item.ticketReference ?? 'ZALO-SUP-2026-001'),
           status: String(item.status ?? 'ACTIVE').toUpperCase().includes('REVOKE')
             ? 'Đã thu hồi'

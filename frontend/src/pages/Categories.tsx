@@ -188,17 +188,17 @@ export default function Categories() {
             <table>
               <thead>
                 <tr>
-                  <th>Mã nhóm</th>
-                  <th>Tên nhóm danh mục</th>
-                  <th>Mô tả quy chuẩn</th>
-                  <th>Trạng thái</th>
-                  <th>Thao tác</th>
+                  <th style={{ minWidth: 105, whiteSpace: 'nowrap' }}>Mã nhóm</th>
+                  <th style={{ minWidth: 160 }}>Tên nhóm danh mục</th>
+                  <th style={{ minWidth: 180 }}>Mô tả quy chuẩn</th>
+                  <th style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                  <th style={{ minWidth: 100, whiteSpace: 'nowrap' }}>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
                 {categories.map((item) => (
                   <tr key={item.id}>
-                    <td style={{ fontWeight: 600 }}>{item.code}</td>
+                    <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}><span className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.code}</span></td>
                     <td>{item.name}</td>
                     <td>{item.description || '—'}</td>
                     <td>

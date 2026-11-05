@@ -52,13 +52,13 @@ export function PackingVideoEvidenceSearchCard({
   return (
     <UiCard title="Kho Bằng chứng Video Đóng gói SHA-256 & Tra cứu Vận đơn (AWB)">
       <form onSubmit={searchPackingVideoEvidences} className="ui-inline-wrap" style={{ alignItems: 'end', gap: 8 }}>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, flex: 1 }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, flex: '1 1 280px', minWidth: 260 }}>
           Tra cứu theo Mã vận đơn (AWB)
           <input
             aria-label="Tra cứu video theo mã vận đơn AWB"
             value={videoSearchAwb}
             onChange={(e) => setVideoSearchAwb(e.target.value)}
-            placeholder="VD: SPXVN058291042"
+            placeholder="VD: SPXVN058291"
           />
         </label>
         <button type="submit" className="ui-btn ui-btn-secondary" disabled={!!busy}>

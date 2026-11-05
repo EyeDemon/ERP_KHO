@@ -89,11 +89,11 @@ public sealed class Wave18RealSqlGovernanceAndImportTests
 
             var seededUsers = new (string Username, string FullName, string Domain, string RoleName, string? Email)[]
             {
-                ("qa_admin", "Quản trị viên Hệ thống", "PLATFORM", "SuperAdmin", null),
-                ("qa_billing_admin", "Quản trị Đối soát Nền tảng", "PLATFORM", "BillingAdmin", null),
-                ("qa_support_admin", "Chuyên viên Hỗ trợ Nền tảng", "PLATFORM", "SupportAdmin", null),
-                ("qa_security_auditor", "Kiểm toán An ninh Nền tảng", "PLATFORM", "SecurityAuditor", null),
-                ("tenant_admin", "Quản trị viên Công ty Đại Phát", "CUSTOMER_TENANT", "Admin", "owner@erpkho.vn")
+                ("qa_admin", "Chủ dự án (SuperAdmin)", "PLATFORM", "SuperAdmin", null),
+                ("qa_billing_admin", "Quản trị Cước phí SaaS", "PLATFORM", "BillingAdmin", null),
+                ("qa_support_admin", "Chuyên viên Hỗ trợ Kỹ thuật", "PLATFORM", "SupportAdmin", null),
+                ("qa_security_auditor", "Kiểm toán An toàn Thông tin", "PLATFORM", "SecurityAuditor", null),
+                ("tenant_admin", "Quản trị viên Đại Phát", "CUSTOMER_TENANT", "Admin", "owner@erpkho.vn")
             }.Select(u => new User
             {
                 TenantId = 1,

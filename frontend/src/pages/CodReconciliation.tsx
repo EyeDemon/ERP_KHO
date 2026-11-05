@@ -142,7 +142,7 @@ const CodReconciliation = () => {
               onChange={e => setTaxpayerType(e.target.value as 'HOUSEHOLD_INDIVIDUAL' | 'ENTERPRISE')}
             >
               <option value="HOUSEHOLD_INDIVIDUAL">Hộ / Cá nhân kinh doanh (Khấu trừ 1% GTGT + 0,5% TNCN theo NĐ 117/2025/NĐ-CP)</option>
-              <option value="ENTERPRISE">Doanh nghiệp / Tổ chức (Tự kê khai 0đ khấu trừ tại nguồn)</option>
+              <option value="ENTERPRISE">Doanh nghiệp / Tổ chức (Tự kê khai 0 ₫ khấu trừ tại nguồn)</option>
             </select>
           </label>
         </div>
@@ -152,11 +152,11 @@ const CodReconciliation = () => {
               Thuế sàn khấu trừ tại nguồn (1,5% - NĐ 117/2025/NĐ-CP)
             </div>
             <div style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
-              {taxpayerType === 'ENTERPRISE' ? '0 đ (Doanh nghiệp tự kê khai theo NĐ 117/2025/NĐ-CP)' : formatCodCurrencyVnd(summary.totalWithheldTaxAmount)}
+              {taxpayerType === 'ENTERPRISE' ? '0 ₫ (Doanh nghiệp tự kê khai theo NĐ 117/2025/NĐ-CP)' : formatCodCurrencyVnd(summary.totalWithheldTaxAmount)}
             </div>
             <div style={{ fontSize: 12, color: '#334155', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
               {taxpayerType === 'ENTERPRISE' ? (
-                <span>Doanh nghiệp tự kê khai, nộp thuế GTGT &amp; TNDN (Khấu trừ tại nguồn: <strong>0 đ</strong>)</span>
+                <span>Doanh nghiệp tự kê khai, nộp thuế GTGT &amp; TNDN (Khấu trừ tại nguồn: <strong>0 ₫</strong>)</span>
               ) : (
                 <>
                   Tách bạch: <strong>1% GTGT: {formatCodCurrencyVnd(summary.totalVatWithheldAmount)}</strong> •{' '}
@@ -168,7 +168,7 @@ const CodReconciliation = () => {
 
           <div style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #cbd5e1', background: '#f8fafc' }}>
             <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 600 }}>
-              Phí hạ tầng xử lý đơn cố định (3.000đ/đơn)
+              Phí hạ tầng xử lý đơn cố định (3.000 ₫/đơn)
             </div>
             <div style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>
               {formatCodCurrencyVnd(summary.totalFixedOrderProcessingFee)}

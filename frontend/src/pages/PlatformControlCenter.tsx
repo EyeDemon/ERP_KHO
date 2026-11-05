@@ -12,7 +12,7 @@ import {
   APPROVER_LABELS, canReconcilePlatformBilling, computeUnpaidInvoiceDueLabelVi,
   EMPTY_INTEGRATION_METRICS, EMPTY_PLATFORM_BENEFICIARY, enrichPlatformWorkers, extractPlatformBeneficiary,
   formatNowViDateTime, mapAndMergePlatformInvoices, mapRawPlatformTenants, mapStoredToSession,
-  PlatformIdentityContext, requiresFourEyesBillingApproval, resolvePlatformPermissionsForRole,
+  normalizeTenantLegalNameVi, PlatformIdentityContext, requiresFourEyesBillingApproval, resolvePlatformPermissionsForRole,
   type PlatformBeneficiaryInfo, type PlatformLayoutOutletContext, type PlatformRoleCode,
 } from '../modules/platform/platformBillingHelpers';
 import './PlatformControlCenter.css';
@@ -281,10 +281,15 @@ export const PlatformControlCenter: React.FC = () => {
     const startedAtUtc = new Date().toISOString();
     const expiresAtUtc = String(d.expiresAtUtc ?? new Date(Date.now() + ttlMinutes * 60000).toISOString());
     const fallbackCode = `TENANT-${String(targetTenantId).padStart(3, '0')}`;
+    const resolvedTenantCode = String(d.targetTenantCode ?? targetTenant?.tenantCode ?? fallbackCode);
     const session: ActiveImpersonationSession = {
       sessionId: String(d.sessionId ?? `IMP-${targetTenantId}`), targetTenantId,
-      targetTenantCode: String(d.targetTenantCode ?? targetTenant?.tenantCode ?? fallbackCode),
-      targetTenantName: String(d.targetTenantName ?? targetTenant?.companyName ?? `Doanh nghiệp ${fallbackCode}`),
+      targetTenantCode: resolvedTenantCode,
+      targetTenantName: normalizeTenantLegalNameVi(
+        String(d.targetTenantName ?? targetTenant?.companyName ?? ''),
+        targetTenantId,
+        resolvedTenantCode,
+      ),
       ticketCode, reason, ttlMinutes, expiresAtUtc, startedByUsername: actorUsername, startedAtUtc,
     };
     setActiveImpersonation(session);

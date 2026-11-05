@@ -192,11 +192,11 @@ const Units = () => {
         });
       } else {
         setUomIntegrity(null);
-        setError('Phản hồi kiểm định hệ số quy đổi ĐVT không hợp lệ từ máy chủ.');
+        setError('Phản hồi kiểm định hệ số quy đổi đơn vị tính không hợp lệ từ máy chủ.');
       }
     } catch (failure) {
       setUomIntegrity(null);
-      setError(messageOf(failure, 'Không thể kiểm định hệ số quy đổi và bất biến ĐVT cơ sở.'));
+      setError(messageOf(failure, 'Không thể kiểm định hệ số quy đổi và bất biến đơn vị chuẩn.'));
     } finally {
       setGovernanceBusy(false);
     }
@@ -210,7 +210,7 @@ const Units = () => {
       const res = await apiClient.post('/api/v1/units/verify-catch-weight-coldchain', {});
       const data = res?.data as { verificationId?: string; status?: string } | undefined;
       if (data?.verificationId && data?.status) {
-        setCatchWeightColdChainResult(`${data.verificationId} • ${({ CATCH_WEIGHT_COLDCHAIN_VALIDATED: 'Đã chuẩn hóa tồn kho hai ĐVT, chuỗi lạnh & hàng nguy hiểm', DUAL_UOM_COLDCHAIN_READY: 'Sẵn sàng tồn kho hai ĐVT & chuỗi lạnh' } as Record<string, string>)[data.status] || data.status}`);
+        setCatchWeightColdChainResult(`${data.verificationId} • ${({ CATCH_WEIGHT_COLDCHAIN_VALIDATED: 'Đã chuẩn hóa tồn kho hai đơn vị tính, chuỗi lạnh & hàng nguy hiểm', DUAL_UOM_COLDCHAIN_READY: 'Sẵn sàng tồn kho hai đơn vị tính & chuỗi lạnh' } as Record<string, string>)[data.status] || data.status}`);
       } else {
         setCatchWeightColdChainResult('');
         setError('Phản hồi kiểm định trọng lượng biến thiên và chuỗi lạnh không hợp lệ từ máy chủ.');
@@ -264,16 +264,16 @@ const Units = () => {
             <table className="ui-table-compact" aria-label="Danh sách đơn vị tính">
               <thead>
                 <tr>
-                  <th>Mã ĐVT</th>
-                  <th>Tên đơn vị</th>
-                  <th>Trạng thái</th>
-                  {canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}
+                  <th style={{ minWidth: 88, whiteSpace: 'nowrap' }}>Mã đơn vị</th>
+                  <th style={{ minWidth: 150 }}>Tên đơn vị</th>
+                  <th style={{ minWidth: 115, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                  {canManage && <th style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Thao tác</th>}
                 </tr>
               </thead>
               <tbody>
                 {paginated.map((unit) => (
                   <tr key={unit.id}>
-                    <td style={{ whiteSpace: 'nowrap' }}><strong>{unit.code}</strong></td>
+                    <td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{unit.code}</strong></td>
                     <td>{unit.name}</td>
                     <td><UiBadge tone={unit.isActive ? 'success' : 'neutral'}>{unit.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge></td>
                     {canManage && <td style={{ whiteSpace: 'nowrap' }}>
@@ -310,15 +310,15 @@ const Units = () => {
       <UiCard title="Tổng quan Hệ thống Đơn vị tính & Quy đổi">
         <div className="ui-inline-wrap">
           <button type="button" disabled={loading || saving || governanceBusy} onClick={() => void verifyUomIntegrity()}>
-            Kiểm định Hệ số Quy đổi & Bất biến ĐVT Cơ sở
+            Kiểm định Hệ số Quy đổi &amp; Bất biến Đơn vị Chuẩn
           </button>
           {uomIntegrity && (
             <UiBadge tone="success">
-              {`Đã kiểm định ${uomIntegrity.verificationId} • ${({ UOM_HIERARCHY_VALIDATED: 'Đã chuẩn hóa hệ số quy đổi & bất biến ĐVT cơ sở', BASE_UOM_IMMUTABLE: 'ĐVT cơ sở bất biến hợp lệ' } as Record<string, string>)[uomIntegrity.status] || uomIntegrity.status}`}
+              {`Đã kiểm định ${uomIntegrity.verificationId} • ${({ UOM_HIERARCHY_VALIDATED: 'Đã chuẩn hóa hệ số quy đổi & bất biến đơn vị chuẩn', BASE_UOM_IMMUTABLE: 'Đơn vị chuẩn bất biến hợp lệ' } as Record<string, string>)[uomIntegrity.status] || uomIntegrity.status}`}
             </UiBadge>
           )}
           <button type="button" disabled={loading || saving || governanceBusy} onClick={() => void verifyCatchWeightColdChain()}>
-            Kiểm định Tồn kho Hai ĐVT (Trọng lượng biến thiên), Chuỗi lạnh &amp; Hàng nguy hiểm
+            Kiểm định Tồn kho Hai Đơn vị tính (Trọng lượng biến thiên), Chuỗi lạnh &amp; Hàng nguy hiểm
           </button>
           {catchWeightColdChainResult && (
             <UiBadge tone="success">{catchWeightColdChainResult}</UiBadge>

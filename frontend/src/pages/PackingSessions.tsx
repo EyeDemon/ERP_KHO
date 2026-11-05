@@ -103,7 +103,7 @@ export default function PackingSessions() {
         title={isKitRoute ? 'Lệnh lắp ráp bộ Kit' : 'Trạm đóng gói đơn hàng'}
         description={
           isKitRoute
-            ? 'Quản lý định mức cấu thành bộ Kit (BOM), lập lệnh lắp ráp / tháo dỡ bộ Kit, kế thừa hạn dùng FEFO sớm nhất và cộng dồn giá vốn bình quân gia quyền (MAC).'
+            ? 'Quản lý định mức cấu thành bộ Kit (BOM), lập lệnh lắp ráp / tháo dỡ bộ Kit, kế thừa hạn dùng sớm nhất và cộng dồn giá vốn bình quân gia quyền (MAC).'
             : 'Đóng gói hàng đã lấy vào thùng carton, khay hoặc pallet (HU/SSCC). Bước đóng gói bảo toàn số lượng và không trừ tồn kho.'
         }
       />

@@ -83,14 +83,14 @@ describe('CodReconciliation Page', () => {
 
     const view = render(<CodReconciliation />);
 
-    expect(await screen.findByText('19.500.000 đ')).toBeTruthy();
-    expect(screen.getByText('18.200.000 đ')).toBeTruthy();
+    expect(await screen.findByText('19.500.000 ₫')).toBeTruthy();
+    expect(screen.getByText('18.200.000 ₫')).toBeTruthy();
     expect(screen.getByText('Sổ cái Đối soát Chi tiết Từng Vận đơn • 2 vận đơn')).toBeTruthy();
-    expect(screen.getByText('MÃ VẬN ĐƠN')).toBeTruthy();
-    expect(screen.getByText('COD PHẢI THU')).toBeTruthy();
-    expect(screen.getByText('COD THỰC NHẬN')).toBeTruthy();
-    expect(screen.getByText('LỆCH PHÍ VC')).toBeTruthy();
-    expect(screen.getByText('TRẠNG THÁI')).toBeTruthy();
+    expect(screen.getByText('Mã vận đơn')).toBeTruthy();
+    expect(screen.getByText('COD phải thu')).toBeTruthy();
+    expect(screen.getByText('COD thực nhận')).toBeTruthy();
+    expect(screen.getByText('Lệch phí VC')).toBeTruthy();
+    expect(screen.getByText('Trạng thái')).toBeTruthy();
     expect(view.container.textContent).not.toContain('(ShipmentFinancialLedgers)');
     expect(view.container.textContent).not.toContain('TrackingNumber');
     expect(view.container.textContent).not.toContain('ExpectedCod');
@@ -188,9 +188,9 @@ describe('CodReconciliation Page', () => {
       ),
     ).toBeTruthy();
     expect(screen.getByText(/Thuế sàn khấu trừ tại nguồn \(1,5% - NĐ 117\/2025\/NĐ-CP\)/i)).toBeTruthy();
-    expect(screen.getByText('Phí hạ tầng xử lý đơn cố định (3.000đ/đơn)')).toBeTruthy();
-    expect(screen.getByText('Thuế khấu trừ 1,5% & Phí cố định')).toBeTruthy();
-    expect(screen.getAllByText('30.000 đ').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('3.000 đ').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Phí hạ tầng xử lý đơn cố định (3.000 ₫/đơn)')).toBeTruthy();
+    expect(screen.getByText('Thuế 1,5% & Phí')).toBeTruthy();
+    expect(screen.getAllByText('30.000 ₫').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('3.000 ₫').length).toBeGreaterThanOrEqual(1);
   });
 });

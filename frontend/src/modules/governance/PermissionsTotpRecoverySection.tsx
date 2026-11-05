@@ -1,3 +1,4 @@
+import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { UiBadge } from '../../ui/ProductionUi';
 import { maskRecoveryCodeDisplay } from './PermissionsHelpersAndTypes';
 import type { TotpEnrollmentStage } from './PermissionsTotpStepHeader';
@@ -50,11 +51,22 @@ export function PermissionsTotpRecoverySection({
             color: totpEnrollmentStage === 'VERIFIED' ? '#065f46' : '#78350f',
             fontSize: 13,
             fontWeight: 600,
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 8,
           }}
         >
-          {totpEnrollmentStage === 'VERIFIED'
-            ? 'Đã bật xác thực 2 lớp. Khóa cấu hình và mã khôi phục đã được ẩn an toàn.'
-            : '⚠️ Bạn đã xác minh mã OTP 6 chữ số thành công. Vui lòng sao chép hoặc tải 8 mã khôi phục dự phòng và bấm Hoàn tất để kích hoạt xác thực 2 lớp.'}
+          {totpEnrollmentStage === 'VERIFIED' ? (
+            <>
+              <CheckCircle2 size={16} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>Đã bật xác thực 2 lớp. Khóa cấu hình và mã khôi phục đã được ẩn an toàn.</span>
+            </>
+          ) : (
+            <>
+              <AlertTriangle size={16} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>Bạn đã xác minh mã OTP 6 chữ số thành công. Vui lòng sao chép hoặc tải 8 mã khôi phục dự phòng và bấm Hoàn tất để kích hoạt xác thực 2 lớp.</span>
+            </>
+          )}
         </div>
       )}
 

@@ -152,9 +152,9 @@ export function PackingWorkbenchVideoAndAwbPanels({
           )}
           {videoNotice && <p role="status" className="ui-success-text" style={{ marginTop: 3, fontSize: 11.5 }}>{videoNotice}</p>}
         </div>
-        <form onSubmit={recordPackingVideoEvidence} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, alignItems: 'end' }}>
+        <form onSubmit={recordPackingVideoEvidence} className="packing-video-form-grid">
           <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5 }}>Mã vận đơn (AWB)
-            <input aria-label="Mã vận đơn AWB quay video" value={videoAwbCode} onChange={e => setVideoAwbCode(e.target.value)} placeholder="VD: SPXVN058291042" style={{ minHeight: 32, height: 32, padding: '4px 8px', fontSize: 12 }} />
+            <input aria-label="Mã vận đơn AWB quay video" value={videoAwbCode} onChange={e => setVideoAwbCode(e.target.value)} placeholder="VD: SPXVN058291" style={{ minHeight: 32, height: 32, padding: '4px 8px', fontSize: 12 }} />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5 }}>Tệp Video (.mp4/.webm)
             <input
@@ -176,7 +176,7 @@ export function PackingWorkbenchVideoAndAwbPanels({
             <input aria-label="Dung lượng tệp video (MB)" type="number" min="0.1" step="0.1" placeholder="VD: 12.4" value={videoSizeMb} onChange={e => setVideoSizeMb(e.target.value)} style={{ minHeight: 32, height: 32, padding: '4px 8px', fontSize: 12 }} />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5, gridColumn: '1 / -1' }}>Mã băm toàn vẹn SHA-256
-            <input aria-label="Mã băm toàn vẹn SHA-256" placeholder="VD: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" value={videoSha256} onChange={e => setVideoSha256(e.target.value)} style={{ minHeight: 32, height: 32, padding: '4px 8px', fontSize: 12 }} />
+            <input aria-label="Mã băm toàn vẹn SHA-256" placeholder="Nhập hoặc tự sinh mã băm SHA-256..." value={videoSha256} onChange={e => setVideoSha256(e.target.value)} style={{ minHeight: 32, height: 32, padding: '4px 8px', fontSize: 12 }} />
           </label>
           <div className="ui-inline-wrap" style={{ gap: 6, gridColumn: '1 / -1', marginTop: 2 }}>
             <button type="button" className="ui-btn ui-btn-secondary" data-testid="btn-toggle-webrtc-camera" disabled={!!busy || governanceBusy} onClick={() => void handleToggleWebrtcCamera()} style={{ minHeight: 32, padding: '4px 10px', fontSize: 12 }}>

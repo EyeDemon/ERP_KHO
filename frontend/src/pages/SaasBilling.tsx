@@ -4,7 +4,8 @@ import apiClient from '../services/apiClient';
 import { UiCard, UiPage, UiPageHeader } from '../ui/ProductionUi';
 import {
   buildClientVietQrPayload, buildPlanDowngradeWarning, extractErrorText,
-  formatVietQrTransferContent, normalizeTransferReference, parseBillingSubscriptionResponse,
+  formatVietQrTransferContent, normalizeSaasCompanyName, normalizeSaasTaxCode,
+  normalizeTransferReference, parseBillingSubscriptionResponse,
   resolveInvoiceStatusBadge, resolveNextBillingCycle, resolveQuotaTierLabel,
   resolveSubscriptionStatusLabel, SAAS_PLAN_CATALOG, type BillingState, type InvoiceRecord,
 } from '../modules/governance/SaasBillingHelpers';
@@ -98,6 +99,7 @@ const SaasBilling = () => {
     const parsed = parseBillingSubscriptionResponse(bd);
     setSelectedPlanCode(parsed.activeTargetPlan);
     setTaxCodeDraft(parsed.resolvedTaxCode);
+    setBuyerCompanyName((prev) => normalizeSaasCompanyName(prev || parsed.resolvedCompanyName));
     setBilling(parsed.billingState);
     setVietQrInvoice(parsed.vietQrState);
   };
@@ -150,9 +152,11 @@ const SaasBilling = () => {
   };
 
   const saveTaxCode = () => {
-    const cleanTax = taxCodeDraft.trim();
-    if (!cleanTax) { setError('Vui lòng nhập mã số thuế doanh nghiệp hợp lệ.'); return; }
+    const rawTrimmed = taxCodeDraft.trim();
+    if (!rawTrimmed) { setError('Vui lòng nhập mã số thuế doanh nghiệp hợp lệ.'); return; }
+    const cleanTax = normalizeSaasTaxCode(rawTrimmed);
     setError('');
+    setTaxCodeDraft(cleanTax);
     setBilling((prev) => ({ ...prev, taxCode: cleanTax }));
     setEditingTaxCode(false);
     setNotice(`Đã cập nhật mã số thuế xuất hóa đơn GTGT: ${cleanTax}.`);
@@ -163,10 +167,13 @@ const SaasBilling = () => {
     if (busy) return;
     setBusy(true); setError(''); setNotice('');
     try {
-      const cleanTax = taxCodeDraft.trim();
+      const cleanTax = normalizeSaasTaxCode(taxCodeDraft);
+      const cleanCompany = normalizeSaasCompanyName(buyerCompanyName);
       await apiClient.put('/api/v1/saas-billing/tax-profile', {
-        taxCode: cleanTax, companyName: buyerCompanyName.trim(), taxpayerType: buyerTaxpayerType, legalRegisteredAddress: legalRegisteredAddress.trim(),
+        taxCode: cleanTax, companyName: cleanCompany, taxpayerType: buyerTaxpayerType, legalRegisteredAddress: legalRegisteredAddress.trim(),
       });
+      setTaxCodeDraft(cleanTax);
+      setBuyerCompanyName(cleanCompany);
       setBilling((prev) => ({ ...prev, taxCode: cleanTax || prev.taxCode }));
       setNotice(`Đã cập nhật Hồ sơ Thuế Doanh nghiệp Thuê bao (Thông tư 86/2024/TT-BTC): ${cleanTax}.`);
     } catch (err) {
@@ -332,17 +339,17 @@ const SaasBilling = () => {
   const showQaWebhookSimulator = Boolean(import.meta.env.DEV) && import.meta.env.VITE_QA_WEBHOOK_SIMULATOR === 'true';
   const hasActiveMatchingInvoice = vietQrInvoice.status.toUpperCase() === 'UNPAID' && !isInvoiceExpired && Boolean(vietQrInvoice.invoiceCode) && vietQrInvoice.planCode.toUpperCase() === selectedPlanCode;
   const quotaGaugeItems = [
-    { key: 'orders', title: 'Sản lượng đơn hàng tháng', unit: 'đơn', used: billing.currentMonthOrderCount, max: billing.monthlyOrderQuota, tier: orderTier },
+    { key: 'orders', title: 'Sản lượng đơn / tháng', unit: 'đơn', used: billing.currentMonthOrderCount, max: billing.monthlyOrderQuota, tier: orderTier },
     { key: 'warehouses', title: 'Kho đang hoạt động', unit: 'kho', used: billing.activeWarehouses, max: billing.maxWarehouses, tier: whTier },
-    { key: 'users', title: 'Tài khoản nhân sự', unit: 'tài khoản nhân sự', used: billing.activeUsers, max: billing.maxUsers, tier: userTier },
     { key: 'products', title: 'Danh mục mặt hàng', unit: 'mặt hàng', used: billing.activeProducts, max: billing.maxProducts, tier: skuTier },
+    { key: 'users', title: 'Tài khoản nhân sự', unit: 'tài khoản nhân sự', used: billing.activeUsers, max: billing.maxUsers, tier: userTier },
   ];
 
   return (
     <UiPage className="saas-billing-compact-page">
       <UiPageHeader
         eyebrow="Quản trị & Gói dịch vụ SaaS"
-        title="Quản trị gói dịch vụ SaaS, hạn mức 3 mức & thanh toán tự động VietQR"
+        title="Gói thuê bao & Thanh toán SaaS"
         description="Theo dõi chu kỳ cước, hạn mức vận hành theo thời gian thực và thanh toán nâng cấp tự động qua chuyển khoản Napas247 VietQR."
       />
       {isSuspendedOrReadOnly && !hasGlobalSuspendedBanner ? (
@@ -365,15 +372,7 @@ const SaasBilling = () => {
         loadSubscription={loadSubscription} quotaGaugeItems={quotaGaugeItems} createVietQrInvoice={createVietQrInvoice}
       />
 
-      <div
-        className="saas-billing-mid-grid"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: isQrPanelOpen ? 'minmax(0, 1fr)' : 'minmax(0, 1.35fr) minmax(0, 0.95fr)',
-          gap: 6,
-          alignItems: 'stretch',
-        }}
-      >
+      <div className="saas-billing-mid-grid">
         <SaasBillingTaxProfileCard
           busy={busy} taxCodeDraft={taxCodeDraft} setTaxCodeDraft={setTaxCodeDraft}
           buyerCompanyName={buyerCompanyName} setBuyerCompanyName={setBuyerCompanyName}

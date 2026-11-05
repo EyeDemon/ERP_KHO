@@ -557,9 +557,9 @@ public sealed class Wave07PlatformControlPlaneAndResidualsTests
                 w.GetProperty("lastRunRelativeVi").GetString().Should().MatchRegex(@"^\d{2}:\d{2}:\d{2} \(\d+ giây trước\)$");
             }
             workers.Select(w => w.GetProperty("lastDurationMs").GetInt32()).Distinct().Count().Should().Be(3);
-            workers[0].GetProperty("titleVi").GetString().Should().Be("Tiến trình đồng bộ hóa đơn & sổ cái");
-            workers[1].GetProperty("titleVi").GetString().Should().Be("Tiến trình đối soát bất biến tồn kho 9 chiều");
-            workers[2].GetProperty("titleVi").GetString().Should().Be("Tiến trình thu hồi webhook & dọn phiên hỗ trợ");
+            workers[0].GetProperty("titleVi").GetString().Should().Be("Tiến trình đồng bộ hóa đơn & vận đơn");
+            workers[1].GetProperty("titleVi").GetString().Should().Be("Tiến trình đối soát cân bằng sổ cái tồn kho");
+            workers[2].GetProperty("titleVi").GetString().Should().Be("Tiến trình đồng bộ đối tác & dọn phiên hỗ trợ");
         }
 
         // 3. Cross-Portal Warehouse Count Parity (1 / 3 kho) & Canonical Legal Name across /platform/tenants, SaasBillingService, and ReportOperationsService
@@ -570,7 +570,7 @@ public sealed class Wave07PlatformControlPlaneAndResidualsTests
             var t1 = tenantsDoc.RootElement.GetProperty("items")[0];
             t1.GetProperty("usedWarehouses").GetInt32().Should().Be(1);
             t1.GetProperty("maxWarehouses").GetInt32().Should().Be(3);
-            t1.GetProperty("companyName").GetString().Should().Be("CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO");
+            t1.GetProperty("companyName").GetString().Should().Be("Công ty TNHH Thương mại & Kho vận Đại Phát");
         }
 
         var saasBillingService = new SaasBillingService(db);
@@ -581,7 +581,7 @@ public sealed class Wave07PlatformControlPlaneAndResidualsTests
             subDoc.RootElement.GetProperty("activeWarehouses").GetInt32().Should().Be(1);
             subDoc.RootElement.GetProperty("usedWarehouses").GetInt32().Should().Be(1);
             subDoc.RootElement.GetProperty("maxWarehouses").GetInt32().Should().Be(3);
-            subDoc.RootElement.GetProperty("companyName").GetString().Should().Be("CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO");
+            subDoc.RootElement.GetProperty("companyName").GetString().Should().Be("Công ty TNHH Thương mại & Kho vận Đại Phát");
         }
 
         var reportOps = new ReportOperationsService(db);
@@ -606,7 +606,7 @@ public sealed class Wave07PlatformControlPlaneAndResidualsTests
             statusDoc.RootElement.GetProperty("reasonCategory").GetString().Should().Be("BILLING_OVERDUE");
             statusDoc.RootElement.GetProperty("suspendedBy").GetString().Should().NotBeNullOrWhiteSpace();
             statusDoc.RootElement.GetProperty("suspendedAtVi").GetString().Should().Be("Vừa xong");
-            statusDoc.RootElement.GetProperty("companyName").GetString().Should().Be("CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO");
+            statusDoc.RootElement.GetProperty("companyName").GetString().Should().Be("Công ty TNHH Thương mại & Kho vận Đại Phát");
         }
 
         // 5. Quota Override ContractReference & EffectiveUntilDate
@@ -1321,7 +1321,7 @@ public sealed class Wave07PlatformControlPlaneAndResidualsTests
         {
             subDoc.RootElement.GetProperty("currentCyclePaid").GetBoolean().Should().BeTrue();
             subDoc.RootElement.GetProperty("currentCycleSettlementBannerVi").GetString()
-                .Should().Be("Hóa đơn kỳ 11/2026 (INV-SAAS-202611-002) đã tất toán đầy đủ (1.490.000 đ) • Xác nhận lúc: 02/11/2026 18:30");
+                .Should().Be("Hóa đơn kỳ 11/2026 (INV-SAAS-202611-002) đã tất toán đầy đủ (1.490.000 ₫) • Xác nhận lúc: 02/11/2026 18:30");
         }
 
         // 6. Reset invoice #2 back to UNPAID at the end of the test
@@ -1598,7 +1598,7 @@ public sealed class Wave07PlatformControlPlaneAndResidualsTests
         custSubJson.Should().NotContain("Xác nhận thủ công bởi");
         custSubJson.Should().NotContain("UNC");
         custInvoicesJson.Should().Contain("Đã xác nhận thanh toán (Mã giao dịch: FT2630698418102)");
-        custSubJson.Should().Contain("Hóa đơn kỳ 11/2026 (INV-SAAS-202611-002) đã tất toán đầy đủ (1.490.000 đ) • Xác nhận lúc: 02/11/2026 18:30");
+        custSubJson.Should().Contain("Hóa đơn kỳ 11/2026 (INV-SAAS-202611-002) đã tất toán đầy đủ (1.490.000 ₫) • Xác nhận lúc: 02/11/2026 18:30");
 
         // Reset back to UNPAID and check dynamic dashboard due label
         await controller.ReconcileBillingInvoice(175, resetToPending: true);
@@ -1830,14 +1830,14 @@ public sealed class Wave07PlatformControlPlaneAndResidualsTests
                 x => x.GetProperty("roleCode").GetString()!,
                 x => x.GetProperty("displayNameVi").GetString()!);
 
-            labelsByCode["Admin"].Should().Be("Quản trị viên công ty");
+            labelsByCode["Admin"].Should().Be("Quản trị công ty");
             labelsByCode["Manager"].Should().Be("Quản lý kho");
             labelsByCode["Accountant"].Should().Be("Kế toán kho");
             labelsByCode["WarehouseStaff"].Should().Be("Nhân viên kho");
             labelsByCode["Supervisor"].Should().Be("Giám sát & QC");
             labelsByCode["Receiver"].Should().Be("Nhân viên nhận hàng");
             labelsByCode["PickerPacker"].Should().Be("Nhân viên lấy/đóng gói");
-            labelsByCode["Viewer"].Should().Be("Chỉ xem / Kiểm toán");
+            labelsByCode["Viewer"].Should().Be("Kiểm toán nội bộ");
             labelsByCode["ShiftLead"].Should().Be("Vai trò ShiftLead");
 
             labelsByCode.Values.Should().OnlyHaveUniqueItems();
@@ -2009,7 +2009,7 @@ public sealed class Wave07PlatformControlPlaneAndResidualsTests
             topEvent.GetProperty("eventLabelVi").GetString().Should().Be("Cập nhật hạn ngạch doanh nghiệp");
             topEvent.GetProperty("targetCode").GetString().Should().Be("TENANT-001");
             topEvent.GetProperty("timestampVi").GetString().Should().Be("03/11/2026 16:15");
-            topEvent.GetProperty("actorDisplay").GetString().Should().Be("Quản trị viên Cấp cao (qa_admin)");
+            topEvent.GetProperty("actorDisplay").GetString().Should().Be("Chủ dự án (SuperAdmin)");
             topEvent.GetProperty("summaryVi").GetString().Should().Contain("15.000 đơn");
             topEvent.GetProperty("tone").GetString().Should().Be("info");
 

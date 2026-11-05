@@ -38,7 +38,7 @@ export function ExportReceiptsBatchAwbCard({
       >
         <div className="ui-stack" style={{ gap: 12 }}>
           <div className="ui-inline-wrap" style={{ gap: 8, alignItems: 'end', padding: '8px 10px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 260 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 280 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>Nghiệp vụ HĐĐT (NĐ 70/2025/NĐ-CP &amp; TT 32/2025/TT-BTC)</span>
               <select
                 aria-label="Nghiệp vụ Hóa đơn điện tử NĐ 70/2025"
@@ -46,9 +46,9 @@ export function ExportReceiptsBatchAwbCard({
                 value={einvoiceAction}
                 onChange={(e) => setEinvoiceAction(e.target.value as 'ISSUE' | 'ADJUSTMENT' | 'REPLACEMENT')}
               >
-                <option value="ISSUE">ISSUE — Phát hành hóa đơn GTGT từ Phiếu xuất kho</option>
-                <option value="ADJUSTMENT">ADJUSTMENT — Điều chỉnh hóa đơn (NĐ 70/2025/NĐ-CP)</option>
-                <option value="REPLACEMENT">REPLACEMENT — Thay thế hóa đơn (NĐ 70/2025/NĐ-CP)</option>
+                <option value="ISSUE">Phát hành HĐ GTGT từ Phiếu xuất</option>
+                <option value="ADJUSTMENT">Điều chỉnh hóa đơn (NĐ 70/2025)</option>
+                <option value="REPLACEMENT">Thay thế hóa đơn (NĐ 70/2025)</option>
               </select>
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 150 }}>
@@ -61,7 +61,7 @@ export function ExportReceiptsBatchAwbCard({
                 placeholder="VD: 1"
               />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 280 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 260 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>Số biên bản thỏa thuận (NĐ 70/2025/NĐ-CP)</span>
               <input
                 aria-label="Số biên bản thỏa thuận hai bên"
@@ -69,7 +69,7 @@ export function ExportReceiptsBatchAwbCard({
                 required={einvoiceAction !== 'ISSUE'}
                 value={agreementDocumentNo}
                 onChange={(e) => setAgreementDocumentNo(e.target.value)}
-                placeholder="Số biên bản thỏa thuận hai bên (bắt buộc khi Điều chỉnh/Thay thế theo NĐ 70/2025/NĐ-CP)"
+                placeholder="Nhập số biên bản thỏa thuận..."
               />
             </label>
           </div>
@@ -201,7 +201,7 @@ export function ExportReceiptsBatchAwbCard({
               <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
                 Chọn phiếu xuất để in gộp vận đơn &amp; chốt bàn giao ({selectedHandoverReceiptIds.length} đã chọn)
               </span>
-              <label style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, margin: 0, height: 'auto' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, margin: 0, height: 'auto', maxWidth: '100%' }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>Danh sách / Quét AWB bàn giao:</span>
                 <input
                   type="search"
@@ -209,8 +209,8 @@ export function ExportReceiptsBatchAwbCard({
                   aria-label="Nhập hoặc quét mã vận đơn bàn giao"
                   value={handoverTrackingInput}
                   onChange={(e) => setHandoverTrackingInput(e.target.value)}
-                  placeholder="Nhập hoặc quét mã vận đơn AWB..."
-                  style={{ marginTop: 0, minHeight: 34, minWidth: 340, width: 360, maxWidth: '100%', padding: '4px 10px' }}
+                  placeholder="Nhập hoặc quét mã AWB..."
+                  style={{ marginTop: 0, minHeight: 34, minWidth: 220, width: 280, maxWidth: '100%', padding: '4px 10px' }}
                 />
               </label>
             </div>
@@ -218,7 +218,7 @@ export function ExportReceiptsBatchAwbCard({
               <table className="ui-table-compact" aria-label="Chọn phiếu xuất để in gộp vận đơn & chốt bàn giao" data-testid="handover-receipt-selector-table">
                 <thead>
                   <tr>
-                    <th style={{ width: 52, textAlign: 'center' }}>Chọn</th>
+                    <th style={{ width: 76, minWidth: 76, textAlign: 'center' }}>Chọn</th>
                     <th>Mã phiếu xuất</th>
                     <th>Hãng vận chuyển</th>
                     <th>Mã vận đơn AWB</th>
@@ -234,7 +234,7 @@ export function ExportReceiptsBatchAwbCard({
                   ) : (
                     receipts.slice(0, 6).map((r, idx) => {
                       const rowAwb = r.trackingNumber || (idx === 0 ? 'GHN84920188' : idx === 1 ? 'VTP99201122' : `AWB-${r.code}`);
-                      const rowCarrier = r.carrierCode || (idx === 0 ? 'GHN Express' : idx === 1 ? 'Viettel Post' : 'GHN Express');
+                      const rowCarrier = r.carrierCode || (idx === 0 ? 'Giao Hàng Nhanh (GHN)' : idx === 1 ? 'Viettel Post' : 'Giao Hàng Nhanh (GHN)');
                       const isChecked = selectedHandoverReceiptIds.includes(r.id);
                       return (
                         <tr key={r.id}>

@@ -88,7 +88,7 @@ export function PurchaseOrderListCard({
                     </td>
                     <td style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{isoDay(item.expectedDate)}</td>
                     <td className="inbound-planning-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.baseOrderedQuantity.toLocaleString('vi-VN')} THÙNG</td>
-                    <td className="inbound-planning-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{Number(item.totalAmount || 0).toLocaleString('vi-VN')} đ</td>
+                    <td className="inbound-planning-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{Number(item.totalAmount || 0).toLocaleString('vi-VN')} ₫</td>
                     <td>
                       <div className="ui-inline-actions" style={{ gap: 6, flexWrap: 'nowrap' }}>
                         <button type="button" style={{ whiteSpace: 'nowrap', background: '#f8fafc', color: '#0f172a', border: '1px solid #cbd5e1' }} onClick={() => void viewDetail(item.id)}>Xem chi tiết</button>

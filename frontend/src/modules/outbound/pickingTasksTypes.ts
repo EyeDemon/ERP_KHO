@@ -148,7 +148,7 @@ export const failureMessage = (e: unknown) => {
 export const telemetryLabels: Record<string, string> = {
   AMR_ASRS_CONVEYOR_SYNCHRONIZED: 'Đã sắp xếp lộ trình đi bộ nhặt hàng chữ S (Dãy → Kệ → Tầng → Ô)',
   RFID_GATE_AND_COLD_CHAIN_SENSORS_ONLINE: 'Đã kiểm tra điều kiện bảo quản theo phân khu kệ',
-  VOICE_PTL_HANDS_FREE_DIRECTED_ACTIVE: 'Kết hợp ưu tiên lô cận hạn FEFO',
+  VOICE_PTL_HANDS_FREE_DIRECTED_ACTIVE: 'Kết hợp ưu tiên lô cận hạn xuất trước',
 };
 
 export const defaultPutToWallSlots: PutToWallSlot[] = Array.from({ length: 8 }, (_, i) => ({

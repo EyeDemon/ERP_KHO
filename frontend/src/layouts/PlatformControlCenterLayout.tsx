@@ -8,8 +8,9 @@ import {
 import apiClient, { logout } from '../services/apiClient';
 import {
   clearActiveImpersonationState, getActiveImpersonationState,
-  type ActiveImpersonationState,
+  normalizeTenantDisplayName, type ActiveImpersonationState,
 } from '../config/portalMode';
+import { formatUserDisplayNameVi } from '../services/permissionPresentation';
 import {
   formatPlatformRoleBadgeLabel,
   PlatformIdentityContext,
@@ -227,7 +228,7 @@ export const PlatformControlCenterLayout: React.FC<{ children?: React.ReactNode 
         <div style={{ padding: '14px 16px', borderTop: '1px solid #1e293b', backgroundColor: '#020617', fontSize: 12 }}>
           <div style={{ color: '#cbd5e1', marginBottom: 4 }}>Tài khoản quản trị nền tảng</div>
           <div data-testid="platform-sidebar-actor" style={{ fontWeight: 600, color: '#f8fafc', marginBottom: 10 }}>
-            {actorUsername} ({activeRole})
+            {formatUserDisplayNameVi(actorUsername, activeRole)}
           </div>
           <button
             type="button"
@@ -250,17 +251,17 @@ export const PlatformControlCenterLayout: React.FC<{ children?: React.ReactNode 
             role="status"
             data-testid="active-impersonation-banner"
             className="platform-sticky-impersonation-bar"
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'nowrap', gap: 12 }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}
           >
             <span data-testid="platform-sticky-impersonation-bar" style={{ display: 'none' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
               <ShieldAlert size={16} strokeWidth={2} aria-hidden="true" color="#b45309" style={{ flexShrink: 0 }} />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span>
                 {isTenantSuspended
                   ? 'Đang trong phiên chẩn đoán chỉ đọc (Doanh nghiệp đang tạm khóa) — '
                   : 'Đang trong phiên hỗ trợ kỹ thuật chỉ đọc: '}
                 <strong>{impersonationState.tenantCode || `TENANT-${String(impersonationState.tenantId).padStart(3, '0')}`}</strong>{' '}
-                ({!impersonationState.tenantName || impersonationState.tenantName === 'Doanh nghiệp Kho vận ERP_KHO (Tenant 1)' ? 'CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO' : impersonationState.tenantName}) • Ticket:{' '}
+                ({normalizeTenantDisplayName(impersonationState.tenantName)}) • Ticket:{' '}
                 <strong>{impersonationState.ticketCode}</strong> •{' '}
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 700, color: '#b45309', flexShrink: 0, whiteSpace: 'nowrap' }}>
@@ -288,7 +289,7 @@ export const PlatformControlCenterLayout: React.FC<{ children?: React.ReactNode 
 
         <header
           data-testid="platform-header"
-          style={{ backgroundColor: '#ffffff', borderBottom: '1px solid #e2e8f0', padding: '8px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}
+          style={{ position: 'sticky', top: 0, zIndex: 30, backgroundColor: '#ffffff', borderBottom: '1px solid #e2e8f0', padding: '8px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}
         >
           <div>
             <h1 data-testid="platform-page-heading" style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0f172a', lineHeight: 1.25 }}>
@@ -337,10 +338,12 @@ export const PlatformControlCenterLayout: React.FC<{ children?: React.ReactNode 
           </div>
         </header>
 
-        <main id="platform-main-content" tabIndex={-1} style={{ flex: 1, padding: '10px 20px', overflowY: 'auto' }}>
-          <PlatformIdentityContext.Provider value={outletContext}>
-            {children ?? <Outlet context={outletContext} />}
-          </PlatformIdentityContext.Provider>
+        <main id="platform-main-content" tabIndex={-1} style={{ flex: 1, padding: '10px 20px' }}>
+          <div className="platform-main-inner" style={{ maxWidth: 1480, width: '100%', marginLeft: 'auto', marginRight: 'auto', boxSizing: 'border-box' }}>
+            <PlatformIdentityContext.Provider value={outletContext}>
+              {children ?? <Outlet context={outletContext} />}
+            </PlatformIdentityContext.Provider>
+          </div>
         </main>
       </div>
     </div>

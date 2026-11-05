@@ -97,14 +97,14 @@ export function StockTransferInTransitCard(props: {
           <table aria-label="Tồn kho đang vận chuyển">
             <thead>
               <tr>
-                <th>Mã phiếu</th>
-                <th>Kho nguồn → Kho đích</th>
-                <th>Sản phẩm</th>
-                <th>ĐVT</th>
-                <th className="ui-number" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>SL đã xuất</th>
-                <th className="ui-number" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>SL đang vận chuyển</th>
-                <th>Thời điểm xuất</th>
-                <th className="ui-number" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Thời gian vận chuyển</th>
+                <th style={{ minWidth: 100, whiteSpace: 'nowrap' }}>Mã phiếu</th>
+                <th style={{ minWidth: 150 }}>Kho nguồn → Kho đích</th>
+                <th style={{ minWidth: 150 }}>Sản phẩm</th>
+                <th style={{ minWidth: 78, whiteSpace: 'nowrap' }}>Đơn vị</th>
+                <th className="ui-number" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 92, whiteSpace: 'nowrap' }}>SL đã xuất</th>
+                <th className="ui-number" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 110, whiteSpace: 'nowrap' }}>Đang đi đường</th>
+                <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Thời điểm xuất</th>
+                <th className="ui-number" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 105, whiteSpace: 'nowrap' }}>Giờ đi đường</th>
               </tr>
             </thead>
             <tbody>
@@ -112,17 +112,17 @@ export function StockTransferInTransitCard(props: {
                 <tr key={`${row.transferId}-${row.productId}`}>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button type="button" onClick={() => onOpenDetail(row.transferId)}>
-                      <strong style={{ whiteSpace: 'nowrap' }}>{row.transferCode}</strong>
+                      <strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{row.transferCode}</strong>
                     </button>
                   </td>
                   <td>{row.sourceWarehouseName} → {row.destinationWarehouseName}</td>
-                  <td><strong style={{ whiteSpace: 'nowrap' }}>{row.productCode}</strong> — {row.productName}</td>
-                  <td>{row.unitName === 'QA_UNIT' || row.unitName === 'QA-PCS' ? 'THÙNG' : row.unitName}</td>
+                  <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{row.productCode}</strong> — {row.productName}</td>
+                  <td>{!row.unitName || row.unitName.trim().toUpperCase() === 'ĐVT' ? 'Cái' : (row.unitName === 'QA_UNIT' || row.unitName === 'QA-PCS' ? 'THÙNG' : row.unitName)}</td>
                   <td className="ui-number" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.dispatchedQuantity}</td>
                   <td className="ui-number" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                     <UiBadge tone="warning">{row.inTransitQuantity}</UiBadge>
                   </td>
-                  <td>{row.dispatchedAt ? formatDateTimeVn(row.dispatchedAt) : '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{row.dispatchedAt ? formatDateTimeVn(row.dispatchedAt) : '—'}</td>
                   <td className="ui-number" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.hoursInTransit}h</td>
                 </tr>
               ))}
@@ -154,11 +154,11 @@ export function StockTransferListCard(props: {
           <table aria-label="Danh sách phiếu điều chuyển">
             <thead>
               <tr>
-                <th>Mã phiếu</th>
-                <th>Luồng kho</th>
-                <th>Trạng thái</th>
-                <th>Ngày tạo</th>
-                <th style={{ paddingRight: 10, whiteSpace: 'nowrap' }}>Hành động</th>
+                <th style={{ minWidth: 105, whiteSpace: 'nowrap' }}>Mã phiếu</th>
+                <th style={{ minWidth: 150 }}>Luồng kho</th>
+                <th style={{ minWidth: 105, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                <th style={{ minWidth: 125, whiteSpace: 'nowrap' }}>Ngày tạo</th>
+                <th style={{ minWidth: 100, paddingRight: 10, whiteSpace: 'nowrap' }}>Hành động</th>
               </tr>
             </thead>
             <tbody>
@@ -166,7 +166,7 @@ export function StockTransferListCard(props: {
                 const normalized = normalizeStatus(item.status);
                 return (
                   <tr key={item.id}>
-                    <td style={{ whiteSpace: 'nowrap' }}><strong style={{ whiteSpace: 'nowrap' }}>{item.code}</strong></td>
+                    <td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.code}</strong></td>
                     <td>
                       <span className="transfer-flow" style={{ display: 'block', lineHeight: 1.25 }}>
                         <span style={{ display: 'block', color: '#475569' }}>{item.sourceWarehouseName} →</span>

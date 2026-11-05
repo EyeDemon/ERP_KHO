@@ -1,3 +1,4 @@
+import { Lock } from 'lucide-react';
 import { useState } from 'react';
 import apiClient from '../../services/apiClient';
 import { UiBadge, UiCard, UiMetric, UiMetricGrid, UiTableScroll } from '../../ui/ProductionUi';
@@ -221,9 +222,13 @@ export function ExportReceiptDetailCard({
         {(selectedReceipt.totalAmount !== undefined || selectedReceipt.details.some(d => d.unitPrice === null)) && (
           <div>
             <strong>Tổng tiền:</strong>{' '}
-            {selectedReceipt.totalAmount === null || selectedReceipt.details.some(d => d.unitPrice === null)
-              ? 'Ẩn theo phân quyền'
-              : `${Number(selectedReceipt.totalAmount ?? 0).toLocaleString('vi-VN')} VND`}
+            {selectedReceipt.totalAmount === null || selectedReceipt.details.some(d => d.unitPrice === null) ? (
+              <span className="ui-cost-masked-badge" style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#475569', fontSize: 12, fontWeight: 600 }}>
+                <Lock size={12} aria-hidden="true" /> Ẩn theo quyền
+              </span>
+            ) : (
+              `${Number(selectedReceipt.totalAmount ?? 0).toLocaleString('vi-VN')} ₫`
+            )}
           </div>
         )}
         <div><strong>Ngày tạo:</strong> {new Date(selectedReceipt.createdAt).toLocaleString('vi-VN')}</div>
@@ -248,9 +253,9 @@ export function ExportReceiptDetailCard({
         <table aria-label={'Chi tiết phiếu xuất ' + selectedReceipt.code}>
           <thead>
             <tr>
-              <th style={{ textAlign: 'center', width: 52 }}>STT</th>
+              <th style={{ textAlign: 'center', width: 76, minWidth: 76 }}>STT</th>
               <th>Sản phẩm</th>
-              <th style={{ textAlign: 'center', width: 88 }}>ĐVT</th>
+              <th style={{ minWidth: 78, textAlign: 'center' }}>Đơn vị</th>
               <th className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số lượng</th>
               <th className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đơn giá</th>
               <th className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Thành tiền</th>
@@ -259,14 +264,19 @@ export function ExportReceiptDetailCard({
           <tbody>
             {selectedReceipt.details.map((d, idx) => {
               const unitDisplay = !d.unitName || d.unitName === 'QA_UNIT' || d.unitName === 'QA-PCS' ? 'THÙNG' : d.unitName;
+              const maskedBadge = (
+                <span className="ui-cost-masked-badge" style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#475569', fontSize: 12, fontWeight: 600 }}>
+                  <Lock size={12} aria-hidden="true" /> Ẩn theo quyền
+                </span>
+              );
               return (
                 <tr key={d.id}>
                   <td style={{ textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{idx + 1}</td>
                   <td><strong style={{ whiteSpace: 'nowrap' }}>{d.productCode}</strong> - {d.productName}</td>
                   <td style={{ textAlign: 'center' }}>{unitDisplay}</td>
                   <td className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.quantity} {unitDisplay}</td>
-                  <td className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.unitPrice === null ? 'Ẩn theo phân quyền' : `${Number(d.unitPrice || 0).toLocaleString('vi-VN')} VND`}</td>
-                  <td className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.unitPrice === null || d.lineTotalAmount === null ? 'Ẩn theo phân quyền' : `${(d.lineTotalAmount !== undefined ? Number(d.lineTotalAmount) : Number(d.quantity || 0) * Number(d.unitPrice || 0)).toLocaleString('vi-VN')} VND`}</td>
+                  <td className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.unitPrice === null ? maskedBadge : `${Number(d.unitPrice || 0).toLocaleString('vi-VN')} ₫`}</td>
+                  <td className="export-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{d.unitPrice === null || d.lineTotalAmount === null ? maskedBadge : `${(d.lineTotalAmount !== undefined ? Number(d.lineTotalAmount) : Number(d.quantity || 0) * Number(d.unitPrice || 0)).toLocaleString('vi-VN')} ₫`}</td>
                 </tr>
               );
             })}

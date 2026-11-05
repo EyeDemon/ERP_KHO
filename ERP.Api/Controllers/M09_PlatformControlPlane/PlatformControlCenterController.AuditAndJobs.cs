@@ -160,11 +160,11 @@ public sealed partial class PlatformControlCenterController
             new
             {
                 workerName = "OutboxDispatcherWorker",
-                titleVi = "Tiến trình đồng bộ hóa đơn & sổ cái",
-                descriptionVi = "Đẩy sự kiện hóa đơn điện tử NĐ 70/2025 & bút toán kế toán sang MISA/Viettel và cổng vận chuyển",
+                titleVi = "Tiến trình đồng bộ hóa đơn & vận đơn",
+                descriptionVi = "Đồng bộ hóa đơn điện tử NĐ 70/2025 sang hệ thống kế toán và cập nhật trạng thái vận đơn các hãng vận chuyển",
                 status = "HEALTHY",
                 statusLabelVi = "Hoạt động tốt",
-                scope = "Multi-Tenant Outbox + Multi-Carrier Adapter Dispatch",
+                scope = "Đồng bộ hóa đơn điện tử & vận đơn đa đối tác",
                 intervalSeconds = 30,
                 lastRunAtUtc = outboxBeat.ObservedAtUtc,
                 lastRunRelativeVi = outboxBeat.RelativeVi,
@@ -178,11 +178,11 @@ public sealed partial class PlatformControlCenterController
             new
             {
                 workerName = "InventoryConsistencyWorker",
-                titleVi = "Tiến trình đối soát bất biến tồn kho 9 chiều",
-                descriptionVi = "Kiểm tra chéo số dư InventoryStocks và tổng đại số sổ cái InventoryTransactions trên toàn nền tảng",
+                titleVi = "Tiến trình đối soát cân bằng sổ cái tồn kho",
+                descriptionVi = "Kiểm tra đối chiếu tự động giữa số dư tồn kho thực tế và tổng phát sinh sổ cái trên toàn hệ thống",
                 status = "HEALTHY",
                 statusLabelVi = "Hoạt động tốt",
-                scope = "9-Dimension GrainHash & Ledger-to-Balance Parity Check",
+                scope = "Đối soát cân bằng sổ cái tồn kho toàn hệ thống",
                 intervalSeconds = 300,
                 lastRunAtUtc = consistencyBeat.ObservedAtUtc,
                 lastRunRelativeVi = consistencyBeat.RelativeVi,
@@ -196,11 +196,11 @@ public sealed partial class PlatformControlCenterController
             new
             {
                 workerName = "WebhookRetryAndCleanupWorker",
-                titleVi = "Tiến trình thu hồi webhook & dọn phiên hỗ trợ",
-                descriptionVi = "Thử lại sự kiện Webhook sàn TMĐT/vận chuyển và quét độc lập từng Doanh nghiệp đang hoạt động để tính phí lưu kho theo Pallet/Bin/CBM",
+                titleVi = "Tiến trình đồng bộ đối tác & dọn phiên hỗ trợ",
+                descriptionVi = "Thử lại thông báo sàn thương mại điện tử, thu hồi phiên hỗ trợ hết hạn và tổng hợp sản lượng lưu kho định kỳ",
                 status = "HEALTHY",
                 statusLabelVi = "Hoạt động tốt",
-                scope = "Webhook Retry Queue + Multi-Tenant 3PL Storage Billing Accrual",
+                scope = "Hàng đợi đồng bộ đối tác & phiên hỗ trợ kỹ thuật",
                 intervalSeconds = 60,
                 lastRunAtUtc = webhookBeat.ObservedAtUtc,
                 lastRunRelativeVi = webhookBeat.RelativeVi,
@@ -234,30 +234,34 @@ public sealed partial class PlatformControlCenterController
             return forbidResult;
         }
 
-        var logs = await db.AuditLogs
+        var rawLogs = await db.AuditLogs
             .IgnoreQueryFilters()
             .AsNoTracking()
+            .Where(a => a.EntityName != "UserSession"
+                     && !a.Action.StartsWith("Authentication.")
+                     && !a.Action.StartsWith("Auth."))
             .OrderByDescending(a => a.Id)
             .Take(100)
-            .Select(a => new
-            {
-                a.Id,
-                a.TenantId,
-                a.UserId,
-                a.ImpersonatedBySupportUserId,
-                a.ImpersonatedByUserId,
-                securityDomain = a.SecurityDomain ?? "CUSTOMER_TENANT",
-                a.Action,
-                a.EntityName,
-                a.EntityId,
-                a.OldValues,
-                a.NewValues,
-                a.Reason,
-                a.Result,
-                a.CorrelationId,
-                a.Timestamp
-            })
             .ToListAsync(ct);
+
+        var logs = rawLogs.Select(a => new
+        {
+            a.Id,
+            a.TenantId,
+            a.UserId,
+            a.ImpersonatedBySupportUserId,
+            a.ImpersonatedByUserId,
+            securityDomain = a.SecurityDomain ?? "CUSTOMER_TENANT",
+            a.Action,
+            a.EntityName,
+            a.EntityId,
+            a.OldValues,
+            a.NewValues,
+            Reason = SanitizePlatformAuditReasonVi(a.Reason),
+            a.Result,
+            a.CorrelationId,
+            a.Timestamp
+        }).ToList();
 
         return Ok(new { totalCount = logs.Count, items = logs });
     }

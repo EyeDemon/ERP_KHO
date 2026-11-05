@@ -287,7 +287,7 @@ const WarehouseCalendar = () => {
               <div tabIndex={0} role="region" aria-label="Vùng cuộn lịch vận hành tuần" style={{ maxHeight: 180, overflowY: 'auto' }}>
                 <UiTableScroll>
                   <table aria-label="Lịch vận hành tuần" className="ui-table-compact">
-                    <thead><tr><th>Ngày</th><th>Mở cửa</th><th>Mở</th><th>Đóng</th><th>Hạn cắt đơn nhập</th><th>Hạn cắt đơn xuất</th></tr></thead>
+                    <thead><tr><th style={{ minWidth: 96 }}>Ngày</th><th style={{ minWidth: 80, whiteSpace: 'nowrap' }}>Mở cửa</th><th style={{ minWidth: 88, whiteSpace: 'nowrap' }}>Giờ mở</th><th style={{ minWidth: 88, whiteSpace: 'nowrap' }}>Giờ đóng</th><th style={{ minWidth: 115, whiteSpace: 'nowrap' }}>Cắt đơn nhập</th><th style={{ minWidth: 115, whiteSpace: 'nowrap' }}>Cắt đơn xuất</th></tr></thead>
                     <tbody>
                       {calendar.days.map((day, index) => {
                         const form = days[index];

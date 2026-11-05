@@ -2,14 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
 import { hasPermission, usePermissionSet } from '../services/authorization';
 import { useHardwareScannerWedge } from '../hooks/useHardwareScannerWedge';
+import { CustomerReturnsTableAndCards } from '../modules/returns/CustomerReturnsTableAndCards';
 import ReturnDispositionDrawer, { createRmaIdempotencyKey, normalizeCustomerReturnDto, type CustomerReturnDto } from '../modules/returns/ReturnDispositionDrawer';
-import { UiBadge, UiCard, UiEmptyState, UiMetricGrid, UiPage, UiPageHeader, UiTableScroll } from '../ui/ProductionUi';
-import {
-  rmaConditionLabelVi,
-  rmaDispositionLabelVi,
-  rmaStatusLabelVi,
-  warehouseLocationLabelVi,
-} from '../ui/vietnameseEnumLabels';
+import { UiCard, UiEmptyState, UiMetricGrid, UiPage, UiPageHeader } from '../ui/ProductionUi';
 import { CANONICAL_WH01_LABEL, formatWarehouseLabel } from '../utils/warehouseLabel';
 
 interface WarehouseOption { id: number; code: string; name: string; }
@@ -19,19 +14,6 @@ interface CustomerReturnListResponse {
   costHiddenByRbac?: boolean;
   summary?: { quarantinedCount?: number; inspectedCount?: number; restockedCount?: number; refurbishRtvScrapCount?: number };
 }
-
-const formatVnd = (val?: number | null): string =>
-  typeof val === 'number' && Number.isFinite(val) ? `${val.toLocaleString('vi-VN')} ₫` : '—';
-
-const formatShortDateVi = (iso?: string): string => {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  return `${dd}/${mm}/${yyyy}`;
-};
 
 export default function CustomerReturns() {
   usePermissionSet();
@@ -248,55 +230,62 @@ export default function CustomerReturns() {
 
       {errorState && errorState.status === 409 && (
         <div role="alert" data-testid="rma-conflict-banner" style={{ padding: '10px 14px', borderRadius: 8, background: '#fffbeb', border: '1px solid #f59e0b', color: '#92400e', fontSize: 13.5 }}>
-          <strong>Xung đột phiên bản (409 Conflict):</strong> {errorState.message}{' '}
+          <strong>Xung đột phiên bản (Mã 409):</strong> {errorState.message}{' '}
           <button type="button" className="ui-btn ui-btn-secondary" onClick={() => void loadData()}>Tải lại</button>
         </div>
       )}
 
       {errorState && errorState.status === 403 && (
         <div role="alert" data-testid="rma-forbidden-banner" style={{ padding: '10px 14px', borderRadius: 8, background: '#fef2f2', border: '1px solid #f87171', color: '#991b1b', fontSize: 13.5 }}>
-          <strong>Không đủ quyền truy cập (403 Forbidden):</strong> {errorState.message}
+          <strong>Không đủ quyền truy cập (Mã 403):</strong> {errorState.message}
         </div>
       )}
 
       {errorState && errorState.status !== 409 && errorState.status !== 403 && (
         <div role="alert" data-testid="rma-error-banner" style={{ padding: '10px 14px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fca5a5', color: '#991b1b', fontSize: 13.5 }}>
-          <strong>Thông báo lỗi{errorState.errorCode ? ` (${errorState.errorCode})` : ''}:</strong> {errorState.message}
+          <strong>Thông báo lỗi:</strong> {errorState.message}
         </div>
       )}
 
       <UiCard title="Quét tiếp nhận nhanh kiện hoàn vào Khu biệt trữ RMA (1 bước)">
-        <form onSubmit={handleIntakeSubmit} data-testid="rma-intake-scan-bar" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, alignItems: 'end' }}>
-          <label className="ui-field">
+        <form onSubmit={handleIntakeSubmit} data-testid="rma-intake-scan-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end', maxWidth: 1120 }}>
+          <label className="ui-field" style={{ flex: '1 1 205px', minWidth: 195 }}>
             <span>Mã vận đơn AWB / Đơn gốc</span>
-            <input aria-label="Mã vận đơn AWB hoặc mã đơn gốc" data-testid="input-rma-intake-scan" value={intakeScanCode} onChange={e => { setIntakeScanCode(e.target.value); intakeIdempotencyKeyRef.current = createRmaIdempotencyKey(); }} placeholder="Quét AWB, EX-2026-..., SO-..." />
+            <input aria-label="Mã vận đơn AWB hoặc mã đơn gốc" data-testid="input-rma-intake-scan" value={intakeScanCode} onChange={e => { setIntakeScanCode(e.target.value); intakeIdempotencyKeyRef.current = createRmaIdempotencyKey(); }} placeholder="Quét AWB, đơn gốc..." />
           </label>
-          <label className="ui-field">
+          <label className="ui-field" style={{ flex: '0 1 150px', minWidth: 135 }}>
             <span>Mã sản phẩm (SKU)</span>
             <input aria-label="Mã sản phẩm hoàn" data-testid="input-rma-intake-product" value={intakeProductCode} onChange={e => setIntakeProductCode(e.target.value)} placeholder="VD: SKU-1001" />
           </label>
-          <label className="ui-field">
+          <label className="ui-field" style={{ flex: '0 1 110px', minWidth: 96 }}>
             <span>Số lượng hoàn</span>
             <input type="number" min={1} aria-label="Số lượng hoàn" data-testid="input-rma-intake-qty" value={intakeQuantity} onChange={e => setIntakeQuantity(e.target.value)} />
           </label>
-          <label className="ui-field">
+          <label className="ui-field" style={{ flex: '1 1 215px', minWidth: 205 }}>
             <span>Kho tiếp nhận</span>
-            <select aria-label="Kho tiếp nhận" value={intakeWarehouseId} onChange={e => setIntakeWarehouseId(Number(e.target.value))}>
+            <select aria-label="Kho tiếp nhận" value={intakeWarehouseId} onChange={e => setIntakeWarehouseId(Number(e.target.value))} style={{ minWidth: 205 }}>
               {warehouses.length === 0 && <option value={1}>{CANONICAL_WH01_LABEL}</option>}
               {warehouses.map(w => <option key={w.id} value={w.id}>{formatWarehouseLabel(w.name, w.code, w.id)}</option>)}
             </select>
           </label>
-          <label className="ui-field">
+          <label className="ui-field" style={{ flex: '1 1 250px', minWidth: 245 }}>
             <span>Lý do hoàn trả</span>
-            <select aria-label="Lý do hoàn trả" value={intakeReason} onChange={e => setIntakeReason(e.target.value)}>
-              <option value="BUYER_REJECTED_DELIVERY">Khách từ chối nhận hàng (Hoàn đơn)</option>
+            <select aria-label="Lý do hoàn trả" value={intakeReason} onChange={e => setIntakeReason(e.target.value)} style={{ minWidth: 245 }}>
+              <option value="BUYER_REJECTED_DELIVERY">Khách từ chối nhận hàng</option>
               <option value="DAMAGED_IN_TRANSIT">Móp vỡ khi vận chuyển</option>
-              <option value="DEFECTIVE_WARRANTY">Lỗi kỹ thuật / Đổi trả bảo hành</option>
+              <option value="DEFECTIVE_WARRANTY">Lỗi kỹ thuật / Bảo hành</option>
               <option value="WRONG_ITEM_SENT">Giao sai mẫu / phân loại</option>
             </select>
           </label>
-          <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end' }}>
-            <button type="submit" data-testid="btn-submit-rma-intake" className="ui-btn ui-btn-primary ui-primary-button" disabled={isSubmittingIntake || !canCreateIntake} style={{ minHeight: 38, padding: '0 18px', whiteSpace: 'nowrap' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', marginLeft: 'auto' }}>
+            <button
+              type="submit"
+              data-testid="btn-submit-rma-intake"
+              className="ui-btn ui-btn-primary ui-primary-button"
+              disabled={isSubmittingIntake || !canCreateIntake}
+              title={!canCreateIntake ? 'Tài khoản hiện tại không có quyền tiếp nhận hàng hoàn' : undefined}
+              style={{ minHeight: 38, padding: '0 18px', whiteSpace: 'nowrap' }}
+            >
               {isSubmittingIntake ? 'Đang tiếp nhận...' : 'Tiếp nhận vào Khu biệt trữ RMA'}
             </button>
           </div>
@@ -305,21 +294,28 @@ export default function CustomerReturns() {
 
       <UiCard title="Danh sách Phiếu Hàng Hoàn & Định Đoạt (RMA)">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
-          <input type="search" aria-label="Tìm mã RMA, AWB hoặc SKU" placeholder="Tìm mã RMA, vận đơn AWB, SKU..." value={keyword} onChange={e => setKeyword(e.target.value)} style={{ minWidth: 220 }} />
-          <select aria-label="Lọc theo trạng thái RMA" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+          <input
+            type="search"
+            aria-label="Tìm mã RMA, AWB hoặc SKU"
+            placeholder="Tìm mã RMA, vận đơn, đơn gốc..."
+            value={keyword}
+            onChange={e => setKeyword(e.target.value)}
+            style={{ minWidth: 265, flex: '1 1 265px', maxWidth: 340 }}
+          />
+          <select aria-label="Lọc theo trạng thái RMA" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ minWidth: 190 }}>
             <option value="">Tất cả trạng thái</option>
             <option value="QUARANTINED">Đang biệt trữ</option>
             <option value="PENDING_INSPECTION">Chờ kiểm định QC</option>
             <option value="INSPECTED">Đã kiểm định</option>
             <option value="COMPLETED">Đã hoàn tất</option>
           </select>
-          <select aria-label="Lọc theo tình trạng vật lý" value={conditionFilter} onChange={e => setConditionFilter(e.target.value)}>
+          <select aria-label="Lọc theo tình trạng vật lý" value={conditionFilter} onChange={e => setConditionFilter(e.target.value)} style={{ minWidth: 205 }}>
             <option value="">Tất cả tình trạng vật lý</option>
             <option value="GOOD">Nguyên vẹn</option>
-            <option value="DAMAGED_BOX">Móp vỏ hộp (Cần thay vỏ)</option>
+            <option value="DAMAGED_BOX">Móp vỏ hộp</option>
             <option value="DEFECTIVE">Lỗi kỹ thuật / Hư hỏng</option>
           </select>
-          <select aria-label="Lọc theo hướng định đoạt" value={dispositionFilter} onChange={e => setDispositionFilter(e.target.value)}>
+          <select aria-label="Lọc theo hướng định đoạt" value={dispositionFilter} onChange={e => setDispositionFilter(e.target.value)} style={{ minWidth: 215 }}>
             <option value="">Tất cả hướng định đoạt</option>
             <option value="PENDING">Chờ quyết định</option>
             <option value="RESTOCK_AVAILABLE">Nhập lại tồn khả dụng</option>
@@ -335,94 +331,11 @@ export default function CustomerReturns() {
         ) : items.length === 0 ? (
           <UiEmptyState title="Chưa có kiện hàng hoàn trả nào khớp bộ lọc" detail="Sử dụng thanh Quét tiếp nhận nhanh ở trên để đưa kiện hoàn AWB vào Khu biệt trữ RMA." />
         ) : (
-          <UiTableScroll>
-            <table data-testid="customer-returns-table" className="ui-table-compact" aria-label="Bảng quản lý hàng hoàn và đổi trả RMA" style={{ width: '100%', minWidth: 0 }}>
-              <colgroup>
-                <col style={{ width: '12%' }} />
-                <col style={{ width: '13.5%' }} />
-                <col style={{ width: '12.5%' }} />
-                <col style={{ width: '23.5%' }} />
-                <col style={{ width: '16.5%' }} />
-                <col style={{ width: '5%' }} />
-                <col style={{ width: '8%' }} />
-                <col style={{ width: '9%' }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th style={{ padding: '5px 6px', whiteSpace: 'normal', lineHeight: 1.25 }}>Mã RMA &amp; Ngày</th>
-                  <th style={{ padding: '5px 6px', whiteSpace: 'normal', lineHeight: 1.25 }}>Trạng thái</th>
-                  <th style={{ padding: '5px 6px', whiteSpace: 'normal', lineHeight: 1.25 }}>Đơn gốc &amp; Vận đơn</th>
-                  <th style={{ padding: '5px 6px', whiteSpace: 'normal', lineHeight: 1.25 }}>Sản phẩm &amp; Tình trạng</th>
-                  <th style={{ padding: '5px 6px', whiteSpace: 'normal', lineHeight: 1.25 }}>Kho &amp; Vị trí biệt trữ</th>
-                  <th style={{ padding: '5px 6px', textAlign: 'right', whiteSpace: 'normal', lineHeight: 1.25 }}>SL Hoàn</th>
-                  <th style={{ padding: '5px 6px', textAlign: 'right', whiteSpace: 'normal', lineHeight: 1.25 }}>Đơn giá vốn</th>
-                  <th style={{ padding: '5px 5px', width: 88, maxWidth: 112, whiteSpace: 'nowrap' }}>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map(row => {
-                  const statusUpper = String(row.status ?? '').toUpperCase();
-                  const statusTone = statusUpper === 'COMPLETED' ? 'success' : statusUpper === 'INSPECTED' ? 'info' : 'warning';
-                  const condTone = row.condition === 'GOOD' ? 'success' : row.condition === 'DEFECTIVE' ? 'danger' : 'warning';
-                  const createdDate = formatShortDateVi(row.createdAt);
-                  return (
-                    <tr key={row.id} data-testid={`rma-row-${row.returnCode}`}>
-                      <td style={{ padding: '5px 6px', whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.3 }}>
-                        <div><strong>{row.returnCode}</strong></div>
-                        {createdDate ? <div style={{ fontSize: 11.5, color: '#475569', fontVariantNumeric: 'tabular-nums' }}>{createdDate}</div> : null}
-                      </td>
-                      <td style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>
-                        <UiBadge tone={statusTone}>{rmaStatusLabelVi(row.status)}</UiBadge>
-                      </td>
-                      <td style={{ padding: '5px 6px', whiteSpace: 'normal', overflowWrap: 'anywhere', lineHeight: 1.3 }}>
-                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{row.trackingNumber || '—'}</div>
-                        <div style={{ fontSize: 11.5, color: '#475569' }}>{row.exportReceiptCode || row.salesOrderCode || '—'}</div>
-                      </td>
-                      <td style={{ padding: '5px 6px', whiteSpace: 'normal', lineHeight: 1.35 }}>
-                        <div><strong>{row.productCode}</strong> — {row.productName}</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center', marginTop: 2 }}>
-                          <UiBadge tone={condTone}>{rmaConditionLabelVi(row.condition)}</UiBadge>
-                          <span style={{ fontSize: 11.5, color: '#475569', fontWeight: 500 }}>
-                            • {rmaDispositionLabelVi(row.disposition)}
-                          </span>
-                        </div>
-                      </td>
-                      <td style={{ padding: '5px 6px', whiteSpace: 'normal', overflowWrap: 'normal', wordBreak: 'normal', lineHeight: 1.3 }}>
-                        <div style={{ fontWeight: 600, color: '#0f172a' }}>
-                          {formatWarehouseLabel(row.warehouseName, row.warehouseCode, row.warehouseId)}
-                        </div>
-                        <div style={{ fontSize: 11.5, color: '#475569' }}>
-                          {warehouseLocationLabelVi(row.quarantineLocationCode || 'QUARANTINE-01')}
-                        </div>
-                      </td>
-                      <td style={{ padding: '5px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                        {row.quantity}
-                      </td>
-                      <td style={{ padding: '5px 6px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', lineHeight: 1.25 }}>
-                        {showUnitCost ? (
-                          <span data-testid="rma-cost-visible" style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{formatVnd(row.unitCost)}</span>
-                        ) : (
-                          <span data-testid="rma-cost-redacted" style={{ color: '#475569', fontStyle: 'italic' }}>Đã ẩn theo phân quyền</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '5px 5px', width: 88, maxWidth: 112, whiteSpace: 'nowrap' }}>
-                        <button
-                          type="button"
-                          data-testid="btn-open-disposition-drawer"
-                          className="ui-btn ui-btn-secondary"
-                          style={{ padding: '4px 7px', minHeight: 32, fontSize: 12, whiteSpace: 'nowrap' }}
-                          disabled={statusUpper === 'COMPLETED'}
-                          onClick={() => void openDispositionDrawer(row)}
-                        >
-                          Phân loại
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </UiTableScroll>
+          <CustomerReturnsTableAndCards
+            items={items}
+            showUnitCost={showUnitCost}
+            onOpenDisposition={openDispositionDrawer}
+          />
         )}
       </UiCard>
 

@@ -57,8 +57,8 @@ export function ProductFormDrawer({
           <label className="ui-stack" style={{ minWidth: 0 }}><span>Tên sản phẩm *</span><input aria-label="Tên sản phẩm" value={form.name} onChange={e => setForm(x => ({ ...x, name: e.target.value }))} placeholder="Nhập tên sản phẩm" required style={{ height: 38, boxSizing: 'border-box' }} /></label>
           <label className="ui-stack" style={{ gridColumn: '1 / -1' }}><span>Mô tả sản phẩm</span><textarea aria-label="Mô tả sản phẩm" value={form.description} onChange={e => setForm(x => ({ ...x, description: e.target.value }))} placeholder="VD: Thùng linh kiện điện tử tiêu chuẩn xuất nhập kho" rows={2} style={{ minHeight: 38, boxSizing: 'border-box' }} /></label>
           <label className="ui-stack"><span>Phân lớp bảo quản</span><input aria-label="Storage Class sản phẩm" value={form.storageClass} onChange={e => setForm(x => ({ ...x, storageClass: e.target.value }))} placeholder="VD: Nhiệt độ thường, Mát" maxLength={32} style={{ height: 38, boxSizing: 'border-box' }} /></label>
-          <label className="ui-stack"><span>Trọng lượng (kg / ĐVT)</span><input aria-label="Trọng lượng đơn vị kg" type="number" min="0.000001" step="0.000001" value={form.unitWeightKg} onChange={e => setForm(x => ({ ...x, unitWeightKg: e.target.value }))} placeholder="VD: 1.25" style={{ height: 38, boxSizing: 'border-box' }} /></label>
-          <label className="ui-stack"><span>Thể tích (m³ / ĐVT)</span><input aria-label="Thể tích đơn vị m3" type="number" min="0.00000001" step="0.00000001" value={form.unitVolumeM3} onChange={e => setForm(x => ({ ...x, unitVolumeM3: e.target.value }))} placeholder="VD: 0.015" style={{ height: 38, boxSizing: 'border-box' }} /></label>
+          <label className="ui-stack"><span>Trọng lượng (kg / đơn vị)</span><input aria-label="Trọng lượng đơn vị kg" type="number" min="0.000001" step="0.000001" value={form.unitWeightKg} onChange={e => setForm(x => ({ ...x, unitWeightKg: e.target.value }))} placeholder="VD: 1.25" style={{ height: 38, boxSizing: 'border-box' }} /></label>
+          <label className="ui-stack"><span>Thể tích (m³ / đơn vị)</span><input aria-label="Thể tích đơn vị m3" type="number" min="0.00000001" step="0.00000001" value={form.unitVolumeM3} onChange={e => setForm(x => ({ ...x, unitVolumeM3: e.target.value }))} placeholder="VD: 0.015" style={{ height: 38, boxSizing: 'border-box' }} /></label>
           <label className="ui-stack"><span>Quy đổi Pallet</span><input aria-label="Pallet-equivalent đơn vị" type="number" min="0.00000001" step="0.00000001" value={form.unitPalletEquivalent} onChange={e => setForm(x => ({ ...x, unitPalletEquivalent: e.target.value }))} placeholder="VD: 0.05" style={{ height: 38, boxSizing: 'border-box' }} /></label>
           <label className="ui-stack"><span>Phương thức theo dõi</span>
             <select
@@ -198,12 +198,12 @@ export function ProductCategoriesAndUomSection({
       )}
 
       {(canManage || canCreate) && (
-        <UiCard title="Cấu hình Quy đổi Đa Đơn vị tính (ĐVT phụ)">
+        <UiCard title="Cấu hình Quy đổi Đa Đơn vị tính (Đơn vị phụ)">
           <form onSubmit={addProductUom} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
-            <UiToolbarField label="Sản phẩm quy đổi ĐVT">
+            <UiToolbarField label="Sản phẩm quy đổi đơn vị">
               <select aria-label="Sản phẩm quy đổi ĐVT" value={activeUomProduct?.id || 0} onChange={e => setUomProductId(Number(e.target.value))} style={{ height: 38, boxSizing: 'border-box' }}>
                 {products.length === 0 ? <option value={0}>Chưa có sản phẩm</option> : null}
-                {products.map(item => <option key={item.id} value={item.id}>{item.code} – {item.name} (ĐVT gốc: {item.unitName || item.unitId})</option>)}
+                {products.map(item => <option key={item.id} value={item.id}>{item.code} – {item.name} (Đơn vị chuẩn: {!item.unitName || item.unitName.trim().toUpperCase() === 'ĐVT' ? 'Cái' : item.unitName})</option>)}
               </select>
             </UiToolbarField>
             <UiToolbarField label="Đơn vị quy đổi phụ">
@@ -212,16 +212,16 @@ export function ProductCategoriesAndUomSection({
                 {units.filter(u => u.isActive).map(u => <option key={u.id} value={u.id}>{u.code} – {u.name}</option>)}
               </select>
             </UiToolbarField>
-            <UiToolbarField label="Hệ số quy đổi ra ĐVT cơ sở">
+            <UiToolbarField label="Hệ số quy đổi ra đơn vị chuẩn">
               <input aria-label="Hệ số quy đổi ĐVT" type="number" min="1" step="1" value={uomFactor} onChange={e => setUomFactor(e.target.value)} placeholder="VD: 20" style={{ height: 38, boxSizing: 'border-box', width: 130 }} />
             </UiToolbarField>
-            <button type="submit" disabled={mutating || !activeUomProduct} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>Thêm quy đổi ĐVT</button>
+            <button type="submit" disabled={mutating || !activeUomProduct} style={{ height: 38, minHeight: 38, whiteSpace: 'nowrap' }}>Thêm quy đổi đơn vị</button>
           </form>
           {activeUomProduct && (activeUomProduct.uoms?.length ?? 0) > 0 && (
             <div className="ui-inline-wrap" style={{ marginTop: 10 }}>
               {activeUomProduct.uoms?.map(u => (
                 <UiBadge key={u.id ?? u.unitId}>
-                  {`1 ${u.unitName || u.unitCode || u.unitId} = ${u.conversionFactor ?? u.conversionFactorToBase ?? 1} ${activeUomProduct.unitName || 'ĐVT gốc'}`}
+                  {`1 ${u.unitName || u.unitCode || u.unitId} = ${u.conversionFactor ?? u.conversionFactorToBase ?? 1} ${!activeUomProduct.unitName || activeUomProduct.unitName.trim().toUpperCase() === 'ĐVT' ? 'đơn vị chuẩn' : activeUomProduct.unitName}`}
                   <button type="button" aria-label={`Xóa quy đổi ${u.unitName || u.unitCode || u.unitId}`} onClick={() => void removeProductUom(activeUomProduct.id, u.id ?? u.unitId)} className="ui-badge-remove">
                     <X size={14} aria-hidden="true" />
                   </button>

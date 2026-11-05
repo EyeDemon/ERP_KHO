@@ -111,7 +111,7 @@ const BusinessPartners = () => {
       const arCode = String(data?.receivableInvoiceCode || data?.arInvoiceCode || `AR-3PL-${targetId}-202610`);
       const total = typeof data?.totalBillingAmount === 'number' ? data.totalBillingAmount : billingSummary.totalBillingAmount;
       setIsStatementIssued(true);
-      setGenerated3PlStatementNotice(`Đã phát hành bảng kê ${code} • Hóa đơn phải thu: ${arCode} (${total.toLocaleString('vi-VN')} đ)`);
+      setGenerated3PlStatementNotice(`Đã phát hành bảng kê ${code} • Hóa đơn phải thu: ${arCode} (${total.toLocaleString('vi-VN')} ₫)`);
     } catch (e: any) {
       setGenerated3PlStatementNotice('');
       const code = e?.response?.data?.errorCode || e?.response?.data?.code || '';

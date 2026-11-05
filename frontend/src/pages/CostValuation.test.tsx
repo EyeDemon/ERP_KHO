@@ -75,21 +75,21 @@ describe('CostValuation Page', () => {
 
     const view = render(<CostValuation />);
 
-    expect(await screen.findByText('85.000.000 đ')).toBeTruthy();
+    expect(await screen.findByText('85.000.000 ₫')).toBeTruthy();
     expect(screen.getByText('Giá vốn hàng bán bình quân gia quyền')).toBeTruthy();
     expect(screen.getByText('Bảng Định giá Tồn kho theo Giá vốn Bình quân Gia quyền • 1 mặt hàng')).toBeTruthy();
     expect(view.container.textContent).not.toContain('(COGS)');
     expect(view.container.textContent).not.toContain('(MovingAverageCost)');
     expect(view.container.textContent).not.toContain('0 SKU');
-    expect(screen.getByText('51.000.000 đ')).toBeTruthy();
-    expect(screen.getByText('24.500.000 đ')).toBeTruthy();
+    expect(screen.getByText('51.000.000 ₫')).toBeTruthy();
+    expect(screen.getByText('24.500.000 ₫')).toBeTruthy();
     expect(screen.getByText('28,8%')).toBeTruthy();
     expect(screen.getByText('QA-E2E-001')).toBeTruthy();
     expect(screen.getByText('Kho Trung tâm (WH01)')).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: 'Đơn vị tính' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Đơn vị' })).toBeTruthy();
     expect(view.container.textContent).not.toContain('ĐVT');
-    expect(screen.getByText('120.000 đ')).toBeTruthy();
-    expect(screen.getByText('12.000.000 đ')).toBeTruthy();
+    expect(screen.getByText('120.000 ₫')).toBeTruthy();
+    expect(screen.getByText('12.000.000 ₫')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('btn-export-misa-xlsx'));
     await waitFor(() => {
@@ -219,11 +219,11 @@ describe('CostValuation Page', () => {
     expect(
       screen.getByText('Khấu trừ thuế Sàn TMĐT 1,5% (1% GTGT + 0,5% TNCN — Cấu hình chính sách thuế TMĐT)'),
     ).toBeTruthy();
-    expect(screen.getByText('Phí Hạ tầng Đơn hàng Cố định (3.000đ/đơn)')).toBeTruthy();
+    expect(screen.getByText('Phí Hạ tầng Đơn hàng Cố định (3.000 ₫/đơn)')).toBeTruthy();
     expect(screen.getByText('Lợi nhuận Ròng Sau Thuế Sàn & Phí')).toBeTruthy();
-    expect(screen.getByText('30.000 đ')).toBeTruthy();
-    expect(screen.getByText('3.000 đ')).toBeTruthy();
-    expect(screen.getByText('1.015.000 đ')).toBeTruthy();
+    expect(screen.getByText('30.000 ₫')).toBeTruthy();
+    expect(screen.getByText('3.000 ₫')).toBeTruthy();
+    expect(screen.getByText('1.015.000 ₫')).toBeTruthy();
   });
 
   it('separates /misa-exports and /cost-valuation into dedicated single-function workbenches without dual-purpose toggle tabs (WAVE-12)', async () => {
@@ -261,9 +261,9 @@ describe('CostValuation Page', () => {
     );
     expect(await wacView.findByTestId('wac-profit-reconciliation-grid')).toBeTruthy();
     expect(wacView.queryByTestId('btn-export-misa-xlsx')).toBeNull();
-    expect(wacView.getByText('45.650.000 đ')).toBeTruthy();
+    expect(wacView.getByText('45.650.000 ₫')).toBeTruthy();
     expect(wacView.getByText('84,54%')).toBeTruthy();
-    expect(wacView.getByText('42.689.000 đ')).toBeTruthy();
+    expect(wacView.getByText('42.689.000 ₫')).toBeTruthy();
     expect(wacView.queryByText('QA-SERIAL-001')).toBeNull();
   });
 
@@ -292,7 +292,7 @@ describe('CostValuation Page', () => {
     expect(kpiGrid.textContent).toContain('3 mặt hàng (Theo đơn vị tính chuẩn)');
     expect(kpiGrid.textContent).toContain('Mặt hàng giá trị tồn lớn nhất');
     expect(kpiGrid.textContent).toContain('Cập nhật giá vốn gần nhất');
-    expect(kpiGrid.textContent).toContain('76.500.000 đ');
+    expect(kpiGrid.textContent).toContain('76.500.000 ₫');
     expect(kpiGrid.textContent).toContain('QA-SERIAL-001');
     uaSpy.mockRestore();
   });

@@ -293,7 +293,7 @@ describe('InventoryTraceability',()=>{
     fireEvent.change(view.getByLabelText('ID sản phẩm'),{target:{value:'10'}});
     fireEvent.click(view.getByText('Truy vết'));
     expect(await view.findByText(/Chỉ hiển thị 500 nhóm tồn của trang hiện tại/)).toBeTruthy();
-    expect(view.getByText(/Lịch sử còn dữ liệu cũ hơn/)).toBeTruthy();
+    expect(view.getByText(/Lịch sử còn các bản ghi trước đó/)).toBeTruthy();
   });
 
   it('paginates warehouse stock into a second server window and back without repeating buckets',async()=>{

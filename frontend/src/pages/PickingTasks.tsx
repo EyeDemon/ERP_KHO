@@ -23,13 +23,28 @@ export default function PickingTasks() {
   const [isMobileViewport, setIsMobileViewport] = useState<boolean>(
     () => typeof window !== 'undefined' && window.innerWidth > 0 && window.innerWidth <= 767,
   );
+  const [isHandheldViewport, setIsHandheldViewport] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 480px)').matches) return true;
+    return window.innerWidth > 0 && window.innerWidth <= 480;
+  });
   const lock = useRef(new Set<string>());
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const onResize = () => setIsMobileViewport(window.innerWidth > 0 && window.innerWidth <= 767);
+    const mql480 = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 480px)') : null;
+    const onResize = () => {
+      setIsMobileViewport(window.innerWidth > 0 && window.innerWidth <= 767);
+      setIsHandheldViewport(
+        Boolean(mql480?.matches) || (window.innerWidth > 0 && window.innerWidth <= 480),
+      );
+    };
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    mql480?.addEventListener?.('change', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      mql480?.removeEventListener?.('change', onResize);
+    };
   }, []);
   const canAssign = usePermission('picking.assign');
   const canExecute = usePermission('picking.execute');
@@ -106,14 +121,30 @@ export default function PickingTasks() {
 
   if (loading && tasks.length === 0) return <p role="status">Đang tải nhiệm vụ lấy hàng...</p>;
 
+  const waitingCount = tasks.filter(x => x.status === 'Open' || x.status === 'Assigned').length;
+  const activePickingCount = tasks.filter(x => ['InProgress', 'ShortPick', 'Resolved'].includes(x.status)).length;
+  const completedPickingCount = tasks.filter(x => x.status === 'Completed').length;
+
   return (
     <UiPage>
       <div className="picking-tasks-page ui-stack" style={isMobileViewport ? { gap: 6 } : undefined}>
-        <UiPageHeader
-          eyebrow="Xuất kho"
-          title="Lấy hàng tại kệ"
-          description="Quét vị trí kệ và mã hàng để xác nhận lấy hàng theo FEFO."
-        />
+        <style>{`
+          @media (max-width: 480px) {
+            .picking-tasks-page .picking-page-header-wrap { display: none !important; }
+            .picking-tasks-page .picking-handheld-kpi-strip {
+              display: grid !important;
+              grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) !important;
+              gap: 6px !important;
+            }
+          }
+        `}</style>
+        <div className="picking-page-header-wrap" style={isHandheldViewport ? { display: 'none' } : undefined}>
+          <UiPageHeader
+            eyebrow="Xuất kho"
+            title="Lấy hàng tại kệ"
+            description="Quét vị trí kệ và mã hàng để xác nhận lấy hàng theo ưu tiên hạn dùng."
+          />
+        </div>
         {!isMobileViewport && (
           <div className="outbound-pipeline-stepper-mobile-hide">
             <OutboundPipelineStepper />
@@ -133,17 +164,59 @@ export default function PickingTasks() {
           }}
         />
 
-        <div className="ui-stack">
-          <PickingMobileStationCard
-            tasks={tasks}
-            selected={selected}
-            mobileScanInput={mobileScanInput}
-            setMobileScanInput={setMobileScanInput}
-            governanceBusy={governanceBusy}
-            setGovernanceBusy={setGovernanceBusy}
-            busy={busy}
-            setError={setError}
-          />
+        {isHandheldViewport && (
+          <section
+            aria-label="Tóm tắt tiến độ lấy hàng"
+            data-testid="picking-handheld-kpi-strip"
+            className="picking-handheld-kpi-strip"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)',
+              gap: 6,
+            }}
+          >
+            {[
+              { label: 'Chờ lấy', value: waitingCount },
+              { label: 'Đang lấy', value: activePickingCount },
+              { label: 'Hoàn tất', value: completedPickingCount },
+            ].map(item => (
+              <div
+                key={item.label}
+                style={{
+                  padding: '6px 8px',
+                  borderRadius: 8,
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 4,
+                  minWidth: 0,
+                }}
+              >
+                <span style={{ fontSize: 11.5, color: '#475569', fontWeight: 600, whiteSpace: 'nowrap' }}>{item.label}</span>
+                <strong style={{ fontSize: 14, color: '#0f172a', fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                  {item.value}
+                </strong>
+              </div>
+            ))}
+          </section>
+        )}
+
+        <div className="ui-stack" style={isHandheldViewport ? { gap: 8 } : undefined}>
+          {!isHandheldViewport && (
+            <PickingMobileStationCard
+              tasks={tasks}
+              selected={selected}
+              mobileScanInput={mobileScanInput}
+              setMobileScanInput={setMobileScanInput}
+              governanceBusy={governanceBusy}
+              setGovernanceBusy={setGovernanceBusy}
+              busy={busy}
+              setError={setError}
+              isHandheldViewport={false}
+            />
+          )}
 
           <PickingTasksGrid
             tasks={tasks}
@@ -156,7 +229,22 @@ export default function PickingTasks() {
             detail={detail}
             mutate={mutate}
             setError={setError}
+            isHandheldViewport={isHandheldViewport}
           />
+
+          {isHandheldViewport && (
+            <PickingMobileStationCard
+              tasks={tasks}
+              selected={selected}
+              mobileScanInput={mobileScanInput}
+              setMobileScanInput={setMobileScanInput}
+              governanceBusy={governanceBusy}
+              setGovernanceBusy={setGovernanceBusy}
+              busy={busy}
+              setError={setError}
+              isHandheldViewport={true}
+            />
+          )}
 
           <PickingPutToWallCard
             tasks={tasks}

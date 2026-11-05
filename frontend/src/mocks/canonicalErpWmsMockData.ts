@@ -588,7 +588,7 @@ export const CANONICAL_ROLE_PROFILES: Record<CanonicalRoleName, CanonicalRolePro
   },
   Admin: {
     roleName: 'Admin',
-    labelVi: 'Quản trị viên công ty',
+    labelVi: 'Quản trị công ty',
     securityDomain: 'CUSTOMER_TENANT',
     permissionCount: 141,
     permissions: CANONICAL_CUSTOMER_PERMISSION_CODES,
@@ -638,7 +638,7 @@ export const CANONICAL_ROLE_PROFILES: Record<CanonicalRoleName, CanonicalRolePro
   },
   Viewer: {
     roleName: 'Viewer',
-    labelVi: 'Chỉ xem / Kiểm toán',
+    labelVi: 'Kiểm toán nội bộ',
     securityDomain: 'CUSTOMER_TENANT',
     permissionCount: 18,
     permissions: VIEWER_18_PERMISSIONS,
@@ -671,8 +671,8 @@ export const demoCustomerPermissionCatalog = CANONICAL_CUSTOMER_PERMISSION_CODES
 export const canonicalTenantSubscription = {
   tenantId: 1,
   tenantCode: 'TENANT-001',
-  companyName: 'CÔNG TY TNHH THƯƠNG MẠI & DỊCH VỤ KHO VẬN ĐẠI PHÁT',
-  taxCode: '0312345678',
+  companyName: 'Công ty TNHH Thương mại & Kho vận Đại Phát',
+  taxCode: '0318294012',
   status: 'ACTIVE',
   lifecycleStatus: 'ACTIVE',
   planCode: 'GROWTH',
@@ -1812,7 +1812,55 @@ export const resolveCanonicalMockResponse = (
       return okRes({ tenantId: findNumericId(path), tenantCode: 'TENANT-001', status: String(body.status ?? 'ACTIVE').toUpperCase() });
     }
     if (method === 'get' && path === '/api/platform/dashboard') {
-      return okRes({ activeTenantsCount: 1, suspendedTenantsCount: 0, mrrNetVnd: 1_354_545, grossBillingVnd: 1_490_000, unpaidInvoicesCount: 1, healthyWorkersCount: 4 });
+      return okRes({
+        activeTenantsCount: 1,
+        suspendedTenantsCount: 0,
+        primaryTenantCode: 'TENANT-001',
+        primaryTenantLegalName: canonicalTenantSubscription.companyName,
+        highestResourceSummaryVi: `Cao nhất hiện tại: 33,3% giới hạn kho (TENANT-001 — ${canonicalTenantSubscription.companyName})`,
+        mrrNetVnd: 1_354_545,
+        grossBillingVnd: 1_490_000,
+        unpaidInvoicesCount: 1,
+        healthyWorkersCount: 4,
+        recentEvents: [
+          {
+            eventId: 'EVT-W20-01',
+            timestampVi: '03/11/2026 16:15',
+            actorDisplay: 'Chủ dự án (SuperAdmin)',
+            eventTypeVi: 'Đối soát gạch nợ hóa đơn',
+            summaryVi: 'Đối soát hóa đơn INV-SAAS-202610-001 (1.490.000 ₫)',
+            targetVi: 'Công ty TNHH Thương mại & Kho vận Đại Phát',
+            severity: 'success',
+          },
+          {
+            eventId: 'EVT-W20-02',
+            timestampVi: '01/11/2026 08:00',
+            actorDisplay: 'Hệ thống Kế toán Tự động',
+            eventTypeVi: 'Phát hành hóa đơn định kỳ',
+            summaryVi: 'Phát hành hóa đơn kỳ 11/2026 INV-SAAS-202611-002 (1.490.000 ₫)',
+            targetVi: 'Công ty TNHH Thương mại & Kho vận Đại Phát',
+            severity: 'info',
+          },
+          {
+            eventId: 'EVT-W20-03',
+            timestampVi: '03/11/2026 16:00',
+            actorDisplay: 'Tiến trình Kiểm toán Kho',
+            eventTypeVi: 'Đối soát cân bằng sổ cái tồn kho',
+            summaryVi: 'Kiểm tra đối soát cân bằng sổ cái tồn kho tự động (Đạt 100%)',
+            targetVi: 'Kho Trung tâm (WH01)',
+            severity: 'success',
+          },
+          {
+            eventId: 'EVT-W20-04',
+            timestampVi: '03/11/2026 15:42',
+            actorDisplay: 'Cổng Kết nối Vận chuyển',
+            eventTypeVi: 'Đồng bộ đối tác vận chuyển',
+            summaryVi: 'Đồng bộ vận đơn GHN Sandbox (ShopId 235512)',
+            targetVi: 'Giao Hàng Nhanh (GHN)',
+            severity: 'info',
+          },
+        ],
+      });
     }
     if (method === 'get' && path === '/api/platform/tenants') {
       return okRes({ items: [canonicalTenantSubscription], totalCount: 1 });
@@ -1865,11 +1913,11 @@ export const resolveCanonicalMockResponse = (
         totalCount: 3,
         workers: [
           {
-            workerName: 'OutboxDispatcherWorker',
-            titleVi: 'Tiến trình đồng bộ hóa đơn & sổ cái',
+            workerName: 'InvoiceLedgerSyncWorker',
+            titleVi: 'Tiến trình đồng bộ hóa đơn & đối tác',
             descriptionVi: 'Đẩy sự kiện hóa đơn điện tử NĐ 70/2025 & bút toán kế toán sang MISA/Viettel và cổng vận chuyển',
             status: 'HEALTHY',
-            scope: 'Multi-Tenant Outbox + Multi-Carrier Adapter Dispatch',
+            scope: 'Đồng bộ hóa đơn điện tử & vận đơn đa đối tác',
             intervalSeconds: 30,
             lastDurationMs: 42,
             lastRunRelativeVi: '8 giây trước',
@@ -1879,10 +1927,10 @@ export const resolveCanonicalMockResponse = (
           },
           {
             workerName: 'InventoryConsistencyWorker',
-            titleVi: 'Tiến trình đối soát bất biến tồn kho 9 chiều',
-            descriptionVi: 'Kiểm toán tự động tổng đại số sổ cái InventoryTransactions và số dư InventoryBalances theo GrainHash SHA-256',
+            titleVi: 'Tiến trình đối soát cân bằng sổ cái tồn kho',
+            descriptionVi: 'Kiểm toán tự động tổng đại số sổ cái giao dịch và số dư tồn kho thực tế theo mã định danh SHA-256',
             status: 'HEALTHY',
-            scope: '9-Dimension GrainHash Ledger vs Balance Parity',
+            scope: 'Đối soát cân bằng sổ cái tồn kho toàn hệ thống',
             intervalSeconds: 300,
             lastDurationMs: 68,
             lastRunRelativeVi: '47 giây trước',
@@ -1892,10 +1940,10 @@ export const resolveCanonicalMockResponse = (
           },
           {
             workerName: 'WebhookRetryAndCleanupWorker',
-            titleVi: 'Tiến trình thử lại Webhook & dọn dẹp hàng đợi',
-            descriptionVi: 'Xử lý lại sự kiện Shopee/TikTok/VietQR bị trễ mạng và thu hồi phiên Impersonation hết hạn TTL',
+            titleVi: 'Tiến trình đồng bộ lại đối tác & dọn phiên hỗ trợ',
+            descriptionVi: 'Xử lý lại thông báo Shopee/TikTok/VietQR bị trễ mạng và thu hồi phiên hỗ trợ kỹ thuật hết hạn',
             status: 'HEALTHY',
-            scope: 'IntegrationInboxMessages + Expired Support Sessions',
+            scope: 'Hàng đợi đồng bộ đối tác & phiên hỗ trợ kỹ thuật',
             intervalSeconds: 60,
             lastDurationMs: 29,
             lastRunRelativeVi: '23 giây trước',
@@ -1971,13 +2019,28 @@ export const resolveCanonicalMockResponse = (
 
   // 4. GET Endpoints Resolution
   if (path === '/api/auth/me') {
+    const fullNameByRole: Record<CanonicalRoleName, string> = {
+      SuperAdmin: 'Chủ dự án (SuperAdmin)',
+      BillingAdmin: 'Quản trị Cước phí SaaS',
+      SupportAdmin: 'Chuyên viên Hỗ trợ Kỹ thuật',
+      SecurityAuditor: 'Kiểm toán An toàn Thông tin',
+      Admin: 'Quản trị viên Đại Phát',
+      Manager: 'Quản lý kho WH01',
+      Supervisor: 'Giám sát & QC WH01',
+      Accountant: 'Kế toán kho Đại Phát',
+      WarehouseStaff: 'Nhân viên kho WH01',
+      Viewer: 'Kiểm toán nội bộ WH01',
+    };
     return okRes({
       userId: 1,
       username: profile.defaultUsername,
+      fullName: fullNameByRole[profile.roleName],
+      displayName: fullNameByRole[profile.roleName],
       role: profile.roleName,
       securityDomain: profile.securityDomain,
       tenantId: 1,
       tenantCode: 'TENANT-001',
+      companyName: canonicalTenantSubscription.companyName,
       warehouseScopeIds: profile.warehouseScopeIds,
       permissions: [...profile.permissions],
     });
@@ -2335,7 +2398,7 @@ export const resolveCanonicalMockResponse = (
 
   if (path === '/api/customer-returns') {
     const item = maskCostRow(
-      { id: 901, returnCode: 'RMA-2026-0901', trackingNumber: 'GHNVN06889911', exportReceiptCode: 'EX-2026-5108', salesOrderCode: 'SO-202611-001', warehouseId: 1, warehouseName: 'Kho Trung tâm (WH01)', quarantineLocationCode: 'QUARANTINE-01', productCode: 'QA-E2E-001', productName: 'Thùng linh kiện điện tử QA-01', quantity: 2, unitCost: 250_000, returnReason: 'BUYER_REJECTED_DELIVERY', condition: 'GOOD', disposition: 'PENDING', status: 'QUARANTINED', rowVersion: 'AAAAAAAARMA1' },
+      { id: 901, returnCode: 'RMA-2026-0901', trackingNumber: 'GHNVN06889911', exportReceiptCode: 'EX-2026-5108', salesOrderCode: 'SO-202611-001', warehouseId: 1, warehouseName: 'Kho Trung tâm (WH01)', quarantineLocationCode: 'QUARANTINE-01', productCode: 'QA-E2E-001', productName: 'Thùng linh kiện điện tử QA-01', unitName: 'Thùng', baseUomCode: 'Thùng', quantity: 2, unitCost: 250_000, returnReason: 'BUYER_REJECTED_DELIVERY', condition: 'GOOD', disposition: 'PENDING', status: 'QUARANTINED', rowVersion: 'AAAAAAAARMA1' },
       canReadCost,
     );
     return okRes({ items: [item], totalCount: 1, costHiddenByRbac: !canReadCost, summary: { quarantinedCount: 1, inspectedCount: 0, restockedCount: 0, refurbishRtvScrapCount: 0 } });

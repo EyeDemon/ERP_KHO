@@ -3,7 +3,14 @@ import { ShieldAlert } from 'lucide-react';
 import { UiBadge, UiCard } from '../../ui/ProductionUi';
 import { PlatformReconcileInvoiceModal, type ManualReconcilePayload } from './PlatformReconcileInvoiceModal';
 import { PlatformIntegrationsAndWorkersCards } from './PlatformIntegrationsAndWorkersCards';
-import { EMPTY_INTEGRATION_METRICS, EMPTY_PLATFORM_BENEFICIARY, type PlatformBeneficiaryInfo } from './platformBillingHelpers';
+import {
+  EMPTY_INTEGRATION_METRICS,
+  EMPTY_PLATFORM_BENEFICIARY,
+  normalizeTenantLegalNameVi,
+  normalizeTenantTaxCode,
+  sanitizePlatformJargonVi,
+  type PlatformBeneficiaryInfo,
+} from './platformBillingHelpers';
 
 export interface PlatformBillingInvoiceItem {
   id: number;
@@ -135,9 +142,9 @@ export const PlatformHealthAndWorkersSection: React.FC<Props> = ({
               <span className="platform-kpi-value">{mrrNet.toLocaleString('vi-VN')} ₫</span>
               <div className="platform-kpi-subtext" style={{ display: 'grid', gap: 2 }}>
                 <div style={{ whiteSpace: 'nowrap' }}>
-                  <abbr title="Doanh thu định kỳ hàng năm">ARR</abbr> (Trước thuế): {arrNet.toLocaleString('vi-VN')} đ/năm
+                  <abbr title="Doanh thu định kỳ hàng năm">ARR</abbr> (Trước thuế): {arrNet.toLocaleString('vi-VN')} ₫/năm
                 </div>
-                <div style={{ whiteSpace: 'nowrap' }}>Thu thực tế (Gồm 10% VAT): 1.490.000 đ/tháng</div>
+                <div style={{ whiteSpace: 'nowrap' }}>Thu thực tế (Gồm 10% VAT): 1.490.000 ₫/tháng</div>
               </div>
             </div>
             <div className="platform-kpi-card">
@@ -174,14 +181,14 @@ export const PlatformHealthAndWorkersSection: React.FC<Props> = ({
                 <table className="ui-table ui-table-compact" data-testid="platform-billing-invoices-table" style={{ width: '100%', fontSize: 13 }}>
                   <thead>
                     <tr>
-                      <th style={{ padding: '4px 5px', whiteSpace: 'nowrap' }}>Mã HĐ</th>
-                      <th style={{ padding: '4px 5px', whiteSpace: 'nowrap' }}>Trạng thái</th>
-                      <th style={{ padding: '4px 5px', maxWidth: 175 }}>Bên mua &amp; MST/CCCD</th>
-                      <th style={{ padding: '4px 5px', maxWidth: 160 }}>Kỳ cước / Hạn TT</th>
-                      <th style={{ padding: '4px 5px', textAlign: 'right', whiteSpace: 'nowrap' }}>Trước thuế</th>
-                      <th style={{ padding: '4px 5px', textAlign: 'right', whiteSpace: 'nowrap' }}>Thuế GTGT 10%</th>
-                      <th style={{ padding: '4px 5px', textAlign: 'right', whiteSpace: 'nowrap' }}>Tổng cộng</th>
-                      <th style={{ padding: '4px 5px', maxWidth: 225 }}>Thao tác / Đối soát</th>
+                      <th style={{ minWidth: 96, padding: '6px 8px', whiteSpace: 'nowrap' }}>Mã HĐ</th>
+                      <th style={{ minWidth: 164, padding: '6px 8px' }}>Trạng thái</th>
+                      <th style={{ minWidth: 168, padding: '6px 8px' }}>Bên mua &amp; MST</th>
+                      <th style={{ minWidth: 128, padding: '6px 8px' }}>Kỳ cước / Hạn TT</th>
+                      <th style={{ minWidth: 96, padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>Trước thuế</th>
+                      <th style={{ minWidth: 104, padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>Thuế GTGT 10%</th>
+                      <th style={{ minWidth: 96, padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>Tổng cộng</th>
+                      <th style={{ minWidth: 88, width: 108, maxWidth: 116, padding: '6px 8px', whiteSpace: 'nowrap' }}>Thao tác</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -195,9 +202,11 @@ export const PlatformHealthAndWorkersSection: React.FC<Props> = ({
                       const isPaid = inv.status.toUpperCase() === 'PAID';
                       const tenantDisplay = String(inv.tenantId).startsWith('TENANT-') ? String(inv.tenantId) : `TENANT-${String(inv.tenantId || 1).padStart(3, '0')}`;
                       const rowId = inv.id ?? idx + 1;
-                      const rawSettlement = (inv.settlementSummaryVi || '')
-                        .replace('FT2628890123', 'FT2627690123')
-                        .replace(/Mã UNC:|UNC:/gi, 'Mã giao dịch:');
+                      const rawSettlement = sanitizePlatformJargonVi(
+                        (inv.settlementSummaryVi || '')
+                          .replace('FT2628890123', 'FT2627690123')
+                          .replace(/Mã UNC:|UNC:/gi, 'Mã giao dịch:'),
+                      );
                       const settlementText =
                         rawSettlement ||
                         (isOct || rowId === 1
@@ -205,57 +214,63 @@ export const PlatformHealthAndWorkersSection: React.FC<Props> = ({
                           : 'Đối soát thủ công (Mã giao dịch: FT2630698418102)');
                       const bankCreditLine = inv.bankCreditTimeVi || (isOct ? '03/10/2026 16:00' : '02/11/2026 18:15');
                       const confirmedAtLine = inv.confirmedAtVi || (isOct ? '03/10/2026 16:15' : '02/11/2026 18:30');
+                      const buyerLegalNameVi = normalizeTenantLegalNameVi(inv.buyerLegalName, Number(inv.tenantId) || 1, tenantDisplay);
+                      const buyerTaxCodeVi = normalizeTenantTaxCode(inv.buyerTaxCode);
                       return (
                         <tr key={rowId}>
-                          <td style={{ padding: '4px 5px', fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{code}</td>
-                          <td style={{ padding: '4px 5px', fontSize: 13, whiteSpace: 'nowrap' }}><UiBadge tone={isPaid ? 'success' : 'warning'}>{isPaid ? 'Đã thanh toán' : 'Chờ đối soát'}</UiBadge></td>
-                          <td style={{ padding: '4px 5px', fontSize: 13, maxWidth: 175, whiteSpace: 'normal', lineHeight: 1.3 }}>
-                            <div style={{ fontWeight: 600 }}>
-                              {tenantDisplay} — {!inv.buyerLegalName || inv.buyerLegalName === 'Doanh nghiệp Kho vận ERP_KHO (Tenant 1)' ? 'CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO' : inv.buyerLegalName}
-                            </div>
-                            <div style={{ fontSize: 12, color: '#475569', fontVariantNumeric: 'tabular-nums' }}>MST: {inv.buyerTaxCode || '0312345678'} • Gói Tăng trưởng</div>
+                          <td className="ui-code" style={{ padding: '6px 8px', fontSize: 12.5, fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{code}</td>
+                          <td style={{ padding: '6px 8px', fontSize: 13, maxWidth: 210, whiteSpace: 'normal', lineHeight: 1.3 }}>
+                            <UiBadge tone={isPaid ? 'success' : 'warning'}>{isPaid ? 'Đã thanh toán' : 'Chờ đối soát'}</UiBadge>
+                            {isPaid ? (
+                              <div style={{ display: 'grid', gap: 1, marginTop: 4, fontSize: 11, color: '#475569', fontVariantNumeric: 'tabular-nums' }}>
+                                <span style={{ fontWeight: 600, color: '#334155' }}>{settlementText}</span>
+                                <span>Ngân hàng ghi có: {bankCreditLine}</span>
+                                <span>Xác nhận lúc: {confirmedAtLine}</span>
+                              </div>
+                            ) : null}
                           </td>
-                          <td style={{ padding: '4px 5px', fontSize: 13, fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', maxWidth: 160, lineHeight: 1.3 }} title={inv.billingPeriod || period}>
+                          <td style={{ padding: '6px 8px', fontSize: 13, maxWidth: 210, whiteSpace: 'normal', lineHeight: 1.35 }}>
+                            <div style={{ fontWeight: 600, color: '#0f172a' }}>
+                              {tenantDisplay} — {buyerLegalNameVi}
+                            </div>
+                            <div style={{ fontSize: 12, color: '#475569', fontVariantNumeric: 'tabular-nums' }}>MST: {buyerTaxCodeVi} • Gói Tăng trưởng</div>
+                          </td>
+                          <td style={{ padding: '6px 8px', fontSize: 13, fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', maxWidth: 160, lineHeight: 1.3 }} title={inv.billingPeriod || period}>
                             <div style={{ fontWeight: 600 }}>Kỳ {period}</div>
                             <div style={{ fontSize: 11.5, color: '#475569' }}>
                               {isOct ? 'Phát hành: 01/10/2026 • Hạn: 05/10/2026' : 'Phát hành: 01/11/2026 • Hạn: 05/11/2026'}
                             </div>
                           </td>
-                          <td style={{ padding: '4px 5px', fontSize: 13, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{sub.toLocaleString('vi-VN')} ₫</td>
-                          <td style={{ padding: '4px 5px', fontSize: 13, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{vat.toLocaleString('vi-VN')} ₫</td>
-                          <td style={{ padding: '4px 5px', fontSize: 13, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{total.toLocaleString('vi-VN')} ₫</td>
-                          <td style={{ padding: '4px 5px', fontSize: 13, whiteSpace: isPaid ? 'normal' : 'nowrap', maxWidth: isPaid ? 225 : 140, lineHeight: 1.3 }}>
+                          <td style={{ padding: '6px 8px', fontSize: 13, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{sub.toLocaleString('vi-VN')} ₫</td>
+                          <td style={{ padding: '6px 8px', fontSize: 13, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{vat.toLocaleString('vi-VN')} ₫</td>
+                          <td style={{ padding: '6px 8px', fontSize: 13, textAlign: 'right', fontWeight: 700, color: '#0f172a', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{total.toLocaleString('vi-VN')} ₫</td>
+                          <td style={{ padding: '6px 8px', fontSize: 12.5, width: 108, maxWidth: 116, whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
                             {isPaid ? (
-                              <div style={{ display: 'grid', gap: 2, fontVariantNumeric: 'tabular-nums' }}>
-                                <span style={{ fontSize: 11.5, fontWeight: 700, color: '#166534' }}>{settlementText}</span>
-                                <span style={{ fontSize: 11, color: '#334155' }}>Ngân hàng ghi có: {bankCreditLine}</span>
-                                <span style={{ fontSize: 11, color: '#334155' }}>Xác nhận lúc: {confirmedAtLine}</span>
-                                {rowId === 2 ? (
-                                  <div>
-                                    <button
-                                      type="button"
-                                      className="platform-btn platform-btn-secondary"
-                                      data-testid={`btn-reset-reconcile-${rowId}`}
-                                      style={{ padding: '2px 8px', fontSize: 11.5, marginTop: 2 }}
-                                      disabled={!canWriteBilling}
-                                      onClick={() => onResetReconcileInvoice?.(rowId, code)}
-                                    >
-                                      Hoàn tác chờ đối soát
-                                    </button>
-                                  </div>
-                                ) : null}
-                              </div>
+                              rowId === 2 ? (
+                                <button
+                                  type="button"
+                                  className="platform-btn platform-btn-secondary"
+                                  data-testid={`btn-reset-reconcile-${rowId}`}
+                                  style={{ padding: '4px 8px', fontSize: 11.5, whiteSpace: 'nowrap' }}
+                                  disabled={!canWriteBilling}
+                                  onClick={() => onResetReconcileInvoice?.(rowId, code)}
+                                >
+                                  Hoàn tác
+                                </button>
+                              ) : (
+                                <span style={{ fontSize: 11.5, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap' }}>Đã lưu chứng từ</span>
+                              )
                             ) : (
                               <button
                                 type="button"
                                 className="ui-btn ui-btn-primary ui-btn-sm"
-                                style={{ padding: '4px 8px', fontSize: 12.5 }}
+                                style={{ padding: '4px 10px', fontSize: 12, whiteSpace: 'nowrap' }}
                                 data-testid={`btn-reconcile-saas-invoice-${rowId}`}
                                 disabled={!canWriteBilling}
                                 title={!canWriteBilling ? '403 Forbidden — Thiếu quyền platform.billing.reconcile' : undefined}
                                 onClick={() => setReconcilingInvoice(inv)}
                               >
-                                <span data-testid={`btn-open-reconcile-modal-${rowId}`}>Xác nhận đã thu tiền</span>
+                                <span data-testid={`btn-open-reconcile-modal-${rowId}`}>Đối soát</span>
                               </button>
                             )}
                           </td>

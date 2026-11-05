@@ -1,8 +1,20 @@
 import React from 'react';
 import { CheckCircle2, Landmark, ShoppingBag, Truck } from 'lucide-react';
 import { UiBadge, UiCard } from '../../ui/ProductionUi';
-import { EMPTY_INTEGRATION_METRICS, EMPTY_PLATFORM_BENEFICIARY, type PlatformBeneficiaryInfo } from './platformBillingHelpers';
+import {
+  EMPTY_INTEGRATION_METRICS,
+  EMPTY_PLATFORM_BENEFICIARY,
+  sanitizePlatformJargonVi,
+  type PlatformBeneficiaryInfo,
+} from './platformBillingHelpers';
 import type { PlatformIntegrationMetrics, PlatformWorkerHealthItem } from './PlatformHealthAndWorkersSection';
+
+const WORKER_CODE_LABELS: Readonly<Record<string, string>> = {
+  OutboxDispatcherWorker: 'WRK-PARTNER-SYNC',
+  InvoiceLedgerSyncWorker: 'WRK-PARTNER-SYNC',
+  InventoryConsistencyWorker: 'WRK-LEDGER-AUDIT',
+  WebhookRetryAndCleanupWorker: 'WRK-WEBHOOK-CLEANUP',
+};
 
 interface PlatformIntegrationsAndWorkersCardsProps {
   showIntegrations: boolean;
@@ -127,27 +139,32 @@ export const PlatformIntegrationsAndWorkersCards: React.FC<PlatformIntegrationsA
       ) : null}
 
       {showMonitoring ? (
-        <UiCard title="Giám sát tiến trình nền và đối soát tồn kho 9 chiều">
+        <UiCard title="Giám sát tiến trình nền &amp; Đối soát cân bằng sổ cái tồn kho">
           <div className="platform-worker-grid" data-testid="platform-workers-card">
-            {workers.map((w) => (
-              <div key={w.workerName} className="platform-worker-card" data-testid={`worker-card-${w.workerName}`}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6 }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', lineHeight: 1.25 }}>{w.titleVi || w.workerName}</div>
-                    <div style={{ fontSize: 11, color: '#475569' }}>Mã tiến trình: <code>{w.workerName}</code></div>
+            {workers.map((w) => {
+              const processCode = WORKER_CODE_LABELS[w.workerName] || sanitizePlatformJargonVi(w.workerName);
+              const cleanTitle = sanitizePlatformJargonVi(w.titleVi || w.workerName);
+              const cleanDesc = sanitizePlatformJargonVi(w.descriptionVi || w.scope);
+              return (
+                <div key={w.workerName} className="platform-worker-card" data-testid={`worker-card-${w.workerName}`}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', lineHeight: 1.25 }}>{cleanTitle}</div>
+                      <div style={{ fontSize: 11, color: '#475569' }}>Mã tiến trình: <code className="ui-code">{processCode}</code></div>
+                    </div>
+                    <UiBadge tone="success"><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><CheckCircle2 size={12} strokeWidth={2} aria-hidden="true" /> Hoạt động tốt</span></UiBadge>
                   </div>
-                  <UiBadge tone="success"><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><CheckCircle2 size={12} strokeWidth={2} aria-hidden="true" /> Hoạt động tốt</span></UiBadge>
+                  <div style={{ fontSize: 11.5, lineHeight: 1.25, color: '#334155' }}>{cleanDesc}</div>
+                  <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 4, fontSize: 11.5, lineHeight: 1.25, color: '#475569', display: 'grid', gridTemplateColumns: '1.35fr 0.85fr', gap: '2px 8px', fontVariantNumeric: 'tabular-nums' }}>
+                    <div data-testid={`worker-last-run-${w.workerName}`} style={{ whiteSpace: 'nowrap' }}><strong>Chạy lần cuối:</strong> {resolveWorkerLastRunVi(w)}</div>
+                    <div style={{ whiteSpace: 'nowrap' }}><strong>Chu kỳ quét:</strong> {w.intervalSeconds} giây</div>
+                    <div style={{ whiteSpace: 'nowrap' }}><strong>Thời lượng xử lý:</strong> {w.lastDurationMs ?? 35} ms</div>
+                    <div style={{ whiteSpace: 'nowrap' }}><strong>Hàng đợi đồng bộ đối tác:</strong> {w.pendingOutboxCount ?? 0} chờ / {w.deadLetterCount ?? 0} lỗi</div>
+                    <div style={{ gridColumn: '1 / -1', whiteSpace: 'nowrap' }}><strong>Đối soát cân bằng sổ cái tồn kho:</strong> <span style={{ color: '#15803d', fontWeight: 700 }}>{w.driftCount ?? 0} lệch</span></div>
+                  </div>
                 </div>
-                <div style={{ fontSize: 11.5, lineHeight: 1.25, color: '#334155' }}>{w.descriptionVi || w.scope}</div>
-                <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 4, fontSize: 11.5, lineHeight: 1.25, color: '#475569', display: 'grid', gridTemplateColumns: '1.35fr 0.85fr', gap: '2px 8px', fontVariantNumeric: 'tabular-nums' }}>
-                  <div data-testid={`worker-last-run-${w.workerName}`} style={{ whiteSpace: 'nowrap' }}><strong>Chạy lần cuối:</strong> {resolveWorkerLastRunVi(w)}</div>
-                  <div style={{ whiteSpace: 'nowrap' }}><strong>Chu kỳ quét:</strong> {w.intervalSeconds} giây</div>
-                  <div style={{ whiteSpace: 'nowrap' }}><strong>Thời lượng xử lý:</strong> {w.lastDurationMs ?? 35} ms</div>
-                  <div style={{ whiteSpace: 'nowrap' }}><strong>Hàng đợi / Lỗi:</strong> {w.pendingOutboxCount ?? 0} / {w.deadLetterCount ?? 0}</div>
-                  <div style={{ gridColumn: '1 / -1', whiteSpace: 'nowrap' }}><strong>Đối soát tồn 9 chiều:</strong> <span style={{ color: '#15803d', fontWeight: 700 }}>{w.driftCount ?? 0} lệch</span></div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </UiCard>
       ) : null}

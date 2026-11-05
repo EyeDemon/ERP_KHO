@@ -1,4 +1,5 @@
 import React from 'react';
+import { MoreHorizontal } from 'lucide-react';
 import apiClient from '../../services/apiClient';
 import { permissionError } from '../../services/permissionPresentation';
 import { type ImportReceipt } from './ImportReceiptTypes';
@@ -119,7 +120,7 @@ export const ImportReceiptRowActions: React.FC<ImportReceiptRowActionsProps> = (
       color: '#ffffff',
       borderColor: '#1d4ed8',
       fontWeight: 600,
-      ...(fullWidth ? { flex: '1 1 auto', minHeight: 44, whiteSpace: 'normal', textAlign: 'center', lineHeight: 1.25 } : {}),
+      ...(fullWidth ? { flex: '1 1 auto', minWidth: 0, minHeight: 44, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center', lineHeight: 1.25 } : {}),
     };
     if (primaryKind === 'observe') {
       return (
@@ -153,22 +154,36 @@ export const ImportReceiptRowActions: React.FC<ImportReceiptRowActionsProps> = (
   };
 
   if (isMobile) {
+    const primaryBtn = renderPrimaryButton(true);
     return (
-      <div className="import-row-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {renderPrimaryButton(true)}
-        <button
-          type="button"
-          className="ui-btn-secondary"
-          style={{ minHeight: 44, whiteSpace: 'nowrap' }}
-          onClick={() => void handleViewDetails(r.id)}
-        >
-          Chi tiết
-        </button>
-        <details className="ui-row-more-menu" style={{ position: 'relative' }}>
-          <summary className="ui-more-summary" aria-label={`Thao tác khác cho phiếu ${r.code}`}>
-            ⋯
+      <div
+        className="import-row-actions import-row-actions-mobile"
+        style={{ display: 'flex', flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', gap: 8, width: '100%' }}
+      >
+        {primaryBtn ?? (
+          <button
+            type="button"
+            className="ui-btn-secondary"
+            style={{ flex: '1 1 auto', minWidth: 0, minHeight: 44, whiteSpace: 'nowrap' }}
+            onClick={() => void handleViewDetails(r.id)}
+          >
+            Chi tiết
+          </button>
+        )}
+        <details className="ui-row-more-menu" style={{ position: 'relative', flex: '0 0 44px', width: 44 }}>
+          <summary
+            className="ui-more-summary"
+            aria-label="Thao tác khác"
+            style={{ width: 44, height: 44, minWidth: 44, minHeight: 44, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <MoreHorizontal size={18} aria-hidden="true" />
           </summary>
           <div className="ui-row-more-popover">
+            {primaryBtn !== null && (
+              <button type="button" style={menuItemStyle} onClick={() => void handleViewDetails(r.id)}>
+                Chi tiết
+              </button>
+            )}
             <button type="button" style={menuItemStyle} disabled={printLoadingId !== null} onClick={(e) => void openPrintPreview(r.id, e.currentTarget)}>
               {printLoadingId === r.id ? 'Đang tải bản in...' : 'Xem bản in'}
             </button>
@@ -199,8 +214,12 @@ export const ImportReceiptRowActions: React.FC<ImportReceiptRowActionsProps> = (
         Chi tiết
       </button>
       <details className="ui-row-more-menu" style={{ position: 'relative' }}>
-        <summary className="ui-more-summary" aria-label={`Thao tác khác cho phiếu ${r.code}`}>
-          ⋯
+        <summary
+          className="ui-more-summary"
+          aria-label={`Thao tác khác cho phiếu ${r.code}`}
+          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <MoreHorizontal size={16} aria-hidden="true" />
         </summary>
         <div className="ui-row-more-popover">
           <button type="button" style={menuItemStyle} disabled={printLoadingId !== null} onClick={(e) => void openPrintPreview(r.id, e.currentTarget)}>

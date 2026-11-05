@@ -154,7 +154,7 @@ export function OutboundSelectedOrderCard({
         <UiBadge tone={tone(selected.status)}>{orderLabels[selected.status] ?? selected.status}</UiBadge>
         <span>{selected.externalOrderId} • {selected.customerName} • {selected.warehouseName}</span>
         <span>Đặt hàng: {selected.orderedQuantity} • Đã giao: {selected.shippedQuantity} • Còn mở: {selected.openQuantity} • Đã hủy: {selected.cancelledQuantity}</span>
-        {Number(selected.totalAmount || 0) > 0 && <span>Tổng giá trị: <strong>{Number(selected.totalAmount).toLocaleString('vi-VN')} {selected.currency || 'VND'}</strong></span>}
+        {Number(selected.totalAmount || 0) > 0 && <span>Tổng giá trị: <strong>{Number(selected.totalAmount).toLocaleString('vi-VN')} {!selected.currency || selected.currency === 'VND' ? '₫' : selected.currency}</strong></span>}
       </div>
       <p className="ui-muted-text">Phát hành đơn theo tồn khả dụng, tự động tạo giữ hàng, phân bổ cho phần đủ tồn và tạo đơn nợ hàng (Backorder) cho phần thiếu.</p>
       <div className="ui-inline-wrap">

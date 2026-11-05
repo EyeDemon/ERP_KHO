@@ -225,25 +225,25 @@ export function BreakBulkReplenishmentCard(props: {
           <table className="ui-table-compact" aria-label="Bảng quy đổi xả thùng bổ sung kệ lẻ" data-testid="break-bulk-conversion-table" style={{ width: '100%' }}>
             <thead>
               <tr>
-                <th style={{ whiteSpace: 'normal', lineHeight: 1.25 }}>Sản phẩm</th>
-                <th style={{ whiteSpace: 'normal', lineHeight: 1.25 }}>Vị trí Dự trữ</th>
-                <th style={{ whiteSpace: 'normal', lineHeight: 1.25 }}>Vị trí Nhặt lẻ</th>
-                <th className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', lineHeight: 1.25 }}>SL Xuất Chẵn (Thùng)</th>
-                <th className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', lineHeight: 1.25 }}>Hệ số Quy đổi</th>
-                <th className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', lineHeight: 1.25 }}>SL Nhập Lẻ (ĐV)</th>
-                <th style={{ whiteSpace: 'normal', lineHeight: 1.25 }}>Trạng thái Sổ cái Nguyên tử</th>
+                <th style={{ minWidth: 130, lineHeight: 1.25 }}>Sản phẩm</th>
+                <th style={{ minWidth: 110, whiteSpace: 'nowrap', lineHeight: 1.25 }}>Vị trí dự trữ</th>
+                <th style={{ minWidth: 110, whiteSpace: 'nowrap', lineHeight: 1.25 }}>Vị trí nhặt lẻ</th>
+                <th className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 105, whiteSpace: 'nowrap', lineHeight: 1.25 }}>SL xuất chẵn</th>
+                <th className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 105, whiteSpace: 'nowrap', lineHeight: 1.25 }}>Hệ số quy đổi</th>
+                <th className="ui-cell-numeric" style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 96, whiteSpace: 'nowrap', lineHeight: 1.25 }}>SL nhập lẻ</th>
+                <th style={{ minWidth: 135, whiteSpace: 'nowrap', lineHeight: 1.25 }}>Trạng thái sổ cái</th>
               </tr>
             </thead>
             <tbody>
               {breakBulkItems.map((item, idx) => (
                 <tr key={`${item.productCode}-${idx}`}>
                   <td>
-                    <strong style={{ whiteSpace: 'nowrap' }}>{item.productCode}</strong>
+                    <strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.productCode}</strong>
                     <br />
                     <small>{item.productName}</small>
                   </td>
-                  <td style={{ whiteSpace: 'nowrap' }}><code>{item.reserveBinCode}</code></td>
-                  <td style={{ whiteSpace: 'nowrap' }}><code>{item.pickFaceBinCode}</code></td>
+                  <td style={{ whiteSpace: 'nowrap' }}><code className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.reserveBinCode}</code></td>
+                  <td style={{ whiteSpace: 'nowrap' }}><code className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.pickFaceBinCode}</code></td>
                   <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>-{item.cartonsDeducted} Thùng</td>
                   <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>1 Thùng = {item.conversionFactor} ĐV</td>
                   <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}><strong>+{item.baseUnitsAdded} ĐV</strong></td>

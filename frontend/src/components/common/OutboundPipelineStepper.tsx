@@ -15,7 +15,7 @@ const EXPRESS_STEPS: OutboundPipelineStep[] = [
   {
     stepNumber: 1,
     label: 'Đơn bán hàng và phân bổ',
-    subtitle: 'Tạo đơn bán và giữ tồn FEFO',
+    subtitle: 'Tạo đơn bán và giữ tồn ưu tiên hạn dùng',
     path: '/outbound-demand',
     matchPaths: ['/outbound-demand', '/sales-orders', '/stock-reservations', '/stock-allocations', '/backorders'],
   },
@@ -39,7 +39,7 @@ const FULL_WMS_STEPS: OutboundPipelineStep[] = [
   {
     stepNumber: 2,
     label: 'Lấy hàng tại kệ',
-    subtitle: 'Quét vị trí kệ và lấy theo FEFO',
+    subtitle: 'Quét vị trí kệ và lấy hàng ưu tiên hạn dùng',
     path: '/picking-tasks',
     matchPaths: ['/picking-tasks'],
   },

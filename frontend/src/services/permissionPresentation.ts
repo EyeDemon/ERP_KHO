@@ -288,14 +288,14 @@ const ROLE_LABELS: Record<string, string> = {
   BillingAdmin: 'Quản trị Thanh toán SaaS',
   SupportAdmin: 'Quản trị Hỗ trợ Kỹ thuật',
   SecurityAuditor: 'Kiểm toán Bảo mật',
-  Admin: 'Quản trị viên công ty',
+  Admin: 'Quản trị công ty',
   Manager: 'Quản lý kho',
   WarehouseStaff: 'Nhân viên kho',
   Accountant: 'Kế toán kho',
   Supervisor: 'Giám sát & QC',
   Receiver: 'Nhân viên nhận hàng',
   PickerPacker: 'Nhân viên lấy/đóng gói',
-  Viewer: 'Chỉ xem / Kiểm toán',
+  Viewer: 'Kiểm toán nội bộ',
 };
 
 export const roleLabel = (name: string): string => ROLE_LABELS[name] || `Vai trò ${name}`;
@@ -306,17 +306,75 @@ export const roleChipLabel = (roleName: string, count: number): string => {
     BillingAdmin: 'Quản trị Thanh toán SaaS',
     SupportAdmin: 'Quản trị Hỗ trợ Kỹ thuật',
     SecurityAuditor: 'Kiểm toán Bảo mật',
-    Admin: 'Quản trị viên công ty',
+    Admin: 'Quản trị công ty',
     Manager: 'Quản lý kho',
     Supervisor: 'Giám sát & QC',
     Accountant: 'Kế toán kho',
     WarehouseStaff: 'Nhân viên kho',
-    Viewer: 'Chỉ xem / Kiểm toán',
+    Viewer: 'Kiểm toán nội bộ',
     Receiver: 'Nhân viên nhận hàng',
     PickerPacker: 'Nhân viên lấy/đóng gói',
   };
   const label = chipNames[roleName] || roleLabel(roleName);
-  return `${label} (${roleName} · ${count})`;
+  return `${label} (${count})`;
+};
+
+const USER_DISPLAY_NAMES_VI: Record<string, string> = {
+  qa_admin: 'Chủ dự án (SuperAdmin)',
+  'qa system admin': 'Chủ dự án (SuperAdmin)',
+  qa_admin_local: 'Quản trị viên Nội bộ',
+  qa_billing_admin: 'Quản trị Cước phí SaaS',
+  qa_support_admin: 'Chuyên viên Hỗ trợ Kỹ thuật',
+  qa_security_auditor: 'Kiểm toán An toàn Thông tin',
+  tenant_admin: 'Quản trị viên Đại Phát',
+  qa_manager_wh01: 'Quản lý kho WH01',
+  'qa manager wh01': 'Quản lý kho WH01',
+  qa_supervisor_wh01: 'Giám sát & QC WH01',
+  'qa supervisor wh01': 'Giám sát & QC WH01',
+  qa_accountant: 'Kế toán kho Đại Phát',
+  qa_staff_wh01: 'Nhân viên kho WH01',
+  'qa staff wh01': 'Nhân viên kho WH01',
+  qa_viewer_wh01: 'Kiểm toán nội bộ WH01',
+  'qa viewer wh01': 'Kiểm toán nội bộ WH01',
+};
+
+export const formatUserDisplayNameVi = (
+  rawUsernameOrLabel?: string | null,
+  fallbackRoleName?: string | null,
+): string => {
+  const trimmed = (rawUsernameOrLabel ?? '').trim();
+  if (!trimmed) {
+    if (fallbackRoleName === 'SuperAdmin') return 'Chủ dự án (SuperAdmin)';
+    if (fallbackRoleName === 'Admin') return 'Quản trị viên Đại Phát';
+    if (fallbackRoleName === 'WarehouseStaff') return 'Nhân viên kho WH01';
+    return fallbackRoleName ? roleLabel(fallbackRoleName) : 'Người dùng hệ thống';
+  }
+  const normalized = trimmed.toLowerCase();
+  if (USER_DISPLAY_NAMES_VI[normalized]) {
+    return USER_DISPLAY_NAMES_VI[normalized];
+  }
+  const cleaned = trimmed
+    .replace(/\s*\((?:qa_[a-z0-9_]+|tenant_admin)\)/gi, '')
+    .replace(/^(?:qa_admin|tenant_admin|qa_[a-z0-9_]+)\s*[—-]\s*/i, (_, match) => match && '')
+    .trim();
+  if (cleaned && cleaned !== trimmed) {
+    if (/quản trị viên hệ thống/i.test(cleaned) && fallbackRoleName === 'SuperAdmin') {
+      return 'Chủ dự án (SuperAdmin)';
+    }
+    return cleaned;
+  }
+  if (/^quản trị viên hệ thống$/i.test(trimmed) && fallbackRoleName === 'SuperAdmin') {
+    return 'Chủ dự án (SuperAdmin)';
+  }
+  return trimmed;
+};
+
+export const formatMinLengthCounterVi = (currentLength: number, minRequired = 10): string => {
+  const safeLen = Math.max(0, Math.floor(currentLength));
+  if (safeLen >= minRequired) {
+    return `Đã nhập ${safeLen} ký tự (Đạt yêu cầu ≥ ${minRequired} ký tự)`;
+  }
+  return `Còn thiếu ${minRequired - safeLen} ký tự (Tối thiểu ${minRequired} ký tự)`;
 };
 export const permissionError = (error: unknown, fallback = 'Không thể xử lý yêu cầu. Vui lòng thử lại.') => {
   const status = axios.isAxiosError(error) ? error.response?.status : (error as { response?: { status?: number } })?.response?.status;

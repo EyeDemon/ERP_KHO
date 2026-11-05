@@ -195,7 +195,7 @@ public static class ReportsExcelHelper
         using var workbook = new XLWorkbook();
         var ws = workbook.Worksheets.Add("Thẻ kho S12-DN");
 
-        ws.Cell(1, 1).Value = "Đơn vị: Hệ thống Quản trị Kho ERP_KHO";
+        ws.Cell(1, 1).Value = "Đơn vị: Công ty TNHH Thương mại & Kho vận Đại Phát";
         ws.Cell(2, 1).Value = $"Kho: {card.WarehouseName} ({card.WarehouseCode})";
         ws.Cell(1, 8).Value = card.FormCode;
         ws.Cell(2, 8).Value = card.CircularReference;

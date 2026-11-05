@@ -5,11 +5,15 @@
  */
 
 export const RMA_STATUS_LABELS_VI: Record<string, string> = {
+  DRAFT: 'Nháp',
+  RECEIVED: 'Đang biệt trữ',
   QUARANTINED: 'Đang biệt trữ',
   PENDING_INSPECTION: 'Chờ kiểm định QC',
   INSPECTED: 'Đã kiểm định',
+  POSTED: 'Đã ghi sổ',
   COMPLETED: 'Đã hoàn tất',
   DISPOSED: 'Đã hoàn tất',
+  REJECTED: 'Từ chối',
   CANCELLED: 'Đã hủy',
 };
 

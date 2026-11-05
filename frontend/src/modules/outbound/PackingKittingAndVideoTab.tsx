@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Lock } from 'lucide-react';
 import { useInRouterContext, useLocation } from 'react-router-dom';
 import apiClient from '../../services/apiClient';
 import { usePermission } from '../../services/authorization';
@@ -250,10 +251,16 @@ export function PackingKittingAndVideoTab({
           <span><strong>CARTON-L</strong> (40×30×30 cm): tối đa 20 kg / Cước DIM 6.0 kg</span>
           <span><strong>CARTON-XL</strong> (50×40×30 cm): tối đa 35 kg / Cước DIM 10.0 kg</span>
           <span>Chính sách tối ưu đóng thùng: <UiBadge tone="success">Đề xuất &amp; Xác nhận bởi Nhân viên</UiBadge></span>
-          <span data-testid="packing-kit-earliest-expiry"><strong>Hạn dùng kế thừa (FEFO):</strong> {kitEarliestExpiry}</span>
-          <span data-testid="packing-kit-rolledup-cost">
+          <span data-testid="packing-kit-earliest-expiry"><strong>Hạn dùng kế thừa sớm nhất:</strong> {kitEarliestExpiry}</span>
+          <span data-testid="packing-kit-rolledup-cost" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <strong>Giá vốn Kit cộng dồn (MAC):</strong>{' '}
-            {canReadCost && kitRolledUpCost !== null ? `${kitRolledUpCost.toLocaleString('vi-VN')} đ` : 'Ẩn theo quyền RBAC (inventory.cost.read)'}
+            {canReadCost && kitRolledUpCost !== null ? (
+              `${kitRolledUpCost.toLocaleString('vi-VN')} ₫`
+            ) : (
+              <span className="ui-cost-masked-badge" style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Lock size={12} aria-hidden="true" /> Ẩn theo quyền
+              </span>
+            )}
           </span>
         </div>
         <div className="ui-inline-wrap">
@@ -265,7 +272,7 @@ export function PackingKittingAndVideoTab({
             data-testid="select-kitting-vas-mode"
             value={kittingVasMode}
             onChange={(e) => setKittingVasMode(e.target.value as 'PRE_KIT' | 'DEKIT_DISASSEMBLE')}
-            style={{ maxWidth: '100%' }}
+            style={{ flex: '1 1 300px', minWidth: 280, maxWidth: '100%' }}
           >
             <option value="PRE_KIT">Lắp ráp bộ sản phẩm theo đơn hàng</option>
             <option value="DEKIT_DISASSEMBLE">Xả bộ hàng lắp ráp sau chiến dịch khuyến mãi</option>

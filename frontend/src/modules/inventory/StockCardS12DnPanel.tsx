@@ -220,21 +220,21 @@ export function StockCardS12DnPanel({
               <table className="ui-table-compact" aria-label="Bảng chi tiết Thẻ Kho S12-DN">
                 <thead>
                   <tr>
-                    <th>Ngày ghi sổ</th>
-                    <th>Chứng từ Nhập</th>
-                    <th>Chứng từ Xuất</th>
-                    <th>Diễn giải</th>
-                    <th style={{ textAlign: 'right' }}>SL Nhập</th>
-                    <th style={{ textAlign: 'right' }}>SL Xuất</th>
-                    <th style={{ textAlign: 'right' }}>Số dư lũy kế</th>
+                    <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Ngày ghi sổ</th>
+                    <th style={{ minWidth: 115, whiteSpace: 'nowrap' }}>Chứng từ Nhập</th>
+                    <th style={{ minWidth: 115, whiteSpace: 'nowrap' }}>Chứng từ Xuất</th>
+                    <th style={{ minWidth: 140 }}>Diễn giải</th>
+                    <th style={{ textAlign: 'right', minWidth: 88, whiteSpace: 'nowrap' }}>SL Nhập</th>
+                    <th style={{ textAlign: 'right', minWidth: 88, whiteSpace: 'nowrap' }}>SL Xuất</th>
+                    <th style={{ textAlign: 'right', minWidth: 105, whiteSpace: 'nowrap' }}>Số dư lũy kế</th>
                   </tr>
                 </thead>
                 <tbody>
                   {lines.map((line, idx) => (
                     <tr key={line.transactionId ?? idx}>
-                      <td>{line.transactionDate ? new Date(line.transactionDate).toLocaleDateString('vi-VN') : '—'}</td>
-                      <td>{line.inboundDocumentCode || ((line.inboundQuantity ?? 0) > 0 ? line.documentCode : '—')}</td>
-                      <td>{line.outboundDocumentCode || ((line.outboundQuantity ?? 0) > 0 ? line.documentCode : '—')}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{line.transactionDate ? new Date(line.transactionDate).toLocaleDateString('vi-VN') : '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}><span className="ui-code" style={{ whiteSpace: 'nowrap' }}>{line.inboundDocumentCode || ((line.inboundQuantity ?? 0) > 0 ? line.documentCode : '—')}</span></td>
+                      <td style={{ whiteSpace: 'nowrap' }}><span className="ui-code" style={{ whiteSpace: 'nowrap' }}>{line.outboundDocumentCode || ((line.outboundQuantity ?? 0) > 0 ? line.documentCode : '—')}</span></td>
                       <td>{line.description || line.movementType || 'Giao dịch kho'}</td>
                       <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: '#047857' }}>
                         {line.inboundQuantity ?? 0}

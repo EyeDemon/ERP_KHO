@@ -76,8 +76,8 @@ export const CostValuationMisaSection: React.FC<CostValuationMisaSectionProps> =
               aria-invalid={Boolean(einvoiceMstError)}
               value={einvoiceBuyerTaxCode}
               onChange={e => setEinvoiceBuyerTaxCode(e.target.value)}
-              placeholder="VD: 0312345678 hoặc 0312345678-001"
-              style={{ minWidth: 230, borderColor: einvoiceMstError ? '#dc2626' : undefined }}
+              placeholder="VD: 0318294012"
+              style={{ minWidth: 240, flex: '1 1 240px', borderColor: einvoiceMstError ? '#dc2626' : undefined }}
             />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

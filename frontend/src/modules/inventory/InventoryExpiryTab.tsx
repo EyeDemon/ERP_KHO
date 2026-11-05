@@ -136,16 +136,16 @@ export const InventoryExpiryTab: React.FC<InventoryExpiryTabProps> = ({
           <table aria-label="Báo cáo hạn dùng và tuổi tồn" className="ui-table-compact inventory-table-wide">
             <thead>
               <tr>
-                <th>Kho / Vị trí</th>
-                <th>Sản phẩm</th>
-                <th>Mã lô</th>
-                <th>Trạng thái tồn</th>
-                <th>Ngày SX</th>
-                <th>Hạn sử dụng</th>
-                <th>Tình trạng HSD</th>
-                <th className="inventory-numeric ui-cell-numeric" style={{ ...rightNumStyle, whiteSpace: 'nowrap' }}>Tuổi tồn (ngày)</th>
-                <th className="inventory-numeric ui-cell-numeric" style={{ ...rightNumStyle, whiteSpace: 'nowrap' }}>Tồn thực tế</th>
-                <th className="inventory-numeric ui-cell-numeric" style={{ ...rightNumStyle, whiteSpace: 'nowrap' }}>Khả dụng</th>
+                <th style={{ minWidth: 120 }}>Kho / Vị trí</th>
+                <th style={{ minWidth: 150 }}>Sản phẩm</th>
+                <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Mã lô</th>
+                <th style={{ minWidth: 105, whiteSpace: 'nowrap' }}>Trạng thái tồn</th>
+                <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Ngày SX</th>
+                <th style={{ minWidth: 100, whiteSpace: 'nowrap' }}>Hạn sử dụng</th>
+                <th style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Tình trạng HSD</th>
+                <th className="inventory-numeric ui-cell-numeric" style={{ ...rightNumStyle, minWidth: 105, whiteSpace: 'nowrap' }}>Tuổi tồn (ngày)</th>
+                <th className="inventory-numeric ui-cell-numeric" style={{ ...rightNumStyle, minWidth: 96, whiteSpace: 'nowrap' }}>Tồn thực tế</th>
+                <th className="inventory-numeric ui-cell-numeric" style={{ ...rightNumStyle, minWidth: 92, whiteSpace: 'nowrap' }}>Khả dụng</th>
               </tr>
             </thead>
             <tbody>
@@ -166,12 +166,12 @@ export const InventoryExpiryTab: React.FC<InventoryExpiryTabProps> = ({
                       <td>
                         <strong>{formatWarehouseLabel(row.warehouseName, undefined, row.warehouseId)}</strong>
                         <br />
-                        <small>{row.locationCode === 'RECEIVING' ? 'Bãi tiếp nhận (RCV-01)' : row.locationCode}</small>
+                        <small className="ui-code" style={{ whiteSpace: 'nowrap' }}>{row.locationCode === 'RECEIVING' ? 'Bãi tiếp nhận (RCV-01)' : row.locationCode}</small>
                       </td>
                       <td>
-                        <strong>{row.productCode}</strong> — {row.productName}
+                        <strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{row.productCode}</strong> — {row.productName}
                       </td>
-                      <td>{row.lotNumber || '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}><span className="ui-code" style={{ whiteSpace: 'nowrap' }}>{row.lotNumber || '—'}</span></td>
                       <td><UiBadge tone={inventoryStatusTone(row.status)}>{inventoryStatusLabel(row.status)}</UiBadge></td>
                       <td>{row.manufactureDate ? new Date(row.manufactureDate).toLocaleDateString('vi-VN') : '—'}</td>
                       <td>{row.expiryDate ? new Date(row.expiryDate).toLocaleDateString('vi-VN') : '—'}</td>

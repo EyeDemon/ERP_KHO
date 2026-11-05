@@ -102,7 +102,7 @@ export function CodPackingEvidenceDrawer({
               Bằng chứng Chống Đội Cước &amp; Gian lận Trọng lượng ĐVVC
             </div>
             <h3 style={{ margin: '4px 0 0', fontSize: 18, color: '#0f172a' }}>
-              Vận đơn: <code>{item.trackingNumber}</code> • <UiBadge>{item.carrierCode}</UiBadge>
+              Vận đơn: <code className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.trackingNumber}</code> • <UiBadge>{item.carrierCode}</UiBadge>
             </h3>
           </div>
           <button
@@ -134,11 +134,11 @@ export function CodPackingEvidenceDrawer({
           </div>
         )}
 
-        <UiCard title="Bảng đối chiếu Trọng lượng & Phí vận chuyển (Weight & Shipping Fee Dispute Table)">
+        <UiCard title="Bảng đối chiếu Trọng lượng & Phí vận chuyển">
           <table className="ui-table-compact" style={{ width: '100%' }}>
             <tbody>
               <tr>
-                <td>Trọng lượng cân thực tế tại Bàn đóng gói (Packed Gross Weight)</td>
+                <td>Trọng lượng cân thực tế tại Bàn đóng gói</td>
                 <td
                   data-testid="evidence-packed-weight"
                   style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}
@@ -147,7 +147,7 @@ export function CodPackingEvidenceDrawer({
                 </td>
               </tr>
               <tr>
-                <td>Trọng lượng Hãng vận chuyển tính phí (Carrier Billed Weight)</td>
+                <td>Trọng lượng Hãng vận chuyển tính phí</td>
                 <td
                   data-testid="evidence-carrier-weight"
                   style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}
@@ -156,7 +156,7 @@ export function CodPackingEvidenceDrawer({
                 </td>
               </tr>
               <tr>
-                <td>Chênh lệch trọng lượng (Weight Variance)</td>
+                <td>Chênh lệch trọng lượng</td>
                 <td
                   data-testid="evidence-weight-variance"
                   style={{
@@ -184,20 +184,20 @@ export function CodPackingEvidenceDrawer({
           </table>
         </UiCard>
 
-        <UiCard title="Bằng chứng Kiện hàng & Video Đóng gói chống gian lận (Packing HU & SHA-256 Video Evidence)">
+        <UiCard title="Bằng chứng Kiện hàng & Video Đóng gói chống gian lận">
           <div className="ui-stack" style={{ gap: 8, fontSize: 13 }}>
             <div>
-              Mã kiện đóng gói (Handling Unit):{' '}
-              <strong data-testid="evidence-hu-code">{huCode}</strong>
+              Mã kiện đóng gói:{' '}
+              <strong data-testid="evidence-hu-code" className="ui-code" style={{ whiteSpace: 'nowrap' }}>{huCode}</strong>
             </div>
             <div>
-              Bàn đóng gói (Packing Station): <strong>{stationCode}</strong>
+              Bàn đóng gói: <strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{stationCode}</strong>
             </div>
             <div>
-              Thời điểm đóng gói (Packed At UTC): <code>{packedAt}</code>
+              Thời điểm đóng gói: <code>{packedAt}</code>
             </div>
             <div>
-              Mã băm toàn vẹn Video (SHA-256 Hash):{' '}
+              Mã băm toàn vẹn Video (SHA-256):{' '}
               <code
                 data-testid="evidence-video-sha256"
                 style={{ wordBreak: 'break-all', background: '#f1f5f9', padding: '2px 6px', borderRadius: 4 }}

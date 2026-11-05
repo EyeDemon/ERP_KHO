@@ -126,12 +126,12 @@ public sealed partial class MultiRoleAuthorizationMatrixTests
                 roles.Select(r => r.GetProperty("roleCode").GetString()!).Should().Equal(
                     "Admin", "Manager", "Supervisor", "Accountant", "WarehouseStaff", "Viewer");
                 roles.Select(r => r.GetProperty("displayNameVi").GetString()!).Should().Equal(
-                    "Quản trị viên công ty",
+                    "Quản trị công ty",
                     "Quản lý kho",
                     "Giám sát & QC",
                     "Kế toán kho",
                     "Nhân viên kho",
-                    "Chỉ xem / Kiểm toán");
+                    "Kiểm toán nội bộ");
                 roles.Select(r => r.GetProperty("permissions").GetArrayLength()).Should().Equal(141, 98, 54, 42, 36, 18);
                 foreach (var r in roles)
                 {

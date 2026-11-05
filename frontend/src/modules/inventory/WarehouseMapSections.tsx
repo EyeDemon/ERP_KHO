@@ -155,20 +155,20 @@ export const WarehouseMapBottomSections: React.FC<WarehouseMapBottomSectionsProp
         <table aria-label="Chi tiết heatmap kho thật" className="ui-table-compact">
           <thead>
             <tr>
-              <th>Vị trí</th>
-              <th>Phân lớp lưu trữ</th>
-              <th style={rightNumStyle}>Mức sử dụng</th>
-              <th>Sức chứa</th>
-              <th style={rightNumStyle}>Dịch chuyển 60p</th>
-              <th style={rightNumStyle}>Cất hàng mở</th>
-              <th>Hoạt động</th>
-              {canManage && <th style={{ whiteSpace: 'nowrap' }}>Bố trí</th>}
+              <th style={{ minWidth: 110 }}>Vị trí</th>
+              <th style={{ minWidth: 120 }}>Phân lớp lưu trữ</th>
+              <th style={{ ...rightNumStyle, minWidth: 96 }}>Mức sử dụng</th>
+              <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Sức chứa</th>
+              <th style={{ ...rightNumStyle, minWidth: 106 }}>Dịch chuyển 60p</th>
+              <th style={{ ...rightNumStyle, minWidth: 96 }}>Cất hàng mở</th>
+              <th style={{ minWidth: 92, whiteSpace: 'nowrap' }}>Hoạt động</th>
+              {canManage && <th style={{ minWidth: 84, whiteSpace: 'nowrap' }}>Bố trí</th>}
             </tr>
           </thead>
           <tbody>
             {items.map((item) => (
               <tr key={item.locationId}>
-                <td><strong style={{ whiteSpace: 'nowrap' }}>{item.code}</strong><br /><small>{item.structurePath?.split('/').join(' / ') || item.name}</small></td>
+                <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.code}</strong><br /><small>{item.structurePath?.split('/').join(' / ') || item.name}</small></td>
                 <td>{item.storageClass === 'AMBIENT' ? 'Nhiệt độ thường' : item.storageClass === 'COLD' ? 'Kho lạnh' : (item.storageClass || '—')}</td>
                 <td style={rightNumStyle}>{item.utilizationPercent != null ? item.utilizationPercent + '%' : 'Chưa có'}</td>
                 <td><UiBadge tone={capacityTone(item)}>{stateLabel[item.capacityState] || item.capacityState}</UiBadge></td>
@@ -190,17 +190,17 @@ export const WarehouseMapBottomSections: React.FC<WarehouseMapBottomSectionsProp
           <table aria-label="Location chưa bố trí bản đồ" className="ui-table-compact">
             <thead>
               <tr>
-                <th>Mã</th>
-                <th>Tên</th>
-                <th>Đường dẫn cấu trúc</th>
-                <th>Phân lớp lưu trữ</th>
-                {canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}
+                <th style={{ minWidth: 92, whiteSpace: 'nowrap' }}>Mã vị trí</th>
+                <th style={{ minWidth: 130 }}>Tên vị trí</th>
+                <th style={{ minWidth: 150 }}>Đường dẫn cấu trúc</th>
+                <th style={{ minWidth: 120 }}>Phân lớp lưu trữ</th>
+                {canManage && <th style={{ minWidth: 88, whiteSpace: 'nowrap' }}>Thao tác</th>}
               </tr>
             </thead>
             <tbody>
               {unmappedItems.map((item) => (
                 <tr key={item.locationId}>
-                  <td style={{ whiteSpace: 'nowrap' }}><strong>{item.code}</strong></td>
+                  <td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.code}</strong></td>
                   <td>{item.name.replace(/\s*\(RMA\)/gi, '')}</td>
                   <td>{item.structurePath?.split('/').join(' / ') || '—'}</td>
                   <td>{item.storageClass === 'AMBIENT' ? 'Nhiệt độ thường' : item.storageClass === 'COLD' ? 'Kho lạnh' : (item.storageClass || '—')}</td>

@@ -103,14 +103,14 @@ export const StocktakesListAndPolicySection: React.FC<StocktakesListAndPolicySec
             <table className="ui-table-compact stocktake-list-table" aria-label="Danh sách phiếu kiểm kê">
               <thead>
                 <tr>
-                  <th>Mã phiếu</th><th>Kho</th><th>Ngày tạo</th><th>Trạng thái</th>
-                  <th className="ui-cell-numeric" style={rightNumStyle}>SL SP</th><th>Ghi chú</th><th>Hành động</th>
+                  <th style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Mã phiếu</th><th style={{ minWidth: 120 }}>Kho</th><th style={{ minWidth: 125, whiteSpace: 'nowrap' }}>Ngày tạo</th><th style={{ minWidth: 115, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                  <th className="ui-cell-numeric" style={{ ...rightNumStyle, minWidth: 84, whiteSpace: 'nowrap' }}>Số dòng</th><th style={{ minWidth: 140 }}>Ghi chú</th><th style={{ minWidth: 105, whiteSpace: 'nowrap' }}>Hành động</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedStocktakes.map((s) => (
                   <tr key={s.id}>
-                    <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap' }}><strong style={{ whiteSpace: 'nowrap' }}>{s.code}</strong></td>
+                    <td className="ui-cell-nowrap" style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{s.code}</strong></td>
                     <td>{s.warehouseName}</td>
                     <td>{new Date(s.createdAt).toLocaleString('vi-VN')}</td>
                     <td><UiBadge tone={statusTone(s.status)}>{getStatusText(s.status)}</UiBadge></td>
@@ -142,7 +142,7 @@ export const StocktakesListAndPolicySection: React.FC<StocktakesListAndPolicySec
     {policyExpanded && (
       <div className="ui-stack" style={stocktakeSectionTab === 'policy' ? undefined : inactiveTabPanelStyle}>
         <UiCard
-          title="Đánh giá Tự động Duyệt Chênh lệch Nhỏ (< 1% & ≤ 500.000đ) & Lịch sử Đếm lại (Lần 1 / Lần 2)"
+          title="Đánh giá Tự động Duyệt Chênh lệch Nhỏ (< 1% & ≤ 500.000 ₫) & Lịch sử Đếm lại (Lần 1 / Lần 2)"
           subtitle="Quy tắc ngưỡng tự động duyệt: |Chênh lệch %| < 1% VÀ |Giá trị lệch| ≤ 500.000 ₫ — Vượt ngưỡng bắt buộc chuyển Giám đốc kho phê duyệt"
         >
           <div className="ui-inline-wrap" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -152,7 +152,7 @@ export const StocktakesListAndPolicySection: React.FC<StocktakesListAndPolicySec
             </div>
             <div className="ui-inline-wrap" style={{ gap: 8 }}>
               <button type="button" data-testid="btn-evaluate-stocktake-auto-approval" disabled={autoApprovalBusy} onClick={onEvaluateAutoApproval}>
-                {autoApprovalBusy ? 'Đang đánh giá...' : 'Chạy Đánh Giá Tự Động Duyệt (< 1% & ≤ 500.000đ)'}
+                {autoApprovalBusy ? 'Đang đánh giá...' : 'Chạy Đánh Giá Tự Động Duyệt (< 1% & ≤ 500.000 ₫)'}
               </button>
               <button type="button" className="ui-btn-secondary" disabled={autoApprovalBusy} onClick={onReloadAutoApproval}>
                 Tải lại Lịch sử Đếm Lần 1 / Lần 2
@@ -170,26 +170,26 @@ export const StocktakesListAndPolicySection: React.FC<StocktakesListAndPolicySec
             <table className="ui-table-compact" aria-label="Bảng đối chiếu lịch sử đếm lại và đánh giá tự động duyệt" style={{ width: '100%' }}>
               <thead>
                 <tr>
-                  <th>Mã &amp; Tên sản phẩm</th>
-                  <th style={rightNumStyle}>Tồn hệ thống (Ẩn khi đếm mù)</th>
-                  <th style={rightNumStyle}>Đếm Lần 1</th>
-                  <th style={rightNumStyle}>Đếm Lại Lần 2</th>
-                  <th style={rightNumStyle}>Chênh lệch (%)</th>
-                  <th style={rightNumStyle}>Giá trị lệch (VNĐ)</th>
-                  <th>Phân loại phê duyệt</th>
+                  <th style={{ minWidth: 150 }}>Mã &amp; Tên sản phẩm</th>
+                  <th style={{ ...rightNumStyle, minWidth: 105, whiteSpace: 'nowrap' }}>Tồn hệ thống</th>
+                  <th style={{ ...rightNumStyle, minWidth: 92, whiteSpace: 'nowrap' }}>Đếm Lần 1</th>
+                  <th style={{ ...rightNumStyle, minWidth: 105, whiteSpace: 'nowrap' }}>Đếm Lại Lần 2</th>
+                  <th style={{ ...rightNumStyle, minWidth: 105, whiteSpace: 'nowrap' }}>Chênh lệch (%)</th>
+                  <th style={{ ...rightNumStyle, minWidth: 115, whiteSpace: 'nowrap' }}>Giá trị lệch (₫)</th>
+                  <th style={{ minWidth: 150, whiteSpace: 'nowrap' }}>Phân loại phê duyệt</th>
                 </tr>
               </thead>
               <tbody>
                 {autoApprovalRows.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="ui-empty-cell">
-                      Nhấn &ldquo;Chạy Đánh Giá Tự Động Duyệt (&lt; 1% &amp; ≤ 500.000đ)&rdquo; hoặc chọn phiếu kiểm kê để xem chi tiết Đếm Lần 1 / Đếm Lại Lần 2.
+                      Nhấn &ldquo;Chạy Đánh Giá Tự Động Duyệt (&lt; 1% &amp; ≤ 500.000 ₫)&rdquo; hoặc chọn phiếu kiểm kê để xem chi tiết Đếm Lần 1 / Đếm Lại Lần 2.
                     </td>
                   </tr>
                 ) : (
                   autoApprovalRows.map((item) => (
                     <tr key={item.id}>
-                      <td><strong>{item.productCode}</strong> — {item.productName}</td>
+                      <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.productCode}</strong> — {item.productName}</td>
                       <td style={rightNumStyle}>{item.isBlindCount ? <span className="ui-muted-text">Ẩn khi đếm mù</span> : item.systemQuantity.toLocaleString('vi-VN')}</td>
                       <td style={rightNumStyle}>{item.attempt1Quantity !== null ? item.attempt1Quantity.toLocaleString('vi-VN') : '—'}</td>
                       <td style={rightNumStyle}>{item.attempt2Quantity !== null ? item.attempt2Quantity.toLocaleString('vi-VN') : '—'}</td>
@@ -214,7 +214,7 @@ export const StocktakesListAndPolicySection: React.FC<StocktakesListAndPolicySec
             <div><div style={policyBoxStyle}><strong>Loại bút toán điều chỉnh sổ cái:</strong><br />Điều chỉnh tăng &amp; Điều chỉnh giảm</div></div>
             <div><div style={policyBoxStyle}><strong>Kiểm soát phân tách nhiệm vụ:</strong><br />Người tạo phiếu kiểm kê không được tự phê duyệt điều chỉnh tồn kho (Ngưỡng cảnh báo lệch chuẩn: ±2.0%)</div></div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, marginTop: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginTop: 10 }}>
             <label className="ui-stack">
               <span>Sản phẩm điều chỉnh</span>
               <input aria-label="Sản phẩm điều chỉnh" type="text" list="stocktake-proposal-products" placeholder="VD: QA-E2E-001" value={proposalProductCode} onChange={(e) => setProposalProductCode(e.target.value)} />

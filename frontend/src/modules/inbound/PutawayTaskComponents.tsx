@@ -144,7 +144,7 @@ export function PutawayWorkspaceAndSlottingCards({
   return (
     <>
       <UiCard title="Điều phối cất hàng lên kệ" subtitle="Chọn nhanh nhiệm vụ phiếu nhập, vị trí nguồn, vị trí kệ đích và số lượng thực cất">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, alignItems: 'start' }}>
+        <div className="putaway-dispatch-form-grid">
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'flex-start' }}>
             <span>Phiếu nhập / Nhiệm vụ cất hàng</span>
             <select aria-label="Chọn phiếu nhập cất hàng" style={{ minHeight: 44 }} value={workspaceTaskId} onChange={e => { setWorkspaceTaskId(e.target.value); if (e.target.value) void detail(Number(e.target.value)); else setSelected(null); }}>
@@ -173,7 +173,7 @@ export function PutawayWorkspaceAndSlottingCards({
         </div>
       </UiCard>
 
-      <UiCard title="Gợi ý vị trí cất hàng tự động" subtitle="Tối ưu vị trí kệ đích theo nguyên tắc FEFO, sức chứa và điều phối chuyến kép">
+      <UiCard title="Gợi ý vị trí cất hàng tự động" subtitle="Tối ưu vị trí kệ đích theo nguyên tắc Ưu tiên Hạn dùng, sức chứa và điều phối chuyến kép">
         <div className="ui-stack" style={{ gap: 10 }}>
           <div className="ui-inline-wrap" style={{ marginTop: 2 }}>
             <button type="button" style={{ background: '#1d4ed8', color: '#ffffff', fontWeight: 600, border: '1px solid #1d4ed8', minHeight: 40 }} disabled={!!busy || slottingBusy} onClick={() => void evaluateSlotting()}>
@@ -214,7 +214,7 @@ export function PutawayWorkspaceAndSlottingCards({
           {crossDockNotice && <div role="status" data-testid="cross-dock-status-banner" style={{ marginTop: 4, padding: '8px 12px', borderRadius: 8, background: '#eff6ff', color: '#1e3a8a', border: '1px solid #93c5fd', fontSize: 13, lineHeight: 1.5, fontWeight: 600 }}>{crossDockNotice}</div>}
           {slottingEvaluationResult && <div role="status" style={{ marginTop: 4, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word' }}>{slottingEvaluationResult}</div>}
           <details style={{ marginTop: 4, padding: '8px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-            <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#334155' }}>Quy tắc gợi ý vị trí kệ tự động (FEFO &amp; Sức chứa) — Chi tiết quy tắc &amp; kỹ thuật hệ thống</summary>
+            <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#334155' }}>Quy tắc gợi ý vị trí kệ tự động (Ưu tiên Hạn dùng &amp; Sức chứa) — Chi tiết quy tắc &amp; kỹ thuật hệ thống</summary>
             <div className="ui-stack" style={{ gap: 8, marginTop: 8 }}>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}><span style={{ fontWeight: 600 }}>Tiêu chí xếp hạng (5 mức):</span>{PUTAWAY_RANKING_CODES.map(code => <UiBadge key={code} tone="success">{formatPutawayRuleLabel(code)}</UiBadge>)}</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}><span style={{ fontWeight: 600 }}>Ràng buộc cứng (4 mức):</span>{PUTAWAY_HARD_GUARD_CODES.map(code => <UiBadge key={code}>{formatPutawayRuleLabel(code)}</UiBadge>)}</div>

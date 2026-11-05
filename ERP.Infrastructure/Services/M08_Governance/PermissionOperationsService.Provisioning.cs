@@ -26,7 +26,7 @@ public sealed partial class PermissionOperationsService
         {
             tenantId = _db.CurrentTenantId,
             tenantCode = "TNT-ERP-KHO-VN",
-            tenantName = "Hệ thống Kho Vận Doanh Nghiệp (Tenant Chính)",
+            tenantName = SaasBillingService.CanonicalTenant1LegalName,
             planCode = "ENTERPRISE_SAAS",
             planName = "Gói Doanh nghiệp Mở rộng (Enterprise SaaS)",
             isolationMode = "Cách ly đa khách hàng theo TenantId & Phân quyền Kho (Row-Level Isolation)",
@@ -94,7 +94,7 @@ public sealed partial class PermissionOperationsService
         {
             tenantId = _db.CurrentTenantId,
             tenantCode = !string.IsNullOrWhiteSpace(request?.TenantCode) ? request.TenantCode.Trim() : "TNT-ERP-KHO-VN",
-            tenantName = "Hệ thống Kho Vận Doanh Nghiệp (Tenant Chính)",
+            tenantName = SaasBillingService.CanonicalTenant1LegalName,
             planCode = "ENTERPRISE_SAAS",
             planName = "Gói Doanh nghiệp Mở rộng (Enterprise SaaS)",
             isolationMode = "Cách ly đa khách hàng theo TenantId & Phân quyền Kho (Row-Level Isolation)",
@@ -215,11 +215,11 @@ public sealed partial class PermissionOperationsService
                 if (!await _db.SaasPlans.AsNoTracking().AnyAsync(ct))
                 {
                     _db.SaasPlans.AddRange(
-                        new SaasPlan { PlanCode = "FREE_TRIAL", PlanName = "Gói Dùng thử 14 Ngày — 0 đ/tháng", MonthlyOrderQuota = 300, MaxWarehouses = 1, MaxUsers = 3, MonthlyPriceVnd = 0m, IsActive = true },
-                        new SaasPlan { PlanCode = "STARTER", PlanName = "Gói Khởi đầu — 490.000 đ/tháng", MonthlyOrderQuota = 1500, MaxWarehouses = 1, MaxUsers = 5, MonthlyPriceVnd = 490000m, IsActive = true },
-                        new SaasPlan { PlanCode = "GROWTH", PlanName = "Gói Tăng trưởng — 1.490.000 đ/tháng", MonthlyOrderQuota = 10000, MaxWarehouses = 3, MaxUsers = 20, MonthlyPriceVnd = 1490000m, IsActive = true },
-                        new SaasPlan { PlanCode = "PRO", PlanName = "Gói Tăng trưởng — 1.490.000 đ/tháng", MonthlyOrderQuota = 10000, MaxWarehouses = 3, MaxUsers = 20, MonthlyPriceVnd = 1490000m, IsActive = true },
-                        new SaasPlan { PlanCode = "ENTERPRISE", PlanName = "Gói Doanh nghiệp — 3.490.000 đ/tháng", MonthlyOrderQuota = 100000, MaxWarehouses = 20, MaxUsers = 100, MonthlyPriceVnd = 3490000m, IsActive = true }
+                        new SaasPlan { PlanCode = "FREE_TRIAL", PlanName = "Gói Dùng thử 14 Ngày — 0 ₫/tháng", MonthlyOrderQuota = 300, MaxWarehouses = 1, MaxUsers = 3, MonthlyPriceVnd = 0m, IsActive = true },
+                        new SaasPlan { PlanCode = "STARTER", PlanName = "Gói Khởi đầu — 490.000 ₫/tháng", MonthlyOrderQuota = 1500, MaxWarehouses = 1, MaxUsers = 5, MonthlyPriceVnd = 490000m, IsActive = true },
+                        new SaasPlan { PlanCode = "GROWTH", PlanName = "Gói Tăng trưởng — 1.490.000 ₫/tháng", MonthlyOrderQuota = 10000, MaxWarehouses = 3, MaxUsers = 20, MonthlyPriceVnd = 1490000m, IsActive = true },
+                        new SaasPlan { PlanCode = "PRO", PlanName = "Gói Tăng trưởng — 1.490.000 ₫/tháng", MonthlyOrderQuota = 10000, MaxWarehouses = 3, MaxUsers = 20, MonthlyPriceVnd = 1490000m, IsActive = true },
+                        new SaasPlan { PlanCode = "ENTERPRISE", PlanName = "Gói Doanh nghiệp — 3.490.000 ₫/tháng", MonthlyOrderQuota = 100000, MaxWarehouses = 20, MaxUsers = 100, MonthlyPriceVnd = 3490000m, IsActive = true }
                     );
                     await _db.SaveChangesAsync(ct);
                 }

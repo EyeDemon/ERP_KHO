@@ -23,11 +23,11 @@ export function InventoryTraceabilityExposureCards({ result }: { result: Result 
           <table className="ui-table-compact" aria-label="Chứng từ liên quan cùng lô hoặc sê-ri">
             <thead>
               <tr>
-                <th>Chứng từ</th>
-                <th>Kho</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Sự kiện</th>
-                <th>Phát sinh đầu</th>
-                <th>Phát sinh cuối</th>
+                <th style={{ minWidth: 130 }}>Chứng từ</th>
+                <th style={{ minWidth: 110 }}>Kho</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 84, whiteSpace: 'nowrap' }}>Sự kiện</th>
+                <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Phát sinh đầu</th>
+                <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Phát sinh cuối</th>
               </tr>
             </thead>
             <tbody>
@@ -39,8 +39,8 @@ export function InventoryTraceabilityExposureCards({ result }: { result: Result 
                     <td><strong>{referenceTypeLabel(doc.referenceType)}</strong><br /><small>Mã tham chiếu #{doc.referenceId}</small></td>
                     <td>{doc.warehouseName}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{doc.eventCount}</td>
-                    <td>{new Date(doc.firstTransactionDate).toLocaleString('vi-VN')}</td>
-                    <td>{new Date(doc.lastTransactionDate).toLocaleString('vi-VN')}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{new Date(doc.firstTransactionDate).toLocaleString('vi-VN')}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{new Date(doc.lastTransactionDate).toLocaleString('vi-VN')}</td>
                   </tr>
                 ))
               )}
@@ -63,11 +63,11 @@ export function InventoryTraceabilityExposureCards({ result }: { result: Result 
           <table className="ui-table-compact" aria-label="Phiếu nhập đã ghi sổ theo lô hoặc sê-ri">
             <thead>
               <tr>
-                <th>Mã phiếu nhập</th>
-                <th>Trạng thái</th>
-                <th>Lần ghi sổ cuối</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Đã nhập</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Giao dịch sổ cái</th>
+                <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Mã phiếu nhập</th>
+                <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Lần ghi sổ cuối</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 88, whiteSpace: 'nowrap' }}>Đã nhập</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 110, whiteSpace: 'nowrap' }}>Giao dịch sổ cái</th>
               </tr>
             </thead>
             <tbody>
@@ -76,9 +76,9 @@ export function InventoryTraceabilityExposureCards({ result }: { result: Result 
               ) : (
                 result.receiptExposures.map((receipt) => (
                   <tr key={receipt.warehouseId + '-' + receipt.receiptId}>
-                    <td><strong>{receipt.receiptCode}</strong><br /><small>#{receipt.receiptId} • Kho #{receipt.warehouseId}</small></td>
+                    <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{receipt.receiptCode}</strong><br /><small>#{receipt.receiptId} • Kho #{receipt.warehouseId}</small></td>
                     <td><UiBadge>Đã ghi sổ</UiBadge></td>
-                    <td>{new Date(receipt.lastPostedAt).toLocaleString('vi-VN')}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{new Date(receipt.lastPostedAt).toLocaleString('vi-VN')}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{receipt.postedQuantity}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{receipt.ledgerEventCount}</td>
                   </tr>
@@ -104,11 +104,11 @@ export function InventoryTraceabilityExposureCards({ result }: { result: Result 
           <table className="ui-table-compact" aria-label="Shipment có giao dịch xuất giao cần rà soát">
             <thead>
               <tr>
-                <th>Mã chuyến giao</th>
-                <th>Trạng thái hiện tại</th>
-                <th>Xuất giao lúc</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Đã xuất</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Giao dịch sổ cái</th>
+                <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Mã chuyến giao</th>
+                <th style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Xuất giao lúc</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 88, whiteSpace: 'nowrap' }}>Đã xuất</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 110, whiteSpace: 'nowrap' }}>Giao dịch sổ cái</th>
               </tr>
             </thead>
             <tbody>
@@ -117,9 +117,9 @@ export function InventoryTraceabilityExposureCards({ result }: { result: Result 
               ) : (
                 result.shipmentExposures.map((shipment) => (
                   <tr key={shipment.warehouseId + '-' + shipment.shipmentId}>
-                    <td><strong>{shipment.shipmentCode}</strong><br /><small>#{shipment.shipmentId} • Kho #{shipment.warehouseId}</small></td>
+                    <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{shipment.shipmentCode}</strong><br /><small>#{shipment.shipmentId} • Kho #{shipment.warehouseId}</small></td>
                     <td><UiBadge>{shipmentStatusLabel(shipment.shipmentStatus)}</UiBadge></td>
-                    <td>{shipment.dispatchedAt ? new Date(shipment.dispatchedAt).toLocaleString('vi-VN') : '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{shipment.dispatchedAt ? new Date(shipment.dispatchedAt).toLocaleString('vi-VN') : '—'}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{shipment.dispatchedQuantity}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{shipment.ledgerEventCount}</td>
                   </tr>
@@ -145,11 +145,11 @@ export function InventoryTraceabilityExposureCards({ result }: { result: Result 
           <table className="ui-table-compact" aria-label="Liên kết Shipment Packing Picking theo lô hoặc sê-ri">
             <thead>
               <tr>
-                <th>Chuyến giao</th>
-                <th>Đóng gói</th>
-                <th>Lấy hàng</th>
-                <th>Phân bổ / Vị trí</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Đã lấy hàng</th>
+                <th style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Chuyến giao</th>
+                <th style={{ minWidth: 100, whiteSpace: 'nowrap' }}>Đóng gói</th>
+                <th style={{ minWidth: 100, whiteSpace: 'nowrap' }}>Lấy hàng</th>
+                <th style={{ minWidth: 120 }}>Phân bổ / Vị trí</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 96, whiteSpace: 'nowrap' }}>Đã lấy hàng</th>
               </tr>
             </thead>
             <tbody>
@@ -158,10 +158,10 @@ export function InventoryTraceabilityExposureCards({ result }: { result: Result 
               ) : (
                 result.shipmentPickingEvidence.map((link) => (
                   <tr key={link.shipmentId + '-' + link.pickingTaskLineId}>
-                    <td><strong>{link.shipmentCode}</strong><small> #{link.shipmentId}</small></td>
-                    <td>{link.packingSessionCode}<br /><small>#{link.packingSessionId}</small></td>
-                    <td>{link.pickingTaskCode}<br /><small>Dòng #{link.pickingTaskLineId}</small></td>
-                    <td>#{link.allocationId}<br /><small>{locationCodeLabel(link.sourceLocationCode)}</small></td>
+                    <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{link.shipmentCode}</strong><small> #{link.shipmentId}</small></td>
+                    <td><span className="ui-code" style={{ whiteSpace: 'nowrap' }}>{link.packingSessionCode}</span><br /><small>#{link.packingSessionId}</small></td>
+                    <td><span className="ui-code" style={{ whiteSpace: 'nowrap' }}>{link.pickingTaskCode}</span><br /><small>Dòng #{link.pickingTaskLineId}</small></td>
+                    <td>#{link.allocationId}<br /><small className="ui-code" style={{ whiteSpace: 'nowrap' }}>{locationCodeLabel(link.sourceLocationCode)}</small></td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{link.pickedQuantity}</td>
                   </tr>
                 ))
@@ -187,12 +187,12 @@ export function InventoryTraceabilityExposureCards({ result }: { result: Result 
           <table className="ui-table-compact" aria-label="Chuỗi Handling Unit gốc con đã xuất theo lô hoặc sê-ri">
             <thead>
               <tr>
-                <th>Chuyến giao</th>
-                <th>Kiện gốc</th>
-                <th>Chuỗi kiện</th>
-                <th>Mã quét kiện chứa hàng</th>
-                <th>Dòng lấy hàng</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Đã đóng gói</th>
+                <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Chuyến giao</th>
+                <th style={{ minWidth: 100, whiteSpace: 'nowrap' }}>Kiện gốc</th>
+                <th style={{ minWidth: 130 }}>Chuỗi kiện</th>
+                <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Mã quét kiện</th>
+                <th style={{ minWidth: 100, whiteSpace: 'nowrap' }}>Dòng lấy hàng</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 96, whiteSpace: 'nowrap' }}>Đã đóng gói</th>
               </tr>
             </thead>
             <tbody>
@@ -201,11 +201,11 @@ export function InventoryTraceabilityExposureCards({ result }: { result: Result 
               ) : (
                 result.shipmentHuEvidence.map((hu) => (
                   <tr key={hu.shipmentId + '-' + hu.contentHandlingUnitId + '-' + hu.pickingTaskLineId}>
-                    <td>#{hu.shipmentId}</td>
-                    <td><strong>{hu.rootHandlingUnitCode}</strong><br /><small>#{hu.rootHandlingUnitId}</small></td>
+                    <td style={{ whiteSpace: 'nowrap' }}>#{hu.shipmentId}</td>
+                    <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{hu.rootHandlingUnitCode}</strong><br /><small>#{hu.rootHandlingUnitId}</small></td>
                     <td>{hu.hierarchyPath}<br /><small>Kiện chứa hàng: #{hu.contentHandlingUnitId}</small></td>
-                    <td>{hu.contentHandlingUnitBarcode}</td>
-                    <td>#{hu.pickingTaskLineId}</td>
+                    <td><span className="ui-code" style={{ whiteSpace: 'nowrap' }}>{hu.contentHandlingUnitBarcode}</span></td>
+                    <td style={{ whiteSpace: 'nowrap' }}>#{hu.pickingTaskLineId}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{hu.packedQuantity}</td>
                   </tr>
                 ))
@@ -231,11 +231,11 @@ export function InventoryTraceabilityExposureCards({ result }: { result: Result 
           <table className="ui-table-compact" aria-label="Liên kết Shipment Picking với phiếu xuất kho nguồn">
             <thead>
               <tr>
-                <th>Chuyến giao</th>
-                <th>Phiếu xuất nguồn</th>
-                <th>Tác vụ lấy hàng</th>
-                <th>Phiếu đã xuất lúc</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Số lượng sản phẩm trên phiếu</th>
+                <th style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Chuyến giao</th>
+                <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Phiếu xuất nguồn</th>
+                <th style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Tác vụ lấy hàng</th>
+                <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Phiếu đã xuất lúc</th>
+                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', minWidth: 100, whiteSpace: 'nowrap' }}>SL trên phiếu</th>
               </tr>
             </thead>
             <tbody>
@@ -244,10 +244,10 @@ export function InventoryTraceabilityExposureCards({ result }: { result: Result 
               ) : (
                 result.shipmentExportSources.map((source) => (
                   <tr key={source.warehouseId + '-' + source.shipmentId + '-' + source.exportReceiptId}>
-                    <td><strong>{source.shipmentCode}</strong><br /><small>#{source.shipmentId} • Kho #{source.warehouseId}</small></td>
-                    <td><strong>{source.exportReceiptCode}</strong><br /><small>#{source.exportReceiptId}</small></td>
-                    <td>#{source.pickingTaskId}</td>
-                    <td>{source.exportReceiptDispatchedAt ? new Date(source.exportReceiptDispatchedAt).toLocaleString('vi-VN') : '—'}</td>
+                    <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{source.shipmentCode}</strong><br /><small>#{source.shipmentId} • Kho #{source.warehouseId}</small></td>
+                    <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{source.exportReceiptCode}</strong><br /><small>#{source.exportReceiptId}</small></td>
+                    <td style={{ whiteSpace: 'nowrap' }}>#{source.pickingTaskId}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{source.exportReceiptDispatchedAt ? new Date(source.exportReceiptDispatchedAt).toLocaleString('vi-VN') : '—'}</td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{source.exportReceiptProductQuantity}</td>
                   </tr>
                 ))

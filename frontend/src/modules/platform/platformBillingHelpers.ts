@@ -242,18 +242,62 @@ export const EMPTY_INTEGRATION_METRICS: PlatformIntegrationMetrics = {
   vietQr: { ...EMPTY_CHANNEL_METRICS },
 };
 
+export const CANONICAL_TENANT1_LEGAL_NAME = 'Công ty TNHH Thương mại & Kho vận Đại Phát';
+export const CANONICAL_TENANT1_TAX_CODE = '0318294012';
+
+export const normalizeTenantLegalNameVi = (rawName?: string | null, tenantId = 1, fallbackCode = 'TENANT-001'): string => {
+  const trimmed = (rawName ?? '').trim();
+  if (!trimmed) return tenantId === 1 ? CANONICAL_TENANT1_LEGAL_NAME : `Doanh nghiệp Thuê bao ${fallbackCode}`;
+  const upper = trimmed.toUpperCase();
+  if (
+    /ERP_KHO/i.test(trimmed) ||
+    upper === 'CÔNG TY TNHH THƯƠNG MẠI ĐẠI PHÁT' ||
+    upper === 'CONG TY TNHH THUONG MAI DAI PHAT' ||
+    upper === 'CÔNG TY TNHH THƯƠNG MẠI & KHO VẬN ĐẠI PHÁT'
+  ) {
+    return CANONICAL_TENANT1_LEGAL_NAME;
+  }
+  return trimmed;
+};
+
+export const normalizeTenantTaxCode = (rawTaxCode?: string | null): string => {
+  const trimmed = (rawTaxCode ?? '').trim();
+  return !trimmed || trimmed === '0312345678' ? CANONICAL_TENANT1_TAX_CODE : trimmed;
+};
+
+export const sanitizePlatformJargonVi = (rawText?: string | null): string => {
+  const text = (rawText ?? '').trim();
+  if (!text) return '';
+  return text
+    .replace(/Doanh nghiệp Kho vận ERP_KHO\s*\(Tenant\s*1\)/gi, CANONICAL_TENANT1_LEGAL_NAME)
+    .replace(/CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO/gi, CANONICAL_TENANT1_LEGAL_NAME)
+    .replace(/CÔNG TY TNHH THƯƠNG MẠI ĐẠI PHÁT/gi, CANONICAL_TENANT1_LEGAL_NAME)
+    .replace(/ERP_KHO/gi, 'ERPKHO')
+    .replace(/Đối soát\s+(?:bất biến\s+)?(?:sổ cái\s+|tồn kho\s+|tồn\s+)?9 chiều/gi, 'Đối soát cân bằng sổ cái tồn kho')
+    .replace(/(?:bất biến\s+)?(?:sổ cái|tồn kho|tồn)\s+9 chiều/gi, 'sổ cái tồn kho')
+    .replace(/\b9 chiều\b/gi, 'sổ cái tồn kho')
+    .replace(/\bFull WMS\b/gi, 'Gói Quản trị Kho Toàn diện')
+    .replace(/Sự kiện Outbox/gi, 'Hàng đợi đồng bộ đối tác')
+    .replace(/\bOutbox\b/gi, 'Hàng đợi đồng bộ đối tác')
+    .replace(/\bDLQ\b/gi, 'Hàng đợi đồng bộ đối tác');
+};
+
 const WORKER_METADATA_BY_NAME: Readonly<Record<string, { titleVi: string; descriptionVi: string }>> = {
   OutboxDispatcherWorker: {
-    titleVi: 'Tiến trình đồng bộ hóa đơn & sổ cái',
-    descriptionVi: 'Đẩy sự kiện hóa đơn điện tử NĐ 70/2025 & bút toán kế toán sang MISA/Viettel và cổng vận chuyển',
+    titleVi: 'Hàng đợi đồng bộ đối tác & hóa đơn',
+    descriptionVi: 'Đẩy sự kiện hóa đơn điện tử NĐ 70/2025, chứng từ kế toán sang MISA/Viettel và cổng vận chuyển',
+  },
+  InvoiceLedgerSyncWorker: {
+    titleVi: 'Hàng đợi đồng bộ đối tác & hóa đơn',
+    descriptionVi: 'Đẩy sự kiện hóa đơn điện tử NĐ 70/2025, chứng từ kế toán sang MISA/Viettel và cổng vận chuyển',
   },
   InventoryConsistencyWorker: {
-    titleVi: 'Tiến trình đối soát bất biến tồn kho 9 chiều',
-    descriptionVi: 'Kiểm toán tự động tổng đại số sổ cái InventoryTransactions và số dư InventoryBalances theo GrainHash SHA-256',
+    titleVi: 'Đối soát cân bằng sổ cái tồn kho',
+    descriptionVi: 'Kiểm toán tự động tổng đại số sổ cái nhập xuất và số dư tồn kho thực tế theo mã định danh duy nhất',
   },
   WebhookRetryAndCleanupWorker: {
     titleVi: 'Tiến trình thử lại Webhook & dọn dẹp hàng đợi',
-    descriptionVi: 'Xử lý lại sự kiện Shopee/TikTok/VietQR bị trễ mạng và thu hồi phiên Impersonation hết hạn TTL',
+    descriptionVi: 'Xử lý lại thông điệp Shopee/TikTok/VietQR bị trễ mạng và thu hồi phiên hỗ trợ kỹ thuật hết hạn',
   },
 };
 
@@ -262,27 +306,25 @@ export const enrichPlatformWorkers = (
 ): PlatformWorkerHealthItem[] =>
   rawWorkers.map((rw) => {
     const meta = WORKER_METADATA_BY_NAME[rw.workerName];
+    const titleVi = sanitizePlatformJargonVi(meta?.titleVi || rw.titleVi);
+    const descriptionVi = sanitizePlatformJargonVi(meta?.descriptionVi || rw.descriptionVi);
     return meta
-      ? {
-          ...rw,
-          titleVi: rw.titleVi || meta.titleVi,
-          descriptionVi: rw.descriptionVi || meta.descriptionVi,
-        }
-      : rw;
+      ? { ...rw, titleVi, descriptionVi }
+      : { ...rw, titleVi: titleVi || sanitizePlatformJargonVi(rw.workerName), descriptionVi };
   });
 
 export const mapStoredToSession = (fallbackActor = 'SuperAdmin'): ActiveImpersonationSession | null => {
   const stored = getActiveImpersonationState();
   if (!stored) return null;
   const tid = Number(stored.tenantId) || 1;
-  const rawName = stored.tenantName?.trim();
+  const fallbackCode = `TENANT-${String(tid).padStart(3, '0')}`;
   return {
     sessionId: stored.sessionCode || stored.impersonationToken || `IMP-${tid}`,
     targetTenantId: tid,
-    targetTenantCode: stored.tenantCode || `TENANT-${String(tid).padStart(3, '0')}`,
-    targetTenantName: !rawName || rawName === 'Doanh nghiệp Kho vận ERP_KHO (Tenant 1)' ? 'CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO' : rawName,
+    targetTenantCode: stored.tenantCode || fallbackCode,
+    targetTenantName: normalizeTenantLegalNameVi(stored.tenantName, tid, fallbackCode),
     ticketCode: stored.ticketCode,
-    reason: stored.reason || 'Hỗ trợ kỹ thuật theo yêu cầu khách hàng',
+    reason: sanitizePlatformJargonVi(stored.reason) || 'Hỗ trợ kỹ thuật theo yêu cầu khách hàng',
     ttlMinutes: 30,
     expiresAtUtc: stored.expiresAtUtc,
     startedByUsername: stored.startedByUsername || fallbackActor,
@@ -298,14 +340,18 @@ export const mapRawPlatformTenants = (rawTenants: Array<Record<string, unknown>>
     const cleanCode = rawCode.toUpperCase() === 'DEFAULT' ? fallbackCode : rawCode;
     const statusStr = String(t.lifecycleStatus ?? t.status ?? 'ACTIVE');
     const currentOrders = Number(t.currentMonthOrderCount ?? 0);
-    const cleanPlanName = String(t.planName ?? 'Gói Tăng trưởng').replace(/\s*\(Growth\)/gi, '');
-    const rawCompName = String(t.companyName ?? '').trim();
-    const normalizedCompanyName = !rawCompName || rawCompName === 'Doanh nghiệp Kho vận ERP_KHO (Tenant 1)'
-      ? tid === 1 ? 'CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO' : `Doanh nghiệp Thuê bao ${cleanCode}`
-      : rawCompName;
+    const cleanPlanName = sanitizePlatformJargonVi(
+      String(t.planName ?? 'Gói Tăng trưởng').replace(/\s*\(Growth\)/gi, ''),
+    );
+    const normalizedCompanyName = normalizeTenantLegalNameVi(
+      t.companyName != null ? String(t.companyName) : '',
+      tid,
+      cleanCode,
+    );
     return {
       tenantId: tid, tenantCode: cleanCode, companyName: normalizedCompanyName,
-      taxCode: String(t.taxCode ?? '0312345678'), taxpayerType: String(t.taxpayerType ?? 'ENTERPRISE'),
+      taxCode: normalizeTenantTaxCode(t.taxCode != null ? String(t.taxCode) : ''),
+      taxpayerType: String(t.taxpayerType ?? 'ENTERPRISE'),
       ownerEmail: String(t.ownerEmail ?? `owner.t${tid}@erpkho.local`), status: statusStr, lifecycleStatus: statusStr,
       suspensionReason: (t.suspensionReason ?? t.suspendedReason) ? String(t.suspensionReason ?? t.suspendedReason) : null,
       suspendedBy: t.suspendedBy ? String(t.suspendedBy) : null, suspendedAtVi: t.suspendedAtVi ? String(t.suspendedAtVi) : null,
@@ -325,10 +371,11 @@ export const mapAndMergePlatformInvoices = (rawItems: Array<Record<string, unkno
     const sub = rawSub > 0 && rawVat > 0 && rawSub + rawVat === total ? rawSub : Math.round(total / 1.1);
     const code = String(raw.invoiceCode ?? raw.invoiceNo ?? (idx === 0 ? 'INV-SAAS-202610-001' : `INV-SAAS-202611-00${idx + 1}`));
     const isOct = code.includes('202610');
+    const tid = Number(raw.tenantId ?? 1);
     const rawCreditVi = [raw.bankCreditTimeVi, raw.bankCreditTimestampVi].find((v) => typeof v === 'string' && v.trim()) as string | undefined;
     const rawConfirmedVi = [raw.confirmedAtVi, raw.reconciledTimestampVi, raw.paidDateDisplayVi].find((v) => typeof v === 'string' && v.trim()) as string | undefined;
     return {
-      id: Number(raw.id ?? idx + 1), tenantId: Number(raw.tenantId ?? 1), invoiceCode: code,
+      id: Number(raw.id ?? idx + 1), tenantId: tid, invoiceCode: code,
       planCode: String(raw.planCode ?? 'GROWTH'),
       billingPeriod: String(raw.billingPeriod ?? (isOct ? '10/2026' : '11/2026')),
       dueDateVi: String(raw.dueDateVi ?? (isOct ? '05/10/2026' : '05/11/2026')),
@@ -336,11 +383,11 @@ export const mapAndMergePlatformInvoices = (rawItems: Array<Record<string, unkno
       confirmedAtVi: rawConfirmedVi ? rawConfirmedVi.trim() : (isOct ? '03/10/2026 16:15' : undefined),
       bankTransactionRef: typeof raw.bankTransactionRef === 'string' && raw.bankTransactionRef ? raw.bankTransactionRef : (isOct ? 'FT2627690123' : undefined),
       subTotalVnd: sub, vatRatePercent: Number(raw.vatRatePercent ?? 10), vatAmountVnd: total - sub, amountVnd: total,
-      buyerTaxCode: raw.buyerTaxCode ? String(raw.buyerTaxCode) : '0312345678',
-      buyerLegalName: raw.buyerLegalName ? String(raw.buyerLegalName) : 'CÔNG TY TNHH VẬN HÀNH KHO ERP_KHO',
+      buyerTaxCode: normalizeTenantTaxCode(raw.buyerTaxCode != null ? String(raw.buyerTaxCode) : ''),
+      buyerLegalName: normalizeTenantLegalNameVi(raw.buyerLegalName != null ? String(raw.buyerLegalName) : '', tid),
       status: String(raw.status ?? (idx === 0 ? 'PAID' : 'PENDING')).toUpperCase(),
       settlementSummaryVi: raw.settlementSummaryVi
-        ? String(raw.settlementSummaryVi).replace('FT2628890123', 'FT2627690123').replace(/Mã UNC:|UNC:/gi, 'Mã giao dịch:')
+        ? sanitizePlatformJargonVi(String(raw.settlementSummaryVi).replace('FT2628890123', 'FT2627690123').replace(/Mã UNC:|UNC:/gi, 'Mã giao dịch:'))
         : undefined,
       createdAtUtc: String(raw.createdAtUtc ?? '2026-11-01T00:00:00Z'),
     };

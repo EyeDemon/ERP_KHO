@@ -146,10 +146,19 @@ export const statusLabel = (status: string) =>
     Cancelled: 'Đã hủy',
   }[status] || 'Trạng thái chưa xác định');
 
-export const statusTone = (status: string): 'neutral' | 'success' | 'warning' | 'danger' => {
+export const checkCompactViewport = (maxWidth = 768): boolean => {
+  if (typeof window === 'undefined') return false;
+  if (typeof window.matchMedia === 'function' && window.matchMedia(`(max-width: ${maxWidth}px)`).matches) {
+    return true;
+  }
+  return window.innerWidth > 0 && window.innerWidth <= maxWidth;
+};
+
+export const statusTone = (status: string): 'neutral' | 'success' | 'warning' | 'danger' | 'info' => {
   if (status === 'Cancelled' || status === 'DiscrepancyRejected') return 'danger';
-  if (status === 'Posted' || status === 'QcCompleted' || status === 'ReadyToPost') return 'success';
-  if (status === 'Draft' || status.includes('Pending') || status === 'Received') return 'warning';
+  if (status === 'Posted') return 'success';
+  if (status === 'Approved' || status === 'QcCompleted' || status === 'ReadyToPost' || status === 'Received') return 'info';
+  if (status.includes('Pending')) return 'warning';
   return 'neutral';
 };
 

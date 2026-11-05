@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
+import { Lock } from 'lucide-react';
 import { usePermission } from '../../services/authorization';
-import { UiBadge, UiCard, UiEmptyState, UiSortTh, UiTableScroll } from '../../ui/ProductionUi';
+import { UiBadge, UiCard, UiEmptyState, UiMetric, UiMetricGrid, UiSortTh, UiTableScroll } from '../../ui/ProductionUi';
 import { formatWarehouseLabel } from '../../utils/warehouseLabel';
 import { ImportReceiptRowActions } from './ImportReceiptRowActions';
 import {
   type ImportReceipt,
   type Warehouse,
+  checkCompactViewport,
   formatVnDateTime,
   mapCreatedByDisplayName,
   statusLabel,
@@ -26,46 +28,38 @@ export const ImportReceiptKpiCard: React.FC<ImportReceiptKpiCardProps> = ({ rece
   const postedCount = receipts.filter(r => r.status === 'Posted' || r.status === 'Approved').length;
   const cancelledCount = receipts.filter(r => r.status === 'Cancelled').length;
 
-  const cards = [
-    { label: 'Tổng số phiếu nhập', value: receipts.length, subtitle: 'Toàn bộ chứng từ tiếp nhận', isZero: receipts.length === 0 },
-    { label: 'Đang soạn / Nhận tại cửa', value: receivingCount, subtitle: 'Nháp, đã nhận hoặc xử lý sai lệch', isZero: receivingCount === 0 },
-    { label: 'Đang chờ Kiểm định / Chờ duyệt', value: qcCount, subtitle: 'Chờ QC hoặc sẵn sàng ghi sổ', isZero: qcCount === 0 },
-    { label: 'Đã ghi sổ tồn kho', value: postedCount, subtitle: 'Đã hạch toán sổ cái & giá vốn', isZero: postedCount === 0 },
-    { label: 'Phiếu đã hủy', value: cancelledCount, subtitle: 'Chứng từ hủy không phát sinh tồn', isZero: cancelledCount === 0 },
-  ];
-
   return (
-    <div style={{ order: 1, minWidth: 0, maxWidth: '100%' }}>
-      <div
-        className="ui-kpi-grid"
-        style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 12, width: '100%', alignItems: 'stretch' }}
-      >
-        {cards.map((c) => (
-          <article
-            key={c.label}
-            data-zero={c.isZero ? 'true' : 'false'}
-            style={{
-              height: '100%',
-              boxSizing: 'border-box',
-              padding: '12px 14px',
-              borderRadius: 10,
-              border: c.isZero ? '1px solid #e2e8f0' : '1px solid #cbd5e1',
-              background: c.isZero ? '#f8fafc' : '#ffffff',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              gap: 4,
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: '#475569' }}>{c.label}</span>
-            <strong style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.15, color: c.isZero ? '#475569' : '#0f172a' }}>
-              {c.value}
-            </strong>
-            <span style={{ fontSize: 12, color: '#475569' }}>{c.subtitle}</span>
-          </article>
-        ))}
-      </div>
+    <div className="import-kpi-strip" style={{ order: 1, minWidth: 0, maxWidth: '100%' }}>
+      <UiMetricGrid>
+        <UiMetric
+          label="Tổng số phiếu nhập"
+          value={receipts.length}
+          subtitle="Toàn bộ chứng từ tiếp nhận"
+          isZero={receipts.length === 0}
+        />
+        <UiMetric
+          label="Đang soạn / Nhận tại cửa"
+          value={receivingCount}
+          subtitle="Nháp, đã nhận hoặc xử lý sai lệch"
+          isZero={receivingCount === 0}
+        />
+        <UiMetric
+          label="Chờ kiểm định / Chờ duyệt"
+          value={qcCount}
+          subtitle="Chờ QC hoặc sẵn sàng ghi sổ"
+          isZero={qcCount === 0}
+        />
+        <UiMetric
+          label="Đã ghi sổ tồn kho"
+          value={postedCount}
+          subtitle={
+            cancelledCount > 0
+              ? `Đã hạch toán sổ cái • Đã hủy: ${cancelledCount}`
+              : 'Đã hạch toán sổ cái & giá vốn'
+          }
+          isZero={postedCount === 0}
+        />
+      </UiMetricGrid>
     </div>
   );
 };
@@ -115,15 +109,16 @@ export const ImportReceiptListCard: React.FC<ImportReceiptListCardProps> = ({
   const [sortKey, setSortKey] = useState<ReceiptSortKey>('createdAt');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const canReadCost = usePermission('inventory.cost.read');
-  const [isMobileViewport, setIsMobileViewport] = useState<boolean>(
-    () => typeof window !== 'undefined' && window.innerWidth > 0 && window.innerWidth <= 640,
-  );
+  const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => checkCompactViewport(768));
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState<boolean>(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const handleResize = () => setIsMobileViewport(window.innerWidth > 0 && window.innerWidth <= 640);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    const syncViewport = () => setIsMobileViewport(checkCompactViewport(768));
+    const mq = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 768px)') : null;
+    window.addEventListener('resize', syncViewport);
+    mq?.addEventListener?.('change', syncViewport);
+    return () => { window.removeEventListener('resize', syncViewport); mq?.removeEventListener?.('change', syncViewport); };
   }, []);
 
   const toggleSort = (key: ReceiptSortKey) => {
@@ -180,6 +175,109 @@ export const ImportReceiptListCard: React.FC<ImportReceiptListCardProps> = ({
     handleCancel, handleApprove, runWorkflow, fetchData, setError, setSuccessMsg,
   };
 
+  const activeFilterCount = (listWarehouseFilter ? 1 : 0) + (listStatusFilter ? 1 : 0);
+  const maskedCostBadge = (
+    <span className="ui-cost-masked-badge" style={{ whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#475569', fontSize: 12, fontWeight: 600 }}>
+      <Lock size={12} aria-hidden="true" /> Ẩn theo quyền
+    </span>
+  );
+
+  const renderStatusOptions = () => (
+    <>
+      <option value="">Tất cả trạng thái</option>
+      <option value="Draft">Nháp</option>
+      <option value="Received">Đã nhận hàng</option>
+      <option value="QcPending">Chờ kiểm định QC</option>
+      <option value="ReadyToPost">Sẵn sàng ghi sổ</option>
+      <option value="Approved">Đã duyệt</option>
+      <option value="Posted">Đã ghi nhận tồn kho</option>
+      <option value="Cancelled">Đã hủy</option>
+    </>
+  );
+
+  const renderMobileCards = () => (
+    <div className="ui-mobile-card-list" data-testid="import-receipts-mobile-cards" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 8, width: '100%', maxWidth: '100%' }}>
+      {sortedReceipts.map(r => {
+        const totalQty = (r.details || []).reduce((s, d) => s + Number(d.receivedQuantity || d.expectedQuantity || 0), 0);
+        const totalVnd = computeReceiptTotalVnd(r);
+        return (
+          <article
+            key={r.id}
+            data-testid="import-receipt-mobile-card"
+            className="ui-mobile-card"
+            style={{ padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span className="ui-code" style={{ whiteSpace: 'nowrap', fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{r.code}</span>
+              <UiBadge tone={statusTone(r.status)}>{statusLabel(r.status)}</UiBadge>
+            </div>
+            <div style={{ fontSize: 12.5, color: '#475569', display: 'flex', flexWrap: 'wrap', gap: 6, fontVariantNumeric: 'tabular-nums' }}>
+              <span>{r.supplierName || 'Chưa gắn NCC'}</span>
+              <span>•</span>
+              <span>{formatWarehouseLabel(r.warehouseName, undefined, r.warehouseId)}</span>
+              <span>•</span>
+              <span>{formatVnDateTime(r.createdAt)}</span>
+              {totalQty > 0 && (
+                <>
+                  <span>•</span>
+                  <strong>{totalQty} sản phẩm</strong>
+                </>
+              )}
+            </div>
+            <div data-testid="import-receipt-mobile-total" style={{ fontSize: 12.5, color: '#0f172a', fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ color: '#475569' }}>Tổng tiền:</span>
+              {canReadCost && totalVnd !== null ? <strong>{`${Math.round(totalVnd).toLocaleString('vi-VN')} ₫`}</strong> : maskedCostBadge}
+            </div>
+            <ImportReceiptRowActions receipt={r} isMobile={true} {...sharedActionProps} />
+          </article>
+        );
+      })}
+    </div>
+  );
+
+  if (isMobileViewport) {
+    return (
+      <section aria-label="Danh sách phiếu nhập" style={{ order: 2, minWidth: 0, maxWidth: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="import-compact-bar" style={{ display: 'flex', flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', gap: 6, width: '100%' }}>
+          <input
+            type="search"
+            aria-label="Tìm mã phiếu hoặc nhà cung cấp"
+            placeholder="Tìm mã phiếu, NCC..."
+            value={listSearchFilter}
+            onChange={e => setListSearchFilter(e.target.value)}
+            style={{ flex: '1 1 auto', minWidth: 0, height: 40, minHeight: 40, padding: '6px 10px', fontSize: 13, boxSizing: 'border-box' }}
+          />
+          <button
+            type="button"
+            data-testid="btn-toggle-mobile-filters"
+            className="ui-btn ui-btn-secondary"
+            aria-expanded={mobileFiltersOpen}
+            onClick={() => setMobileFiltersOpen(v => !v)}
+            style={{ flex: '0 0 auto', flexShrink: 0, height: 40, minHeight: 40, padding: '0 12px', fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap' }}
+          >
+            Bộ lọc{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+          </button>
+        </div>
+        {mobileFiltersOpen && (
+          <div data-testid="import-mobile-filters-panel" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 8, padding: '8px 10px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+            <select aria-label="Lọc phiếu nhập theo kho" value={listWarehouseFilter} onChange={e => setListWarehouseFilter(e.target.value)} style={{ width: '100%' }}>
+              <option value="">Tất cả kho</option>
+              {warehouseNames.map(wh => <option key={wh} value={wh}>{wh}</option>)}
+            </select>
+            <select aria-label="Lọc phiếu nhập theo trạng thái" value={listStatusFilter} onChange={e => setListStatusFilter(e.target.value)} style={{ width: '100%' }}>
+              {renderStatusOptions()}
+            </select>
+          </div>
+        )}
+        {sortedReceipts.length === 0 ? (
+          <UiEmptyState title="Chưa có phiếu nhập" detail="Chưa có chứng từ nhập kho phù hợp với bộ lọc hiện tại." />
+        ) : (
+          renderMobileCards()
+        )}
+      </section>
+    );
+  }
+
   return (
     <div style={{ order: 2, minWidth: 0, maxWidth: '100%' }}>
       <UiCard
@@ -187,76 +285,27 @@ export const ImportReceiptListCard: React.FC<ImportReceiptListCardProps> = ({
         subtitle="Theo dõi trạng thái phiếu nhập, ghi nhận số lượng thực tế và duyệt ghi sổ tồn kho"
       >
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end', marginBottom: 12, padding: '10px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', maxWidth: '100%', boxSizing: 'border-box' }}>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '1 1 180px', minWidth: 0, maxWidth: '100%' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '1 1 190px', minWidth: 185, maxWidth: '100%' }}>
             <span style={{ fontSize: 12.5, fontWeight: 600, color: '#334155' }}>Kho nhận</span>
-            <select aria-label="Lọc phiếu nhập theo kho" value={listWarehouseFilter} onChange={e => setListWarehouseFilter(e.target.value)} style={{ width: '100%', maxWidth: '100%' }}>
+            <select aria-label="Lọc phiếu nhập theo kho" value={listWarehouseFilter} onChange={e => setListWarehouseFilter(e.target.value)} style={{ width: '100%', minWidth: 185 }}>
               <option value="">Tất cả kho</option>
               {warehouseNames.map(wh => <option key={wh} value={wh}>{wh}</option>)}
             </select>
           </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '1 1 180px', minWidth: 0, maxWidth: '100%' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '1 1 195px', minWidth: 190, maxWidth: '100%' }}>
             <span style={{ fontSize: 12.5, fontWeight: 600, color: '#334155' }}>Trạng thái phiếu</span>
-            <select aria-label="Lọc phiếu nhập theo trạng thái" value={listStatusFilter} onChange={e => setListStatusFilter(e.target.value)} style={{ width: '100%', maxWidth: '100%' }}>
-              <option value="">Tất cả trạng thái</option>
-              <option value="Draft">Trạng thái: Nháp</option>
-              <option value="Received">Trạng thái: Đã nhận hàng</option>
-              <option value="QcPending">Trạng thái: Chờ kiểm định QC</option>
-              <option value="ReadyToPost">Trạng thái: Sẵn sàng ghi sổ</option>
-              <option value="Approved">Trạng thái: Đã duyệt</option>
-              <option value="Posted">Trạng thái: Đã ghi nhận tồn kho</option>
-              <option value="Cancelled">Trạng thái: Đã hủy</option>
+            <select aria-label="Lọc phiếu nhập theo trạng thái" value={listStatusFilter} onChange={e => setListStatusFilter(e.target.value)} style={{ width: '100%', minWidth: 190 }}>
+              {renderStatusOptions()}
             </select>
           </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '1 1 200px', minWidth: 0, maxWidth: '100%' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: '1 1 220px', minWidth: 210, maxWidth: '100%' }}>
             <span style={{ fontSize: 12.5, fontWeight: 600, color: '#334155' }}>Tìm mã phiếu / Nhà cung cấp</span>
-            <input type="search" aria-label="Tìm mã phiếu hoặc nhà cung cấp" placeholder="Nhập mã PN, mã/tên nhà cung cấp..." value={listSearchFilter} onChange={e => setListSearchFilter(e.target.value)} style={{ width: '100%', maxWidth: '100%' }} />
+            <input type="search" aria-label="Tìm mã phiếu hoặc nhà cung cấp" placeholder="Tìm mã phiếu, NCC..." value={listSearchFilter} onChange={e => setListSearchFilter(e.target.value)} style={{ width: '100%', minWidth: 210 }} />
           </label>
         </div>
 
         {sortedReceipts.length === 0 ? (
           <UiEmptyState title="Chưa có phiếu nhập" detail="Chưa có chứng từ nhập kho phù hợp với bộ lọc hiện tại." />
-        ) : isMobileViewport ? (
-          <div className="ui-mobile-card-list" data-testid="import-receipts-mobile-cards" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 10, width: '100%', maxWidth: '100%' }}>
-            {sortedReceipts.map(r => {
-              const totalQty = (r.details || []).reduce((s, d) => s + Number(d.receivedQuantity || d.expectedQuantity || 0), 0);
-              const totalVnd = computeReceiptTotalVnd(r);
-              const totalAmountLabel =
-                canReadCost && totalVnd !== null
-                  ? `${Math.round(totalVnd).toLocaleString('vi-VN')} ₫`
-                  : 'Đã ẩn theo phân quyền';
-              return (
-                <article
-                  key={r.id}
-                  data-testid="import-receipt-mobile-card"
-                  className="ui-mobile-card"
-                  style={{ padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <strong style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 14, color: '#0f172a' }}>{r.code}</strong>
-                    <UiBadge tone={statusTone(r.status)}>{statusLabel(r.status)}</UiBadge>
-                  </div>
-                  <div style={{ fontSize: 12.5, color: '#475569', display: 'flex', flexWrap: 'wrap', gap: 6, fontVariantNumeric: 'tabular-nums' }}>
-                    <span>{r.supplierName || 'Chưa gắn NCC'}</span>
-                    <span>•</span>
-                    <span>{formatWarehouseLabel(r.warehouseName, undefined, r.warehouseId)}</span>
-                    <span>•</span>
-                    <span>{formatVnDateTime(r.createdAt)}</span>
-                    {totalQty > 0 && (
-                      <>
-                        <span>•</span>
-                        <strong>SL: {totalQty}</strong>
-                      </>
-                    )}
-                  </div>
-                  <div data-testid="import-receipt-mobile-total" style={{ fontSize: 12.5, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
-                    <span style={{ color: '#475569' }}>Tổng tiền: </span>
-                    <strong>{totalAmountLabel}</strong>
-                  </div>
-                  <ImportReceiptRowActions receipt={r} isMobile={true} {...sharedActionProps} />
-                </article>
-              );
-            })}
-          </div>
         ) : (
           <div className="ui-desktop-table-wrap">
             <UiTableScroll>
@@ -266,7 +315,7 @@ export const ImportReceiptListCard: React.FC<ImportReceiptListCardProps> = ({
                     <UiSortTh label="Mã phiếu & Ngày" active={sortKey === 'code'} direction={sortDir} onToggle={() => toggleSort('code')} className="ui-sticky-id" />
                     <UiSortTh label="Trạng thái" active={sortKey === 'status'} direction={sortDir} onToggle={() => toggleSort('status')} />
                     <th>Kho &amp; Nhà cung cấp</th>
-                    <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>SL / Tổng tiền</th>
+                    <th style={{ textAlign: 'right', whiteSpace: 'nowrap', minWidth: 112 }}>SL / Tổng tiền</th>
                     <th className="ui-sticky-action" style={{ width: 128, maxWidth: 136 }}>Thao tác</th>
                   </tr>
                 </thead>
@@ -284,7 +333,7 @@ export const ImportReceiptListCard: React.FC<ImportReceiptListCardProps> = ({
                     return (
                       <tr key={r.id}>
                         <td className="ui-sticky-id" style={{ whiteSpace: 'nowrap', background: '#ffffff' }}>
-                          <div><strong>{r.code}</strong></div>
+                          <div><span className="ui-code" style={{ whiteSpace: 'nowrap', fontWeight: 700 }}>{r.code}</span></div>
                           <div style={{ fontSize: 11.5, color: '#475569', fontVariantNumeric: 'tabular-nums' }}>
                             {formatVnDateTime(r.createdAt)}
                           </div>
@@ -302,14 +351,14 @@ export const ImportReceiptListCard: React.FC<ImportReceiptListCardProps> = ({
                             {supplierDisplay} • {creatorName}
                           </div>
                         </td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                          <div style={{ fontWeight: 600, color: '#0f172a' }}>{totalQty > 0 ? `${totalQty} ĐVT` : '—'}</div>
+                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', paddingRight: 12 }}>
+                          <div style={{ fontWeight: 600, color: '#0f172a' }}>{totalQty > 0 ? `${totalQty} sản phẩm` : '—'}</div>
                           <div style={{ fontSize: 11.5, color: '#475569' }}>
                             {canReadCost && totalVnd !== null
                               ? `${Math.round(totalVnd).toLocaleString('vi-VN')} ₫`
                               : canReadCost
                                 ? '—'
-                                : 'Đã ẩn theo phân quyền'}
+                                : maskedCostBadge}
                           </div>
                         </td>
                         <td className="ui-sticky-action" style={{ background: '#ffffff', width: 128, maxWidth: 136, overflow: 'visible' }}>

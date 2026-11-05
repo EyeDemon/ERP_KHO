@@ -348,7 +348,7 @@ describe('Wave-17 Full 10-Role RBAC Matrix, Security Isolation & Canonical Mock 
     expect(billingChildrenView.getByTestId('platform-active-role-badge').textContent).toBe('BillingAdmin');
     fireEvent.click(billingChildrenView.getByTestId('btn-reconcile-saas-invoice-2'));
     expect(await billingChildrenView.findByTestId('input-reconcile-approver')).toBeTruthy();
-    expect(billingChildrenView.getByTestId('reconcile-actor-readonly').textContent).toContain('qa_billing_admin');
+    expect(billingChildrenView.getByTestId('reconcile-actor-readonly').textContent).toContain('Quản trị Cước phí SaaS');
     cleanup();
   });
 
@@ -401,7 +401,7 @@ describe('Wave-17 Full 10-Role RBAC Matrix, Security Isolation & Canonical Mock 
       if (profile.canReadInventoryCost) {
         expect(table.textContent).toContain('500.000');
       } else {
-        expect(table.textContent).toContain('Ẩn theo quyền RBAC (inventory.cost.read)');
+        expect(table.textContent).toContain('Ẩn theo quyền');
         expect(table.textContent).not.toContain('500.000');
       }
       cleanup();
@@ -426,9 +426,9 @@ describe('Wave-17 Full 10-Role RBAC Matrix, Security Isolation & Canonical Mock 
 
       const costChip = await packingView.findByTestId('packing-kit-rolledup-cost');
       if (profile.canReadInventoryCost) {
-        await waitFor(() => expect(costChip.textContent).toContain('500.000 đ'));
+        await waitFor(() => expect(costChip.textContent).toContain('500.000 ₫'));
       } else {
-        expect(costChip.textContent).toContain('Ẩn theo quyền RBAC (inventory.cost.read)');
+        expect(costChip.textContent).toContain('Ẩn theo quyền');
         expect(costChip.textContent).not.toContain('500.000');
       }
       cleanup();

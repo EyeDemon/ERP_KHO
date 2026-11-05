@@ -171,7 +171,7 @@ export function PurchaseOrderDetailCard(props: {
         <div><strong>Ngày dự kiến</strong><br />{isoDay(selected.expectedDate)}</div>
         <div><strong>Tiền tệ tham chiếu</strong><br />{selected.currency || '—'}</div>
         <div><strong>Tổng SL cơ sở</strong><br />{selected.baseOrderedQuantity.toLocaleString('vi-VN')} THÙNG</div>
-        <div><strong>Tổng tiền đơn mua (Đã gồm thuế)</strong><br />{Number(selected.totalAmount || 0).toLocaleString('vi-VN')} đ</div>
+        <div><strong>Tổng tiền đơn mua (Đã gồm thuế)</strong><br />{Number(selected.totalAmount || 0).toLocaleString('vi-VN')} ₫</div>
       </div>
       <div className="inbound-planning-actions">
         {canRelease && selected.status === 'Draft' && <button className="ui-primary-button" style={{ background: '#1d4ed8', color: '#ffffff', fontWeight: 600, border: '1px solid #1d4ed8' }} disabled={!!busy || !selected.rowVersion} onClick={() => void command('/api/v1/purchase-orders/' + selected.id + '/open', 'po-open:' + selected.id, 'Đơn mua đã được mở cho quy trình nhận hàng.')}>{busy ? 'Đang lưu...' : 'Mở đơn mua'}</button>}

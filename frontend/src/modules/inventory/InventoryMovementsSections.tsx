@@ -38,13 +38,13 @@ export const MovableBucketsTableCard: React.FC<MovableBucketsTableCardProps> = (
         <table className="ui-table-compact" aria-label="Internal move buckets">
           <thead>
             <tr>
-              <th>Sản phẩm</th>
-              <th>Kho / Vị trí</th>
-              <th style={{ whiteSpace: 'nowrap' }}>Trạng thái</th>
-              <th style={{ whiteSpace: 'nowrap' }}>Lô / Sê-ri</th>
-              <th style={rightNumStyle}>Tồn thực tế</th>
-              <th style={rightNumStyle}>Đã giữ</th>
-              <th style={rightNumStyle}>Chưa giữ</th>
+              <th style={{ minWidth: 135 }}>Sản phẩm</th>
+              <th style={{ minWidth: 120 }}>Kho / Vị trí</th>
+              <th style={{ minWidth: 100, whiteSpace: 'nowrap' }}>Trạng thái</th>
+              <th style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Lô / Sê-ri</th>
+              <th style={{ ...rightNumStyle, minWidth: 96 }}>Tồn thực tế</th>
+              <th style={{ ...rightNumStyle, minWidth: 84 }}>Đã giữ</th>
+              <th style={{ ...rightNumStyle, minWidth: 88 }}>Chưa giữ</th>
               {canMove && <th style={{ whiteSpace: 'nowrap', minWidth: 110 }}>Thao tác</th>}
             </tr>
           </thead>
@@ -59,14 +59,14 @@ export const MovableBucketsTableCard: React.FC<MovableBucketsTableCardProps> = (
               buckets.map((x) => (
                 <tr key={x.inventoryStockId}>
                   <td>
-                    <strong style={{ whiteSpace: 'nowrap' }}>{x.productCode}</strong>
+                    <strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{x.productCode}</strong>
                     <br />
                     <small>{x.productName}</small>
                   </td>
                   <td>
                     {x.warehouseName}
                     <br />
-                    <small style={{ whiteSpace: 'nowrap' }}>{locationCodeLabel(x.locationCode)}</small>
+                    <small className="ui-code" style={{ whiteSpace: 'nowrap' }}>{locationCodeLabel(x.locationCode)}</small>
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <UiBadge>{statusLabel(x.status)}</UiBadge>
@@ -172,13 +172,13 @@ export const ReplenishmentSuggestionsCard: React.FC<ReplenishmentSuggestionsCard
         <table className="ui-table-compact" aria-label="Gợi ý bổ sung vị trí lấy hàng">
           <thead>
             <tr>
-              <th>Sản phẩm</th>
-              <th>Kho</th>
-              <th style={{ whiteSpace: 'nowrap' }}>Vị trí nguồn (Dự trữ)</th>
-              <th style={rightNumStyle}>Khả dụng nguồn</th>
-              <th style={{ whiteSpace: 'nowrap' }}>Vị trí đích (Mặt lấy)</th>
-              <th style={rightNumStyle}>Tồn tại đích</th>
-              <th style={rightNumStyle}>SL gợi ý</th>
+              <th style={{ minWidth: 135 }}>Sản phẩm</th>
+              <th style={{ minWidth: 110 }}>Kho</th>
+              <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Vị trí nguồn</th>
+              <th style={{ ...rightNumStyle, minWidth: 110 }}>Khả dụng nguồn</th>
+              <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>Vị trí đích</th>
+              <th style={{ ...rightNumStyle, minWidth: 96 }}>Tồn tại đích</th>
+              <th style={{ ...rightNumStyle, minWidth: 88 }}>SL gợi ý</th>
               {canMove && <th style={{ whiteSpace: 'nowrap', minWidth: 150 }}>Thao tác nhanh</th>}
             </tr>
           </thead>
@@ -186,17 +186,17 @@ export const ReplenishmentSuggestionsCard: React.FC<ReplenishmentSuggestionsCard
             {suggestions.map((s) => (
               <tr key={`${s.inventoryStockId}-${s.targetLocationId}`}>
                 <td>
-                  <strong style={{ whiteSpace: 'nowrap' }}>{s.productCode}</strong>
+                  <strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{s.productCode}</strong>
                   <br />
                   <small>{s.productName}</small>
                 </td>
                 <td>{s.warehouseName}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  <code style={{ whiteSpace: 'nowrap' }}>{locationCodeLabel(s.sourceLocationCode)}</code>
+                  <code className="ui-code" style={{ whiteSpace: 'nowrap' }}>{locationCodeLabel(s.sourceLocationCode)}</code>
                 </td>
                 <td style={rightNumStyle}>{s.availableAtSource}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  <code style={{ whiteSpace: 'nowrap' }}>{locationCodeLabel(s.targetLocationCode)}</code>
+                  <code className="ui-code" style={{ whiteSpace: 'nowrap' }}>{locationCodeLabel(s.targetLocationCode)}</code>
                 </td>
                 <td style={rightNumStyle}>{s.currentAtTarget}</td>
                 <td style={rightNumStyle}>

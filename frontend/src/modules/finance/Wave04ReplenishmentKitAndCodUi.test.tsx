@@ -173,7 +173,7 @@ describe('Wave 04 — Min/Max Replenishment, KitWorkOrder FEFO & RBAC Cost, and 
     );
 
     const maskedCostCell = await screen.findByTestId('kit-wo-rolledup-cost');
-    expect(maskedCostCell.textContent).toContain('Ẩn theo quyền RBAC');
+    expect(maskedCostCell.textContent).toContain('Ẩn theo quyền');
   });
 
   it('opens CodPackingEvidenceDrawer from CodReconciliation and displays weight variance, HU code, and SHA-256 hash', async () => {

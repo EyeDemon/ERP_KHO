@@ -169,7 +169,7 @@ const CostValuation = () => {
     const mstPattern = /^\d{10}(-?\d{3})?$/;
     if (trimmedMst.length > 0 && !mstPattern.test(trimmedMst)) {
       setEinvoiceMstError(
-        'Mã số thuế người mua phải gồm đúng 10 chữ số (doanh nghiệp) hoặc 13 chữ số (chi nhánh, VD: 0312345678 hoặc 0312345678-001).',
+        'Mã số thuế người mua phải gồm đúng 10 chữ số (doanh nghiệp) hoặc 13 chữ số (chi nhánh, VD: 0318294012 hoặc 0318294012-001).',
       );
       return;
     }

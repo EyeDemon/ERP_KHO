@@ -101,10 +101,9 @@ public sealed partial class SaasBillingService
             var novCodeDisplay = novInv?.InvoiceCode ?? "INV-SAAS-202611-002";
             var novReconciledAtVi = novSnap?.ReconciledTimestampVi ?? "02/11/2026 18:30";
             currentCycleSettlementBannerVi = isCurrentCyclePaid
-                ? $"Hóa đơn kỳ 11/2026 ({novCodeDisplay}) đã tất toán đầy đủ (1.490.000 đ) • Xác nhận lúc: {novReconciledAtVi}"
+                ? $"Hóa đơn kỳ 11/2026 ({novCodeDisplay}) đã tất toán đầy đủ (1.490.000 ₫) • Xác nhận lúc: {novReconciledAtVi}"
                 : null;
 
-            var normalizedBuyerName = NormalizeTenantLegalName(tenantId, tenantProfile?.CompanyName, tenantProfile?.TenantName);
             recentInvoices = rawInvoices.Select(i =>
             {
                 var manualSnap = GetManualReconcileSnapshot(i.Id);
@@ -121,6 +120,8 @@ public sealed partial class SaasBillingService
                 var creditCarryoverVnd = manualSnap?.CreditCarryoverVnd ?? 0m;
                 var varianceStatus = manualSnap?.VarianceStatus ?? (isPaid ? "EXACT_MATCH" : (isPartial ? "PARTIAL_PAYMENT" : "UNPAID"));
                 var issuedDateDisplayVi = issuedAtUtc.ToString("dd/MM/yyyy", System.Globalization.CultureInfo.InvariantCulture);
+                var buyerLegalName = NormalizeInvoiceBuyerLegalName(i.TenantId, i.BuyerLegalName, tenantProfile?.CompanyName, tenantProfile?.TenantName);
+                var buyerTaxCode = NormalizeInvoiceBuyerTaxCode(i.TenantId, i.BuyerTaxCode, i.BuyerLegalName, tenantProfile?.TaxCode, tenantProfile?.CompanyName, tenantProfile?.TenantName);
                 return new
                 {
                     id = i.Id,
@@ -146,8 +147,8 @@ public sealed partial class SaasBillingService
                     remainingAmountVnd,
                     creditCarryoverVnd,
                     varianceStatus,
-                    buyerTaxCode = i.BuyerTaxCode ?? tenantProfile?.TaxCode ?? string.Empty,
-                    buyerLegalName = !string.IsNullOrWhiteSpace(i.BuyerLegalName) ? i.BuyerLegalName : normalizedBuyerName,
+                    buyerTaxCode,
+                    buyerLegalName,
                     paymentProvider = i.PaymentProvider,
                     status = i.Status,
                     statusLabelVi = isPaid ? "Đã tất toán VietQR" : (isPartial ? "Thanh toán một phần" : "Chờ thanh toán"),
@@ -219,7 +220,7 @@ public sealed partial class SaasBillingService
             dueDateDisplayVi = "05/11/2026",
             currentCyclePaid = isCurrentCyclePaid,
             currentCycleSettlementBannerVi,
-            taxCode = tenantProfile?.TaxCode ?? string.Empty,
+            taxCode = NormalizeTenantTaxCode(tenantId, tenantProfile?.TaxCode, tenantProfile?.CompanyName, tenantProfile?.TenantName),
             companyName = resolvedCompanyName,
             companyLegalName = resolvedCompanyName,
             legalRegisteredAddress = tenantProfile?.LegalRegisteredAddress ?? string.Empty,

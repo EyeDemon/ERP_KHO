@@ -25,9 +25,9 @@ export const ProductCatalogTabs: React.FC<ProductCatalogTabsProps> = ({ activeTa
   >
     {[
       { id: 'products' as const, label: 'Danh sách Sản phẩm', testId: 'tab-products-list' },
-      { id: 'categories-uom' as const, label: 'Danh mục & Quy đổi ĐVT', testId: 'tab-categories-uom' },
+      { id: 'categories-uom' as const, label: 'Danh mục & Quy đổi Đơn vị', testId: 'tab-categories-uom' },
       { id: 'channel-mapping' as const, label: 'Ánh xạ SKU Đa sàn TMĐT', testId: 'tab-channel-mapping' },
-      { id: 'bundle-gift' as const, label: 'Combo / Kit & Quà tặng 0đ', testId: 'tab-bundle-gift' },
+      { id: 'bundle-gift' as const, label: 'Combo / Kit & Quà tặng 0 ₫', testId: 'tab-bundle-gift' },
     ].map(tab => {
       const isActive = activeTab === tab.id;
       return (
@@ -121,22 +121,22 @@ export const ProductListTabSection: React.FC<ProductListTabSectionProps> = ({
         : { maxHeight: 0, overflow: 'hidden', opacity: 0, pointerEvents: 'none', margin: 0, padding: 0, border: 0 }
     }
   >
-    <UiCard title="Chỉ số Chuẩn hóa Chính sách Hạn dùng, Đa ĐVT, QC & Quy cách Đóng gói Sản phẩm">
+    <UiCard title="Chỉ số Chuẩn hóa Chính sách Hạn dùng, Đa Đơn vị tính, Kiểm định & Quy cách Đóng gói">
       <div className="ui-inline-wrap" style={{ gap: '8px 16px' }}>
         <span style={{ fontSize: 13, color: '#065f46', fontWeight: 600 }}>{`• Sản phẩm hoạt động: ${governanceSummary.activeCount}/${products.length}`}</span>
         <span style={{ fontSize: 13, color: '#334155' }}>{`• Danh mục hoạt động: ${categories.filter(c => c.isActive).length}/${categories.length}`}</span>
         <span style={{ fontSize: 13, color: '#334155' }}>{`• Theo dõi Lô: ${governanceSummary.lotCount} • Sê-ri: ${governanceSummary.serialCount}`}</span>
-        <span style={{ fontSize: 13, color: '#92400e', fontWeight: 600 }}>{`• Kiểm soát hạn dùng / FEFO: ${governanceSummary.expiryCount} sản phẩm`}</span>
+        <span style={{ fontSize: 13, color: '#92400e', fontWeight: 600 }}>{`• Kiểm soát hạn dùng / Ưu tiên hạn dùng: ${governanceSummary.expiryCount} sản phẩm`}</span>
         <span style={{ fontSize: 13, color: '#065f46', fontWeight: 600 }}>{`• Đã chuẩn hóa Trọng lượng/Thể tích/Pallet: ${governanceSummary.dimensionCount} sản phẩm`}</span>
         <button type="button" disabled={mutating} onClick={() => void triggerAutoAuditGovernance()}>
-          Chạy Kiểm định Hồ sơ Kỹ thuật &amp; Chuẩn hóa FEFO/Đóng gói
+          Chạy Kiểm định Hồ sơ Kỹ thuật &amp; Chuẩn hóa Ưu tiên Hạn dùng / Đóng gói
         </button>
         <button type="button" disabled={mutating} onClick={() => void verifyCategoryStoragePolicy()}>
           Kiểm định Chính sách Bảo quản &amp; Phân nhóm Nhiệt độ/Nguy hại
         </button>
         {skuAuditResult && (
           <div role="status" style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13, lineHeight: 1.5, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%' }}>
-            {`Đã kiểm định ${skuAuditResult.auditId} • ${({ FEFO_STRICT_ENFORCED: 'Thực thi nghiêm ngặt FEFO', FEFO_VALIDATED: 'Chuẩn hóa FEFO' } as Record<string, string>)[skuAuditResult.fefoPolicyStatus] || skuAuditResult.fefoPolicyStatus} • ${({ UOM_PACKAGING_VALIDATED: 'Đã chuẩn hóa quy cách đóng gói', PACKAGING_VALIDATED: 'Đóng gói hợp lệ' } as Record<string, string>)[skuAuditResult.packagingHierarchyStatus] || skuAuditResult.packagingHierarchyStatus}`}
+            {`Đã kiểm định ${skuAuditResult.auditId} • ${({ FEFO_STRICT_ENFORCED: 'Thực thi nghiêm ngặt ưu tiên hạn dùng', FEFO_VALIDATED: 'Chuẩn hóa ưu tiên hạn dùng' } as Record<string, string>)[skuAuditResult.fefoPolicyStatus] || skuAuditResult.fefoPolicyStatus} • ${({ UOM_PACKAGING_VALIDATED: 'Đã chuẩn hóa quy cách đóng gói', PACKAGING_VALIDATED: 'Đóng gói hợp lệ' } as Record<string, string>)[skuAuditResult.packagingHierarchyStatus] || skuAuditResult.packagingHierarchyStatus}`}
           </div>
         )}
         {categoryPolicyResult && (
@@ -199,20 +199,20 @@ export const ProductListTabSection: React.FC<ProductListTabSectionProps> = ({
       ) : (
         <UiTableScroll>
           <table className="ui-table-compact">
-            <thead><tr><th>Mã</th><th>Tên</th><th>Danh mục</th><th>Đơn vị</th><th>Thông số lưu trữ</th><th>Theo dõi</th><th>Mã vạch</th><th>Trạng thái</th>{(canManage || canManageBarcodes || canDeactivate) && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
+            <thead><tr><th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Mã SP</th><th style={{ minWidth: 150 }}>Tên sản phẩm</th><th style={{ minWidth: 115 }}>Danh mục</th><th style={{ minWidth: 120 }}>Đơn vị</th><th style={{ minWidth: 145 }}>Thông số lưu trữ</th><th style={{ minWidth: 145 }}>Theo dõi</th><th style={{ minWidth: 120 }}>Mã vạch</th><th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Trạng thái</th>{(canManage || canManageBarcodes || canDeactivate) && <th style={{ minWidth: 105, whiteSpace: 'nowrap' }}>Thao tác</th>}</tr></thead>
             <tbody>
               {visibleProducts.length === 0 ? (
                 <tr><td colSpan={canManage || canManageBarcodes || canDeactivate ? 9 : 8} className="ui-empty-cell">Không có sản phẩm phù hợp với bộ lọc hiện tại.</td></tr>
               ) : (
                 visibleProducts.map(product => (
                   <tr key={product.id}>
-                    <td style={{ whiteSpace: 'nowrap' }}><strong>{product.code}</strong></td>
+                    <td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{product.code}</strong></td>
                     <td>
                       <div>{product.name}</div>
                       {product.description && <small style={{ color: '#475569' }}>{sanitizeProductDescription(product.description)}</small>}
                     </td>
                     <td>{product.categoryName || '—'}</td>
-                    <td><strong>{product.unitName || product.unitId}</strong><br /><small>{product.uoms && product.uoms.length > 0 ? product.uoms.map(u => `${u.unitName || u.unitCode || u.unitId} (×${u.conversionFactor ?? u.conversionFactorToBase ?? 1})`).join(', ') : `ĐVT cơ sở (×1)${product.unitPalletEquivalent ? ` • ${Math.round(1 / product.unitPalletEquivalent)} ĐV/Pallet` : ''}`}</small></td>
+                    <td><strong>{!product.unitName || product.unitName.trim().toUpperCase() === 'ĐVT' ? (product.unitId ? 'Cái' : '—') : product.unitName}</strong><br /><small>{product.uoms && product.uoms.length > 0 ? product.uoms.map(u => `${u.unitName || u.unitCode || u.unitId} (×${u.conversionFactor ?? u.conversionFactorToBase ?? 1})`).join(', ') : `Đơn vị chuẩn (×1)${product.unitPalletEquivalent ? ` • ${Math.round(1 / product.unitPalletEquivalent)} ĐV/Pallet` : ''}`}</small></td>
                     <td><strong>{formatStorageClass(product.storageClass) || '—'}</strong><br /><small>{product.unitWeightKg != null ? product.unitWeightKg + ' kg' : '—'} • {product.unitVolumeM3 != null ? product.unitVolumeM3 + ' m³' : '—'} • {product.unitPalletEquivalent != null ? product.unitPalletEquivalent + ' quy đổi pallet' : '—'}</small></td>
                     <td><strong>{product.trackingType === 'Lot' ? 'Theo lô' : product.trackingType === 'Serial' ? 'Theo sê-ri' : 'Không theo dõi'}</strong><br /><small>{product.expiryControl ? `Có hạn dùng${product.shelfLifeDays ? ` • ${product.shelfLifeDays} ngày` : ''}` : 'Không kiểm soát hạn dùng'} • {product.qcRequired || product.trackingType === 'Serial' || product.expiryControl ? 'Kiểm định đầu vào' : 'Kiểm định tiêu chuẩn'} • Dung sai: ±{product.receivingTolerancePercent ?? 0}%</small></td>
                     <td>{product.barcodes?.map(item => item.value).join(', ') || '—'}</td>

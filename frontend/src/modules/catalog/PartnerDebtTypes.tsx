@@ -105,8 +105,13 @@ export const formatPaymentMethod = (method?: string | null) =>
 export const statusTone = (status: string): 'neutral' | 'success' | 'warning' | 'danger' =>
   status === 'Paid' ? 'success' : status === 'PartiallyPaid' ? 'warning' : status === 'Cancelled' ? 'danger' : 'neutral';
 
-export const formatCurrency = (val: number, currency = 'VND') =>
-  `${Number(val || 0).toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${currency}`;
+export const formatCurrency = (val: number, currency = 'VND') => {
+  const upper = (currency || 'VND').trim().toUpperCase();
+  if (upper === 'VND' || upper === 'VNĐ' || currency === '₫') {
+    return `${Math.round(Number(val || 0)).toLocaleString('vi-VN')} ₫`;
+  }
+  return `${Number(val || 0).toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${currency}`;
+};
 
 export const formatNumberCompact = (val: number) =>
   Number(val || 0).toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 2 });

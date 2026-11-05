@@ -36,11 +36,14 @@
 }
 
 .app-sidebar {
+  position: sticky;
+  top: 0;
   width: var(--wms-primary-sidebar-width, 232px);
   flex: 0 0 var(--wms-primary-sidebar-width, 232px);
-  min-height: 100vh;
-  height: 100%;
-  align-self: stretch;
+  height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  align-self: flex-start;
   background: #0F172A;
   color: #FFFFFF;
   border-right: 1px solid #1E293B;
@@ -51,16 +54,16 @@
 }
 
 .app-sidebar.is-collapsed {
-  min-height: 100vh;
-  height: 100%;
-  align-self: stretch;
+  height: 100vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  align-self: flex-start;
   background: #0F172A;
   padding: 18px 8px;
 }
 
 .app-sidebar-sticky {
-  position: sticky;
-  top: 0;
+  position: static;
 }
 
 .ui-table button,
@@ -148,9 +151,10 @@
 }
 
 .wms-primary-group-label {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: break-word;
+  line-height: 1.3;
+  text-overflow: clip;
 }
 
 .wms-primary-group-meta {
@@ -233,28 +237,27 @@
 .wms-flyout-item-copy {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
-  overflow: hidden;
 }
 
 .wms-flyout-item-title {
   font-size: 13px;
   font-weight: 600;
   color: inherit;
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: break-word;
+  text-overflow: clip;
 }
 
 .wms-flyout-item-desc {
   font-size: 11px;
   color: #94A3B8;
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: break-word;
+  text-overflow: clip;
 }
 
 .wms-flyout-sr-tree {
@@ -419,6 +422,9 @@
 }
 
 .app-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   min-height: 46px;
   background: #FFFFFF;
   border-bottom: 1px solid #E6E8EA;
@@ -457,8 +463,7 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
-  flex-wrap: nowrap;
-  overflow: hidden;
+  flex-wrap: wrap;
 }
 
 .topbar-eyebrow {
@@ -481,9 +486,10 @@
   font-size: 14px;
   font-weight: 700;
   margin-top: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: break-word;
+  text-overflow: clip;
 }
 
 .topbar-description {
@@ -603,7 +609,8 @@
   border-radius: 6px;
   background: #FFFFFF;
   color: #0F172A;
-  padding: 0 8px;
+  padding: 7px 10px;
+  text-overflow: clip;
   font: inherit;
 }
 
@@ -639,6 +646,16 @@
   background: #F8FAFC;
 }
 
+.app-content > .production-ui,
+.app-content > .ui-page,
+.main-content-inner {
+  max-width: 1480px;
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+}
+
 .app-content:focus {
   outline: none;
 }
@@ -648,7 +665,7 @@
 }
 
 .demo-runtime-banner {
-  max-width: 1440px;
+  max-width: 1480px;
   margin: 0 auto 16px;
   display: flex;
   justify-content: space-between;
@@ -748,21 +765,26 @@
 
   .app-sidebar {
     display: block;
-    position: relative;
+    position: sticky;
+    top: 0;
     transform: none;
     visibility: visible;
-    min-height: 100vh;
-    height: 100%;
-    align-self: stretch;
+    height: 100vh;
+    max-height: 100vh;
+    overflow-y: auto;
+    align-self: flex-start;
     background: #0F172A;
   }
 }
 
 @media (min-width: 768px) and (max-width: 1199px) {
   .app-sidebar {
-    min-height: 100vh;
-    height: 100%;
-    align-self: stretch;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    max-height: 100vh;
+    overflow-y: auto;
+    align-self: flex-start;
     background: #0F172A;
   }
 }
@@ -778,14 +800,16 @@
   }
 
   .app-sidebar {
-    position: relative;
+    position: sticky;
+    top: 0;
     transform: none;
     visibility: visible;
     width: 64px;
     flex: 0 0 64px;
-    min-height: 100vh;
-    height: 100%;
-    align-self: stretch;
+    height: 100vh;
+    max-height: 100vh;
+    overflow-y: auto;
+    align-self: flex-start;
     background: #0F172A;
     padding: 14px 6px;
   }
@@ -808,21 +832,29 @@
 }
 
 @media (max-width: 1024px) {
-  .ui-table-scroll table th:last-child,
-  .ui-table-scroll table td:last-child,
-  .production-ui .ui-table-scroll table th:last-child,
-  .production-ui .ui-table-scroll table td:last-child {
-    position: sticky;
-    right: 0;
-    z-index: 2;
-    background: var(--ui-surface, #ffffff);
-    box-shadow: -4px 0 8px rgba(15, 23, 42, 0.06);
+  .ui-table-scroll table th:has(+ .ui-sticky-action),
+  .ui-table-scroll table td:has(+ .ui-sticky-action),
+  .production-ui .ui-table-scroll table th:has(+ .ui-sticky-action),
+  .production-ui .ui-table-scroll table td:has(+ .ui-sticky-action) {
+    padding-right: 12px;
   }
 
-  .ui-table-scroll table thead th:last-child,
-  .production-ui .ui-table-scroll table thead th:last-child {
-    background: var(--ui-surface-muted, #f2f3f4);
-    z-index: 3;
+  .ui-table-scroll table th.ui-sticky-action,
+  .ui-table-scroll table td.ui-sticky-action,
+  .production-ui .ui-table-scroll table th.ui-sticky-action,
+  .production-ui .ui-table-scroll table td.ui-sticky-action {
+    position: sticky;
+    right: 0;
+    z-index: 4;
+    background: #FFFFFF;
+    border-left: 1px solid #CBD5E1;
+    box-shadow: -6px 0 12px -4px rgba(15, 23, 42, 0.12);
+  }
+
+  .ui-table-scroll table thead th.ui-sticky-action,
+  .production-ui .ui-table-scroll table thead th.ui-sticky-action {
+    background: #F1F5F9;
+    z-index: 5;
   }
 }
 
@@ -939,13 +971,54 @@
   }
 }
 
+@media (max-width: 960px) {
+  .app-topbar {
+    padding: 6px 12px;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  .topbar-leading {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 6px;
+  }
+
+  .topbar-page-meta {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .topbar-title {
+    min-width: 0;
+    font-size: 13.5px;
+  }
+
+  .topbar-description,
+  .topbar-mode-toggle {
+    display: none !important;
+  }
+
+  .topbar-actions {
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .logout-button {
+    padding: 4px 8px;
+    font-size: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
+
 @media (max-width: 767px) {
   body,
   .app-shell,
-  .app-main-column,
-  .app-topbar {
+  .app-main-column {
     max-width: 100vw;
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 
   .wms-secondary-flyout,
@@ -965,7 +1038,6 @@
   .app-topbar {
     align-items: center;
     min-height: 46px;
-    max-height: 50px;
     padding: 4px 10px;
     flex-wrap: nowrap;
     gap: 6px;
@@ -992,11 +1064,12 @@
   }
 
   .topbar-title {
-    font-size: 13.5px;
+    font-size: 13px;
     margin-top: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: break-word;
+    text-overflow: clip;
   }
 
   .topbar-actions {
@@ -1007,9 +1080,7 @@
   .runtime-badge {
     font-size: 11.5px;
     padding: 3px 8px;
-    max-width: 156px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    text-overflow: clip;
     white-space: nowrap;
   }
 
@@ -1094,16 +1165,16 @@
     min-height: 52px;
     font-size: 11px;
     padding: 4px 1px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow: visible;
+    text-overflow: clip;
     white-space: nowrap;
   }
 
   .app-bottom-nav-link span,
   .mobile-bottom-nav__item span {
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
     white-space: nowrap;
   }
 }
@@ -1139,6 +1210,7 @@
   .app-main,
   .app-main-column,
   .app-content,
+  .main-content-inner,
   .production-ui,
   .ui-page,
   .ui-stack {

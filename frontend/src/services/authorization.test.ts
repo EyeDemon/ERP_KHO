@@ -16,7 +16,13 @@ import {
   setCurrentPermissions,
   usePermission,
 } from './authorization';
-import { isPlatformRoleName, roleChipLabel, roleLabel } from './permissionPresentation';
+import {
+  formatMinLengthCounterVi,
+  formatUserDisplayNameVi,
+  isPlatformRoleName,
+  roleChipLabel,
+  roleLabel,
+} from './permissionPresentation';
 
 describe('frontend authorization matrix & 10-role RBAC helpers', () => {
   beforeEach(() => {
@@ -77,15 +83,22 @@ describe('frontend authorization matrix & 10-role RBAC helpers', () => {
       expect(isPlatformRoleName(role)).toBe(expectedPlatform);
 
       expect(roleLabel(role)).not.toContain(`Vai trò ${role}`);
-      expect(roleChipLabel(role, 10)).toContain(role);
+      expect(roleChipLabel(role, 10)).not.toContain(role);
+      expect(roleChipLabel(role, 10)).toContain('(10)');
     }
 
-    expect(roleChipLabel('Admin', 141)).toBe('Quản trị viên công ty (Admin · 141)');
-    expect(roleChipLabel('Manager', 98)).toBe('Quản lý kho (Manager · 98)');
-    expect(roleChipLabel('Supervisor', 54)).toBe('Giám sát & QC (Supervisor · 54)');
-    expect(roleChipLabel('Accountant', 42)).toBe('Kế toán kho (Accountant · 42)');
-    expect(roleChipLabel('WarehouseStaff', 36)).toBe('Nhân viên kho (WarehouseStaff · 36)');
-    expect(roleChipLabel('Viewer', 18)).toBe('Chỉ xem / Kiểm toán (Viewer · 18)');
+    expect(roleChipLabel('Admin', 141)).toBe('Quản trị công ty (141)');
+    expect(roleChipLabel('Manager', 98)).toBe('Quản lý kho (98)');
+    expect(roleChipLabel('Supervisor', 54)).toBe('Giám sát & QC (54)');
+    expect(roleChipLabel('Accountant', 42)).toBe('Kế toán kho (42)');
+    expect(roleChipLabel('WarehouseStaff', 36)).toBe('Nhân viên kho (36)');
+    expect(roleChipLabel('Viewer', 18)).toBe('Kiểm toán nội bộ (18)');
+
+    expect(formatUserDisplayNameVi('qa_admin', 'SuperAdmin')).toBe('Chủ dự án (SuperAdmin)');
+    expect(formatUserDisplayNameVi('tenant_admin', 'Admin')).toBe('Quản trị viên Đại Phát');
+    expect(formatUserDisplayNameVi('qa_staff_wh01', 'WarehouseStaff')).toBe('Nhân viên kho WH01');
+    expect(formatMinLengthCounterVi(6, 10)).toBe('Còn thiếu 4 ký tự (Tối thiểu 10 ký tự)');
+    expect(formatMinLengthCounterVi(56, 10)).toBe('Đã nhập 56 ký tự (Đạt yêu cầu ≥ 10 ký tự)');
 
     localStorage.setItem('role', 'UnknownBogusRole');
     expect(currentRole()).toBe('Viewer');

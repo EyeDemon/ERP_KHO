@@ -383,7 +383,7 @@ const MainLayout = () => {
               </div>
             </section>
           )}
-          {identityState === 'loading' ? <p role="status">Đang xác minh quyền truy cập...</p> : identityState === 'error' ? <p role="alert">Không thể xác minh quyền truy cập. Vui lòng tải lại.</p> : <Outlet />}
+          <div className="main-content-inner">{identityState === 'loading' ? <p role="status">Đang xác minh quyền truy cập...</p> : identityState === 'error' ? <p role="alert">Không thể xác minh quyền truy cập. Vui lòng tải lại.</p> : <Outlet />}</div>
         </main>
 
         <MainLayoutBottomNav pathname={pathname} isCompactViewport={isCompactViewport} mobileNavOpen={mobileNavOpen} onOpenMoreMenu={() => setMobileNavOpen(true)} />

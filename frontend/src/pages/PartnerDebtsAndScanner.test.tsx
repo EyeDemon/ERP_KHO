@@ -229,7 +229,7 @@ describe('PartnerDebts & MobileBarcodeScannerBar', () => {
     const input = view.getByRole('searchbox', {
       name: /Quét mã vạch (Thiết bị Cầm tay|Mobile \/ RF)/i,
     });
-    expect(view.getByPlaceholderText('Nhập hoặc quét mã kệ, mã SP, số lô, số sê-ri, mã GS1-128...')).toBeTruthy();
+    expect(view.getByPlaceholderText('Quét mã kệ, mã SP hoặc số lô...')).toBeTruthy();
     expect(view.getByTestId('scanner-camera-skeleton-idle')).toBeTruthy();
 
     fireEvent.change(input, { target: { value: '  BIN-STAGE-01\r\n ' } });

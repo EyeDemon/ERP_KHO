@@ -126,7 +126,7 @@ export default function InventoryMovements() {
       if (mapped) setBreakBulkItems(mapped);
       const batchCode = String(d.replenishmentId ?? d.replenishmentBatchCode ?? d.batchCode ?? 'BB-REPL-2026-01');
       setBreakBulkNotice(
-        `Đã thực thi lệnh bổ sung xả thùng tự động (${batchCode}): Xuất chẵn thùng tại kệ dự trữ và nhập lẻ đơn vị cơ sở vào kệ nhặt lẻ — Khớp 2 bút toán (-1 THÙNG / +12 ĐV • Δ BaseUom = 0.0000).`,
+        `Đã thực thi lệnh bổ sung xả thùng tự động (${batchCode}): Xuất chẵn thùng tại kệ dự trữ và nhập lẻ đơn vị cơ sở vào kệ nhặt lẻ — Khớp 2 bút toán (-1 THÙNG / +12 ĐV • Δ Đơn vị chuẩn = 0.0000).`,
       );
       await load();
     } catch (err) {

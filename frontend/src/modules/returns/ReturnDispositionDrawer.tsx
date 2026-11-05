@@ -11,13 +11,11 @@ export const normalizeCustomerReturnDto = (row: CustomerReturnDto): CustomerRetu
   const firstLine = row.lines?.[0];
   const rawCond = String(row.condition || firstLine?.condition || firstLine?.conditionNote || 'GOOD').toUpperCase();
   const normalizedCondition =
-    rawCond === 'REPACK_REQUIRED'
-      ? 'REPACK_REQUIRED'
-      : rawCond.includes('DAMAGED') || rawCond.includes('REPACK')
-        ? 'DAMAGED_BOX'
-        : rawCond.includes('DEFECT')
-          ? 'DEFECTIVE'
-          : 'GOOD';
+    rawCond.includes('DAMAGED') || rawCond.includes('REPACK')
+      ? 'DAMAGED_BOX'
+      : rawCond.includes('DEFECT')
+        ? 'DEFECTIVE'
+        : 'GOOD';
   const rawDisp = String(row.disposition || firstLine?.disposition || firstLine?.dispositionAction || 'PENDING').toUpperCase();
   return {
     ...row,
@@ -249,20 +247,31 @@ export function ReturnDispositionDrawer({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <div>
             <UiBadge tone="warning">Kiểm định &amp; Định đoạt 4 Luồng (RMA)</UiBadge>
-            <h2 id="return-disposition-drawer-title" style={{ margin: '6px 0 0', fontSize: 17, color: '#0f172a' }}>Phiếu hoàn {item.returnCode} • {effectiveProductCode}</h2>
+            <h2 id="return-disposition-drawer-title" style={{ margin: '6px 0 0', fontSize: 17, color: '#0f172a' }}>
+              Phiếu hoàn <span className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.returnCode}</span> • <span className="ui-code" style={{ whiteSpace: 'nowrap' }}>{effectiveProductCode}</span>
+            </h2>
           </div>
-          <button type="button" className="ui-btn ui-btn-secondary" onClick={onClose} disabled={isSubmitting}>Đóng</button>
+          <button
+            type="button"
+            className="ui-btn ui-btn-secondary"
+            aria-label="Đóng hộp thoại"
+            onClick={onClose}
+            disabled={isSubmitting}
+            style={{ width: 36, minWidth: 36, minHeight: 36, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, lineHeight: 1, flexShrink: 0 }}
+          >
+            ×
+          </button>
         </div>
 
         <div style={{ padding: '10px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: 13 }}>
           <div><strong>Kho / Vị trí Biệt trữ:</strong> {item.warehouseName} • {warehouseLocationLabelVi(effectiveQuarantineBin)}</div>
-          <div><strong>Sản phẩm:</strong> {effectiveProductCode} — {effectiveProductName} • <strong>SL:</strong> {effectiveQty}</div>
-          <div><strong>Vận đơn / Đơn gốc:</strong> {item.trackingNumber || '—'} / {item.exportReceiptCode || item.salesOrderCode || '—'}</div>
+          <div><strong>Sản phẩm:</strong> <span className="ui-code" style={{ whiteSpace: 'nowrap' }}>{effectiveProductCode}</span> — {effectiveProductName} • <strong>SL:</strong> {effectiveQty}</div>
+          <div><strong>Vận đơn / Đơn gốc:</strong> <span className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.trackingNumber || '—'}</span> / <span className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.exportReceiptCode || item.salesOrderCode || '—'}</span></div>
         </div>
 
         {errorState && errorState.status === 409 && (
           <div role="alert" data-testid="rma-disposition-conflict-409" style={{ padding: 12, borderRadius: 8, background: '#fffbeb', border: '1px solid #f59e0b', color: '#92400e', fontSize: 13 }}>
-            <strong>Xung đột dữ liệu (409 Conflict):</strong> {errorState.message}
+            <strong>Xung đột dữ liệu (Mã 409):</strong> {errorState.message}
             <div style={{ marginTop: 8 }}>
               <button type="button" data-testid="btn-reload-rma-conflict" className="ui-btn ui-btn-secondary" onClick={onReloadConflict}>Tải lại dữ liệu mới nhất</button>
             </div>
@@ -271,22 +280,22 @@ export function ReturnDispositionDrawer({
 
         {errorState && errorState.status === 403 && (
           <div role="alert" data-testid="rma-disposition-forbidden-403" style={{ padding: 12, borderRadius: 8, background: '#fef2f2', border: '1px solid #f87171', color: '#991b1b', fontSize: 13 }}>
-            <strong>Từ chối truy cập (403 Forbidden):</strong> Bạn không có quyền thực thi định đoạt này.
+            <strong>Từ chối truy cập (Mã 403):</strong> Bạn không có quyền thực thi định đoạt này.
           </div>
         )}
 
         {errorState && errorState.status !== 409 && errorState.status !== 403 && (
           <div role="alert" data-testid="rma-disposition-error-422" style={{ padding: 12, borderRadius: 8, background: '#fef2f2', border: '1px solid #fca5a5', color: '#991b1b', fontSize: 13 }}>
-            <strong>Lỗi nghiệp vụ{errorState.errorCode ? ` (${errorState.errorCode})` : ''}:</strong> {errorState.message}
+            <strong>Lỗi nghiệp vụ:</strong> {errorState.message}
           </div>
         )}
 
-        <form onSubmit={handleExecuteDisposition} className="ui-stack" style={{ gap: 12 }}>
+        <form onSubmit={handleExecuteDisposition} className="ui-stack" style={{ gap: 12, flex: 1, display: 'flex', flexDirection: 'column' }}>
           <label className="ui-field">
             <span>Tình trạng vật lý sau kiểm định</span>
             <select aria-label="Tình trạng vật lý sau kiểm định" data-initiator="true" data-initial-focus="true" data-testid="select-rma-condition" value={condition} onChange={e => { setCondition(e.target.value as 'GOOD' | 'DAMAGED_BOX' | 'DEFECTIVE'); disposeIdempotencyKeyRef.current = createRmaIdempotencyKey(); }}>
               <option value="GOOD">Nguyên vẹn</option>
-              <option value="DAMAGED_BOX">Móp vỏ hộp (Cần thay vỏ)</option>
+              <option value="DAMAGED_BOX">Móp vỏ hộp</option>
               <option value="DEFECTIVE">Lỗi kỹ thuật / Hư hỏng</option>
             </select>
           </label>
@@ -326,7 +335,10 @@ export function ReturnDispositionDrawer({
             <textarea rows={2} aria-label="Ghi chú biên bản kiểm định" value={note} onChange={e => setNote(e.target.value)} placeholder="Ghi rõ tình trạng niêm phong, lý do hoàn hoặc mã biên bản hủy..." />
           </label>
 
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6, flexWrap: 'wrap' }}>
+          <div style={{ position: 'sticky', bottom: 0, zIndex: 2, background: '#ffffff', borderTop: '1px solid #e2e8f0', paddingTop: 12, paddingBottom: 2, marginTop: 'auto', display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            <button type="button" className="ui-btn ui-btn-secondary" disabled={isSubmitting} onClick={onClose}>
+              Hủy
+            </button>
             <button type="button" data-testid="btn-submit-rma-inspect" className="ui-btn ui-btn-secondary" disabled={isSubmitting} onClick={() => void handleInspectOnly()}>
               {isSubmitting ? 'Đang xử lý...' : 'Lưu kết quả kiểm định'}
             </button>

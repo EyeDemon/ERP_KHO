@@ -182,10 +182,13 @@ describe('SaasBilling Page', () => {
     expect(transferContentCode.textContent).not.toContain(' ');
     expect(screen.getByTestId('vietqr-invoice-status-badge').textContent).toBe('Chờ thanh toán');
     expect(screen.getByTestId('vietqr-inline-status-notice')).toBeTruthy();
+    const vietqrModal = screen.getByTestId('vietqr-payment-modal');
+    expect(vietqrModal.getAttribute('role')).toBe('dialog');
+    expect(vietqrModal.getAttribute('aria-modal')).toBe('true');
     expect(screen.getByTestId('saas-invoice-history-table').textContent).toContain('INV-VQR-20261030-999');
     expect(screen.getByTestId('saas-invoice-history-table').textContent).toContain('ERPKHOINVVQR20261030999');
-    expect(screen.getByTestId('saas-invoice-history-table').textContent).toContain('Ngày phát hành');
-    expect(screen.getByTestId('saas-invoice-history-table').textContent).toContain('Thời điểm thanh toán');
+    expect(screen.getByTestId('saas-invoice-history-table').textContent).toContain('Phát hành');
+    expect(screen.getByTestId('saas-invoice-history-table').textContent).toContain('Thanh toán');
     expect(screen.getByTestId('saas-invoice-history-table').textContent).toContain('Chưa thanh toán');
     expect(screen.getByTestId('saas-invoice-history-table').innerHTML).toContain('• Hạn:');
     expect(screen.getByTestId('checkbox-auto-refresh-vietqr')).toBeTruthy();
@@ -291,7 +294,7 @@ describe('SaasBilling Page', () => {
     fireEvent.click(screen.getByTestId('btn-check-vietqr-payment-status'));
     expect(await screen.findByTestId('vietqr-paid-confirmation-banner')).toBeTruthy();
     expect(screen.getByTestId('saas-billing-cycle-paid-banner').textContent).toContain(
-      'Hóa đơn kỳ 11/2026 (INV-VQR-EXPIRED-001) đã tất toán đầy đủ (1.490.000 đ) • Xác nhận lúc:',
+      'Hóa đơn kỳ 11/2026 (INV-VQR-EXPIRED-001) đã tất toán đầy đủ (1.490.000 ₫) • Xác nhận lúc:',
     );
     expect(screen.getByTestId('btn-download-paid-current-invoice').textContent).toContain('Tải hóa đơn');
     expect(screen.queryByTestId('btn-generate-vietqr')).toBeNull();

@@ -198,16 +198,5 @@ export const defaultCartonRecommendation: CartonRecommendation = {
 };
 
 export const hiddenTabStyle = {
-  position: 'fixed' as const,
-  top: 0,
-  left: 0,
-  width: 0,
-  height: 0,
-  maxHeight: 0,
-  overflow: 'hidden' as const,
-  opacity: 0,
-  pointerEvents: 'none' as const,
-  margin: 0,
-  padding: 0,
-  border: 0,
+  display: 'none' as const,
 };

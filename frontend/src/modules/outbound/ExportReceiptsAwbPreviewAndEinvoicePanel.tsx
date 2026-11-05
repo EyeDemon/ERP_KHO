@@ -105,7 +105,7 @@ export function ExportReceiptsAwbPreviewAndEinvoicePanel({
               <strong>Bút toán Kép Thông tư 200/2014/TT-BTC:</strong>{' '}
               {accountingEinvoiceData.circular200JournalEntries.map((j, idx) => (
                 <span key={idx} style={{ display: 'inline-block', marginRight: 10 }}>
-                  [Nợ TK {j.debitAccount} / Có TK {j.creditAccount}: <strong>{(j.debitAmount ?? 0).toLocaleString('vi-VN')} đ</strong>]
+                  [Nợ TK {j.debitAccount} / Có TK {j.creditAccount}: <strong>{(j.debitAmount ?? 0).toLocaleString('vi-VN')} ₫</strong>]
                 </span>
               ))}
               <span>• Cân đối Nợ/Có Δ = <strong>{accountingEinvoiceData.journalImbalanceDelta ?? 0}</strong></span>

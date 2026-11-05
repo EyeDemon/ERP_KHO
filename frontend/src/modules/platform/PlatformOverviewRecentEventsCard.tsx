@@ -1,5 +1,7 @@
 import React from 'react';
+import { formatUserDisplayNameVi } from '../../services/permissionPresentation';
 import { UiBadge, UiCard, UiEmptyState } from '../../ui/ProductionUi';
+import { normalizeTenantLegalNameVi, sanitizePlatformJargonVi } from './platformBillingHelpers';
 import type { PlatformBillingInvoiceItem } from './PlatformHealthAndWorkersSection';
 import type { PlatformAuditLogItem } from './PlatformSupportAndAuditSection';
 
@@ -19,6 +21,22 @@ interface PlatformOverviewRecentEventsCardProps {
   invoices: PlatformBillingInvoiceItem[];
   onViewAllAuditLogs: () => void;
 }
+
+const isAuthOrSessionEvent = (actionRaw?: string, entityRaw?: string): boolean => {
+  const act = (actionRaw ?? '').trim();
+  const ent = (entityRaw ?? '').trim();
+  if (!act && !ent) return false;
+  if (/^Authentication\./i.test(act)) return true;
+  if (/^(Login|Logout|Refresh|TokenRefresh|LoginSucceeded|LoginFailed)$/i.test(act)) return true;
+  if (/^UserSession$/i.test(ent)) return true;
+  return false;
+};
+
+const humanizeInlineActorNames = (text: string): string =>
+  sanitizePlatformJargonVi(text).replace(
+    /\b(qa_admin|qa_billing_admin|qa_support_admin|qa_security_auditor|tenant_admin|qa_manager_wh01|qa_supervisor_wh01|qa_accountant|qa_staff_wh01|qa_viewer_wh01)\b/gi,
+    (match) => formatUserDisplayNameVi(match),
+  );
 
 const formatIsoToViDateTime = (raw?: string): string => {
   if (!raw) return '02/11/2026 08:00';
@@ -57,16 +75,37 @@ export const PlatformOverviewRecentEventsCard: React.FC<PlatformOverviewRecentEv
   onViewAllAuditLogs,
 }) => {
   const rows: PlatformOverviewRecentEventItem[] = [];
+  const seenKeys = new Set<string>();
+
+  const pushUniqueEvent = (actionKey: string, item: PlatformOverviewRecentEventItem) => {
+    const dedupKey = `${actionKey.toLowerCase()}|${item.targetVi.toLowerCase()}|${item.timestampVi}`;
+    if (seenKeys.has(dedupKey)) return;
+    seenKeys.add(dedupKey);
+    rows.push(item);
+  };
 
   for (let i = 0; i < rawDashboardEvents.length; i += 1) {
     const ev = rawDashboardEvents[i];
-    const mapped = mapAuditActionCategoryVi(String(ev.category ?? ev.action ?? ev.eventType ?? ''));
-    rows.push({
+    const rawAction = String(ev.action ?? ev.eventType ?? ev.category ?? '');
+    const rawEntity = String(ev.entityName ?? ev.entityType ?? '');
+    if (isAuthOrSessionEvent(rawAction, rawEntity)) continue;
+    const mapped = mapAuditActionCategoryVi(String(ev.category ?? rawAction));
+    const rawTarget = String(ev.targetVi ?? ev.targetCode ?? ev.tenantCode ?? ev.entityCode ?? 'TENANT-001');
+    const cleanTarget = /ERP_KHO|ĐẠI PHÁT/i.test(rawTarget) ? normalizeTenantLegalNameVi(rawTarget, 1) : sanitizePlatformJargonVi(rawTarget);
+    const rawActor = ev.actorUsername ?? ev.actor ?? ev.username;
+    const actorPrefix = typeof rawActor === 'string' && rawActor.trim() ? `${formatUserDisplayNameVi(rawActor)}: ` : '';
+    const rawSummary = humanizeInlineActorNames(
+      String(ev.summaryVi ?? ev.descriptionVi ?? ev.message ?? 'Ghi nhận sự kiện điều hành nền tảng SaaS'),
+    );
+    const summaryVi = actorPrefix && !rawSummary.includes(formatUserDisplayNameVi(String(rawActor)))
+      ? `${actorPrefix}${rawSummary}`
+      : rawSummary;
+    pushUniqueEvent(rawAction || mapped.categoryVi, {
       id: String(ev.id ?? `dash-ev-${i}`),
       timestampVi: formatIsoToViDateTime(String(ev.timestampVi ?? ev.occurredAtUtc ?? ev.createdAtUtc ?? '')),
-      categoryVi: String(ev.categoryVi ?? mapped.categoryVi),
-      targetVi: String(ev.targetCode ?? ev.tenantCode ?? ev.entityCode ?? 'TENANT-001'),
-      summaryVi: String(ev.summaryVi ?? ev.descriptionVi ?? ev.message ?? 'Ghi nhận sự kiện điều hành nền tảng SaaS'),
+      categoryVi: sanitizePlatformJargonVi(String(ev.categoryVi ?? mapped.categoryVi)),
+      targetVi: cleanTarget,
+      summaryVi,
       statusLabelVi: String(ev.statusLabelVi ?? mapped.statusLabelVi),
       tone: mapped.tone,
     });
@@ -74,18 +113,24 @@ export const PlatformOverviewRecentEventsCard: React.FC<PlatformOverviewRecentEv
 
   for (let i = 0; i < auditLogs.length && rows.length < 6; i += 1) {
     const log = auditLogs[i];
+    if (isAuthOrSessionEvent(log.action, log.entityName)) continue;
     const mapped = mapAuditActionCategoryVi(log.action);
     const targetCode = log.tenantId
       ? `TENANT-${String(log.tenantId).padStart(3, '0')}`
       : log.entityId
-        ? `${log.entityName} #${log.entityId}`
-        : log.entityName || 'HỆ THỐNG';
-    rows.push({
+        ? `${sanitizePlatformJargonVi(log.entityName)} #${log.entityId}`
+        : sanitizePlatformJargonVi(log.entityName) || 'HỆ THỐNG';
+    const actorVi = formatUserDisplayNameVi(log.username);
+    const baseSummary = log.reason
+      ? humanizeInlineActorNames(log.reason)
+      : `Thực thi tác vụ ${sanitizePlatformJargonVi(log.action)} trên ${sanitizePlatformJargonVi(log.entityName)}`;
+    const summaryVi = baseSummary.includes(actorVi) ? baseSummary : `${actorVi} — ${baseSummary}`;
+    pushUniqueEvent(log.action || mapped.categoryVi, {
       id: `audit-${log.id ?? i}`,
       timestampVi: formatIsoToViDateTime(log.timestamp),
       categoryVi: mapped.categoryVi,
       targetVi: targetCode,
-      summaryVi: log.reason || `Thực thi tác vụ ${log.action} trên ${log.entityName}`,
+      summaryVi,
       statusLabelVi: mapped.statusLabelVi,
       tone: mapped.tone,
     });
@@ -98,15 +143,16 @@ export const PlatformOverviewRecentEventsCard: React.FC<PlatformOverviewRecentEv
       ? String(inv.tenantId)
       : `TENANT-${String(inv.tenantId || 1).padStart(3, '0')}`;
     const totalText = Number(inv.amountVnd || inv.totalAmountVnd || 1490000).toLocaleString('vi-VN');
-    rows.push({
+    const timestampVi = isPaid
+      ? (inv.confirmedAtVi || inv.bankCreditTimeVi || formatIsoToViDateTime(inv.createdAtUtc))
+      : formatIsoToViDateTime(inv.createdAtUtc);
+    pushUniqueEvent('Đối soát hóa đơn', {
       id: `inv-${inv.id ?? inv.invoiceCode}`,
-      timestampVi: isPaid
-        ? (inv.confirmedAtVi || inv.bankCreditTimeVi || formatIsoToViDateTime(inv.createdAtUtc))
-        : formatIsoToViDateTime(inv.createdAtUtc),
+      timestampVi,
       categoryVi: 'Đối soát hóa đơn',
       targetVi: `${tenantDisplay} • ${inv.invoiceCode}`,
       summaryVi: isPaid
-        ? `${inv.settlementSummaryVi || 'Đã đối soát thanh toán'} — Tổng thu: ${totalText} ₫`
+        ? `${humanizeInlineActorNames(inv.settlementSummaryVi || 'Đã đối soát thanh toán')} — Tổng thu: ${totalText} ₫`
         : `Phát hành hóa đơn kỳ ${inv.billingPeriod || '11/2026'} (${totalText} ₫) — Hạn TT: ${inv.dueDateVi || '05/11/2026'}`,
       statusLabelVi: isPaid ? 'Đã tất toán' : 'Chờ đối soát',
       tone: isPaid ? 'success' : 'warning',
@@ -141,11 +187,11 @@ export const PlatformOverviewRecentEventsCard: React.FC<PlatformOverviewRecentEv
             <table className="ui-table ui-table-compact" data-testid="platform-overview-recent-events-table">
               <thead>
                 <tr>
-                  <th style={{ whiteSpace: 'nowrap' }}>Thời gian</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>Trạng thái</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>Phân loại</th>
-                  <th style={{ whiteSpace: 'nowrap' }}>Đối tượng</th>
-                  <th>Nội dung sự kiện</th>
+                  <th style={{ minWidth: 88, whiteSpace: 'nowrap' }}>Thời gian</th>
+                  <th style={{ minWidth: 88, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                  <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Phân loại</th>
+                  <th style={{ minWidth: 96, whiteSpace: 'nowrap' }}>Đối tượng</th>
+                  <th style={{ minWidth: 160 }}>Nội dung sự kiện</th>
                 </tr>
               </thead>
               <tbody>
@@ -160,7 +206,7 @@ export const PlatformOverviewRecentEventsCard: React.FC<PlatformOverviewRecentEv
                     <td style={{ whiteSpace: 'nowrap', fontWeight: 600, color: '#0f172a', fontSize: 12.5 }}>
                       {item.categoryVi}
                     </td>
-                    <td style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: '#1d4ed8', fontSize: 12.5 }}>
+                    <td style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: '#0F172A', fontSize: 12.5 }}>
                       {item.targetVi}
                     </td>
                     <td style={{ color: '#334155', fontSize: 12.5, lineHeight: 1.4 }}>

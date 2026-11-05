@@ -55,14 +55,14 @@ export function PartnerDebtStorageSnapshotCard({
         <table className="ui-table-compact" aria-label="Bảng đối soát chi phí lưu kho 3PL theo chủ hàng" style={{ width: '100%' }}>
           <thead>
             <tr>
-              <th>Chủ hàng</th>
-              <th>Kho</th>
-              <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số mặt hàng</th>
-              <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số vị trí kệ chiếm chỗ</th>
-              <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Tổng thể tích (m³)</th>
-              <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số Pallet quy đổi</th>
-              <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Phí lưu kho ước tính / ngày</th>
-              <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Phí lưu kho lũy kế tháng</th>
+              <th style={{ minWidth: 125 }}>Chủ hàng</th>
+              <th style={{ minWidth: 120 }}>Kho</th>
+              <th style={{ minWidth: 96, whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số mặt hàng</th>
+              <th style={{ minWidth: 115, whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Vị trí chiếm chỗ</th>
+              <th style={{ minWidth: 110, whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Thể tích (m³)</th>
+              <th style={{ minWidth: 110, whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Pallet quy đổi</th>
+              <th style={{ minWidth: 130, whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Phí ước tính / ngày</th>
+              <th style={{ minWidth: 130, whiteSpace: 'nowrap', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Phí lũy kế tháng</th>
             </tr>
           </thead>
           <tbody>

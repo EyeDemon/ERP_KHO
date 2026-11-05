@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useInRouterContext, useLocation } from 'react-router-dom';
+import { AlertTriangle, X } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import { usePermission } from '../services/authorization';
 import { permissionError, permissionLabel, roleLabel } from '../services/permissionPresentation';
 import { UiMetric, UiMetricGrid, UiPage, UiPageHeader, UiTabs } from '../ui/ProductionUi';
+import { useDialogFocusTrap } from '../ui/useDialogFocusTrap';
 import {
   executeRoleGrantToggle,
   executeRoleModuleBatchGrant,
@@ -60,10 +62,21 @@ export default function Permissions() {
   const [permissionSearch, setPermissionSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [pending, setPending] = useState(false);
+  const [pendingGrantKey, setPendingGrantKey] = useState<string | null>(null);
+  const [adminRevokeTarget, setAdminRevokeTarget] = useState<{ role: Role; code: string } | null>(null);
+  const adminRevokeModalRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const inFlight = useRef(false);
   const requestVersion = useRef(0);
+
+  useDialogFocusTrap(adminRevokeModalRef, {
+    open: Boolean(adminRevokeTarget),
+    onEscape: () => {
+      if (!pending) setAdminRevokeTarget(null);
+    },
+    escapeDisabled: pending,
+  });
 
   const [targetUserIdInput, setTargetUserIdInput] = useState('');
   const [userSecurity, setUserSecurity] = useState<UserSecurityStatus | null>(null);
@@ -142,17 +155,37 @@ export default function Permissions() {
     };
   }, [load]);
 
-  const change = async (role: Role, code: string, revoke: boolean) => {
+  const executeGrantMutation = async (role: Role, code: string, revoke: boolean) => {
     if (!canAssign || inFlight.current) return;
-    if (!window.confirm(`${revoke ? 'Thu hồi' : 'Cấp'} quyền “${permissionLabel(code)}” cho ${roleLabel(role.roleName)}?`)) return;
-    inFlight.current = true; setPending(true); setError(''); setSuccess('');
+    inFlight.current = true;
+    setPending(true);
+    setPendingGrantKey(`${role.id}:${code}`);
+    setError('');
+    setSuccess('');
     try {
       await executeRoleGrantToggle(role, code, revoke);
       await load();
       setSuccess('Đã cập nhật quyền truy cập.');
+      setAdminRevokeTarget(null);
     } catch (failure) {
-      setRoles([]); setCatalog([]); setError(permissionError(failure));
-    } finally { inFlight.current = false; setPending(false); }
+      setRoles([]);
+      setCatalog([]);
+      setError(permissionError(failure));
+    } finally {
+      inFlight.current = false;
+      setPending(false);
+      setPendingGrantKey(null);
+    }
+  };
+
+  const change = async (role: Role, code: string, revoke: boolean) => {
+    if (!canAssign || inFlight.current) return;
+    if (revoke && role.roleName === 'Admin') {
+      setAdminRevokeTarget({ role, code });
+      return;
+    }
+    if (!window.confirm(`${revoke ? 'Thu hồi' : 'Cấp'} quyền “${permissionLabel(code)}” cho ${roleLabel(role.roleName)}?`)) return;
+    await executeGrantMutation(role, code, revoke);
   };
 
   const batchGrantModule = async (role: Role, moduleName: string, codesToGrant: string[]) => {
@@ -260,10 +293,11 @@ export default function Permissions() {
   };
 
   const effectiveRoleFilter = roleFilter === '__ALL__' ? '' : roleFilter || roles[0]?.roleName || '';
+  const activeRoleObj = roles.find(r => r.roleName === effectiveRoleFilter) ?? roles[0] ?? null;
   const showPermissionKpis = activeSectionTab === 'overview-matrix' || activeSectionTab === 'roles-warehouse';
 
   return (
-    <UiPage>
+    <UiPage style={{ gap: 16 }}>
       <UiPageHeader
         eyebrow={eyebrow}
         title={title}
@@ -277,7 +311,15 @@ export default function Permissions() {
         <UiMetricGrid>
           <UiMetric value={catalog.length} label="Quyền trong danh mục" />
           <UiMetric value={roles.length} label="Vai trò đang hiển thị" />
-          <UiMetric value={roles.reduce((sum, role) => sum + role.permissions.length, 0)} label="Lượt cấp quyền hiện tại" />
+          <UiMetric
+            value={
+              <span style={{ fontSize: 20, lineHeight: 1.25, whiteSpace: 'normal' }}>
+                {activeRoleObj ? roleLabel(activeRoleObj.roleName) : `${roles.length} vai trò`}
+              </span>
+            }
+            subtitle={activeRoleObj ? `Đã cấp ${activeRoleObj.permissions.length} / ${catalog.length} quyền` : undefined}
+            label="Vai trò đang xem"
+          />
         </UiMetricGrid>
       )}
 
@@ -306,7 +348,7 @@ export default function Permissions() {
           {activeSectionTab === 'support-sessions' && <PermissionsSupportImpersonationCard targetUserIdInput={targetUserIdInput} onError={setError} />}
 
           {(activeSectionTab === 'overview-matrix' || activeSectionTab === 'roles-warehouse') && (
-            <div>
+            <div className="ui-stack" style={{ gap: 16 }}>
               {!isCleanMatrixWorkbench && (catalog.length > 0 || roles.length > 0) && (
                 <PermissionsEnterpriseComplianceCard
                   canReadUserWarehouse={canReadUserWarehouse}
@@ -373,11 +415,77 @@ export default function Permissions() {
               permissionSearch={permissionSearch}
               onChangePermissionSearch={setPermissionSearch}
               pending={pending}
+              pendingGrantKey={pendingGrantKey}
               onChangeGrant={(role, code, revoke) => void change(role, code, revoke)}
               onBatchGrantModule={(role, moduleName, codes) => void batchGrantModule(role, moduleName, codes)}
             />
           )}
         </>
+      )}
+
+      {adminRevokeTarget && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(15, 23, 42, 0.48)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+        >
+          <div
+            ref={adminRevokeModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-revoke-modal-title"
+            data-testid="admin-revoke-confirm-modal"
+            tabIndex={-1}
+            style={{
+              width: '100%', maxWidth: 480, borderRadius: 12, background: '#ffffff',
+              border: '1px solid #cbd5e1', boxShadow: '0 20px 25px -5px rgba(15, 23, 42, 0.18)',
+              padding: '16px 18px', display: 'grid', gap: 12, outline: 'none',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <strong id="admin-revoke-modal-title" style={{ fontSize: 15, color: '#0f172a' }}>
+                Xác nhận thu hồi quyền Quản trị công ty
+              </strong>
+              <button
+                type="button"
+                aria-label="Đóng hộp thoại"
+                data-testid="btn-close-admin-revoke-modal"
+                disabled={pending}
+                onClick={() => setAdminRevokeTarget(null)}
+                style={{ minHeight: 30, padding: '4px 8px', borderRadius: 6, background: '#f8fafc', border: '1px solid #cbd5e1', cursor: pending ? 'not-allowed' : 'pointer' }}
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: 13, lineHeight: 1.45 }}>
+              <AlertTriangle size={18} aria-hidden="true" style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>
+                Bạn sắp thu hồi quyền <strong style={{ color: '#7f1d1d' }}>“{permissionLabel(adminRevokeTarget.code)}”</strong> (<code className="ui-code">{adminRevokeTarget.code}</code>) khỏi vai trò <strong>Quản trị công ty</strong>. Thao tác này có hiệu lực ngay lập tức trên toàn bộ tài khoản quản trị của doanh nghiệp.
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 4 }}>
+              <button
+                type="button"
+                data-testid="btn-cancel-admin-revoke"
+                disabled={pending}
+                onClick={() => setAdminRevokeTarget(null)}
+                style={{ minHeight: 34, padding: '6px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, background: '#ffffff', color: '#0f172a', border: '1px solid #cbd5e1', cursor: pending ? 'not-allowed' : 'pointer' }}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                data-testid="btn-confirm-admin-revoke"
+                disabled={pending}
+                onClick={() => void executeGrantMutation(adminRevokeTarget.role, adminRevokeTarget.code, true)}
+                style={{ minHeight: 34, padding: '6px 14px', borderRadius: 6, fontSize: 13, fontWeight: 700, background: '#dc2626', color: '#ffffff', border: '1px solid #b91c1c', cursor: pending ? 'not-allowed' : 'pointer' }}
+              >
+                {pending ? 'Đang thu hồi...' : 'Xác nhận thu hồi'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </UiPage>
   );

@@ -1,7 +1,7 @@
 export const CANONICAL_WH01_LABEL = 'Kho Trung tâm (WH01)';
 
 /**
- * Chuẩn hóa tên hiển thị kho trên toàn bộ giao diện ERP_KHO.
+ * Chuẩn hóa tên hiển thị kho trên toàn bộ giao diện quản lý kho.
  * Mọi biến thể của kho trung tâm WH01 ("Kho Chính TP.HCM", "Kho Chính", "Kho trung tâm",
  * "Kho Trung Tâm", "WH01 — Kho Chính TP.HCM", "Kho Trung tâm WH01", "WH01")
  * đều quy về duy nhất một nhãn chuẩn: "Kho Trung tâm (WH01)" (không lặp mã kho).
@@ -11,7 +11,7 @@ export function formatWarehouseLabel(
   rawCode?: string | null,
   warehouseId?: number | null,
 ): string {
-  const name = (rawName ?? '').trim();
+  const name = (rawName ?? '').replace(/\bERP_KHO\b/gi, 'Đại Phát').trim();
   const code = (rawCode ?? '').trim().toUpperCase();
 
   if (!name && !code) {

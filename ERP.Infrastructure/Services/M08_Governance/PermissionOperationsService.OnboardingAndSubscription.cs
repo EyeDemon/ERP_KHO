@@ -283,7 +283,7 @@ public sealed partial class PermissionOperationsService
             currentPeriodStartUtc = periodStartUtc,
             currentPeriodEndUtc = periodEndUtc,
             nextRenewalDateUtc = periodEndUtc,
-            taxCode = tenantProfile?.TaxCode ?? string.Empty,
+            taxCode = SaasBillingService.NormalizeTenantTaxCode(tenantId, tenantProfile?.TaxCode, tenantProfile?.CompanyName, tenantProfile?.TenantName),
             taxpayerType = tenantProfile?.TaxpayerType ?? "ENTERPRISE",
             companyName = resolvedCompanyName,
             companyLegalName = resolvedCompanyName,

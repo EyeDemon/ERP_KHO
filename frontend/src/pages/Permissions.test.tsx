@@ -62,7 +62,8 @@ describe('quản trị quyền truy cập', () => {
   });
 
   it('thu hồi quyền đọc xóa dữ liệu quản trị đang hiển thị', async () => {
-    const view = render(<Permissions />); await view.findByText('Quản lý kho');
+    const view = render(<Permissions />);
+    expect((await view.findAllByText('Quản lý kho')).length).toBeGreaterThan(0);
     act(() => setCurrentPermissions([]));
     await waitFor(() => expect(view.queryByText('Quản lý kho')).toBeNull());
   });
@@ -241,7 +242,7 @@ describe('quản trị quyền truy cập', () => {
     // KPI cards and compact 1-line SaaS summary strip visible on Tab 1
     expect(view.getByText('Quyền trong danh mục')).toBeTruthy();
     expect(view.getByText('Vai trò đang hiển thị')).toBeTruthy();
-    expect(view.getByText('Lượt cấp quyền hiện tại')).toBeTruthy();
+    expect(view.getByText('Vai trò đang xem')).toBeTruthy();
     expect(await view.findByText('Tóm tắt gói dịch vụ thuê bao hiện tại')).toBeTruthy();
     expect(view.getByText('Gói Tăng trưởng Thương mại Điện tử')).toBeTruthy();
     expect(view.getByText('2 / 3 kho')).toBeTruthy();
@@ -258,7 +259,7 @@ describe('quản trị quyền truy cập', () => {
     fireEvent.click(view.getByRole('tab', { name: 'Xác thực 2 lớp' }));
     expect(view.queryByText('Quyền trong danh mục')).toBeNull();
     expect(view.queryByText('Vai trò đang hiển thị')).toBeNull();
-    expect(view.queryByText('Lượt cấp quyền hiện tại')).toBeNull();
+    expect(view.queryByText('Vai trò đang xem')).toBeNull();
     expect(view.queryByText('Tóm tắt gói dịch vụ thuê bao hiện tại')).toBeNull();
     expect(view.getByTestId('totp-admin-policy-banner').textContent).toContain('Chính sách bắt buộc đối với tài khoản Quản trị viên');
 
@@ -306,7 +307,7 @@ describe('quản trị quyền truy cập', () => {
     fireEvent.click(view.getByTestId('btn-verify-totp'));
     expect(await view.findByTestId('totp-pending-recovery-banner')).toBeTruthy();
     expect(view.getByTestId('totp-pending-recovery-banner').textContent).toContain(
-      '⚠️ Bạn đã xác minh mã OTP 6 chữ số thành công. Vui lòng sao chép hoặc tải 8 mã khôi phục dự phòng và bấm Hoàn tất để kích hoạt xác thực 2 lớp.',
+      'Bạn đã xác minh mã OTP 6 chữ số thành công. Vui lòng sao chép hoặc tải 8 mã khôi phục dự phòng và bấm Hoàn tất để kích hoạt xác thực 2 lớp.',
     );
     expect(view.queryByTestId('totp-verified-banner')).toBeNull();
     expect(view.queryByTestId('totp-enrolling-secret-box')).toBeNull();
@@ -512,20 +513,31 @@ describe('quản trị quyền truy cập', () => {
     const roleTabs = await view.findByTestId('permissions-role-tabs');
     const labels = Array.from(roleTabs.querySelectorAll('button[role="tab"]')).map(btn => btn.textContent);
     expect(labels).toEqual([
-      'Quản trị viên công ty (Admin · 2)',
-      'Quản lý kho (Manager · 2)',
-      'Giám sát & QC (Supervisor · 1)',
-      'Kế toán kho (Accountant · 1)',
-      'Nhân viên kho (WarehouseStaff · 1)',
-      'Chỉ xem / Kiểm toán (Viewer · 1)',
+      'Quản trị công ty (2)',
+      'Quản lý kho (2)',
+      'Giám sát & QC (1)',
+      'Kế toán kho (1)',
+      'Nhân viên kho (1)',
+      'Kiểm toán nội bộ (1)',
     ]);
     expect(view.container.textContent).not.toContain('SuperAdmin');
     expect(view.container.textContent).not.toContain('BillingAdmin');
     expect(view.container.textContent).not.toContain('SupportAdmin');
     expect(view.container.textContent).not.toContain('SecurityAuditor');
     expect(view.container.textContent).not.toContain('platform.dashboard.read');
-    const matrixScrollRegion = view.getByRole('region', { name: /Vùng cuộn danh sách quyền của Quản trị viên công ty/i });
-    expect(matrixScrollRegion.getAttribute('tabindex')).toBe('0');
+    expect(view.getByTestId('permissions-module-filter-bar')).toBeTruthy();
+    expect(view.queryByRole('region', { name: /Vùng cuộn danh sách quyền/i })).toBeNull();
+
+    // Wave-20 PM-02: Revoking a permission from Admin opens accessible confirmation modal (role="dialog")
+    const adminSwitchBtns = view.getAllByRole('switch');
+    expect(adminSwitchBtns.length).toBeGreaterThanOrEqual(2);
+    fireEvent.click(adminSwitchBtns[0]);
+    const revokeModal = await view.findByTestId('admin-revoke-confirm-modal');
+    expect(revokeModal.getAttribute('role')).toBe('dialog');
+    expect(revokeModal.getAttribute('aria-modal')).toBe('true');
+    fireEvent.click(view.getByTestId('btn-cancel-admin-revoke'));
+    expect(view.queryByTestId('admin-revoke-confirm-modal')).toBeNull();
+
     fireEvent.click(view.getByText('Cấu trúc vai trò & Phạm vi kho'));
     const emptyUserSelect = view.getByLabelText('ID người dùng cần kiểm tra bảo mật') as HTMLSelectElement;
     expect(emptyUserSelect.querySelectorAll('option').length).toBe(1);

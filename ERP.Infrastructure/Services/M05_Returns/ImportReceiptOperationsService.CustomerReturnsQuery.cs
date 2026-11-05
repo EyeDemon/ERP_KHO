@@ -47,6 +47,17 @@ public sealed partial class ImportReceiptOperationsService
                 .ToListAsync(cancellationToken)
             : [];
 
+        var allProdIds = rawReturns.SelectMany(r => r.Lines.Select(l => l.ProductId)).Distinct().ToList();
+        var prodMap = allProdIds.Count > 0
+            ? await db.Products.AsNoTracking()
+                .Where(p => allProdIds.Contains(p.Id))
+                .Select(p => new { p.Id, p.Code, p.Name, UnitName = p.Unit != null ? p.Unit.Name : null })
+                .ToDictionaryAsync(
+                    p => p.Id,
+                    p => (Code: p.Code.Trim(), Name: p.Name.Trim(), UnitName: NormalizeVietnameseUnitLabel(p.UnitName)),
+                    cancellationToken)
+            : new Dictionary<int, (string Code, string Name, string UnitName)>();
+
         var now = DateTime.UtcNow;
         var items = rawReturns.Select(r =>
         {
@@ -67,6 +78,11 @@ public sealed partial class ImportReceiptOperationsService
             var disputeClaimStatus = !string.IsNullOrWhiteSpace(inspectionVideoUrl)
                 ? "EVIDENCE_ATTACHED_READY"
                 : (disputeRemainingHours <= 0 ? "DISPUTE_WINDOW_EXPIRED" : "PENDING_VIDEO_EVIDENCE");
+            var firstLine = r.Lines.OrderBy(l => l.Id).FirstOrDefault();
+            (string Code, string Name, string UnitName) firstProd = default;
+            if (firstLine != null) prodMap.TryGetValue(firstLine.ProductId, out firstProd);
+            var primaryUnit = NormalizeVietnameseUnitLabel(
+                !string.IsNullOrWhiteSpace(firstProd.UnitName) ? firstProd.UnitName : (firstLine?.TransactionUomCode ?? firstLine?.BaseUomCode));
 
             return new
             {
@@ -79,6 +95,8 @@ public sealed partial class ImportReceiptOperationsService
                 r.OrderNumber,
                 ReturnReason = NormalizeVietnameseDiacritics(r.ReturnReason),
                 r.Status,
+                unitName = primaryUnit,
+                unit = primaryUnit,
                 r.CreatedBy,
                 r.CreatedAtUtc,
                 createdAt = r.CreatedAtUtc,
@@ -90,18 +108,28 @@ public sealed partial class ImportReceiptOperationsService
                 disputeDeadlineUtc,
                 disputeRemainingHours,
                 disputeClaimStatus,
-                lines = r.Lines.Select(l => new
+                lines = r.Lines.Select(l =>
                 {
-                    l.Id,
-                    l.ProductId,
-                    l.QuarantineLocationId,
-                    l.TargetLocationId,
-                    l.Quantity,
-                    l.UnitCost,
-                    l.Condition,
-                    l.Disposition,
-                    l.PackagingProductId,
-                    l.PackagingQuantity
+                    prodMap.TryGetValue(l.ProductId, out var pInfo);
+                    var lineUnit = NormalizeVietnameseUnitLabel(
+                        !string.IsNullOrWhiteSpace(pInfo.UnitName) ? pInfo.UnitName : (l.TransactionUomCode ?? l.BaseUomCode));
+                    return new
+                    {
+                        l.Id,
+                        l.ProductId,
+                        productCode = pInfo.Code ?? $"SKU-{l.ProductId}",
+                        productName = pInfo.Name ?? $"Sản phẩm #{l.ProductId}",
+                        unitName = lineUnit,
+                        unit = lineUnit,
+                        l.QuarantineLocationId,
+                        l.TargetLocationId,
+                        l.Quantity,
+                        l.UnitCost,
+                        l.Condition,
+                        l.Disposition,
+                        l.PackagingProductId,
+                        l.PackagingQuantity
+                    };
                 }).ToList()
             };
         }).ToList();
@@ -218,8 +246,9 @@ public sealed partial class ImportReceiptOperationsService
         var productMap = productIds.Count > 0
             ? await db.Products.AsNoTracking()
                 .Where(p => productIds.Contains(p.Id))
-                .ToDictionaryAsync(p => p.Id, p => (p.Code.Trim(), p.Name.Trim()), cancellationToken)
-            : new Dictionary<int, (string Code, string Name)>();
+                .Select(p => new { p.Id, p.Code, p.Name, UnitName = p.Unit != null ? p.Unit.Name : null })
+                .ToDictionaryAsync(p => p.Id, p => (p.Code.Trim(), p.Name.Trim(), NormalizeVietnameseUnitLabel(p.UnitName)), cancellationToken)
+            : new Dictionary<int, (string Code, string Name, string UnitName)>();
 
         var locIds = rawReturns
             .SelectMany(r => r.Lines.SelectMany(l => new[] { l.QuarantineLocationId, l.TargetLocationId, l.RestockLocationId }).Append(r.QuarantineLocationId))
@@ -288,8 +317,9 @@ public sealed partial class ImportReceiptOperationsService
         var productMap = productIds.Count > 0
             ? await db.Products.AsNoTracking()
                 .Where(p => productIds.Contains(p.Id))
-                .ToDictionaryAsync(p => p.Id, p => (p.Code.Trim(), p.Name.Trim()), cancellationToken)
-            : new Dictionary<int, (string Code, string Name)>();
+                .Select(p => new { p.Id, p.Code, p.Name, UnitName = p.Unit != null ? p.Unit.Name : null })
+                .ToDictionaryAsync(p => p.Id, p => (p.Code.Trim(), p.Name.Trim(), NormalizeVietnameseUnitLabel(p.UnitName)), cancellationToken)
+            : new Dictionary<int, (string Code, string Name, string UnitName)>();
 
         var locIds = r.Lines
             .SelectMany(l => new[] { l.QuarantineLocationId, l.TargetLocationId, l.RestockLocationId })

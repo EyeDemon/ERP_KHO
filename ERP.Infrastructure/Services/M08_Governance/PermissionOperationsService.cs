@@ -193,12 +193,12 @@ public sealed partial class PermissionOperationsService : IPermissionOperationsS
         var normalized = (roleCode ?? string.Empty).Trim();
         return normalized switch
         {
-            "Admin" => "Quản trị viên công ty",
+            "Admin" => "Quản trị công ty",
             "Manager" => "Quản lý kho",
             "Supervisor" => "Giám sát & QC",
             "Accountant" => "Kế toán kho",
             "WarehouseStaff" => "Nhân viên kho",
-            "Viewer" => "Chỉ xem / Kiểm toán",
+            "Viewer" => "Kiểm toán nội bộ",
             "Receiver" => "Nhân viên nhận hàng",
             "PickerPacker" => "Nhân viên lấy/đóng gói",
             "PlatformSuperAdmin" => "Quản trị viên Cấp cao",
@@ -282,7 +282,7 @@ public sealed partial class PermissionOperationsService : IPermissionOperationsS
             {
                 x.Id,
                 x.Username,
-                x.FullName,
+                FullName = UserSessionService.ResolveCanonicalUserFullName(x.Username, x.FullName),
                 x.Email,
                 x.TenantId,
                 x.RoleId,

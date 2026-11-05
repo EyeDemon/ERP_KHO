@@ -238,17 +238,17 @@ const Warehouses = () => {
             <table className="ui-table-compact" aria-label="Danh sách kho">
               <thead>
                 <tr>
-                  <th>Mã kho</th>
-                  <th>Tên kho</th>
-                  <th>Địa chỉ</th>
-                  <th>Trạng thái</th>
-                  {canManage && <th style={{ whiteSpace: 'nowrap' }}>Thao tác</th>}
+                  <th style={{ minWidth: 100, whiteSpace: 'nowrap' }}>Mã kho</th>
+                  <th style={{ minWidth: 150 }}>Tên kho</th>
+                  <th style={{ minWidth: 180 }}>Địa chỉ</th>
+                  <th style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                  {canManage && <th style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Thao tác</th>}
                 </tr>
               </thead>
               <tbody>
                 {paginated.map((warehouse) => (
                   <tr key={warehouse.id}>
-                    <td style={{ whiteSpace: 'nowrap' }}><strong>{warehouse.code}</strong></td>
+                    <td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{warehouse.code}</strong></td>
                     <td>{warehouse.name}</td>
                     <td>{warehouse.address || '—'}</td>
                     <td><UiBadge tone={warehouse.isActive ? 'success' : 'neutral'}>{warehouse.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}</UiBadge></td>
