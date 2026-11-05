@@ -372,7 +372,7 @@ const SaasBilling = () => {
         loadSubscription={loadSubscription} quotaGaugeItems={quotaGaugeItems} createVietQrInvoice={createVietQrInvoice}
       />
 
-      <div className="saas-billing-mid-grid">
+      <div className="saas-billing-mid-grid" style={{ alignItems: 'start' }}>
         <SaasBillingTaxProfileCard
           busy={busy} taxCodeDraft={taxCodeDraft} setTaxCodeDraft={setTaxCodeDraft}
           buyerCompanyName={buyerCompanyName} setBuyerCompanyName={setBuyerCompanyName}

@@ -114,8 +114,8 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
       <div
         data-testid="vietqr-idle-cta-bar"
         style={{
-          display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 8,
-          padding: '10px 14px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc',
+          display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignSelf: 'start', gap: 10,
+          padding: '12px 14px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc',
           boxSizing: 'border-box',
         }}
       >
@@ -202,48 +202,48 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
             >
               <span data-testid="saas-vietqr-payment-panel" style={{ display: 'none' }} />
               <div className="ui-stack" style={{ gap: 10, flex: '1 1 500px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(210px, 1fr))', gap: 10, padding: '12px 14px', borderRadius: 8, background: '#ffffff', border: '1px solid #e2e8f0' }}>
-                  <div style={{ padding: '6px 8px', borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: 12, color: '#475569' }}>Ngân hàng thụ hưởng</div>
-                    <strong data-testid="vietqr-bank-display" style={{ display: 'block', fontSize: 13.5, color: '#0f172a', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+                <div data-testid="vietqr-metadata-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(220px, 1fr))', alignItems: 'stretch', gap: 10, padding: '12px 14px', borderRadius: 8, background: '#ffffff', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '8px 10px', borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <span style={{ fontSize: 12, color: '#475569', lineHeight: 1.25 }}>Ngân hàng thụ hưởng</span>
+                    <strong data-testid="vietqr-bank-display" style={{ fontSize: 13.5, color: '#0f172a', lineHeight: 1.3, fontVariantNumeric: 'tabular-nums' }}>
                       {billing.bankName
                         ? `${billing.bankName}${billing.bankName === 'TPBank' ? ' — NH TMCP Tiên Phong' : ''}${billing.bankBin ? ` (BIN: ${billing.bankBin})` : ''}`
                         : 'Chưa cấu hình ngân hàng thụ hưởng'}
                     </strong>
                   </div>
 
-                  <div style={{ padding: '6px 8px', borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: 12, color: '#475569' }}>Chủ tài khoản thụ hưởng</div>
-                    <strong data-testid="vietqr-account-holder" style={{ display: 'block', fontSize: 13.5, color: '#0f172a', marginTop: 2 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '8px 10px', borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <span style={{ fontSize: 12, color: '#475569', lineHeight: 1.25 }}>Chủ tài khoản thụ hưởng</span>
+                    <strong data-testid="vietqr-account-holder" style={{ fontSize: 13.5, color: '#0f172a', lineHeight: 1.3 }}>
                       {billing.accountName || 'Chưa cấu hình chủ tài khoản'}
                     </strong>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <div>
-                      <div style={{ fontSize: 12, color: '#475569' }}>Số tài khoản thụ hưởng</div>
-                      <strong data-testid="vietqr-account-number" style={{ fontSize: 14, color: '#0F172A', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                        {billing.accountNo || 'Chưa cấu hình số tài khoản'}
-                      </strong>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 10px', borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 12, color: '#475569', lineHeight: 1.25 }}>Số tài khoản thụ hưởng</span>
+                      <button type="button" data-testid="btn-copy-stk" style={{ ...secondaryBtnStyle, padding: '2px 8px', fontSize: 11.5 }} onClick={() => void copyToClipboard('account', billing.accountNo)}>
+                        {copiedField === 'account' ? 'Đã sao chép' : 'Sao chép STK'}
+                      </button>
                     </div>
-                    <button type="button" data-testid="btn-copy-stk" style={{ ...secondaryBtnStyle, padding: '4px 10px', fontSize: 12 }} onClick={() => void copyToClipboard('account', billing.accountNo)}>
-                      {copiedField === 'account' ? 'Đã sao chép' : 'Sao chép STK'}
-                    </button>
+                    <strong data-testid="vietqr-account-number" style={{ fontSize: 14, color: '#0F172A', fontWeight: 700, lineHeight: 1.3, fontVariantNumeric: 'tabular-nums' }}>
+                      {billing.accountNo || 'Chưa cấu hình số tài khoản'}
+                    </strong>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <div>
-                      <div style={{ fontSize: 12, color: '#475569' }}>Số tiền &amp; Kỳ cước thanh toán</div>
-                      <strong data-testid="vietqr-amount-display" style={{ display: 'block', fontSize: 13.5, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
-                        {`${displayAmountVnd.toLocaleString('vi-VN')} ₫ • Kỳ ${nextCycle.shortRange}`}
-                      </strong>
-                      <div data-testid="vietqr-vat-breakdown" style={{ fontSize: 11.5, color: '#475569', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-                        {`Trước thuế: ${subTotalVnd.toLocaleString('vi-VN')} ₫ + Thuế GTGT 10%: ${vatVnd.toLocaleString('vi-VN')} ₫`}
-                      </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '8px 10px', borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 12, color: '#475569', lineHeight: 1.25 }}>Số tiền &amp; Kỳ cước</span>
+                      <button type="button" data-testid="btn-copy-amount" style={{ ...secondaryBtnStyle, padding: '2px 8px', fontSize: 11.5 }} onClick={() => void copyToClipboard('amount', String(displayAmountVnd))}>
+                        {copiedField === 'amount' ? 'Đã sao chép' : 'Sao chép số tiền'}
+                      </button>
                     </div>
-                    <button type="button" data-testid="btn-copy-amount" style={{ ...secondaryBtnStyle, padding: '4px 10px', fontSize: 12 }} onClick={() => void copyToClipboard('amount', String(displayAmountVnd))}>
-                      {copiedField === 'amount' ? 'Đã sao chép' : 'Sao chép số tiền'}
-                    </button>
+                    <strong data-testid="vietqr-amount-display" style={{ fontSize: 13.5, color: '#0f172a', lineHeight: 1.3, fontVariantNumeric: 'tabular-nums' }}>
+                      {`${displayAmountVnd.toLocaleString('vi-VN')} ₫ • Kỳ ${nextCycle.shortRange}`}
+                    </strong>
+                    <div data-testid="vietqr-vat-breakdown" style={{ fontSize: 11.5, color: '#475569', lineHeight: 1.3, fontVariantNumeric: 'tabular-nums' }}>
+                      {`Trước thuế: ${subTotalVnd.toLocaleString('vi-VN')} ₫ + Thuế GTGT 10%: ${vatVnd.toLocaleString('vi-VN')} ₫`}
+                    </div>
                   </div>
 
                   <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, paddingTop: 8, borderTop: '1px dashed #cbd5e1' }}>

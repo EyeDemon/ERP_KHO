@@ -290,7 +290,6 @@ public class ProductsController : ControllerBase
     }
 
     [HttpGet("kit-work-orders")]
-    [HttpGet("/api/v1/kit-work-orders")]
     [PermissionAuthorize(AppPermissions.ProductRead, AppPermissions.InventoryRead)]
     public async Task<IActionResult> GetKitWorkOrders(
         [FromQuery] int? warehouseId = null, [FromQuery] int? kitProductId = null, [FromQuery] string? status = null,
@@ -298,7 +297,6 @@ public class ProductsController : ControllerBase
         => (await _productOps.GetKitWorkOrdersAsync(warehouseId, kitProductId, status, cancellationToken)).ToActionResult(this);
 
     [HttpPost("kit-work-orders")]
-    [HttpPost("/api/v1/kit-work-orders")]
     [IdempotentCommand("Product.CreateKitWorkOrder")]
     [PermissionAuthorize(AppPermissions.ProductUpdate, AppPermissions.InventoryMovementCreate)]
     public async Task<IActionResult> CreateKitWorkOrder(
@@ -309,7 +307,6 @@ public class ProductsController : ControllerBase
             : (await _productOps.CreateKitWorkOrderAsync(request, ResolveActorUserId(), cancellationToken)).ToActionResult(this);
 
     [HttpPost("kit-work-orders/{id:int}/complete")]
-    [HttpPost("/api/v1/kit-work-orders/{id:int}/complete")]
     [IdempotentCommand("Product.CompleteKitWorkOrder")]
     [PermissionAuthorize(AppPermissions.ProductUpdate, AppPermissions.InventoryMovementCreate)]
     public async Task<IActionResult> CompleteKitWorkOrder(
@@ -320,7 +317,6 @@ public class ProductsController : ControllerBase
             : (await _productOps.CompleteKitWorkOrderAsync(id, request, ResolveActorUserId(), cancellationToken)).ToActionResult(this);
 
     [HttpPost("kit-work-orders/{id:int}/cancel")]
-    [HttpPost("/api/v1/kit-work-orders/{id:int}/cancel")]
     [IdempotentCommand("Product.CancelKitWorkOrder")]
     [PermissionAuthorize(AppPermissions.ProductUpdate, AppPermissions.InventoryMovementCreate)]
     public async Task<IActionResult> CancelKitWorkOrder(

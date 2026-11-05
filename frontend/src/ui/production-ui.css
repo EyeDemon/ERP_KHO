@@ -1585,7 +1585,7 @@ button.ui-inline-icon-btn {
   display: grid;
   grid-template-columns: minmax(0, 1.42fr) minmax(0, 0.88fr);
   gap: 6px;
-  align-items: stretch;
+  align-items: start;
 }
 
 .saas-tax-profile-grid {

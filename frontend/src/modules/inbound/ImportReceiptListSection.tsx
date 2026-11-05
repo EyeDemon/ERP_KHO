@@ -211,18 +211,11 @@ export const ImportReceiptListCard: React.FC<ImportReceiptListCardProps> = ({
               <span className="ui-code" style={{ whiteSpace: 'nowrap', fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{r.code}</span>
               <UiBadge tone={statusTone(r.status)}>{statusLabel(r.status)}</UiBadge>
             </div>
-            <div style={{ fontSize: 12.5, color: '#475569', display: 'flex', flexWrap: 'wrap', gap: 6, fontVariantNumeric: 'tabular-nums' }}>
+            <div data-testid="import-receipt-mobile-meta" style={{ fontSize: 12.5, color: '#475569', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 12px', fontVariantNumeric: 'tabular-nums' }}>
               <span>{r.supplierName || 'Chưa gắn NCC'}</span>
-              <span>•</span>
               <span>{formatWarehouseLabel(r.warehouseName, undefined, r.warehouseId)}</span>
-              <span>•</span>
               <span>{formatVnDateTime(r.createdAt)}</span>
-              {totalQty > 0 && (
-                <>
-                  <span>•</span>
-                  <strong>{totalQty} sản phẩm</strong>
-                </>
-              )}
+              {totalQty > 0 && <strong>{totalQty} sản phẩm</strong>}
             </div>
             <div data-testid="import-receipt-mobile-total" style={{ fontSize: 12.5, color: '#0f172a', fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <span style={{ color: '#475569' }}>Tổng tiền:</span>

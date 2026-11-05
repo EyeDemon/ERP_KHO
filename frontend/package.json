@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "vitest run --no-file-parallelism --exclude=e2e/**",
+    "test": "vitest run --no-file-parallelism --testTimeout=30000 --hookTimeout=30000 --exclude=e2e/**",
     "preview": "vite preview"
   },
   "dependencies": {

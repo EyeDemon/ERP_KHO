@@ -193,7 +193,10 @@ describe('Outbound demand and backorder workbench',()=>{
 
   it('Wave 15: preserves immutable SO-202610-001 order code verbatim and disables batch recovery when backorder list is empty',async()=>{
     vi.mocked(apiClient.get).mockImplementation(async url=>{
-      if(url==='/api/v1/sales-orders')return {data:[{...summary,id:101,orderCode:'SO-202610-001',warehouseName:'Kho Trung tâm WH01',createdAt:'2026-10-15T08:00:00Z'}]} as never;
+      if(url==='/api/v1/sales-orders')return {data:[
+        {...summary,id:101,orderCode:'SO-202610-001',warehouseName:'Kho Trung tâm WH01',createdAt:'2026-10-15T08:00:00Z'},
+        {...summary,id:102,orderCode:'SO-20261029170749-4C0',warehouseName:'Kho Trung tâm WH01',createdAt:'2026-10-29T08:00:00Z'},
+      ]} as never;
       if(url==='/api/v1/backorders')return {data:[]} as never;
       if(url==='/api/v1/business-partners')return {data:{items:[{id:2,code:'CUS-02',name:'Minh An',isCustomer:true,isActive:true}]}} as never;
       if(url==='/api/v1/warehouses')return {data:[{id:1,code:'WH01',name:'Kho Trung tâm',isActive:true}]} as never;
@@ -203,6 +206,12 @@ describe('Outbound demand and backorder workbench',()=>{
 
     const soView=render(<MemoryRouter initialEntries={['/sales-orders']}><OutboundDemand/></MemoryRouter>);
     expect(await soView.findByText('SO-202610-001')).toBeTruthy();
+    const longCodeSpan=soView.getByTestId('sales-order-code-102') as HTMLElement;
+    expect(longCodeSpan.textContent).toBe('SO-20261029...4C0');
+    expect(longCodeSpan.getAttribute('title')).toBe('SO-20261029170749-4C0');
+    expect(longCodeSpan.style.whiteSpace).toBe('nowrap');
+    expect(longCodeSpan.style.fontSize).toBe('12px');
+    expect(soView.getByTestId('btn-copy-so-102')).toBeTruthy();
     expect(soView.container.textContent).not.toContain('SO-202611-001');
     expect(soView.container.textContent).toContain('Kho Trung tâm (WH01)');
     const codeSortHeader=soView.getByRole('columnheader',{name:/Mã đơn bán/}) as HTMLElement;

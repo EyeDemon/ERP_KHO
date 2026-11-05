@@ -3,7 +3,7 @@ import { Copy, Plus } from 'lucide-react';
 import { UiBadge, UiCard, UiEmptyState, UiMetric, UiMetricGrid, UiSortTh, UiTableScroll } from '../../ui/ProductionUi';
 import { formatWarehouseLabel } from '../../utils/warehouseLabel';
 import { OutboundBackordersShortageView } from './OutboundBackordersShortageView';
-import { type Backorder, type SalesOrder, formatShippingMethodVi, orderLabels, tone } from './outboundDemandTypes';
+import { type Backorder, type SalesOrder, formatShippingMethodVi, formatShortOrderCode, orderLabels, tone } from './outboundDemandTypes';
 import { OutboundSalesOrderMobileCards, useIsMobileViewport } from './OutboundSalesOrderMobileCards';
 
 interface OutboundOrdersAndShortageSectionProps {
@@ -196,7 +196,7 @@ export const OutboundOrdersAndShortageSection: React.FC<OutboundOrdersAndShortag
                 <table className="ui-table-compact" data-testid="sales-orders-table" aria-label="Danh sách đơn bán hàng" style={{ width: '100%', minWidth: 0 }}>
                   <thead>
                     <tr>
-                      <UiSortTh label="Mã đơn bán" active={sortKey === 'orderCode'} direction={sortDir} onToggle={() => toggleSort('orderCode')} className="ui-sticky-id" style={{ minWidth: 120, maxWidth: 152 }} />
+                      <UiSortTh label="Mã đơn bán" active={sortKey === 'orderCode'} direction={sortDir} onToggle={() => toggleSort('orderCode')} className="ui-sticky-id" style={{ minWidth: 148, maxWidth: 184 }} />
                       <UiSortTh label="Trạng thái" active={sortKey === 'status'} direction={sortDir} onToggle={() => toggleSort('status')} style={{ minWidth: 92 }} />
                       <UiSortTh label="Khách hàng" active={sortKey === 'customerName'} direction={sortDir} onToggle={() => toggleSort('customerName')} style={{ minWidth: 112, maxWidth: 148 }} />
                       <th style={{ minWidth: 98, maxWidth: 122, padding: '6px 6px', whiteSpace: 'nowrap' }}>Kho xuất</th>
@@ -214,13 +214,20 @@ export const OutboundOrdersAndShortageSection: React.FC<OutboundOrdersAndShortag
                         : '';
                       return (
                         <tr key={order.id} data-testid={`sales-order-row-${order.id}`}>
-                          <td className="ui-sticky-id" style={{ background: '#ffffff', minWidth: 120, maxWidth: 152, padding: '6px 6px', whiteSpace: 'normal', lineHeight: 1.25 }}>
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, minWidth: 0, maxWidth: '100%' }}>
-                              <span className="ui-code" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word', fontWeight: 700, color: '#0f172a', minWidth: 0 }}>{order.orderCode}</span>
+                          <td className="ui-sticky-id" style={{ background: '#ffffff', minWidth: 148, maxWidth: 184, padding: '6px 6px', whiteSpace: 'nowrap', lineHeight: 1.25 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%' }}>
+                              <span
+                                className="ui-code"
+                                title={order.orderCode}
+                                data-testid={`sales-order-code-${order.id}`}
+                                style={{ fontSize: 12, whiteSpace: 'nowrap', fontWeight: 700, color: '#0f172a', minWidth: 0 }}
+                              >
+                                {formatShortOrderCode(order.orderCode)}
+                              </span>
                               <button
                                 type="button"
                                 className="ui-inline-icon-btn"
-                                title="Sao chép mã đơn"
+                                title={`Sao chép mã đơn ${order.orderCode}`}
                                 aria-label={`Sao chép mã đơn ${order.orderCode}`}
                                 data-testid={`btn-copy-so-${order.id}`}
                                 onClick={() => {
@@ -237,8 +244,12 @@ export const OutboundOrdersAndShortageSection: React.FC<OutboundOrdersAndShortag
                                 {orderDateVi}
                               </div>
                             ) : null}
-                            <div className="ui-muted-text" style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
-                              {order.externalOrderId}
+                            <div
+                              className="ui-muted-text"
+                              title={order.externalOrderId}
+                              style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 172 }}
+                            >
+                              {formatShortOrderCode(order.externalOrderId)}
                             </div>
                           </td>
                           <td className="cell-nowrap" style={{ minWidth: 92, padding: '6px 6px', whiteSpace: 'nowrap' }}>

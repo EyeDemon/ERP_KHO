@@ -24,7 +24,7 @@ export const SaasBillingPlanCardsGrid: React.FC<SaasBillingPlanCardsGridProps> =
   visiblePlans, billing, selectedPlanCode, whTierPct, busy, handleSelectPlan,
 }) => {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, alignItems: 'stretch' }} data-testid="saas-plan-cards-grid">
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, alignItems: 'start' }} data-testid="saas-plan-cards-grid">
       {visiblePlans.map((plan) => {
         const isCurrentPlan = billing.planCode === plan.code;
         const isSelected = plan.code === 'FREE_TRIAL' ? billing.planCode === 'FREE_TRIAL' : selectedPlanCode === plan.code;
@@ -36,7 +36,7 @@ export const SaasBillingPlanCardsGrid: React.FC<SaasBillingPlanCardsGridProps> =
             data-testid={`plan-card-${plan.code}`}
             onClick={() => { if (plan.code !== 'FREE_TRIAL' && !downgradeWarning) handleSelectPlan(plan.code); }}
             style={{
-              display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+              display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: 10,
               cursor: plan.code === 'FREE_TRIAL' || Boolean(downgradeWarning) ? 'default' : 'pointer',
               padding: '14px 16px', borderRadius: 8,
               border: isSelected ? '2px solid #1d4ed8' : '1px solid #cbd5e1',

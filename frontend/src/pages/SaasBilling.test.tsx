@@ -102,6 +102,9 @@ describe('SaasBilling Page', () => {
     expect(/\b1[45]:\d{2}\b/.test(view.container.textContent ?? '')).toBe(false);
     const generateBtn = screen.getByTestId('btn-generate-vietqr');
     expect(generateBtn.textContent).toContain('Tạo mã QR thanh toán (1.490.000 ₫)');
+    expect((screen.getByTestId('vietqr-idle-cta-bar') as HTMLElement).style.alignSelf).toBe('start');
+    expect((screen.getByTestId('vietqr-idle-cta-bar') as HTMLElement).style.justifyContent).toBe('flex-start');
+    expect((screen.getByTestId('saas-plan-cards-grid') as HTMLElement).style.alignItems).toBe('start');
 
     // Edit VAT tax code inline
     fireEvent.click(screen.getByTestId('btn-edit-tax-code'));
@@ -140,6 +143,7 @@ describe('SaasBilling Page', () => {
     // Open VietQR panel on demand
     fireEvent.click(generateBtn);
     expect(await screen.findByTestId('vietqr-payment-panel')).toBeTruthy();
+    expect((screen.getByTestId('vietqr-metadata-grid') as HTMLElement).style.gridTemplateColumns).toContain('repeat(2,');
     expect(screen.getByTestId('vietqr-bank-display').textContent).toBe('TPBank — NH TMCP Tiên Phong (BIN: 970423)');
     expect(screen.getByTestId('vietqr-account-number').textContent).toBe('98418102005');
     expect(screen.getByTestId('vietqr-account-holder').textContent).toBe('HUYNH PHI VAN');

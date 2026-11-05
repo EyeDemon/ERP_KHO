@@ -67,18 +67,17 @@ export const OutboundSalesOrderMobileCards: React.FC<OutboundSalesOrderMobileCar
               <span className="ui-code" style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
                 {order.orderCode}
               </span>
-              <div style={{ fontSize: 11.5, color: '#475569', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                {orderDateVi ? `${orderDateVi} • ` : ''}{order.externalOrderId}
+              <div style={{ fontSize: 11.5, color: '#475569', fontVariantNumeric: 'tabular-nums', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 10px' }}>
+                {orderDateVi ? <span>{orderDateVi}</span> : null}
+                <span>{order.externalOrderId}</span>
               </div>
             </div>
             <UiBadge tone={tone(order.status)}>{orderLabels[order.status] ?? order.status}</UiBadge>
           </div>
 
-          <div style={{ fontSize: 12.5, color: '#475569', display: 'flex', flexWrap: 'wrap', gap: 6, fontVariantNumeric: 'tabular-nums' }}>
+          <div style={{ fontSize: 12.5, color: '#475569', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 12px', fontVariantNumeric: 'tabular-nums' }}>
             <strong style={{ color: '#0f172a' }}>{order.customerName}</strong>
-            <span>•</span>
             <span>{formatShippingMethodVi(order.shippingMethod)}</span>
-            <span>•</span>
             <span>{formatWarehouseLabel(order.warehouseName, undefined, order.warehouseId)}</span>
           </div>
 

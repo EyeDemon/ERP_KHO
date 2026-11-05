@@ -460,6 +460,8 @@ describe('Wave-16 Design System Unification, WCAG & UX Closure', () => {
       />,
     );
     expect(mobileReceiptsView.getByTestId('import-receipt-mobile-card').textContent).toContain('PNK-202611-001');
+    expect(mobileReceiptsView.getByTestId('import-receipt-mobile-meta').textContent).not.toContain('•');
+    expect((mobileReceiptsView.getByTestId('import-receipt-mobile-meta') as HTMLElement).style.gap).toBe('6px 12px');
     expect(mobileReceiptsView.getByTestId('import-receipt-mobile-total').textContent).toContain('40.500.000');
 
     act(() => {

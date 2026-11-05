@@ -1,14 +1,12 @@
 # Local repositories and agent state
 /~/
-/.agent/*
-!/.agent/encoding-baseline.json
+/.agent/
 /.agents/
 /.local-backups/
 /.staging-rehearsal/
 /.skills/
 /ponytail/
 /%SystemDrive%/
-/docs/CHAT_HISTORY.md
 
 # .NET and IDE artifacts
 **/bin/
@@ -47,5 +45,36 @@
 *.mdf
 *.ldf
 
-# Live Browser Audit Screenshots (kept on local disk)
-artifacts/live-browser-audit/
+# Live Browser Audit Screenshots & Internal Documentation/Governance (kept on local disk, excluded from GitHub)
+/docs/
+/documentation/
+/product_reassessment/
+/artifacts/
+/reports/
+/prompts/
+/audit_reports/
+/design-system/
+/.claude/
+/.codex/
+/.cursor/
+/.gemini/
+/AGENTS.md
+/CLAUDE.md
+/GEMINI.md
+/PROJECT_RULES.md
+/ENCODING_RULES.md
+/SKILL_ROUTING_PROTOCOL.md
+/AUDIT_STATE.md
+/EXECUTIVE_PRODUCT_REASSESSMENT.md
+/FINDINGS_REGISTER.md
+/OWNER_DECISION_PROPOSALS.md
+/PRODUCT_ROADMAP.md
+/scripts/run-adversarial-qa-audit.mjs
+/ux_audit_metrics.json
+/ux_audit_summary.csv
+/450
+/current*.zip
+/*REASSESSMENT*.tar
+/*Audit*.md
+!*/*.cs
+!/README.md

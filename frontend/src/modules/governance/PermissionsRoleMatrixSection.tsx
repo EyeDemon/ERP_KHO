@@ -18,9 +18,9 @@ import {
 } from './PermissionsHelpersAndTypes';
 
 const modulePillStyle = (active: boolean): CSSProperties => ({
-  minHeight: 30, padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
-  background: active ? '#0f172a' : '#f8fafc', color: active ? '#ffffff' : '#334155',
-  border: active ? '1px solid #0f172a' : '1px solid #cbd5e1', cursor: 'pointer',
+  minHeight: 30, padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: active ? 700 : 600, whiteSpace: 'nowrap',
+  background: active ? '#eff6ff' : '#f8fafc', color: active ? '#1e40af' : '#475569',
+  border: active ? '1.5px solid #2563eb' : '1px solid #cbd5e1', cursor: 'pointer',
 });
 
 const grantSwitchStyle = (granted: boolean, pending: boolean): CSSProperties => ({
@@ -124,57 +124,66 @@ export function PermissionsRoleMatrixSection({
             border: '1px solid #e2e8f0',
           }}
         >
-          <div
-            data-testid="permissions-role-tabs"
-            role="tablist"
-            aria-label="Chọn vai trò phân quyền"
-            style={{
-              display: 'flex',
-              flexWrap: 'nowrap',
-              overflowX: 'auto',
-              gap: 6,
-              padding: 4,
-              borderRadius: 8,
-              background: '#f1f5f9',
-              border: '1px solid #e2e8f0',
-            }}
-          >
-            {visibleRoles.map(role => {
-              const isSelected = effectiveRoleFilter === role.roleName;
-              return (
-                <button
-                  key={role.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={isSelected}
-                  data-testid={`role-tab-${role.roleName}`}
-                  onClick={() => onChangeRoleFilter(role.roleName)}
-                  style={{
-                    minHeight: 32,
-                    padding: '4px 12px',
-                    borderRadius: 6,
-                    fontSize: 12.5,
-                    fontWeight: 600,
-                    whiteSpace: 'nowrap',
-                    background: isSelected ? '#ffffff' : 'transparent',
-                    color: isSelected ? '#0f172a' : '#475569',
-                    border: isSelected ? '1px solid #cbd5e1' : '1px solid transparent',
-                    boxShadow: isSelected ? '0 1px 2px rgba(15, 23, 42, 0.06)' : 'none',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {roleChipLabel(role.roleName, role.permissions.length)}
-                </button>
-              );
-            })}
+          <div style={{ display: 'grid', gap: 6 }}>
+            <span data-testid="permissions-role-group-label" style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', letterSpacing: '0.01em' }}>
+              {`1. Vai trò (${visibleRoles.length}):`}
+            </span>
+            <div
+              data-testid="permissions-role-tabs"
+              role="tablist"
+              aria-label="Chọn vai trò phân quyền"
+              style={{
+                display: 'flex',
+                flexWrap: 'nowrap',
+                overflowX: 'auto',
+                gap: 6,
+                padding: 4,
+                borderRadius: 8,
+                background: '#f1f5f9',
+                border: '1px solid #cbd5e1',
+              }}
+            >
+              {visibleRoles.map(role => {
+                const isSelected = effectiveRoleFilter === role.roleName;
+                return (
+                  <button
+                    key={role.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isSelected}
+                    data-testid={`role-tab-${role.roleName}`}
+                    onClick={() => onChangeRoleFilter(role.roleName)}
+                    style={{
+                      minHeight: 34,
+                      padding: '5px 14px',
+                      borderRadius: 6,
+                      fontSize: 12.5,
+                      fontWeight: isSelected ? 700 : 600,
+                      whiteSpace: 'nowrap',
+                      background: isSelected ? '#1d4ed8' : '#ffffff',
+                      color: isSelected ? '#ffffff' : '#334155',
+                      border: isSelected ? '1px solid #1e40af' : '1px solid #cbd5e1',
+                      boxShadow: isSelected ? '0 1px 3px rgba(29, 78, 216, 0.25)' : 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {roleChipLabel(role.roleName, role.permissions.length)}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div
-            data-testid="permissions-module-filter-bar"
-            role="group"
-            aria-label="Lọc nhanh theo phân hệ nghiệp vụ"
-            style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}
-          >
+          <div style={{ display: 'grid', gap: 6, paddingTop: 10, borderTop: '1px solid #e2e8f0' }}>
+            <span data-testid="permissions-module-group-label" style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>
+              2. Phân hệ nghiệp vụ:
+            </span>
+            <div
+              data-testid="permissions-module-filter-bar"
+              role="group"
+              aria-label="Lọc nhanh theo phân hệ nghiệp vụ"
+              style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}
+            >
             <button
               type="button"
               data-testid="perm-module-pill-ALL"
@@ -213,6 +222,7 @@ export function PermissionsRoleMatrixSection({
             >
               Chỉ hiện quyền khác mặc định
             </button>
+            </div>
           </div>
 
           <div

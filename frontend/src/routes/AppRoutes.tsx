@@ -35,6 +35,7 @@ const StockReservations = lazy(() => import('../pages/StockReservations'));
 const StockAllocations = lazy(() => import('../pages/StockAllocations'));
 const PickingTasks = lazy(() => import('../pages/PickingTasks'));
 const PackingSessions = lazy(() => import('../pages/PackingSessions'));
+const KitWorkOrders = lazy(() => import('../pages/KitWorkOrders'));
 const Shipments = lazy(() => import('../pages/Shipments'));
 const OutboundDemand = lazy(() => import('../pages/OutboundDemand'));
 const Approvals = lazy(() => import('../pages/Approvals'));
@@ -151,7 +152,7 @@ const AppRoutes = () => {
           <Route path="stock-allocations" element={<PermissionRoute permission="allocation.read"><StockAllocations /></PermissionRoute>} />
           <Route path="picking-tasks" element={<PermissionRoute permission="picking.read"><PickingTasks /></PermissionRoute>} />
           <Route path="packing-sessions" element={<PermissionRoute permission="packing.read"><PackingSessions /></PermissionRoute>} />
-          <Route path="kit-work-orders" element={<PermissionRoute permission="packing.read"><PackingSessions /></PermissionRoute>} />
+          <Route path="kit-work-orders" element={<PermissionRoute permission="packing.read"><KitWorkOrders /></PermissionRoute>} />
           <Route path="kitting" element={<PermissionRoute permission="packing.read"><PackingSessions /></PermissionRoute>} />
           <Route path="shipments" element={<PermissionRoute permission="shipment.read"><Shipments /></PermissionRoute>} />
           <Route path="handover-manifests" element={<PermissionRoute permission="inventory.read"><HandoverManifests /></PermissionRoute>} />

@@ -511,6 +511,9 @@ describe('quản trị quyền truy cập', () => {
 
     const view = render(<Permissions />);
     const roleTabs = await view.findByTestId('permissions-role-tabs');
+    expect(view.getByTestId('permissions-role-group-label').textContent).toBe('1. Vai trò (6):');
+    expect(view.getByTestId('permissions-module-group-label').textContent).toBe('2. Phân hệ nghiệp vụ:');
+    expect((view.getByTestId('role-tab-Admin') as HTMLElement).style.background).toContain('rgb(29, 78, 216)');
     const labels = Array.from(roleTabs.querySelectorAll('button[role="tab"]')).map(btn => btn.textContent);
     expect(labels).toEqual([
       'Quản trị công ty (2)',
