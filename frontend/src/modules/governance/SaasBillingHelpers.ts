@@ -2,6 +2,7 @@ import {
   buildClientVietQrPayload,
   downloadPaidInvoicePdf,
   extractErrorText,
+  extractStructuredError,
   formatCountdownMmSs,
   formatDateTimeVi,
   formatDateVi,
@@ -10,12 +11,14 @@ import {
   resolveNextBillingCycle,
   sanitizeCustomerSettlementSummary,
   secondaryBtnStyle,
+  type StructuredBillingError,
 } from './SaasBillingFormatters';
 
 export {
   buildClientVietQrPayload,
   downloadPaidInvoicePdf,
   extractErrorText,
+  extractStructuredError,
   formatCountdownMmSs,
   formatDateTimeVi,
   formatDateVi,
@@ -24,6 +27,7 @@ export {
   resolveNextBillingCycle,
   sanitizeCustomerSettlementSummary,
   secondaryBtnStyle,
+  type StructuredBillingError,
 };
 
 export type InvoiceRecord = {

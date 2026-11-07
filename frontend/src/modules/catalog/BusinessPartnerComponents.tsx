@@ -67,7 +67,7 @@ export function PartnerDeleteConfirmModal(props: {
         <button type="button" data-testid="btn-cancel-delete-partner" style={{ background: '#f1f5f9', color: '#334155', borderColor: '#cbd5e1', whiteSpace: 'nowrap' }} onClick={onCancel}>
           Hủy bỏ
         </button>
-        <button type="button" data-testid="btn-confirm-delete-partner" disabled={candidateHasBalance || loading} style={{ background: '#dc2626', color: '#ffffff', borderColor: '#dc2626', fontWeight: 600, whiteSpace: 'nowrap' }} onClick={() => void onConfirm()}>
+        <button type="button" data-testid="btn-confirm-delete-partner" disabled={candidateHasBalance || loading} title={candidateHasBalance ? 'Không thể xóa đối tác đang còn số dư công nợ lớn hơn 0 ₫' : loading ? 'Đang xử lý xóa đối tác' : undefined} style={{ background: '#dc2626', color: '#ffffff', borderColor: '#dc2626', fontWeight: 600, whiteSpace: 'nowrap' }} onClick={() => void onConfirm()}>
           Xác nhận xóa đối tác
         </button>
       </div>
@@ -251,7 +251,7 @@ export function PartnerSlaAnd3PlCards(props: {
         <div className="ui-inline-actions" style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
           {isStatementIssued ? (
             <>
-              <button type="button" className="ui-primary-button" data-testid="btn-3pl-statement-locked" disabled style={{ background: '#065f46', borderColor: '#065f46', color: '#ffffff', opacity: 0.9 }}>
+              <button type="button" className="ui-primary-button" data-testid="btn-3pl-statement-locked" disabled title="Bảng kê phí dịch vụ kho 3PL kỳ 2026-10 đã được chốt và phát hành" style={{ background: '#065f46', borderColor: '#065f46', color: '#ffffff', opacity: 0.9 }}>
                 ✓ Đã phát hành bảng kê kỳ 2026-10
               </button>
               <button

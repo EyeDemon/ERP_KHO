@@ -322,6 +322,15 @@ export function MobileBarcodeScannerBar({
                 className="ui-btn ui-btn-primary ui-primary-button"
                 style={{ minHeight: 42, whiteSpace: 'nowrap', width: '100%', background: '#1d4ed8', borderColor: '#1d4ed8', color: '#ffffff' }}
                 disabled={disabled || busy || !sanitizeScannerCode(input)}
+                title={
+                  busy
+                    ? 'Hệ thống đang xử lý mã vạch vừa quét'
+                    : !sanitizeScannerCode(input)
+                      ? 'Quét hoặc nhập mã vạch hợp lệ trước khi xác nhận'
+                      : disabled
+                        ? 'Trạm quét hiện đang tạm khóa thao tác'
+                        : undefined
+                }
                 onClick={() => void handleTrigger(bufferRef.current || input)}
               >
                 {busy ? 'Đang xử lý...' : 'Xác nhận'}
@@ -332,6 +341,15 @@ export function MobileBarcodeScannerBar({
                 className="ui-btn ui-btn-secondary"
                 style={{ minHeight: 42, whiteSpace: 'nowrap', width: '100%' }}
                 disabled={disabled || busy || scanHistoryStack.length === 0}
+                title={
+                  scanHistoryStack.length === 0
+                    ? 'Chưa có thao tác quét nào vừa thực hiện để hoàn tác'
+                    : busy
+                      ? 'Hệ thống đang xử lý mã vạch vừa quét'
+                      : disabled
+                        ? 'Trạm quét hiện đang tạm khóa thao tác'
+                        : undefined
+                }
                 onClick={handleUndoLastScan}
               >
                 {`Hoàn tác${scanHistoryStack.length > 0 ? ` (${scanHistoryStack.length})` : ''}`}

@@ -157,10 +157,10 @@ export function PackingWorkbenchTab({
                 value={unifiedScanInput}
                 onChange={e => setUnifiedScanInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleUnifiedOrderScan(unifiedScanInput); } }}
-                placeholder="Quét mã đơn / PICK-001 / PACK-001..."
-                style={{ flex: '1 1 180px', minWidth: 0, minHeight: 34, height: 34 }}
+                placeholder="Quét mã đơn / PICK / PACK..."
+                style={{ flex: '1 1 210px', minWidth: 0, width: '100%', minHeight: 36 }}
               />
-              <button type="button" className="ui-btn ui-btn-primary ui-primary-button" data-testid="unified-packing-verify-order-btn" disabled={!!busy || governanceBusy} onClick={() => handleUnifiedOrderScan(unifiedScanInput)} style={{ minHeight: 34, padding: '4px 12px' }}>
+              <button type="button" className="ui-btn ui-btn-primary ui-primary-button" data-testid="unified-packing-verify-order-btn" disabled={!!busy || governanceBusy} title={busy || governanceBusy ? 'Trạm đóng gói đang xử lý tác vụ trước đó' : undefined} onClick={() => handleUnifiedOrderScan(unifiedScanInput)} style={{ minHeight: 36, padding: '4px 12px' }}>
                 Kiểm tra Đơn &amp; Chốt Thùng
               </button>
             </div>

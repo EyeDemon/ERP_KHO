@@ -215,6 +215,7 @@ export const CostValuationWacSection: React.FC<CostValuationWacSectionProps> = (
                 <select
                   aria-label="Lọc kho định giá tồn kho"
                   data-testid="select-wac-warehouse-filter"
+                  style={{ minWidth: 148, width: 'auto' }}
                   value={warehouseFilter}
                   onChange={e => setWarehouseFilter(e.target.value)}
                 >

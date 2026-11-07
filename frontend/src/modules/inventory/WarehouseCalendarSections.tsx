@@ -208,7 +208,17 @@ export const WarehouseExceptionsSection: React.FC<WarehouseExceptionsSectionProp
           />
         </label>
         <div className="ui-inline-actions">
-          <button type="submit" disabled={saving || !exceptionForm.windowDateOrRange.trim() || !exceptionForm.reason.trim()}>
+          <button
+            type="submit"
+            disabled={saving || !exceptionForm.windowDateOrRange.trim() || !exceptionForm.reason.trim()}
+            title={
+              saving
+                ? 'Đang lưu ngoại lệ lịch vận hành'
+                : !exceptionForm.windowDateOrRange.trim() || !exceptionForm.reason.trim()
+                  ? 'Nhập khung thời gian áp dụng và lý do điều hành trước khi ghi nhận'
+                  : undefined
+            }
+          >
             {saving ? 'Đang lưu...' : 'Ghi nhận ngoại lệ lịch vận hành'}
           </button>
         </div>

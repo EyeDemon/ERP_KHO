@@ -54,7 +54,7 @@ describe('WarehouseCalendar timezone and date placeholder', { timeout: 20000 }, 
 
   it('defaults timezone to Asia/Ho_Chi_Minh (GMT+7 — Giờ Việt Nam) while keeping UTC selectable, and uses dd/mm/yyyy placeholder', async () => {
     const view = render(<WarehouseCalendar />);
-    const tzSelect = (await view.findByLabelText('Warehouse timezone', {}, { timeout: 10000 })) as HTMLSelectElement;
+    const tzSelect = (await view.findByLabelText('Múi giờ vận hành kho', {}, { timeout: 10000 })) as HTMLSelectElement;
     expect(tzSelect.value).toBe('Asia/Ho_Chi_Minh');
     expect(view.getAllByText(/Asia\/Ho_Chi_Minh \(GMT\+7 — Giờ Việt Nam\)/).length).toBeGreaterThan(0);
 

@@ -121,7 +121,7 @@ export function OutboundMarketplaceAddressCard({
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'stretch', gap: 6, height: 'auto', margin: 0, cursor: 'pointer' }}>
             <span>Tệp Excel đơn hàng (.xlsx)</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 40, padding: '4px 10px', border: '1px solid #cbd5e1', borderRadius: 6, background: '#ffffff' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 44, padding: '4px 10px', border: '1px solid #cbd5e1', borderRadius: 6, background: '#ffffff', boxSizing: 'border-box' }}>
               <span style={{ padding: '4px 10px', borderRadius: 4, background: '#0f172a', color: '#ffffff', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>
                 Chọn tệp Excel (.xlsx)
               </span>
@@ -133,7 +133,7 @@ export function OutboundMarketplaceAddressCard({
               aria-label="Tệp Excel đơn hàng sàn"
               type="file"
               accept=".xlsx,.xls,.csv"
-              style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+              className="sr-only"
               onChange={e => {
                 const file = e.target.files?.[0] ?? null;
                 setSelectedOrderExcelFile(file);

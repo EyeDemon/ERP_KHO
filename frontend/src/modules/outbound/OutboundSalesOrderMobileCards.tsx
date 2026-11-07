@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { MoreHorizontal } from 'lucide-react';
+import { Copy, MoreHorizontal } from 'lucide-react';
 import { UiBadge } from '../../ui/ProductionUi';
 import { formatWarehouseLabel } from '../../utils/warehouseLabel';
-import { type SalesOrder, formatShippingMethodVi, formatShortOrderDateVi, orderLabels, tone } from './outboundDemandTypes';
+import { type SalesOrder, formatShippingMethodVi, formatShortOrderCode, formatShortOrderDateVi, orderLabels, tone } from './outboundDemandTypes';
 
 const checkMobileOrTablet = (): boolean => {
   if (typeof window === 'undefined') return false;
@@ -64,9 +64,39 @@ export const OutboundSalesOrderMobileCards: React.FC<OutboundSalesOrderMobileCar
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
             <div style={{ minWidth: 0 }}>
-              <span className="ui-code" style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>
-                {order.orderCode}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <span
+                  className="ui-code"
+                  title={order.orderCode}
+                  style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}
+                >
+                  {formatShortOrderCode(order.orderCode)}
+                </span>
+                <button
+                  type="button"
+                  data-testid={`btn-copy-mobile-so-${order.id}`}
+                  aria-label={`Sao chép mã đơn ${order.orderCode}`}
+                  title={`Sao chép mã đơn ${order.orderCode}`}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    minWidth: 44,
+                    minHeight: 44,
+                    padding: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flex: '0 0 44px',
+                    borderRadius: 8,
+                  }}
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(order.orderCode);
+                    onCopyNotice(`Đã sao chép mã đơn ${order.orderCode}`);
+                  }}
+                >
+                  <Copy size={15} aria-hidden="true" />
+                </button>
+              </div>
               <div style={{ fontSize: 11.5, color: '#475569', fontVariantNumeric: 'tabular-nums', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 10px' }}>
                 {orderDateVi ? <span>{orderDateVi}</span> : null}
                 <span>{order.externalOrderId}</span>

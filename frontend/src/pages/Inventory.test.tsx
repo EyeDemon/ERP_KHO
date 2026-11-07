@@ -59,11 +59,33 @@ describe('Inventory opening balance multipart FormData import & template downloa
     const view = render(<Inventory />);
     expect(await view.findByText('SKU-10')).toBeTruthy();
 
+    // N-24: Custom 100% Vietnamese file picker with zero raw English browser label
+    const pickBtn = view.getByTestId('btn-pick-opening-excel') as HTMLButtonElement;
+    const clearBtn = view.getByTestId('btn-clear-opening-excel') as HTMLButtonElement;
+    const fileStatus = view.getByTestId('opening-excel-filename');
+    expect(pickBtn.textContent).toContain('Chọn tệp Excel (.xlsx)');
+    expect(pickBtn.style.minHeight).toBe('44px');
+    expect(fileStatus.textContent).toBe('Chưa chọn tệp nào');
+    expect(clearBtn.disabled).toBe(true);
+    expect(clearBtn.getAttribute('aria-describedby')).toBe('opening-excel-file-status');
+    expect(view.container.textContent).not.toContain('Choose File');
+    expect(view.container.textContent).not.toContain('No file chosen');
+
     const fileInput = view.getByLabelText('Tệp Excel tồn kho đầu kỳ') as HTMLInputElement;
+    expect(fileInput.className).toContain('sr-only');
     const excelFile = new File(['xlsx-bytes'], 'opening.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     });
     fireEvent.change(fileInput, { target: { files: [excelFile] } });
+    expect(fileStatus.textContent).toBe('opening.xlsx');
+    expect(clearBtn.disabled).toBe(false);
+
+    // Clearing file resets state back to Chưa chọn tệp nào, then re-select for real FormData upload
+    fireEvent.click(clearBtn);
+    expect(fileStatus.textContent).toBe('Chưa chọn tệp nào');
+    expect(clearBtn.disabled).toBe(true);
+    fireEvent.change(fileInput, { target: { files: [excelFile] } });
+    expect(fileStatus.textContent).toBe('opening.xlsx');
 
     fireEvent.click(view.getByRole('button', { name: 'Nhập Excel Tồn kho Đầu kỳ' }));
 

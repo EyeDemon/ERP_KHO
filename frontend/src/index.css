@@ -4,7 +4,7 @@ body {
   margin: 0;
   padding: 0;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
   font-family: Inter, "Be Vietnam Pro", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background-color: var(--ui-background, #F8FAFC);
   color: var(--ui-foreground, #0F172A);

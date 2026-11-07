@@ -145,25 +145,25 @@ export function PutawayWorkspaceAndSlottingCards({
     <>
       <UiCard title="Điều phối cất hàng lên kệ" subtitle="Chọn nhanh nhiệm vụ phiếu nhập, vị trí nguồn, vị trí kệ đích và số lượng thực cất">
         <div className="putaway-dispatch-form-grid">
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'flex-start' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'flex-start', minWidth: 0 }}>
             <span>Phiếu nhập / Nhiệm vụ cất hàng</span>
-            <select aria-label="Chọn phiếu nhập cất hàng" style={{ minHeight: 44 }} value={workspaceTaskId} onChange={e => { setWorkspaceTaskId(e.target.value); if (e.target.value) void detail(Number(e.target.value)); else setSelected(null); }}>
-              <option value="">-- Chọn nhiệm vụ phiếu nhập --</option>
-              {tasks.map(t => <option key={t.id} value={String(t.id)}>{t.receiptCode} — {t.warehouseName} ({states[t.status] ?? t.status})</option>)}
+            <select aria-label="Chọn phiếu nhập cất hàng" style={{ minHeight: 44, width: '100%' }} value={workspaceTaskId} onChange={e => { setWorkspaceTaskId(e.target.value); if (e.target.value) void detail(Number(e.target.value)); else setSelected(null); }}>
+              <option value="">Chọn phiếu nhập</option>
+              {tasks.map(t => <option key={t.id} value={String(t.id)}>{t.receiptCode} ({states[t.status] ?? t.status})</option>)}
             </select>
           </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'flex-start' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'flex-start', minWidth: 0 }}>
             <span>Vị trí nguồn (Bãi tiếp nhận / đệm)</span>
-            <select aria-label="Chọn vị trí nguồn cất hàng" style={{ minHeight: 44 }} value={workspaceFromLocId} onChange={e => setWorkspaceFromLocId(e.target.value)}>
-              <option value="">-- Chọn vị trí nguồn --</option>
-              {(warehouseLocations.filter(l => ['receiving', 'staging'].includes(l.locationType?.toLowerCase())).length > 0 ? warehouseLocations.filter(l => ['receiving', 'staging'].includes(l.locationType?.toLowerCase())) : warehouseLocations).map(loc => <option key={loc.id} value={String(loc.id)}>{loc.code} — {loc.name} ({warehouseLocationTypeLabelVi(loc.locationType)})</option>)}
+            <select aria-label="Chọn vị trí nguồn cất hàng" style={{ minHeight: 44, width: '100%', fontSize: 12.5, paddingLeft: 8, paddingRight: 24 }} value={workspaceFromLocId} onChange={e => setWorkspaceFromLocId(e.target.value)}>
+              <option value="">Chọn vị trí nguồn</option>
+              {(warehouseLocations.filter(l => ['receiving', 'staging'].includes(l.locationType?.toLowerCase())).length > 0 ? warehouseLocations.filter(l => ['receiving', 'staging'].includes(l.locationType?.toLowerCase())) : warehouseLocations).map(loc => <option key={loc.id} value={String(loc.id)}>{loc.code} — {warehouseLocationTypeLabelVi(loc.locationType).replace('Khu tập kết xuất hàng', 'Khu tập kết xuất')}</option>)}
             </select>
           </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'flex-start' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'flex-start', minWidth: 0 }}>
             <span>Vị trí đích (Kệ lưu trữ)</span>
-            <select aria-label="Chọn vị trí đích cất hàng" style={{ minHeight: 44 }} value={workspaceToLocId} onChange={e => { setWorkspaceToLocId(e.target.value); const firstItem = selected?.items?.[0]; if (firstItem && e.target.value) setDestination(v => ({ ...v, [firstItem.id]: Number(e.target.value) })); }}>
-              <option value="">-- Chọn vị trí đích --</option>
-              {(warehouseLocations.filter(l => l.locationType?.toLowerCase() === 'storage').length > 0 ? warehouseLocations.filter(l => l.locationType?.toLowerCase() === 'storage') : [...warehouseLocations, ...Object.values(locations).flat()]).map(loc => <option key={loc.id} value={String(loc.id)}>{loc.code} — {loc.name} ({warehouseLocationTypeLabelVi(loc.locationType)})</option>)}
+            <select aria-label="Chọn vị trí đích cất hàng" style={{ minHeight: 44, width: '100%', fontSize: 12.5, paddingLeft: 8, paddingRight: 24 }} value={workspaceToLocId} onChange={e => { setWorkspaceToLocId(e.target.value); const firstItem = selected?.items?.[0]; if (firstItem && e.target.value) setDestination(v => ({ ...v, [firstItem.id]: Number(e.target.value) })); }}>
+              <option value="">Chọn vị trí đích</option>
+              {(warehouseLocations.filter(l => l.locationType?.toLowerCase() === 'storage').length > 0 ? warehouseLocations.filter(l => l.locationType?.toLowerCase() === 'storage') : [...warehouseLocations, ...Object.values(locations).flat()]).map(loc => <option key={loc.id} value={String(loc.id)}>{loc.code} — {warehouseLocationTypeLabelVi(loc.locationType).replace('Khu tập kết xuất hàng', 'Khu tập kết xuất')}</option>)}
             </select>
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'flex-start' }}>

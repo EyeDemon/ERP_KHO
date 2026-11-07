@@ -270,14 +270,15 @@ const WarehouseCalendar = () => {
               <label className="ui-stack">
                 <span>Múi giờ kho</span>
                 <select
-                  aria-label="Warehouse timezone"
+                  aria-label="Múi giờ vận hành kho"
+                  style={{ width: '100%', maxWidth: 420 }}
                   value={timeZoneId}
                   onChange={(event) => setTimeZoneId(event.target.value)}
                   disabled={!canManage || saving}
                 >
-                  <option value="Asia/Ho_Chi_Minh">Asia/Ho_Chi_Minh (GMT+7 — Giờ Việt Nam)</option>
-                  <option value="Asia/Bangkok">Asia/Bangkok (GMT+7)</option>
-                  <option value="Asia/Singapore">Asia/Singapore (GMT+8)</option>
+                  <option value="Asia/Ho_Chi_Minh">GMT+7 — Giờ Việt Nam</option>
+                  <option value="Asia/Bangkok">GMT+7 — Bangkok</option>
+                  <option value="Asia/Singapore">GMT+8 — Singapore</option>
                   <option value="UTC">UTC</option>
                   {!['Asia/Ho_Chi_Minh', 'Asia/Bangkok', 'Asia/Singapore', 'UTC'].includes(timeZoneId) && (
                     <option value={timeZoneId}>{timeZoneId}</option>

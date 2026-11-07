@@ -72,7 +72,7 @@ export const OnboardingWizardStepCards: React.FC<OnboardingWizardStepCardsProps>
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
             gap: 10,
             alignItems: 'stretch',
             width: '100%',
@@ -171,11 +171,11 @@ export const OnboardingWizardStepCards: React.FC<OnboardingWizardStepCardsProps>
               aria-label="Mô hình kho mẫu"
               value={warehouseTemplate}
               onChange={(e) => setWarehouseTemplate(e.target.value as 'RETAIL_KIOT' | 'ECOMMERCE_3ZONES' | 'DISTRIBUTION_PALLET')}
-              style={{ maxWidth: 640 }}
+              style={{ width: '100%', maxWidth: 640 }}
             >
-              <option value="RETAIL_KIOT">Kho Cửa hàng Nhỏ (1 Khu, 10 Kệ)</option>
-              <option value="ECOMMERCE_3ZONES">Kho Sàn TMĐT Tiêu chuẩn (3 Khu: Nhận - Lưu - Đóng gói, 50 Vị trí)</option>
-              <option value="DISTRIBUTION_PALLET">Kho Phân phối Bán buôn (Khu Pallet + Khu Lẻ + Khu Hàng lỗi)</option>
+              <option value="RETAIL_KIOT">Kho Cửa hàng Nhỏ (10 kệ)</option>
+              <option value="ECOMMERCE_3ZONES">Kho TMĐT Chuẩn (3 khu • 50 vị trí)</option>
+              <option value="DISTRIBUTION_PALLET">Kho Phân phối B2B (Pallet &amp; Lẻ)</option>
             </select>
           </label>
           <div className="ui-inline-wrap" style={{ gap: 8 }}>
@@ -227,7 +227,7 @@ export const OnboardingWizardStepCards: React.FC<OnboardingWizardStepCardsProps>
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 10,
-                minHeight: 38,
+                minHeight: 44,
                 padding: '6px 12px',
                 border: '1px solid #cbd5e1',
                 borderRadius: 6,
@@ -257,8 +257,8 @@ export const OnboardingWizardStepCards: React.FC<OnboardingWizardStepCardsProps>
                 data-testid="input-onboarding-opening-file"
                 type="file"
                 accept=".xlsx,.xls,.csv"
+                className="sr-only"
                 onChange={(e) => setSelectedOpeningFile(e.target.files?.[0] ?? null)}
-                style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden', pointerEvents: 'none' }}
               />
             </label>
           </div>

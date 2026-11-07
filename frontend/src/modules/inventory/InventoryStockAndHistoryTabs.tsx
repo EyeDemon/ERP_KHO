@@ -1,5 +1,5 @@
-import React from 'react';
-import { UiBadge, UiCard, UiTableScroll, UiToolbar, UiToolbarField } from '../../ui/ProductionUi';
+import React, { useRef, useState } from 'react';
+import { UiBadge, UiCard, UiErrorBanner, UiTableScroll, UiToolbar, UiToolbarField } from '../../ui/ProductionUi';
 import type {
   InventoryStockDto,
   InventoryTransactionHistoryDto,
@@ -14,6 +14,7 @@ import {
   transactionTypeLabel,
 } from './inventoryShared';
 import { formatWarehouseLabel } from '../../utils/warehouseLabel';
+import { usePlatformMobileViewport } from '../platform/usePlatformMobileViewport';
 
 interface InventoryStockTabProps {
   warehouses: WarehouseOption[];
@@ -42,117 +43,191 @@ export const InventoryStockTab: React.FC<InventoryStockTabProps> = ({
   currentStockPage, stockTotalPages, setStockPage, onFilterSubmit, onExportStock,
   onOpeningBalanceImport, onDownloadOpeningBalanceTemplate, onOpeningFileChange,
   openingBalanceNotice, openingBalanceResult,
-}) => (
-  <UiCard title="Tồn kho hiện tại">
-    <div className="ui-subcard" style={{ marginBottom: 12 }}>
-      <div className="ui-subcard-title">Nhập Tồn Kho Đầu Kỳ &amp; Giá Vốn Bình Quân Gia Quyền (Tệp Excel Chuẩn)</div>
-      <form onSubmit={onOpeningBalanceImport} className="ui-inline-wrap" style={{ alignItems: 'end' }}>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          Tệp Excel tồn kho đầu kỳ (.xlsx)
+}) => {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string>('');
+  const isMobile640 = usePlatformMobileViewport(640);
+
+  return (
+    <UiCard title="Tồn kho hiện tại">
+      <div className="ui-subcard inventory-opening-subcard" style={{ marginBottom: 10 }}>
+        <div className="ui-subcard-title inventory-opening-subcard-title">
+          Nhập Tồn Kho Đầu Kỳ &amp; Giá Vốn Bình Quân Gia Quyền (Tệp Excel Chuẩn)
+        </div>
+        <form onSubmit={onOpeningBalanceImport} className="inventory-opening-form">
           <input
+            ref={fileInputRef}
+            id="inventory-opening-excel-input"
             aria-label="Tệp Excel tồn kho đầu kỳ"
             type="file"
             accept=".xlsx,.xls,.csv"
-            onChange={(e) => onOpeningFileChange(e.target.files?.[0] ?? null)}
+            className="sr-only"
+            onChange={(e) => {
+              const picked = e.target.files?.[0] ?? null;
+              setSelectedFileName(picked ? picked.name : '');
+              onOpeningFileChange(picked);
+            }}
           />
-        </label>
-        <button type="submit">Nhập Excel Tồn kho Đầu kỳ</button>
-        <button type="button" className="btn-secondary" onClick={onDownloadOpeningBalanceTemplate}>
-          Tải file mẫu .xlsx
-        </button>
+          <div className="inventory-file-picker-row">
+            <button
+              type="button"
+              className="btn-secondary inventory-file-pick-btn"
+              data-testid="btn-pick-opening-excel"
+              style={{ minHeight: 44 }}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Chọn tệp Excel (.xlsx)
+            </button>
+            <span
+              id="opening-excel-file-status"
+              data-testid="opening-excel-filename"
+              className="inventory-file-status-chip"
+            >
+              {selectedFileName || 'Chưa chọn tệp nào'}
+            </span>
+            <button
+              type="button"
+              className="btn-secondary inventory-file-clear-btn"
+              data-testid="btn-clear-opening-excel"
+              disabled={!selectedFileName}
+              title={!selectedFileName ? 'Chưa chọn tệp Excel tồn đầu kỳ nào để xóa' : undefined}
+              aria-describedby={!selectedFileName ? 'opening-excel-file-status' : undefined}
+              style={{ minHeight: 44 }}
+              onClick={() => {
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                setSelectedFileName('');
+                onOpeningFileChange(null);
+              }}
+            >
+              Xóa
+            </button>
+          </div>
+          <div className="inventory-opening-actions-row">
+            <button type="submit" style={{ minHeight: 44 }}>Nhập Excel Tồn kho Đầu kỳ</button>
+            <button type="button" className="btn-secondary" style={{ minHeight: 44 }} onClick={onDownloadOpeningBalanceTemplate}>
+              Tải file mẫu .xlsx
+            </button>
+          </div>
+        </form>
+        {openingBalanceNotice && <p role="status" className="ui-success-text" style={{ marginTop: 8 }}>{openingBalanceNotice}</p>}
+        {openingBalanceResult && (
+          <div
+            role="status"
+            aria-label="Kết quả nhập tồn kho đầu kỳ"
+            style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}
+          >
+            {`Mã lô nhập: ${openingBalanceResult.importBatchId} • Số dòng hợp lệ: ${openingBalanceResult.importedRows} • ${openingBalanceResult.status}`}
+          </div>
+        )}
+      </div>
+      <form onSubmit={onFilterSubmit}>
+        <UiToolbar>
+          <UiToolbarField label="Kho">
+            <select aria-label="Kho tồn hiện tại" value={stockFilter.warehouseId} onChange={(e) => setStockFilter({ ...stockFilter, warehouseId: e.target.value })}>
+              <option value="">Tất cả kho</option>
+              {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{formatWarehouseLabel(warehouse.name, (warehouse as { code?: string }).code, warehouse.id)}</option>)}
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="Sản phẩm">
+            <select aria-label="ID sản phẩm tồn hiện tại" value={stockFilter.productId} onChange={(e) => setStockFilter({ ...stockFilter, productId: e.target.value })}>
+              <option value="">Tất cả sản phẩm</option>
+              {Array.from(new Map(stocks.map((s) => [s.productId, { id: s.productId, code: s.productCode, name: s.productName }] as const)).values()).map((p) => (
+                <option key={p.id} value={String(p.id)}>{p.code} — {p.name}</option>
+              ))}
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="Từ khóa SP">
+            <input
+              aria-label="Từ khóa sản phẩm tồn hiện tại"
+              type="text"
+              value={stockFilter.keyword}
+              onChange={(e) => setStockFilter({ ...stockFilter, keyword: e.target.value })}
+              placeholder="Mã hoặc tên SP..."
+            />
+          </UiToolbarField>
+          <div className="inventory-toolbar-actions">
+            <button type="submit" style={{ minHeight: 44 }}>Lọc Tồn Kho</button>
+            <button type="button" style={{ minHeight: 44 }} onClick={onExportStock}>Xuất Excel Tồn Kho</button>
+          </div>
+        </UiToolbar>
       </form>
-      {openingBalanceNotice && <p role="status" className="ui-success-text" style={{ marginTop: 8 }}>{openingBalanceNotice}</p>}
-      {openingBalanceResult && (
-        <div
-          role="status"
-          aria-label="Kết quả nhập tồn kho đầu kỳ"
-          style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontSize: 13 }}
-        >
-          {`Mã lô nhập: ${openingBalanceResult.importBatchId} • Số dòng hợp lệ: ${openingBalanceResult.importedRows} • ${openingBalanceResult.status}`}
+
+      {stockError && <UiErrorBanner message={stockError} />}
+      {stockLoading && stocks.length === 0 ? (
+        <p role="status">Đang tải...</p>
+      ) : isMobile640 ? (
+        <div className="ui-mobile-card-list" data-testid="inventory-stock-mobile-cards" style={{ display: 'grid', gap: 8 }}>
+          {paginatedStocks.length === 0 ? (
+            <p className="ui-empty-cell">Không có dữ liệu tồn kho</p>
+          ) : (
+            paginatedStocks.map((item, index) => (
+              <article
+                key={item.productId + '-' + item.warehouseId + '-' + index}
+                className="ui-mobile-card"
+                data-testid={`inventory-stock-mobile-card-${item.productId}-${item.warehouseId}`}
+                style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#ffffff', display: 'grid', gap: 4 }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                  <strong className="ui-code" style={{ fontSize: 13, color: '#0f172a' }}>{item.productCode}</strong>
+                  <span style={{ fontSize: 11.5, color: '#475569' }}>{formatWarehouseLabel(item.warehouseName, undefined, item.warehouseId)}</span>
+                </div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1e293b', overflowWrap: 'anywhere' }}>{item.productName}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, fontSize: 11.5, fontVariantNumeric: 'tabular-nums', paddingTop: 4, borderTop: '1px solid #e2e8f0' }}>
+                  <div><span style={{ color: '#64748b' }}>Thực tế:</span> <strong>{item.onHandQuantity}</strong> {formatUnitName(item.unitName)}</div>
+                  <div><span style={{ color: '#64748b' }}>Đã giữ:</span> <strong>{item.reservedQuantity}</strong></div>
+                  <div style={{ textAlign: 'right' }}><span style={{ color: '#64748b' }}>Khả dụng:</span> <strong style={{ color: '#0f172a' }}>{item.availableQuantity}</strong></div>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      ) : (
+        <UiTableScroll>
+          <table aria-label="Tồn kho hiện tại" className="ui-table-compact inventory-table-wide inventory-current-stock-table">
+            <thead>
+              <tr>
+                <th className="inv-col-code">Mã SP</th>
+                <th className="inv-col-name">Tên SP</th>
+                <th className="inv-col-unit">Đơn vị</th>
+                <th className="inv-col-wh">Kho</th>
+                <th className="inventory-numeric inv-col-onhand" style={rightNumStyle}>Tồn thực tế</th>
+                <th className="inventory-numeric inv-col-reserved" style={rightNumStyle}>Đã giữ</th>
+                <th className="inventory-numeric inv-col-avail" style={rightNumStyle}>Khả dụng</th>
+                <th className="inv-col-updated">Cập nhật lần cuối</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedStocks.length === 0 ? (
+                <tr><td colSpan={8} className="ui-empty-cell">Không có dữ liệu tồn kho</td></tr>
+              ) : (
+                paginatedStocks.map((item, index) => (
+                  <tr key={item.productId + '-' + item.warehouseId + '-' + index}>
+                    <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.productCode}</strong></td>
+                    <td>{item.productName}</td>
+                    <td>{formatUnitName(item.unitName)}</td>
+                    <td>{formatWarehouseLabel(item.warehouseName, undefined, item.warehouseId)}</td>
+                    <td className="inventory-numeric" style={rightNumStyle}>{item.onHandQuantity}</td>
+                    <td className="inventory-numeric" style={rightNumStyle}>{item.reservedQuantity}</td>
+                    <td className="inventory-numeric inventory-available" style={rightNumStyle}>{item.availableQuantity}</td>
+                    <td>{new Date(item.lastUpdated).toLocaleString('vi-VN')}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </UiTableScroll>
+      )}
+
+      {stocks.length > 0 && stockTotalPages > 1 && (
+        <div className="ui-pagination" aria-label="Phân trang tồn kho">
+          <button type="button" disabled={currentStockPage <= 1} onClick={() => setStockPage((prev) => Math.max(prev - 1, 1))}>Trang trước</button>
+          <span>Trang {currentStockPage} / {stockTotalPages} (Tổng: {stocks.length})</span>
+          <button type="button" disabled={currentStockPage >= stockTotalPages} onClick={() => setStockPage((prev) => Math.min(prev + 1, stockTotalPages))}>Trang sau</button>
         </div>
       )}
-    </div>
-    <form onSubmit={onFilterSubmit}>
-      <UiToolbar>
-        <UiToolbarField label="Kho">
-          <select aria-label="Kho tồn hiện tại" value={stockFilter.warehouseId} onChange={(e) => setStockFilter({ ...stockFilter, warehouseId: e.target.value })}>
-            <option value="">Tất cả kho được phép</option>
-            {warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{formatWarehouseLabel(warehouse.name, (warehouse as { code?: string }).code, warehouse.id)}</option>)}
-          </select>
-        </UiToolbarField>
-        <UiToolbarField label="Sản phẩm">
-          <select aria-label="ID sản phẩm tồn hiện tại" value={stockFilter.productId} onChange={(e) => setStockFilter({ ...stockFilter, productId: e.target.value })}>
-            <option value="">Tất cả sản phẩm</option>
-            {Array.from(new Map(stocks.map((s) => [s.productId, { id: s.productId, code: s.productCode, name: s.productName }] as const)).values()).map((p) => (
-              <option key={p.id} value={String(p.id)}>{p.code} — {p.name}</option>
-            ))}
-          </select>
-        </UiToolbarField>
-        <UiToolbarField label="Từ khóa SP">
-          <input
-            aria-label="Từ khóa sản phẩm tồn hiện tại"
-            type="text"
-            value={stockFilter.keyword}
-            onChange={(e) => setStockFilter({ ...stockFilter, keyword: e.target.value })}
-            placeholder="Mã hoặc tên SP..."
-          />
-        </UiToolbarField>
-        <div className="inventory-toolbar-actions">
-          <button type="submit">Lọc Tồn Kho</button>
-          <button type="button" onClick={onExportStock}>Xuất Excel Tồn Kho</button>
-        </div>
-      </UiToolbar>
-    </form>
-
-    {stockError && <p role="alert">{stockError}</p>}
-    {stockLoading && stocks.length === 0 ? (
-      <p role="status">Đang tải...</p>
-    ) : (
-      <UiTableScroll>
-        <table aria-label="Tồn kho hiện tại" className="ui-table-compact inventory-table-wide">
-          <thead>
-            <tr>
-              <th style={{ minWidth: 92, whiteSpace: 'nowrap' }}>Mã SP</th>
-              <th style={{ minWidth: 150 }}>Tên SP</th>
-              <th style={{ minWidth: 78, whiteSpace: 'nowrap' }}>Đơn vị</th>
-              <th style={{ minWidth: 115 }}>Kho</th>
-              <th className="inventory-numeric" style={{ ...rightNumStyle, minWidth: 96, whiteSpace: 'nowrap' }}>Tồn thực tế</th>
-              <th className="inventory-numeric" style={{ ...rightNumStyle, minWidth: 84, whiteSpace: 'nowrap' }}>Đã giữ</th>
-              <th className="inventory-numeric" style={{ ...rightNumStyle, minWidth: 92, whiteSpace: 'nowrap' }}>Khả dụng</th>
-              <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Cập nhật lần cuối</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedStocks.length === 0 ? (
-              <tr><td colSpan={8} className="ui-empty-cell">Không có dữ liệu tồn kho</td></tr>
-            ) : (
-              paginatedStocks.map((item, index) => (
-                <tr key={item.productId + '-' + item.warehouseId + '-' + index}>
-                  <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.productCode}</strong></td>
-                  <td>{item.productName}</td>
-                  <td>{formatUnitName(item.unitName)}</td>
-                  <td>{formatWarehouseLabel(item.warehouseName, undefined, item.warehouseId)}</td>
-                  <td className="inventory-numeric" style={rightNumStyle}>{item.onHandQuantity}</td>
-                  <td className="inventory-numeric" style={rightNumStyle}>{item.reservedQuantity}</td>
-                  <td className="inventory-numeric inventory-available" style={rightNumStyle}>{item.availableQuantity}</td>
-                  <td>{new Date(item.lastUpdated).toLocaleString('vi-VN')}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </UiTableScroll>
-    )}
-
-    {stocks.length > 0 && stockTotalPages > 1 && (
-      <div className="ui-pagination" aria-label="Phân trang tồn kho">
-        <button type="button" disabled={currentStockPage <= 1} onClick={() => setStockPage((prev) => Math.max(prev - 1, 1))}>Trang trước</button>
-        <span>Trang {currentStockPage} / {stockTotalPages} (Tổng: {stocks.length})</span>
-        <button type="button" disabled={currentStockPage >= stockTotalPages} onClick={() => setStockPage((prev) => Math.min(prev + 1, stockTotalPages))}>Trang sau</button>
-      </div>
-    )}
-  </UiCard>
-);
+    </UiCard>
+  );
+};
 
 type HistoryFilterState = {
   fromDate: string; toDate: string; transactionType: string; warehouseId: string;

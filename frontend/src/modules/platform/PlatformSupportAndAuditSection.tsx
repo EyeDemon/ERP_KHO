@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Headset, Lock } from 'lucide-react';
 import { formatMinLengthCounterVi, formatUserDisplayNameVi } from '../../services/permissionPresentation';
-import { UiBadge, UiCard } from '../../ui/ProductionUi';
+import { UiBadge, UiCard, UiTableScroll } from '../../ui/ProductionUi';
 import { CANONICAL_TENANT1_LEGAL_NAME, normalizeTenantLegalNameVi } from './platformBillingHelpers';
 import type { PlatformTenantItem } from './PlatformTenantsAndQuotaSection';
 import { PlatformAuditLogsTableCard } from './PlatformAuditLogsTableCard';
@@ -11,14 +11,20 @@ export interface PlatformAuditLogItem {
   tenantId: number;
   userId?: number | null;
   username?: string | null;
+  actorDisplayVi?: string | null;
   impersonatedBySupportUserId?: number | null;
   securityDomain: string;
+  securityDomainLabelVi?: string | null;
   action: string;
+  actionLabelVi?: string | null;
   entityName: string;
   entityId?: number | null;
+  targetCodeVi?: string | null;
   oldValues?: string | null;
   newValues?: string | null;
+  stateChangeVi?: string | null;
   reason?: string | null;
+  summaryVi?: string | null;
   result?: string | null;
   correlationId?: string | null;
   timestamp: string;
@@ -115,6 +121,20 @@ export const PlatformSupportAndAuditSection: React.FC<Props> = ({
     ticketCode.trim().length >= 4 &&
     reason.trim().length >= 10;
 
+  const disabledImpersonationReason = !canImpersonate
+    ? 'Tài khoản hiện tại không có quyền khởi tạo phiên hỗ trợ kỹ thuật.'
+    : isDuplicateSession
+      ? 'Đang có phiên hỗ trợ hoạt động cho doanh nghiệp này.'
+      : ticketCode.trim().length < 4 && reason.trim().length < 10
+        ? 'Nhập Mã Ticket (≥ 4 ký tự) và Lý do hỗ trợ (≥ 10 ký tự) để mở khóa.'
+        : ticketCode.trim().length < 4
+          ? 'Nhập Mã Ticket hỗ trợ tối thiểu 4 ký tự để mở khóa.'
+          : reason.trim().length < 10
+            ? 'Nhập Lý do truy cập hỗ trợ tối thiểu 10 ký tự để mở khóa.'
+            : submitting
+              ? 'Đang gửi yêu cầu khởi tạo phiên hỗ trợ...'
+              : null;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isImpersonationValid) return;
@@ -144,19 +164,31 @@ export const PlatformSupportAndAuditSection: React.FC<Props> = ({
                 <select
                   id="select-impersonation-tenant"
                   data-testid="select-impersonation-tenant"
+                  style={{ width: '100%' }}
                   value={targetTenantId}
                   onChange={(e) => setTargetTenantId(Number(e.target.value) || 1)}
                 >
                   {tenants.length === 0 ? (
-                    <option value={1}>TENANT-001 — {CANONICAL_TENANT1_LEGAL_NAME}</option>
+                    <option value={1}>TENANT-001 — Kho vận Đại Phát</option>
                   ) : (
-                    tenants.map((t) => (
-                      <option key={t.tenantId} value={t.tenantId}>
-                        {t.tenantCode} — {normalizeTenantLegalNameVi(t.companyName, t.tenantId, t.tenantCode)}
-                      </option>
-                    ))
+                    tenants.map((t) => {
+                      const fullLegal = normalizeTenantLegalNameVi(t.companyName, t.tenantId, t.tenantCode);
+                      const shortName = fullLegal.includes('Đại Phát')
+                        ? 'Kho vận Đại Phát'
+                        : fullLegal.length > 20
+                          ? fullLegal.slice(0, 20).trim()
+                          : fullLegal;
+                      return (
+                        <option key={t.tenantId} value={t.tenantId}>
+                          {t.tenantCode} — {shortName}
+                        </option>
+                      );
+                    })
                   )}
                 </select>
+                <small style={{ fontSize: 11.5, color: '#475569' }}>
+                  Pháp nhân: {tenants.find((t) => t.tenantId === targetTenantId) ? normalizeTenantLegalNameVi(tenants.find((t) => t.tenantId === targetTenantId)?.companyName, targetTenantId) : CANONICAL_TENANT1_LEGAL_NAME}
+                </small>
                 <input type="hidden" data-testid="input-impersonation-tenant-id" value={targetTenantId} readOnly />
               </div>
 
@@ -227,19 +259,32 @@ export const PlatformSupportAndAuditSection: React.FC<Props> = ({
               ) : null}
 
               <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2, gap: 12, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 12, color: '#475569', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <Lock size={13} strokeWidth={2} aria-hidden="true" />
+                <span style={{ fontSize: 12, color: '#475569', display: 'inline-flex', alignItems: 'center', gap: 6, flex: '1 1 260px' }}>
+                  <Lock size={13} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0 }} />
                   <span>Mọi thao tác tra cứu trong phiên hỗ trợ đều được ghi nhận tự động vào Nhật ký kiểm toán kèm danh tính kỹ sư thực hiện.</span>
                 </span>
-                <button
-                  type="submit"
-                  className="platform-btn platform-btn-primary"
-                  data-testid="btn-start-impersonation"
-                  disabled={!isImpersonationValid || submitting || isDuplicateSession}
-                >
-                  <Headset size={15} strokeWidth={2} aria-hidden="true" />
-                  <span>Khởi tạo phiên hỗ trợ</span>
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                  <button
+                    type="submit"
+                    className="platform-btn platform-btn-primary"
+                    data-testid="btn-start-impersonation"
+                    aria-describedby={disabledImpersonationReason ? 'impersonation-submit-disabled-reason' : undefined}
+                    disabled={!isImpersonationValid || submitting || isDuplicateSession}
+                    style={{ minHeight: 44 }}
+                  >
+                    <Headset size={15} strokeWidth={2} aria-hidden="true" />
+                    <span>Khởi tạo phiên hỗ trợ</span>
+                  </button>
+                  {disabledImpersonationReason ? (
+                    <span
+                      id="impersonation-submit-disabled-reason"
+                      data-testid="impersonation-submit-disabled-reason"
+                      style={{ fontSize: 11.5, fontWeight: 600, color: '#64748b' }}
+                    >
+                      {disabledImpersonationReason}
+                    </span>
+                  ) : null}
+                </div>
               </div>
             </form>
 
@@ -248,6 +293,7 @@ export const PlatformSupportAndAuditSection: React.FC<Props> = ({
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: '#0f172a' }}>
                   Danh sách phiên hỗ trợ đang hoạt động
                 </div>
+                <UiTableScroll ariaLabel="Bảng phiên hỗ trợ kỹ thuật đang hoạt động">
                 <table className="ui-table" data-testid="active-impersonation-sessions-table" style={{ fontSize: 12 }}>
                   <thead>
                     <tr>
@@ -296,6 +342,7 @@ export const PlatformSupportAndAuditSection: React.FC<Props> = ({
                     </tr>
                   </tbody>
                 </table>
+                </UiTableScroll>
               </div>
             ) : null}
           </div>

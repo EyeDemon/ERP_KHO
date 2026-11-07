@@ -268,15 +268,15 @@ export default function InventoryReversals(){
                 <td style={{whiteSpace:'nowrap'}}><UiBadge tone={reversed?'success':'warning'}>{reversed?'Đã đảo':'Chưa đảo'}</UiBadge>
                   {reversed&&canTrace&&<><br/><Link to={'/inventory-traceability?referenceType=InventoryReversal&referenceId='+x.id}>Truy vết chuỗi đảo</Link></>}
                 </td>
-                {canReverse&&<td style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} disabled={reversed} onClick={()=>{setSelected(x);setReason('');setReasonCode('')}}>Đảo giao dịch</button></td>}
+                {canReverse&&<td style={{whiteSpace:'nowrap'}}><button type="button" style={{whiteSpace:'nowrap'}} disabled={reversed} title={reversed?'Giao dịch này đã được đảo hoặc không thuộc diện cho phép đảo':undefined} onClick={()=>{setSelected(x);setReason('');setReasonCode('')}}>Đảo giao dịch</button></td>}
               </tr>
             })}
           </tbody>
         </table>
       </UiTableScroll>}
       <nav className="ui-inline-actions" aria-label="Phân trang giao dịch đảo">
-        <button type="button" disabled={loading||busy||page<=1} onClick={()=>{setSelected(null);setPage(p=>Math.max(1,p-1))}}>Trang trước</button>
-        <button type="button" disabled={loading||busy||page>=totalPages} onClick={()=>{setSelected(null);setPage(p=>p+1)}}>Trang sau</button>
+        <button type="button" disabled={loading||busy||page<=1} title={page<=1?'Đang ở trang đầu tiên':undefined} onClick={()=>{setSelected(null);setPage(p=>Math.max(1,p-1))}}>Trang trước</button>
+        <button type="button" disabled={loading||busy||page>=totalPages} title={page>=totalPages?'Đang ở trang cuối cùng':undefined} onClick={()=>{setSelected(null);setPage(p=>p+1)}}>Trang sau</button>
       </nav>
     </UiCard>
 
@@ -299,7 +299,7 @@ export default function InventoryReversals(){
           <input aria-label="Lý do đảo giao dịch tồn kho" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Nhập lý do & bằng chứng đảo..." maxLength={400} required/>
         </UiToolbarField>
         <div className="ui-inline-actions">
-          <button type="submit" disabled={busy||!reason.trim()||!reasonCode||reversalReasons.length===0}>Xác nhận đảo giao dịch</button>
+          <button type="submit" disabled={busy||!reason.trim()||!reasonCode||reversalReasons.length===0} title={(!reason.trim()||!reasonCode)?'Chọn mã lý do và nhập lý do đảo giao dịch trước khi xác nhận':undefined}>Xác nhận đảo giao dịch</button>
           <button type="button" disabled={busy} onClick={()=>setSelected(null)}>Hủy</button>
         </div>
       </form>

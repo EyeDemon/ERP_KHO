@@ -38,6 +38,7 @@ export interface SaasBillingVietQrPanelProps {
     gatewayStatus: string;
   };
   hasActiveMatchingInvoice: boolean;
+  hasLoadError?: boolean;
   autoRefreshQr: boolean;
   setAutoRefreshQr: (v: boolean) => void;
   showQaWebhookSimulator: boolean;
@@ -56,7 +57,7 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
   billing, busy, checkingPayment, isQrPanelOpen, onOpenQrPanel, onCloseQrPanel,
   selectedPlanLabel, nextCycle, activeInvoiceBadge, isInvoicePaid, isInvoiceExpired,
   remainingSeconds, displayAmountVnd, copiedField, copyToClipboard, vietQrInvoice,
-  hasActiveMatchingInvoice, autoRefreshQr, setAutoRefreshQr, showQaWebhookSimulator,
+  hasActiveMatchingInvoice, hasLoadError = false, autoRefreshQr, setAutoRefreshQr, showQaWebhookSimulator,
   notice, checkPaymentStatus, createVietQrInvoice, confirmVietQrWebhook,
 }) => {
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -114,9 +115,9 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
       <div
         data-testid="vietqr-idle-cta-bar"
         style={{
-          display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignSelf: 'start', gap: 10,
-          padding: '12px 14px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#f8fafc',
-          boxSizing: 'border-box',
+          display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignSelf: 'start',
+          height: 'fit-content', gap: 8, padding: '12px 14px', borderRadius: 8,
+          border: '1px solid #cbd5e1', background: '#f8fafc', boxSizing: 'border-box',
         }}
       >
         <div style={{ display: 'grid', gap: 2 }}>
@@ -124,24 +125,29 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
             Thanh toán gia hạn {selectedPlanLabel} qua Napas247 VietQR
           </strong>
           <span style={{ fontSize: 12, color: '#334155', lineHeight: 1.35, fontVariantNumeric: 'tabular-nums' }}>
-            {nextCycle.fullLabel} • Số tiền cần thanh toán: <strong style={{ color: '#0F172A' }}>{displayAmountVnd.toLocaleString('vi-VN')} ₫</strong> (Đã gồm 10% GTGT)
+            {hasLoadError ? (
+              <>Số tiền cần thanh toán: <strong style={{ color: '#64748B' }}>—</strong></>
+            ) : (
+              <>{nextCycle.fullLabel} • Số tiền cần thanh toán: <strong style={{ color: '#0F172A' }}>{displayAmountVnd.toLocaleString('vi-VN')} ₫</strong> (Đã gồm 10% GTGT)</>
+            )}
           </span>
         </div>
-        <div>
+        <div style={{ marginTop: 0 }}>
           <button
             type="button"
             data-testid="btn-generate-vietqr"
-            disabled={busy}
+            disabled={busy || hasLoadError}
+            title={hasLoadError ? 'Vui lòng bấm Thử lại để tải dữ liệu gói cước trước khi tạo mã thanh toán' : undefined}
             onClick={onOpenQrPanel}
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 14px', borderRadius: 8,
+              display: 'inline-flex', alignItems: 'center', gap: 8, minHeight: 44, marginTop: 0, padding: '8px 14px', borderRadius: 8,
               fontSize: 13, fontWeight: 700, backgroundColor: '#1d4ed8', color: '#ffffff',
-              border: '1px solid #1e40af', cursor: busy ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
-              fontVariantNumeric: 'tabular-nums',
+              border: '1px solid #1e40af', cursor: busy || hasLoadError ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+              fontVariantNumeric: 'tabular-nums', boxSizing: 'border-box',
             }}
           >
             <QrCode size={16} strokeWidth={2} aria-hidden="true" />
-            <span>{`Tạo mã QR thanh toán (${displayAmountVnd.toLocaleString('vi-VN')} ₫)`}</span>
+            <span>{hasLoadError ? 'Tạo mã QR thanh toán (—)' : `Tạo mã QR thanh toán (${displayAmountVnd.toLocaleString('vi-VN')} ₫)`}</span>
           </button>
         </div>
       </div>
@@ -184,11 +190,13 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
                 </span>
                 <button
                   type="button"
-                  aria-label="Đóng hộp thoại"
+                  className="ui-icon-touch-target"
+                  aria-label="Đóng hộp thoại thanh toán VietQR"
+                  title="Đóng hộp thoại thanh toán VietQR"
                   data-testid="btn-close-vietqr-panel"
                   disabled={busy}
                   onClick={onCloseQrPanel}
-                  style={{ ...secondaryBtnStyle, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '5px 8px', minHeight: 30 }}
+                  style={{ ...secondaryBtnStyle, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '6px 8px', minWidth: 40, minHeight: 40, boxSizing: 'border-box' }}
                 >
                   <X size={16} strokeWidth={2} aria-hidden="true" />
                 </button>
@@ -203,6 +211,21 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
               <span data-testid="saas-vietqr-payment-panel" style={{ display: 'none' }} />
               <div className="ui-stack" style={{ gap: 10, flex: '1 1 500px' }}>
                 <div data-testid="vietqr-metadata-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(220px, 1fr))', alignItems: 'stretch', gap: 10, padding: '12px 14px', borderRadius: 8, background: '#ffffff', border: '1px solid #e2e8f0' }}>
+                  <div data-testid="vietqr-amount-hero-card" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 12px', borderRadius: 8, background: '#eff6ff', border: '1.5px solid #93c5fd' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: '#1e3a8a', lineHeight: 1.3 }}>{`Số tiền cần chuyển • Kỳ ${nextCycle.shortRange}`}</span>
+                      <button type="button" data-testid="btn-copy-amount" className="vietqr-copy-touch-btn" style={{ ...secondaryBtnStyle, minHeight: 36, padding: '4px 10px', fontSize: 12, boxSizing: 'border-box' }} onClick={() => void copyToClipboard('amount', String(displayAmountVnd))}>
+                        {copiedField === 'amount' ? 'Đã sao chép' : 'Sao chép số tiền'}
+                      </button>
+                    </div>
+                    <strong data-testid="vietqr-amount-display" style={{ fontSize: 24, fontWeight: 800, color: '#1d4ed8', lineHeight: 1.2, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>
+                      {`${displayAmountVnd.toLocaleString('vi-VN')} ₫`}
+                    </strong>
+                    <div data-testid="vietqr-vat-breakdown" style={{ fontSize: 12, color: '#334155', lineHeight: 1.35, fontVariantNumeric: 'tabular-nums' }}>
+                      {`Trước thuế: ${subTotalVnd.toLocaleString('vi-VN')} ₫ + Thuế GTGT 10%: ${vatVnd.toLocaleString('vi-VN')} ₫`}
+                    </div>
+                  </div>
+
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '8px 10px', borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                     <span style={{ fontSize: 12, color: '#475569', lineHeight: 1.25 }}>Ngân hàng thụ hưởng</span>
                     <strong data-testid="vietqr-bank-display" style={{ fontSize: 13.5, color: '#0f172a', lineHeight: 1.3, fontVariantNumeric: 'tabular-nums' }}>
@@ -219,31 +242,16 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
                     </strong>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 10px', borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 10px', borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
                       <span style={{ fontSize: 12, color: '#475569', lineHeight: 1.25 }}>Số tài khoản thụ hưởng</span>
-                      <button type="button" data-testid="btn-copy-stk" style={{ ...secondaryBtnStyle, padding: '2px 8px', fontSize: 11.5 }} onClick={() => void copyToClipboard('account', billing.accountNo)}>
+                      <button type="button" data-testid="btn-copy-stk" className="vietqr-copy-touch-btn" style={{ ...secondaryBtnStyle, minHeight: 36, padding: '4px 10px', fontSize: 12, boxSizing: 'border-box' }} onClick={() => void copyToClipboard('account', billing.accountNo)}>
                         {copiedField === 'account' ? 'Đã sao chép' : 'Sao chép STK'}
                       </button>
                     </div>
                     <strong data-testid="vietqr-account-number" style={{ fontSize: 14, color: '#0F172A', fontWeight: 700, lineHeight: 1.3, fontVariantNumeric: 'tabular-nums' }}>
                       {billing.accountNo || 'Chưa cấu hình số tài khoản'}
                     </strong>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '8px 10px', borderRadius: 6, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 12, color: '#475569', lineHeight: 1.25 }}>Số tiền &amp; Kỳ cước</span>
-                      <button type="button" data-testid="btn-copy-amount" style={{ ...secondaryBtnStyle, padding: '2px 8px', fontSize: 11.5 }} onClick={() => void copyToClipboard('amount', String(displayAmountVnd))}>
-                        {copiedField === 'amount' ? 'Đã sao chép' : 'Sao chép số tiền'}
-                      </button>
-                    </div>
-                    <strong data-testid="vietqr-amount-display" style={{ fontSize: 13.5, color: '#0f172a', lineHeight: 1.3, fontVariantNumeric: 'tabular-nums' }}>
-                      {`${displayAmountVnd.toLocaleString('vi-VN')} ₫ • Kỳ ${nextCycle.shortRange}`}
-                    </strong>
-                    <div data-testid="vietqr-vat-breakdown" style={{ fontSize: 11.5, color: '#475569', lineHeight: 1.3, fontVariantNumeric: 'tabular-nums' }}>
-                      {`Trước thuế: ${subTotalVnd.toLocaleString('vi-VN')} ₫ + Thuế GTGT 10%: ${vatVnd.toLocaleString('vi-VN')} ₫`}
-                    </div>
                   </div>
 
                   <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, paddingTop: 8, borderTop: '1px dashed #cbd5e1' }}>
@@ -256,7 +264,7 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
                         </code>
                       </div>
                     </div>
-                    <button type="button" data-testid="btn-copy-transfer-content" style={{ ...secondaryBtnStyle, padding: '4px 10px', fontSize: 12 }} onClick={() => void copyToClipboard('content', vietQrInvoice.transferContent)}>
+                    <button type="button" data-testid="btn-copy-transfer-content" className="vietqr-copy-touch-btn" style={{ ...secondaryBtnStyle, minHeight: 36, padding: '4px 10px', fontSize: 12, boxSizing: 'border-box' }} onClick={() => void copyToClipboard('content', vietQrInvoice.transferContent)}>
                       {copiedField === 'content' ? 'Đã sao chép' : 'Sao chép nội dung'}
                     </button>
                   </div>
@@ -359,28 +367,11 @@ export const SaasBillingVietQrPanel: React.FC<SaasBillingVietQrPanelProps> = ({
               </div>
             </div>
 
-            <div
-              style={{
-                position: 'sticky', bottom: 0, background: '#ffffff', borderTop: '1px solid #e2e8f0',
-                padding: '10px 18px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, zIndex: 5,
-              }}
-            >
-              <button
-                type="button"
-                data-testid="btn-footer-close-vietqr-modal"
-                disabled={busy}
-                onClick={onCloseQrPanel}
-                style={{ ...secondaryBtnStyle, minHeight: 34, padding: '6px 14px', fontSize: 13 }}
-              >
+            <div style={{ position: 'sticky', bottom: 0, background: '#ffffff', borderTop: '1px solid #e2e8f0', padding: '10px 18px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, zIndex: 5 }}>
+              <button type="button" data-testid="btn-footer-close-vietqr-modal" disabled={busy} onClick={onCloseQrPanel} style={{ ...secondaryBtnStyle, minHeight: 34, padding: '6px 14px', fontSize: 13 }}>
                 Đóng
               </button>
-              <button
-                type="button"
-                data-testid="btn-check-vietqr-payment-status"
-                disabled={busy}
-                onClick={() => void checkPaymentStatus()}
-                style={{ minHeight: 34, padding: '6px 16px', borderRadius: 6, fontSize: 13, fontWeight: 700, background: '#1d4ed8', color: '#ffffff', border: '1px solid #1e40af', cursor: busy ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
-              >
+              <button type="button" data-testid="btn-check-vietqr-payment-status" disabled={busy} onClick={() => void checkPaymentStatus()} style={{ minHeight: 34, padding: '6px 16px', borderRadius: 6, fontSize: 13, fontWeight: 700, background: '#1d4ed8', color: '#ffffff', border: '1px solid #1e40af', cursor: busy ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
                 {checkingPayment ? 'Đang kiểm tra giao dịch...' : 'Kiểm tra trạng thái thanh toán'}
               </button>
             </div>

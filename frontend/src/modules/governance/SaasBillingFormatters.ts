@@ -1,3 +1,34 @@
+export type StructuredBillingError = {
+  message: string;
+  errorCode?: string;
+  correlationId?: string;
+};
+
+export const stripTechnicalErrorSuffix = (rawMessage: string): string =>
+  (rawMessage || '')
+    .replace(/\s*\(CorrelationId:\s*[^)]+\)/gi, '')
+    .replace(/\s*\[[A-Za-z0-9_.:-]{2,}\]\s*$/g, '')
+    .trim();
+
+export const extractStructuredError = (err: unknown, fallback: string): StructuredBillingError => {
+  const anyErr = err as {
+    response?: {
+      status?: number;
+      headers?: Record<string, string>;
+      data?: { errorCode?: string; code?: string; correlationId?: string; message?: string; title?: string };
+    };
+  };
+  const data = anyErr?.response?.data;
+  const rawCode = data?.errorCode || data?.code || (anyErr?.response?.status ? `HTTP_${anyErr.response.status}` : '');
+  const rawCorr = anyErr?.response?.headers?.['x-correlation-id'] || data?.correlationId || '';
+  const cleanedMsg = stripTechnicalErrorSuffix(data?.message || data?.title || '') || fallback;
+  return {
+    message: cleanedMsg,
+    errorCode: rawCode ? String(rawCode).trim() : undefined,
+    correlationId: rawCorr ? String(rawCorr).trim() : undefined,
+  };
+};
+
 export const extractErrorText = (err: unknown, fallback: string) => {
   const anyErr = err as {
     response?: {
@@ -9,7 +40,7 @@ export const extractErrorText = (err: unknown, fallback: string) => {
   const data = anyErr?.response?.data;
   const code = data?.errorCode || data?.code || anyErr?.response?.status || '';
   const corr = anyErr?.response?.headers?.['x-correlation-id'] || data?.correlationId || '';
-  const msg = data?.message || data?.title || fallback;
+  const msg = stripTechnicalErrorSuffix(data?.message || data?.title || '') || fallback;
   return `${msg}${code ? ` [${code}]` : ''}${corr ? ` (CorrelationId: ${corr})` : ''}`;
 };
 

@@ -238,7 +238,7 @@ export default function InventoryLocks(){
         </UiTableScroll>}
         <p className="ui-muted-text" style={{margin:'8px 0 6px'}}>Nền tảng hiện hỗ trợ phạm vi Kho / Vị trí / Sản phẩm / Trạng thái / Lô / Sê-ri. Khóa theo chủ sở hữu, đơn vị đóng gói, một phần số lượng và ghi đè đặc quyền vẫn chưa hoàn tất theo phạm vi chuẩn.</p>
         <div className="ui-inline-actions" style={{marginTop:4}}>
-          <button type="button" disabled={lockPrecedenceBusy} onClick={()=>void verifyLockPrecedence()}>
+          <button type="button" disabled={lockPrecedenceBusy} title={lockPrecedenceBusy ? 'Đang kiểm định thứ tự ưu tiên khóa chồng lấp' : undefined} onClick={()=>void verifyLockPrecedence()}>
             Kiểm định Độ ưu tiên Khóa Chồng lấp & Cách ly Chất lượng
           </button>
           {lockPrecedenceResult&&(
@@ -277,7 +277,7 @@ export default function InventoryLocks(){
               <UiToolbarField label="Lý do thu hồi lô">
                 <input aria-label="Lý do thu hồi lô" value={recallForm.reason} onChange={e=>setRecallForm(x=>({...x,reason:e.target.value}))} placeholder="Số thông báo / biên bản QC" required/>
               </UiToolbarField>
-              <button type="submit" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={busy||!recallForm.warehouseId||!recallForm.productId||!recallForm.lotNumber.trim()||!recallForm.reason.trim()}>Khóa thu hồi lô</button>
+              <button type="submit" style={{height:38,minHeight:38,alignSelf:'end',whiteSpace:'nowrap'}} disabled={busy||!recallForm.warehouseId||!recallForm.productId||!recallForm.lotNumber.trim()||!recallForm.reason.trim()} title={busy?'Đang kích hoạt phong tỏa thu hồi lô':(!recallForm.warehouseId||!recallForm.productId||!recallForm.lotNumber.trim()||!recallForm.reason.trim())?'Chọn kho, sản phẩm và nhập mã lô kèm lý do thu hồi trước khi khóa':undefined}>Khóa thu hồi lô</button>
             </form>
           </UiCard>
         </div>

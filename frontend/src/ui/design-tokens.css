@@ -124,6 +124,14 @@
   --badge-danger-bg: #FEF2F2;
   --badge-danger-border: #FECACA;
   --scanner-bar-bg: var(--erp-color-slate-900);
+  --tooltip-bg: var(--erp-color-slate-900);
+  --tooltip-fg: #FFFFFF;
+  --tooltip-border: var(--erp-color-slate-700);
+  --skeleton-base: var(--erp-color-slate-200);
+  --skeleton-highlight: var(--erp-color-slate-100);
+  --error-banner-bg: #FEF2F2;
+  --error-banner-fg: #991B1B;
+  --error-banner-border: #FECACA;
 }
 
 /* --------------------------------------------------------------------------

@@ -65,12 +65,13 @@ export function ShipmentsListTableCard({ rows, detail }: ShipmentsListTableCardP
             <option value="Delivered">Đã giao</option>
           </select>
         </label>
-        <label className="ui-stack">
+        <label className="ui-stack" style={{ flex: '1 1 240px', minWidth: 220 }}>
           <span>Tìm mã chuyến / biển số xe</span>
           <input
             type="search"
             aria-label="Tìm mã chuyến hoặc biển số xe"
-            placeholder="Nhập mã chuyến hoặc biển số xe..."
+            placeholder="Tìm mã chuyến, biển số..."
+            style={{ width: '100%', minWidth: 220 }}
             value={filterSearch}
             onChange={e => setFilterSearch(e.target.value)}
           />
@@ -83,12 +84,12 @@ export function ShipmentsListTableCard({ rows, detail }: ShipmentsListTableCardP
           <table aria-label="Danh sách Shipment">
             <thead>
               <tr>
-                <th>Mã chuyến</th>
-                <th>Đơn nguồn</th>
-                <th>Kho</th>
-                <th>Trạng thái</th>
-                <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số kiện</th>
-                <th title="Cửa kho xuất bến được gán và biển số phương tiện vận chuyển">CỬA XUẤT &amp; BIỂN SỐ XE</th>
+                <th style={{ whiteSpace: 'nowrap', minWidth: 96 }}>Mã chuyến</th>
+                <th style={{ whiteSpace: 'nowrap', minWidth: 96 }}>Đơn nguồn</th>
+                <th style={{ whiteSpace: 'nowrap', minWidth: 96 }}>Kho</th>
+                <th style={{ whiteSpace: 'nowrap', minWidth: 92 }}>Trạng thái</th>
+                <th style={{ whiteSpace: 'nowrap', minWidth: 80, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Số kiện</th>
+                <th style={{ whiteSpace: 'nowrap', minWidth: 164 }} title="Cửa kho xuất bến được gán và biển số phương tiện vận chuyển">CỬA XUẤT &amp; BIỂN SỐ XE</th>
               </tr>
             </thead>
             <tbody>

@@ -217,7 +217,7 @@ export function MainLayoutTopbar({
                 }
                 setDiagCopiedNotice(`Đã sao chép mã chẩn đoán [${lastErrorCode} | ${lastCorrelationId}].`);
               }}
-              style={{ fontSize: 12, padding: '6px 10px', width: '100%' }}
+              style={{ fontSize: 12, padding: '8px 10px', width: '100%', minHeight: 44, minWidth: 44 }}
             >
               Sao chép Chẩn đoán Lỗi 1-Click gửi Zalo
             </button>

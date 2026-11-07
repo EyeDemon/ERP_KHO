@@ -70,8 +70,15 @@ export const PackingKittingBomSection: React.FC<PackingKittingBomSectionProps> =
   return (
     <div data-testid="kit-work-orders-workbench" className="ui-stack kit-kitting-scope">
       <style>{`
-        @media (max-width: 768px) {
-          .kit-kitting-scope .ui-mobile-card-list { display: grid !important; }
+        @media (max-width: 900px) {
+          .kit-kitting-scope .ui-mobile-card-list {
+            display: grid !important;
+            grid-template-columns: minmax(0, 1fr) !important;
+            gap: 10px !important;
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+          }
           .kit-kitting-scope .ui-desktop-table-wrap { display: none !important; }
         }
       `}</style>
@@ -273,13 +280,14 @@ export const PackingKittingBomSection: React.FC<PackingKittingBomSectionProps> =
                             </button>
                             <button
                               type="button"
+                              className="ui-icon-touch-target"
                               data-testid={`btn-kit-more-${wo.workOrderCode}`}
                               aria-label={`Thao tác khác cho lệnh ${wo.workOrderCode}`}
                               aria-haspopup="menu"
                               aria-expanded={openMenuOrderCode === wo.workOrderCode}
                               disabled={isBusy}
                               onClick={() => setOpenMenuOrderCode((prev) => (prev === wo.workOrderCode ? null : wo.workOrderCode))}
-                              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 32, minHeight: 30, padding: '4px 6px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', color: '#0f172a' }}
+                              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 36, minHeight: 36, padding: '4px 6px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', color: '#0f172a', boxSizing: 'border-box' }}
                             >
                               <MoreHorizontal size={16} strokeWidth={2} aria-hidden="true" />
                             </button>

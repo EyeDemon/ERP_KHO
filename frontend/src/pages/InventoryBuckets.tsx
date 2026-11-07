@@ -207,7 +207,7 @@ export default function InventoryBuckets({warehouses}:{warehouses:WarehouseOptio
         <UiToolbar>
           <UiToolbarField label="Kho">
             <select aria-label="Kho nhóm tồn" value={filters.warehouseId} onChange={e=>setFilters(x=>({...x,warehouseId:e.target.value}))}>
-              <option value="">Tất cả kho được phép</option>
+              <option value="">Tất cả kho</option>
               {warehouses.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
             </select>
           </UiToolbarField>

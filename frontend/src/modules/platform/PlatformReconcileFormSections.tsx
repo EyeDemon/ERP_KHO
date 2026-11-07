@@ -176,7 +176,7 @@ export const PlatformReconcileFormSections: React.FC<PlatformReconcileFormSectio
               className="platform-btn platform-btn-secondary"
               data-testid="btn-upload-reconcile-attachment"
               onClick={() => fileInputRef.current?.click()}
-              style={{ border: '1px dashed #1d4ed8', backgroundColor: '#eff6ff', color: '#1d4ed8' }}
+              style={{ minHeight: 44, border: '1px dashed #1d4ed8', backgroundColor: '#eff6ff', color: '#1d4ed8' }}
             >
               <Upload size={14} strokeWidth={2} aria-hidden="true" />
               <span>Tải lên chứng từ ủy nhiệm chi / sao kê</span>

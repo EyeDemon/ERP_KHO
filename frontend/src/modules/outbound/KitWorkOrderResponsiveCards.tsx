@@ -143,29 +143,37 @@ export const KitBomConsumptionPreviewSection: React.FC<{
 );
 
 export const KitBomComponentsMobileCards: React.FC<{ canReadCost: boolean }> = ({ canReadCost }) => (
-  <div className="ui-mobile-card-list" aria-label="Danh sách định mức linh kiện BOM">
+  <div className="ui-mobile-card-list" data-testid="kit-bom-components-mobile-cards" aria-label="Danh sách định mức linh kiện BOM">
     {KIT_BOM_COMPONENTS.map((item) => (
-      <article key={item.sku} className="ui-mobile-card">
+      <article key={item.sku} className="ui-mobile-card" style={{ minWidth: 0, boxSizing: 'border-box' }}>
         <div className="ui-mobile-card-head">
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div className="ui-mobile-card-title ui-code" style={{ whiteSpace: 'nowrap' }}>{item.sku}</div>
             <div className="ui-mobile-card-subtitle">{item.name}</div>
           </div>
-          <UiBadge tone="info">{item.perKit} {item.uom} / Bộ</UiBadge>
+          <span style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+            <UiBadge tone="info">{item.perKit} {item.uom} / Bộ</UiBadge>
+          </span>
         </div>
         <div className="ui-mobile-card-grid">
           <div className="ui-mobile-card-field">
             <span className="ui-mobile-card-label">Tồn khả dụng</span>
-            <span className="ui-mobile-card-value" style={{ fontVariantNumeric: 'tabular-nums' }}>{item.available} {item.uom}</span>
+            <span className="ui-mobile-card-value" style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.available} {item.uom}</span>
           </div>
           <div className="ui-mobile-card-field">
-            <span className="ui-mobile-card-label">Lô xuất ưu tiên hạn dùng</span>
-            <span className="ui-mobile-card-value ui-code" style={{ whiteSpace: 'nowrap' }}>{item.lotCode} ({item.earliestExpiry})</span>
+            <span className="ui-mobile-card-label">Lô xuất &amp; HSD ưu tiên</span>
+            <span className="ui-mobile-card-value ui-code" style={{ fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>{item.lotCode} ({item.earliestExpiry})</span>
           </div>
           <div className="ui-mobile-card-field" style={{ gridColumn: '1 / -1' }}>
-            <span className="ui-mobile-card-label">Giá vốn định mức</span>
+            <span className="ui-mobile-card-label">Giá vốn định mức / Bộ</span>
             <span className="ui-mobile-card-value" style={{ fontVariantNumeric: 'tabular-nums' }}>
-              {canReadCost ? `${item.perKit} ${item.uom} × ${item.unitCost.toLocaleString('vi-VN')} ₫ = ${item.unitCost.toLocaleString('vi-VN')} ₫` : <MaskedCostInline />}
+              {canReadCost ? (
+                <span style={{ overflowWrap: 'anywhere' }}>
+                  {`${item.perKit} ${item.uom} × ${item.unitCost.toLocaleString('vi-VN')} ₫ = ${item.unitCost.toLocaleString('vi-VN')} ₫`}
+                </span>
+              ) : (
+                <MaskedCostInline />
+              )}
             </span>
           </div>
         </div>
@@ -189,26 +197,37 @@ export const KitWorkOrdersMobileCards: React.FC<{
       const totalOrderCost = wo.totalCost ?? wo.plannedQty * rowUnitCost;
       const showRowCost = isCompleted ? canReadCost : (canReadCost && kitRolledUpCost !== null);
       return (
-        <article key={wo.id} className="ui-mobile-card" data-testid={`kit-wo-mobile-card-${wo.id}`}>
+        <article key={wo.id} className="ui-mobile-card" data-testid={`kit-wo-mobile-card-${wo.id}`} style={{ minWidth: 0, boxSizing: 'border-box' }}>
           <div className="ui-mobile-card-head">
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div className="ui-mobile-card-title ui-code" style={{ whiteSpace: 'nowrap' }}>{wo.workOrderCode}</div>
               <div className="ui-mobile-card-subtitle">{wo.kitSku} — {wo.kitName}</div>
             </div>
-            <UiBadge tone={isCompleted ? 'success' : 'warning'}>
-              {isCompleted ? 'Đã hoàn tất' : 'Chờ lắp ráp'}
-            </UiBadge>
+            <span style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+              <UiBadge tone={isCompleted ? 'success' : 'warning'}>
+                {isCompleted ? 'Đã hoàn tất' : 'Chờ lắp ráp'}
+              </UiBadge>
+            </span>
           </div>
           <div className="ui-mobile-card-grid">
-            <div className="ui-mobile-card-field">
+            <div className="ui-mobile-card-field" style={{ gridColumn: '1 / -1' }}>
               <span className="ui-mobile-card-label">Kho &amp; Hạn dùng</span>
-              <span className="ui-mobile-card-value">{CANONICAL_WH01_LABEL} • {wo.earliestExpiry}</span>
-            </div>
-            <div className="ui-mobile-card-field">
-              <span className="ui-mobile-card-label">Số lượng &amp; Giá vốn</span>
               <span className="ui-mobile-card-value" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                {wo.completedQty} / {wo.plannedQty} {wo.uomLabel} •{' '}
-                {showRowCost ? `${totalOrderCost.toLocaleString('vi-VN')} ₫` : <MaskedCostInline />}
+                {CANONICAL_WH01_LABEL} • <span style={{ whiteSpace: 'nowrap' }}>{wo.earliestExpiry}</span>
+              </span>
+            </div>
+            <div className="ui-mobile-card-field" style={{ gridColumn: '1 / -1' }}>
+              <span className="ui-mobile-card-label">Số lượng &amp; Giá vốn</span>
+              <span className="ui-mobile-card-value" style={{ fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>
+                <span style={{ whiteSpace: 'nowrap' }}>{wo.completedQty} / {wo.plannedQty} {wo.uomLabel}</span>
+                {' • '}
+                {showRowCost ? (
+                  <span>
+                    {`${totalOrderCost.toLocaleString('vi-VN')} ₫ (${rowUnitCost.toLocaleString('vi-VN')} ₫/bộ)`}
+                  </span>
+                ) : (
+                  <MaskedCostInline />
+                )}
               </span>
             </div>
           </div>
@@ -227,7 +246,7 @@ export const KitWorkOrdersMobileCards: React.FC<{
                 <details className="ui-row-more-menu" style={{ flex: '0 0 44px', width: 44 }}>
                   <summary
                     className="ui-more-summary"
-                    aria-label="Thao tác khác"
+                    aria-label={`Thao tác khác cho lệnh ${wo.workOrderCode}`}
                     style={{ width: 44, height: 44, minWidth: 44, minHeight: 44, padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                   >
                     <MoreHorizontal size={18} aria-hidden="true" />

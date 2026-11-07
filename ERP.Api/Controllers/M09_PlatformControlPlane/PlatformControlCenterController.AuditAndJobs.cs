@@ -224,45 +224,4 @@ public sealed partial class PlatformControlCenterController
             checkedAtUtc = now
         });
     }
-
-    [HttpGet("audit-logs")]
-    [PlatformAuthorize(AppPermissions.PlatformAuditRead)]
-    public async Task<IActionResult> GetPlatformAuditLogs(CancellationToken ct = default)
-    {
-        if (EnsureCallerHasPlatformPermission(AppPermissions.PlatformAuditRead) is { } forbidResult)
-        {
-            return forbidResult;
-        }
-
-        var rawLogs = await db.AuditLogs
-            .IgnoreQueryFilters()
-            .AsNoTracking()
-            .Where(a => a.EntityName != "UserSession"
-                     && !a.Action.StartsWith("Authentication.")
-                     && !a.Action.StartsWith("Auth."))
-            .OrderByDescending(a => a.Id)
-            .Take(100)
-            .ToListAsync(ct);
-
-        var logs = rawLogs.Select(a => new
-        {
-            a.Id,
-            a.TenantId,
-            a.UserId,
-            a.ImpersonatedBySupportUserId,
-            a.ImpersonatedByUserId,
-            securityDomain = a.SecurityDomain ?? "CUSTOMER_TENANT",
-            a.Action,
-            a.EntityName,
-            a.EntityId,
-            a.OldValues,
-            a.NewValues,
-            Reason = SanitizePlatformAuditReasonVi(a.Reason),
-            a.Result,
-            a.CorrelationId,
-            a.Timestamp
-        }).ToList();
-
-        return Ok(new { totalCount = logs.Count, items = logs });
-    }
 }

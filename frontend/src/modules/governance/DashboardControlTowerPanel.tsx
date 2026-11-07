@@ -97,8 +97,8 @@ export const DashboardControlTowerPanel: React.FC<DashboardControlTowerPanelProp
                 maxLength={120}
                 value={shopNameInput}
                 onChange={(e) => setShopNameInput(e.target.value)}
-                placeholder="VD: Gian hàng Shopee Chính hãng"
-                style={{ minHeight: 36, minWidth: 260, width: 280, padding: '4px 10px' }}
+                placeholder="VD: Shopee Chính hãng"
+                style={{ minHeight: 36, minWidth: 220, flex: '1 1 240px', maxWidth: '100%', padding: '4px 10px' }}
               />
               <select
                 aria-label="Nền tảng sàn TMĐT"

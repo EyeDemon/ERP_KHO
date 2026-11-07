@@ -143,11 +143,19 @@ describe('SaasBilling Page', () => {
     // Open VietQR panel on demand
     fireEvent.click(generateBtn);
     expect(await screen.findByTestId('vietqr-payment-panel')).toBeTruthy();
-    expect((screen.getByTestId('vietqr-metadata-grid') as HTMLElement).style.gridTemplateColumns).toContain('repeat(2,');
+    const metadataGrid = screen.getByTestId('vietqr-metadata-grid') as HTMLElement;
+    expect(metadataGrid.style.gridTemplateColumns).toContain('repeat(2,');
+    // UI-08: Amount hero card MUST be first child of metadata grid with 24px / 800 prominence
+    const amountHeroCard = screen.getByTestId('vietqr-amount-hero-card') as HTMLElement;
+    expect(metadataGrid.firstElementChild).toBe(amountHeroCard);
+    expect(amountHeroCard.style.gridColumn).toBe('1 / -1');
+    const amountDisplay = screen.getByTestId('vietqr-amount-display') as HTMLElement;
+    expect(amountDisplay.style.fontSize).toBe('24px');
+    expect(amountDisplay.style.fontWeight).toBe('800');
     expect(screen.getByTestId('vietqr-bank-display').textContent).toBe('TPBank — NH TMCP Tiên Phong (BIN: 970423)');
     expect(screen.getByTestId('vietqr-account-number').textContent).toBe('98418102005');
     expect(screen.getByTestId('vietqr-account-holder').textContent).toBe('HUYNH PHI VAN');
-    expect(screen.getByTestId('vietqr-amount-display').textContent).toContain('1.490.000 ₫');
+    expect(amountDisplay.textContent).toContain('1.490.000 ₫');
     expect(screen.getByTestId('vietqr-vat-breakdown').textContent).toBe(
       'Trước thuế: 1.354.545 ₫ + Thuế GTGT 10%: 135.455 ₫',
     );
@@ -211,28 +219,82 @@ describe('SaasBilling Page', () => {
     expect(screen.getByTestId('btn-generate-vietqr')).toBeTruthy();
   });
 
-  it('displays server error banner honestly when SaaS billing API fails', async () => {
-    vi.mocked(apiClient.get).mockRejectedValue({
-      response: {
-        status: 500,
+  it('displays server error banner honestly when SaaS billing API fails and eliminates false-zero KPIs/empty states (N-22 & N-23)', async () => {
+    let shouldFail = true;
+    vi.mocked(apiClient.get).mockImplementation(async () => {
+      if (shouldFail) {
+        throw {
+          response: {
+            status: 503,
+            data: {
+              errorCode: 'SAAS_BILLING_UNAVAILABLE',
+              message: 'Không thể kết nối dịch vụ quản lý thuê bao SaaS.',
+              correlationId: 'corr-saas-500',
+            },
+          },
+        };
+      }
+      return {
         data: {
-          errorCode: 'SAAS_BILLING_UNAVAILABLE',
-          message: 'Không thể kết nối dịch vụ quản lý thuê bao SaaS.',
-          correlationId: 'corr-saas-500',
+          planCode: 'GROWTH',
+          subscriptionStatus: 'ACTIVE',
+          activeWarehouses: 2,
+          maxWarehouses: 3,
+          activeUsers: 11,
+          maxUsers: 20,
+          activeProducts: 350,
+          maxProducts: 5000,
+          currentMonthOrderCount: 4200,
+          monthlyOrderQuota: 10000,
+          billingTaxCode: '0318889999',
+          recentInvoices: [],
         },
-      },
+      } as never;
     });
 
-    render(
+    const view = render(
       <MemoryRouter>
         <SaasBilling />
       </MemoryRouter>,
     );
 
-    const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toContain('Không thể kết nối dịch vụ quản lý thuê bao SaaS.');
-    expect(alert.textContent).toContain('SAAS_BILLING_UNAVAILABLE');
-    expect(alert.textContent).toContain('corr-saas-500');
+    const alert = await screen.findByTestId('saas-billing-error-banner');
+    expect(alert.getAttribute('role')).toBe('alert');
+    const msgEl = alert.querySelector('.ui-error-banner-message') as HTMLElement;
+    expect(msgEl.textContent).toBe('Không thể kết nối dịch vụ quản lý thuê bao SaaS.');
+    expect(msgEl.textContent).not.toContain('SAAS_BILLING_UNAVAILABLE');
+    expect(msgEl.textContent).not.toContain('corr-saas-500');
+
+    const techDetails = screen.getByTestId('ui-error-banner-tech-details') as HTMLDetailsElement;
+    expect(techDetails.open).toBe(false);
+    expect(techDetails.textContent).toContain('Chi tiết kỹ thuật');
+    expect(techDetails.textContent).toContain('SAAS_BILLING_UNAVAILABLE');
+    expect(techDetails.textContent).toContain('corr-saas-500');
+
+    // N-23: Zero fake-zero quota values, zero green "Bình thường (<80%)" badges, and invoice load error state instead of empty state
+    const pageText = view.container.textContent ?? '';
+    expect(pageText).not.toContain('0 / 10.000');
+    expect(pageText).not.toContain('0 / 20 tài khoản nhân sự');
+    expect(pageText).not.toContain('0 / 3 kho');
+    expect(pageText).not.toContain('Bình thường (<80%)');
+    expect(pageText).not.toContain('Chưa có hóa đơn thanh toán nào');
+    expect(screen.getByTestId('quota-value-row-orders').textContent).toBe('—');
+    expect(screen.getByTestId('quota-value-row-users').textContent).toBe('—');
+    expect(screen.getByTestId('quota-badge-error-orders').textContent).toBe('—');
+    expect(screen.getByTestId('quota-badge-error-users').textContent).toBe('—');
+    expect(screen.getByTestId('saas-invoice-history-load-error').textContent).toContain(
+      'Không thể tải danh sách hóa đơn thanh toán',
+    );
+
+    // Clicking [Thử lại] re-fetches and restores real quota metrics cleanly
+    shouldFail = false;
+    const retryBtn = screen.getByTestId('ui-error-banner-retry') as HTMLButtonElement;
+    expect(retryBtn.style.minHeight).toBe('44px');
+    fireEvent.click(retryBtn);
+
+    expect(await screen.findByText('2 / 3 kho')).toBeTruthy();
+    expect(screen.getByText('11 / 20 tài khoản nhân sự')).toBeTruthy();
+    expect(screen.queryByTestId('saas-billing-error-banner')).toBeNull();
   });
 
   it('renders EXPIRED (00:00) neutral badge, overlay with Tạo mã mới button, and PAID confirmation state hiding QR and generate button', async () => {

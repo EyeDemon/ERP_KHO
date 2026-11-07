@@ -75,12 +75,12 @@ export const DashboardExceptionAlerts = ({
               <table className="ui-table-compact" aria-label="Hàng đợi tác vụ kho đang mở">
                 <thead>
                   <tr>
-                    <th>Loại</th>
-                    <th>Mã phiếu/nhiệm vụ</th>
-                    <th>Kho</th>
-                    <th>Trạng thái</th>
-                    <th>Ưu tiên</th>
-                    <th style={{ whiteSpace: 'nowrap' }}>Xử lý</th>
+                    <th style={{ whiteSpace: 'nowrap', minWidth: 80 }}>Loại</th>
+                    <th style={{ whiteSpace: 'nowrap', minWidth: 96 }}>Mã tác vụ</th>
+                    <th style={{ whiteSpace: 'nowrap', minWidth: 96 }}>Kho</th>
+                    <th style={{ whiteSpace: 'nowrap', minWidth: 88 }}>Trạng thái</th>
+                    <th style={{ whiteSpace: 'nowrap', minWidth: 80 }}>Ưu tiên</th>
+                    <th style={{ whiteSpace: 'nowrap', minWidth: 84 }}>Xử lý</th>
                   </tr>
                 </thead>
                 <tbody>

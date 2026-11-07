@@ -14,9 +14,21 @@ import { PlatformReconcileInvoiceModal } from '../modules/platform/PlatformRecon
 import { PlatformQuotaDrawerAndModals } from '../modules/platform/PlatformQuotaDrawerAndModals';
 import { PlatformOverviewRecentEventsCard } from '../modules/platform/PlatformOverviewRecentEventsCard';
 import PlatformControlCenterLayout from '../layouts/PlatformControlCenterLayout';
+import PlatformControlCenter from './PlatformControlCenter';
+import { PlatformAuditLogsTableCard } from '../modules/platform/PlatformAuditLogsTableCard';
+import { DashboardQuickActions } from '../components/dashboard/DashboardQuickActions';
 import { SaasBillingInvoiceHistoryCard } from '../modules/governance/SaasBillingPlanCardsAndHistory';
 import { MobileBarcodeScannerBar } from '../components/MobileBarcodeScannerBar';
 import { ImportReceiptListCard } from '../modules/inbound/ImportReceiptListSection';
+import {
+  WMS_GLOSSARY,
+  UiErrorBanner,
+  UiSkeleton,
+  UiTableScroll,
+  UiToolbar,
+  UiToolbarField,
+  UiTooltip,
+} from '../ui/ProductionUi';
 
 vi.mock('../services/apiClient', () => ({
   default: {
@@ -629,5 +641,335 @@ describe('Wave-16 Design System Unification, WCAG & UX Closure', () => {
     expect(platformSkipLink).toBeTruthy();
     expect(platformSkipLink.getAttribute('href')).toBe('#platform-main-content');
     expect(platformLayoutView.container.querySelector('main#platform-main-content')).toBeTruthy();
+  });
+
+  it('Wave A-E (A11Y-02, UX-05, A11Y-03, DS-02): verifies keyboard-accessible UiTableScroll, 13-term WMS_GLOSSARY + multi-modal UiTooltip, UiSkeleton, and UiErrorBanner', () => {
+    const onRetry = vi.fn();
+    render(
+      <div>
+        <UiTableScroll data-testid="wave-ae-scroll-default">
+          <table><tbody><tr><td>SP-01</td></tr></tbody></table>
+        </UiTableScroll>
+        <UiTableScroll data-testid="wave-ae-scroll-custom" ariaLabel="Bảng tồn kho 9 chiều có thể cuộn ngang">
+          <table><tbody><tr><td>SP-02</td></tr></tbody></table>
+        </UiTableScroll>
+        <UiTooltip term="GS1-128" data-testid="wave-ae-tooltip-gs1" />
+        <UiSkeleton lines={3} data-testid="wave-ae-skeleton" />
+        <UiErrorBanner
+          title="Lỗi kết nối sổ cái tồn kho"
+          message="Không thể truy xuất dữ liệu khóa dòng 9 chiều."
+          errorCode="INV_LEDGER_UNAVAILABLE"
+          correlationId="CORR-WAVE-AE-01"
+          onRetry={onRetry}
+          data-testid="wave-ae-error-banner"
+        />
+        <button type="button" data-testid="wave-ae-outside">Ngoài vùng</button>
+      </div>,
+    );
+
+    const scrollDefault = screen.getByTestId('wave-ae-scroll-default');
+    expect(scrollDefault.getAttribute('tabindex')).toBe('0');
+    expect(scrollDefault.getAttribute('role')).toBe('region');
+    expect(scrollDefault.getAttribute('aria-label')).toBe('Bảng dữ liệu có thể cuộn ngang (dùng phím mũi tên Trái/Phải để cuộn)');
+
+    const scrollCustom = screen.getByTestId('wave-ae-scroll-custom');
+    expect(scrollCustom.getAttribute('tabindex')).toBe('0');
+    expect(scrollCustom.getAttribute('role')).toBe('region');
+    expect(scrollCustom.getAttribute('aria-label')).toBe('Bảng tồn kho 9 chiều có thể cuộn ngang');
+
+    const expectedTerms = ['FEFO', 'FIFO', 'BOM', 'WAC', 'AWB', 'GS1-128', 'RMA', 'MST', 'SoD', 'ĐVVC', 'ĐVT', 'SKU', 'Bin'] as const;
+    expect(Object.keys(WMS_GLOSSARY)).toHaveLength(13);
+    for (const termKey of expectedTerms) {
+      expect(WMS_GLOSSARY[termKey]).toBeDefined();
+      expect(WMS_GLOSSARY[termKey].term).toBe(termKey);
+      expect(WMS_GLOSSARY[termKey].label.trim().length).toBeGreaterThan(0);
+      expect(WMS_GLOSSARY[termKey].description.trim().length).toBeGreaterThan(0);
+    }
+
+    const tooltipTrigger = screen.getByRole('button', { name: 'GS1-128' });
+    fireEvent.focus(tooltipTrigger);
+    const tooltipBubble = screen.getByRole('tooltip');
+    expect(tooltipBubble.textContent).toContain(WMS_GLOSSARY['GS1-128'].label);
+    expect(tooltipTrigger.getAttribute('aria-describedby')).toBe(tooltipBubble.id);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('tooltip')).toBeNull();
+
+    const tooltipWrap = screen.getByTestId('wave-ae-tooltip-gs1');
+    fireEvent.mouseEnter(tooltipWrap);
+    expect(screen.getByRole('tooltip')).toBeTruthy();
+    fireEvent.mouseLeave(tooltipWrap);
+    expect(screen.queryByRole('tooltip')).toBeNull();
+
+    fireEvent.pointerDown(tooltipTrigger);
+    fireEvent.click(tooltipTrigger);
+    expect(screen.getByRole('tooltip')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('wave-ae-outside'));
+    expect(screen.queryByRole('tooltip')).toBeNull();
+
+    const skeleton = screen.getByTestId('wave-ae-skeleton');
+    expect(skeleton.getAttribute('role')).toBe('status');
+    expect(skeleton.getAttribute('aria-busy')).toBe('true');
+    expect(skeleton.querySelectorAll('.ui-skeleton-line')).toHaveLength(3);
+
+    const errBanner = screen.getByTestId('wave-ae-error-banner');
+    expect(errBanner.getAttribute('role')).toBe('alert');
+    expect(errBanner.textContent).toContain('INV_LEDGER_UNAVAILABLE • CORR-WAVE-AE-01');
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('Wave A-E (RES-03 / B2): collapses UiToolbar filters >= index 2 on mobile <= 768px, tracks active badge, preserves state across toggles, and supports Áp dụng / Xóa lọc', () => {
+    const onApply = vi.fn();
+    const onReset = vi.fn();
+
+    const MobileFilterHarness: React.FC = () => {
+      const [docType, setDocType] = useState('RECEIPT');
+      const [reasonSearch, setReasonSearch] = useState('');
+      return (
+        <UiToolbar
+          data-testid="wave-ae-mobile-toolbar"
+          onApplyFilters={onApply}
+          onResetFilters={() => {
+            setDocType('');
+            setReasonSearch('');
+            onReset();
+          }}
+        >
+          <UiToolbarField label="Kho"><select defaultValue="WH01"><option value="WH01">WH01</option></select></UiToolbarField>
+          <UiToolbarField label="Mã phiếu"><input defaultValue="" placeholder="PNK-2026..." /></UiToolbarField>
+          <UiToolbarField label="Loại chứng từ">
+            <select data-testid="wave-ae-sec-doctype" value={docType} onChange={(e) => setDocType(e.target.value)}>
+              <option value="">Tất cả</option>
+              <option value="RECEIPT">Phiếu nhập</option>
+              <option value="ISSUE">Phiếu xuất</option>
+            </select>
+          </UiToolbarField>
+          <UiToolbarField label="Lý do điều chỉnh">
+            <input data-testid="wave-ae-sec-reason" value={reasonSearch} onChange={(e) => setReasonSearch(e.target.value)} />
+          </UiToolbarField>
+          <UiToolbarField label="Ghi chú lô (không kiểm soát)">
+            <input data-testid="wave-ae-sec-uncontrolled" defaultValue="" />
+          </UiToolbarField>
+          <div className="inventory-toolbar-actions" data-testid="wave-ae-inv-actions">
+            <button type="button" data-testid="wave-ae-standalone-action">Làm mới</button>
+            <button type="button">Xuất Excel Tồn Kho</button>
+          </div>
+        </UiToolbar>
+      );
+    };
+
+    Object.defineProperty(window, 'innerWidth', { value: 1280, configurable: true, writable: true });
+    window.dispatchEvent(new Event('resize'));
+    const view = render(<MobileFilterHarness />);
+    expect(screen.queryByTestId('btn-toggle-toolbar-filters')).toBeNull();
+
+    act(() => {
+      Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true, writable: true });
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    const toggleBtn = screen.getByTestId('btn-toggle-toolbar-filters');
+    expect(toggleBtn.textContent).toContain('Bộ lọc (3)');
+    expect((toggleBtn as HTMLButtonElement).style.minHeight).toBe('44px');
+    expect(screen.getByTestId('toolbar-active-filter-badge').textContent).toBe('Đang lọc: 1');
+    expect(screen.getByTestId('wave-ae-standalone-action')).toBeTruthy();
+    expect(screen.getByTestId('wave-ae-inv-actions').closest('.ui-toolbar-primary-bar')).toBeTruthy();
+
+    const secPanel = screen.getByTestId('ui-toolbar-secondary-panel');
+    expect(secPanel.hidden).toBe(true);
+
+    fireEvent.click(toggleBtn);
+    expect(secPanel.hidden).toBe(false);
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
+
+    fireEvent.change(screen.getByTestId('wave-ae-sec-reason'), { target: { value: 'Kiểm kê lệch kệ' } });
+    const uncontrolledInput = screen.getByTestId('wave-ae-sec-uncontrolled') as HTMLInputElement;
+    uncontrolledInput.value = 'LOT-QA-99';
+    fireEvent.input(uncontrolledInput);
+    expect(screen.getByTestId('toolbar-active-filter-badge').textContent).toBe('Đang lọc: 3');
+
+    // Toggle collapse/expand preserves controlled + uncontrolled state
+    fireEvent.click(toggleBtn);
+    expect(secPanel.hidden).toBe(true);
+    fireEvent.click(toggleBtn);
+    expect(secPanel.hidden).toBe(false);
+    expect((screen.getByTestId('wave-ae-sec-reason') as HTMLInputElement).value).toBe('Kiểm kê lệch kệ');
+    expect((screen.getByTestId('wave-ae-sec-uncontrolled') as HTMLInputElement).value).toBe('LOT-QA-99');
+
+    // [Áp dụng] closes panel keeping state intact
+    fireEvent.click(screen.getByTestId('btn-apply-toolbar-filters'));
+    expect(onApply).toHaveBeenCalledTimes(1);
+    expect(secPanel.hidden).toBe(true);
+    expect(screen.getByTestId('toolbar-active-filter-badge').textContent).toBe('Đang lọc: 3');
+
+    // [Xóa lọc] resets secondary filters + badge
+    fireEvent.click(toggleBtn);
+    fireEvent.click(screen.getByTestId('btn-reset-toolbar-filters'));
+    expect(onReset).toHaveBeenCalledTimes(1);
+    expect((screen.getByTestId('wave-ae-sec-doctype') as HTMLSelectElement).value).toBe('');
+    expect((screen.getByTestId('wave-ae-sec-reason') as HTMLInputElement).value).toBe('');
+    expect((screen.getByTestId('wave-ae-sec-uncontrolled') as HTMLInputElement).value).toBe('');
+    expect(screen.queryByTestId('toolbar-active-filter-badge')).toBeNull();
+
+    view.unmount();
+    Object.defineProperty(window, 'innerWidth', { value: 1280, configurable: true, writable: true });
+    window.dispatchEvent(new Event('resize'));
+  });
+
+  it('QA-WAVE-AE-ERROR-STATE-503 & QA-WAVE-AE-REFLOW-320: surfaces HTTP 503 errorCode + correlationId on PlatformControlCenter and enforces 44px touch height on DashboardQuickActions', async () => {
+    vi.mocked(apiClient.get).mockImplementation(async (url) => {
+      if (url === '/api/v1/platform/billing/invoices') {
+        throw {
+          response: {
+            status: 503,
+            headers: { 'x-correlation-id': 'corr-wave-ae-plat-503' },
+            data: {
+              errorCode: 'PLATFORM_BILLING_UPSTREAM_TIMEOUT',
+              message: 'Dịch vụ đối soát hóa đơn nền tảng đang tạm gián đoạn.',
+            },
+          },
+        };
+      }
+      return { data: {} } as never;
+    });
+
+    const view = render(
+      <MemoryRouter initialEntries={['/platform/billing']}>
+        <Routes>
+          <Route path="/platform/billing" element={<PlatformControlCenter />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const alertNotice = await view.findByTestId('platform-action-notice');
+    expect(alertNotice.getAttribute('role')).toBe('alert');
+    expect(alertNotice.querySelector('.ui-error-banner-message')?.textContent).toBe(
+      'Dịch vụ đối soát hóa đơn nền tảng đang tạm gián đoạn.',
+    );
+    expect(alertNotice.querySelector('.ui-error-banner-message')?.textContent).not.toContain(
+      'PLATFORM_BILLING_UPSTREAM_TIMEOUT',
+    );
+    const techDetails = view.getByTestId('ui-error-banner-tech-details') as HTMLDetailsElement;
+    expect(techDetails.open).toBe(false);
+    expect(techDetails.textContent).toContain('PLATFORM_BILLING_UPSTREAM_TIMEOUT');
+    expect(techDetails.textContent).toContain('corr-wave-ae-plat-503');
+    const retryBtn = view.getByTestId('ui-error-banner-retry') as HTMLButtonElement;
+    expect(retryBtn.style.minHeight).toBe('44px');
+    // N-23: Revenue summary must show "—" rather than false-zero 0 ₫, and invoice table shows load error instead of empty state
+    expect(view.getByTestId('platform-billing-revenue-summary').textContent).not.toContain('0 ₫');
+    expect(view.getByTestId('platform-billing-load-error').textContent).toContain(
+      'Không thể tải danh sách hóa đơn thuê bao SaaS',
+    );
+    expect(view.container.textContent).not.toContain('Chưa có hóa đơn thuê bao SaaS nào trên hệ thống.');
+    view.unmount();
+
+    // UX-04: PlatformAuditLogsTableCard filters auth login spam even when only auth logs exist and renders 100% Vietnamese
+    const authSpamOnlyView = render(
+      <PlatformAuditLogsTableCard
+        auditLogs={[
+          {
+            id: 901,
+            tenantId: 1,
+            action: 'Authentication.LoginSucceeded',
+            entityName: 'UserSession',
+            entityId: 12,
+            username: 'qa_admin',
+            securityDomain: 'AUTH_SECURITY',
+            timestamp: '2026-11-06T03:00:00Z',
+          },
+        ]}
+      />,
+    );
+    expect(authSpamOnlyView.getByTestId('platform-audit-empty').textContent).toContain(
+      'Chưa có sự kiện kiểm toán quản trị nền tảng nào được ghi nhận.',
+    );
+    expect(authSpamOnlyView.container.textContent).not.toContain('Authentication.LoginSucceeded');
+    authSpamOnlyView.unmount();
+
+    const opsAuditView = render(
+      <PlatformAuditLogsTableCard
+        auditLogs={[
+          {
+            id: 902,
+            tenantId: 1,
+            action: 'Platform.TenantQuotaUpdated',
+            entityName: 'TenantSubscription',
+            entityId: 1,
+            username: 'superadmin_ops',
+            securityDomain: 'CUSTOMER_TENANT',
+            oldValues: '{"maxWarehouses":1,"monthlyOrderQuota":1500}',
+            newValues: '{"maxWarehouses":3,"monthlyOrderQuota":10000,"reason":"Phụ lục HĐ B2B tháng 11"}',
+            timestamp: '2026-11-06T03:10:00Z',
+          },
+          {
+            id: 903,
+            tenantId: 1,
+            action: 'PLATFORM_ADMIN_AUTH_SUMMARY',
+            actionLabelVi: 'Xác thực quản trị',
+            entityName: 'UserSession',
+            targetCodeVi: 'TENANT-001',
+            actorDisplayVi: 'Chủ dự án (SuperAdmin)',
+            summaryVi: 'Tổng hợp phiên xác thực quản trị hợp lệ trong ca vận hành',
+            securityDomain: 'PLATFORM',
+            securityDomainLabelVi: 'Quản trị nền tảng',
+            timestamp: '2026-11-06T03:15:00Z',
+          },
+        ]}
+      />,
+    );
+    const opsTableText = opsAuditView.getByTestId('platform-audit-table').textContent ?? '';
+    expect(opsTableText).toContain('Doanh nghiệp thuê bao');
+    expect(opsTableText).toContain('Điều chỉnh hạn mức thuê bao');
+    expect(opsTableText).toContain('Kho tối đa: 3');
+    expect(opsTableText).toContain('Xác thực quản trị');
+    expect(opsTableText).toContain('Chủ dự án (SuperAdmin)');
+    expect(opsTableText).not.toContain('CUSTOMER_TENANT');
+    expect(opsTableText).not.toContain('UserSession');
+    expect(opsTableText).not.toContain('{"maxWarehouses"');
+    opsAuditView.unmount();
+
+    const recentEvView = render(
+      <PlatformOverviewRecentEventsCard
+        rawDashboardEvents={[
+          {
+            id: 'AUD-101',
+            timestampUtc: '2026-11-06T03:20:00Z',
+            timestampVi: '06/11/2026 10:20',
+            eventTypeCode: 'PLATFORM_BILLING_MANUAL_RECONCILE',
+            eventLabelVi: 'Đối soát thanh toán thủ công',
+            targetCode: 'INV-SAAS-202611-002',
+            actorDisplay: 'Chủ dự án (SuperAdmin)',
+            summaryVi: 'Đối soát hóa đơn kỳ 11/2026 khớp 1.490.000 ₫',
+            tone: 'success',
+          },
+          {
+            id: 'NOISE-999',
+            action: 'Authentication.LoginSucceeded',
+            entityName: 'UserSession',
+            summaryVi: 'Login spam',
+          },
+        ]}
+        auditLogs={[]}
+        invoices={[]}
+        onViewAllAuditLogs={() => undefined}
+      />,
+    );
+    const recentEvText = recentEvView.getByTestId('platform-overview-recent-events-table').textContent ?? '';
+    expect(recentEvText).toContain('Đối soát thanh toán thủ công');
+    expect(recentEvText).toContain('INV-SAAS-202611-002');
+    expect(recentEvText).toContain('Đã đối soát');
+    expect(recentEvText).not.toContain('Authentication.LoginSucceeded');
+    expect(recentEvText).not.toContain('UserSession');
+    recentEvView.unmount();
+
+    const quickView = render(
+      <MemoryRouter>
+        <DashboardQuickActions />
+      </MemoryRouter>,
+    );
+    const codQuickLink = quickView.getByTestId('quick-action-cod-reconciliation') as HTMLAnchorElement;
+    expect(codQuickLink.style.minHeight).toBe('44px');
+    expect(codQuickLink.style.boxSizing).toBe('border-box');
   });
 });

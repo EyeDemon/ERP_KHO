@@ -138,11 +138,12 @@ const CodReconciliation = () => {
             <select
               aria-label="Loại hình người nộp thuế COD"
               data-testid="select-taxpayer-type-cod"
+              style={{ width: '100%' }}
               value={taxpayerType}
               onChange={e => setTaxpayerType(e.target.value as 'HOUSEHOLD_INDIVIDUAL' | 'ENTERPRISE')}
             >
-              <option value="HOUSEHOLD_INDIVIDUAL">Hộ / Cá nhân kinh doanh (Khấu trừ 1% GTGT + 0,5% TNCN theo NĐ 117/2025/NĐ-CP)</option>
-              <option value="ENTERPRISE">Doanh nghiệp / Tổ chức (Tự kê khai 0 ₫ khấu trừ tại nguồn)</option>
+              <option value="HOUSEHOLD_INDIVIDUAL">Hộ / Cá nhân KD (Khấu trừ 1,5%)</option>
+              <option value="ENTERPRISE">Doanh nghiệp / Tổ chức (0 ₫ khấu trừ)</option>
             </select>
           </label>
         </div>
@@ -197,14 +198,14 @@ const CodReconciliation = () => {
           </label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Tệp bảng kê quyết toán ĐVVC (.xlsx, .csv)</span>
-            <label style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 10, minHeight: 38, padding: '6px 12px', border: '1px solid #cbd5e1', borderRadius: 6, background: '#ffffff', cursor: 'pointer', fontSize: 13, color: '#0f172a' }}>
+            <label style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 10, minHeight: 44, padding: '6px 12px', border: '1px solid #cbd5e1', borderRadius: 6, background: '#ffffff', cursor: 'pointer', fontSize: 13, color: '#0f172a', boxSizing: 'border-box' }}>
               <span style={{ padding: '4px 10px', borderRadius: 4, background: '#f1f5f9', border: '1px solid #cbd5e1', fontWeight: 600, whiteSpace: 'nowrap' }}>
                 Chọn tệp bảng kê...
               </span>
               <span style={{ color: selectedCarrierFile ? '#0f172a' : '#475569', fontWeight: selectedCarrierFile ? 600 : 400 }}>
                 {selectedCarrierFile ? selectedCarrierFile.name : 'Chưa chọn tệp nào (.xlsx, .csv)'}
               </span>
-              <input aria-label="Tệp bảng kê quyết toán COD" data-testid="input-cod-statement-file" type="file" accept=".xlsx,.xls,.csv" onChange={e => setSelectedCarrierFile(e.target.files?.[0] ?? null)} style={{ position: 'absolute', width: 1, height: 1, opacity: 0, overflow: 'hidden' }} />
+              <input aria-label="Tệp bảng kê quyết toán COD" data-testid="input-cod-statement-file" type="file" accept=".xlsx,.xls,.csv" className="sr-only" onChange={e => setSelectedCarrierFile(e.target.files?.[0] ?? null)} />
             </label>
           </div>
           <button type="submit" data-testid="btn-submit-cod-reconciliation" disabled={busy}>

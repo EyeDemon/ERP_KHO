@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Video } from 'lucide-react';
 import apiClient from '../../services/apiClient';
 import { BarcodeSvg } from '../../components/BarcodeSvg';
@@ -39,6 +39,7 @@ export function PackingWorkbenchVideoAndAwbPanels({
   setUnifiedAwbPrintNotice: (val: string) => void;
   setError: (msg: string) => void;
 }) {
+  const videoFileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
   const [videoDurationSec, setVideoDurationSec] = useState<string>('');
   const [videoSizeMb, setVideoSizeMb] = useState<string>('');
@@ -153,22 +154,39 @@ export function PackingWorkbenchVideoAndAwbPanels({
           {videoNotice && <p role="status" className="ui-success-text" style={{ marginTop: 3, fontSize: 11.5 }}>{videoNotice}</p>}
         </div>
         <form onSubmit={recordPackingVideoEvidence} className="packing-video-form-grid">
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5 }}>Mã vận đơn (AWB)
-            <input aria-label="Mã vận đơn AWB quay video" value={videoAwbCode} onChange={e => setVideoAwbCode(e.target.value)} placeholder="VD: SPXVN058291" style={{ minHeight: 32, height: 32, padding: '4px 8px', fontSize: 12 }} />
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5, minWidth: 0 }}>Mã vận đơn (AWB)
+            <input aria-label="Mã vận đơn AWB quay video" value={videoAwbCode} onChange={e => setVideoAwbCode(e.target.value)} placeholder="VD: SPX05829" style={{ minHeight: 34, height: 34, width: '100%', padding: '4px 8px', fontSize: 12 }} />
           </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5 }}>Tệp Video (.mp4/.webm)
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5 }}>
+            <span style={{ fontWeight: 600, color: '#0f172a' }}>Tệp Video (.mp4/.webm)</span>
             <input
+              ref={videoFileInputRef}
+              id="packing-video-file-input"
               aria-label="Tệp video đóng gói"
               type="file"
               accept="video/*"
-              style={{ minHeight: 32, height: 32, padding: '3px 6px', fontSize: 11 }}
+              className="sr-only"
               onChange={e => {
                 const file = e.target.files?.[0] ?? null;
                 setSelectedVideoFile(file);
                 if (file && file.size > 0) setVideoSizeMb(String(Math.max(0.1, Math.round((file.size / (1024 * 1024)) * 10) / 10)));
               }}
             />
-          </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="ui-btn ui-btn-secondary"
+                data-testid="btn-pick-packing-video"
+                onClick={() => videoFileInputRef.current?.click()}
+                style={{ minHeight: 44, padding: '6px 10px', fontSize: 12, whiteSpace: 'nowrap' }}
+              >
+                Chọn tệp video (.mp4/.webm)
+              </button>
+              <span style={{ fontSize: 11.5, color: selectedVideoFile ? '#0f172a' : '#475569', fontWeight: selectedVideoFile ? 600 : 400 }}>
+                {selectedVideoFile ? selectedVideoFile.name : 'Chưa chọn tệp nào'}
+              </span>
+            </div>
+          </div>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11.5 }}>Thời lượng (giây)
             <input aria-label="Thời lượng video (giây)" type="number" min="1" placeholder="VD: 45" value={videoDurationSec} onChange={e => setVideoDurationSec(e.target.value)} style={{ minHeight: 32, height: 32, padding: '4px 8px', fontSize: 12 }} />
           </label>

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import apiClient from '../services/apiClient';
-import { UiCard, UiPage, UiPageHeader } from '../ui/ProductionUi';
+import { UiCard, UiErrorBanner, UiPage, UiPageHeader, UiSkeleton } from '../ui/ProductionUi';
 import {
-  buildClientVietQrPayload, buildPlanDowngradeWarning, extractErrorText,
+  buildClientVietQrPayload, buildPlanDowngradeWarning, extractStructuredError,
   formatVietQrTransferContent, normalizeSaasCompanyName, normalizeSaasTaxCode,
   normalizeTransferReference, parseBillingSubscriptionResponse,
   resolveInvoiceStatusBadge, resolveNextBillingCycle, resolveQuotaTierLabel,
-  resolveSubscriptionStatusLabel, SAAS_PLAN_CATALOG, type BillingState, type InvoiceRecord,
+  resolveSubscriptionStatusLabel, SAAS_PLAN_CATALOG, type BillingState, type InvoiceRecord, type StructuredBillingError,
 } from '../modules/governance/SaasBillingHelpers';
 import { SaasBillingSummaryAndQuotas } from '../modules/governance/SaasBillingSummaryAndQuotas';
 import { SaasBillingTaxProfileCard } from '../modules/governance/SaasBillingTaxProfileCard';
@@ -29,10 +29,12 @@ const PLAN_PRICES: Record<'STARTER' | 'GROWTH' | 'ENTERPRISE', number> = { START
 
 const SaasBilling = () => {
   const [loading, setLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [busy, setBusy] = useState(false);
   const [checkingPayment, setCheckingPayment] = useState(false);
   const [isQrPanelOpen, setIsQrPanelOpen] = useState(false);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState<StructuredBillingError | null>(null);
+  const [actionError, setActionError] = useState<StructuredBillingError | null>(null);
   const [notice, setNotice] = useState('');
   const [copiedField, setCopiedField] = useState<'account' | 'amount' | 'content' | null>(null);
   const [editingTaxCode, setEditingTaxCode] = useState(false);
@@ -97,6 +99,7 @@ const SaasBilling = () => {
 
   const applyBillingData = (bd: Record<string, unknown>) => {
     const parsed = parseBillingSubscriptionResponse(bd);
+    setHasLoadedOnce(true);
     setSelectedPlanCode(parsed.activeTargetPlan);
     setTaxCodeDraft(parsed.resolvedTaxCode);
     setBuyerCompanyName((prev) => normalizeSaasCompanyName(prev || parsed.resolvedCompanyName));
@@ -105,14 +108,24 @@ const SaasBilling = () => {
   };
 
   const loadSubscription = useCallback(async () => {
-    setLoading(true); setError('');
+    setLoading(true);
+    setLoadError(null);
+    setActionError(null);
     try {
       const res = await apiClient
         .get<Record<string, unknown>>('/api/v1/permissions/saas/subscription-billing')
         .catch(() => apiClient.get<Record<string, unknown>>('/api/v1/saas-billing/subscription'));
-      if (res?.data) applyBillingData(res.data);
+      if (res?.data) {
+        applyBillingData(res.data);
+        setLoadError(null);
+      }
     } catch (err) {
-      setError(extractErrorText(err, 'Không thể tải thông tin gói dịch vụ SaaS.'));
+      setLoadError(
+        extractStructuredError(
+          err,
+          'Không thể tải thông tin gói dịch vụ SaaS. Vui lòng kiểm tra kết nối và thử lại.',
+        ),
+      );
     } finally {
       setLoading(false);
     }
@@ -128,8 +141,8 @@ const SaasBilling = () => {
   const handleSelectPlan = (targetPlan: 'STARTER' | 'GROWTH' | 'ENTERPRISE') => {
     const targetSpec = SAAS_PLAN_CATALOG.find((p) => p.code === targetPlan);
     const warning = targetSpec ? buildPlanDowngradeWarning(targetSpec, billing) : null;
-    if (warning) { setError(warning); return; }
-    setError('');
+    if (warning) { setActionError({ message: warning }); return; }
+    setActionError(null);
     setSelectedPlanCode(targetPlan);
     const matchingUnpaid = billing.recentInvoices.find((inv) => inv.status.toUpperCase() === 'UNPAID' && inv.planCode.toUpperCase() === targetPlan);
     const planPrice = targetSpec?.priceVnd ?? 1490000;
@@ -153,9 +166,9 @@ const SaasBilling = () => {
 
   const saveTaxCode = () => {
     const rawTrimmed = taxCodeDraft.trim();
-    if (!rawTrimmed) { setError('Vui lòng nhập mã số thuế doanh nghiệp hợp lệ.'); return; }
+    if (!rawTrimmed) { setActionError({ message: 'Vui lòng nhập mã số thuế doanh nghiệp hợp lệ.' }); return; }
     const cleanTax = normalizeSaasTaxCode(rawTrimmed);
-    setError('');
+    setActionError(null);
     setTaxCodeDraft(cleanTax);
     setBilling((prev) => ({ ...prev, taxCode: cleanTax }));
     setEditingTaxCode(false);
@@ -165,7 +178,7 @@ const SaasBilling = () => {
   const saveSaasTaxProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (busy) return;
-    setBusy(true); setError(''); setNotice('');
+    setBusy(true); setActionError(null); setNotice('');
     try {
       const cleanTax = normalizeSaasTaxCode(taxCodeDraft);
       const cleanCompany = normalizeSaasCompanyName(buyerCompanyName);
@@ -177,7 +190,7 @@ const SaasBilling = () => {
       setBilling((prev) => ({ ...prev, taxCode: cleanTax || prev.taxCode }));
       setNotice(`Đã cập nhật Hồ sơ Thuế Doanh nghiệp Thuê bao (Thông tư 86/2024/TT-BTC): ${cleanTax}.`);
     } catch (err) {
-      setError(extractErrorText(err, 'Không thể lưu hồ sơ thuế doanh nghiệp thuê bao.'));
+      setActionError(extractStructuredError(err, 'Không thể lưu hồ sơ thuế doanh nghiệp thuê bao.'));
     } finally {
       setBusy(false);
     }
@@ -194,9 +207,9 @@ const SaasBilling = () => {
     const targetPlan = overridePlanCode ?? selectedPlanCode;
     const targetSpec = SAAS_PLAN_CATALOG.find((p) => p.code === targetPlan);
     const warning = targetSpec ? buildPlanDowngradeWarning(targetSpec, billing) : null;
-    if (warning) { setError(warning); return; }
+    if (warning) { setActionError({ message: warning }); return; }
     if (overridePlanCode) setSelectedPlanCode(overridePlanCode);
-    setIsQrPanelOpen(true); setBusy(true); setError(''); setNotice('');
+    setIsQrPanelOpen(true); setBusy(true); setActionError(null); setNotice('');
     const targetLabel = targetPlan === 'STARTER' ? 'Gói Khởi đầu' : targetPlan === 'ENTERPRISE' ? 'Gói Doanh nghiệp' : 'Gói Tăng trưởng';
     try {
       const res = await apiClient.post<Record<string, unknown>>('/api/v1/permissions/saas/subscription-billing/create-vietqr-invoice', {
@@ -242,7 +255,7 @@ const SaasBilling = () => {
       });
       setNotice(`Đã khởi tạo mã thanh toán VietQR tự động cho ${targetLabel} (Nội dung CK: ${cleanTransferContent}).`);
     } catch (err) {
-      setError(extractErrorText(err, 'Không thể khởi tạo hóa đơn thanh toán VietQR.'));
+      setActionError(extractStructuredError(err, 'Không thể khởi tạo hóa đơn thanh toán VietQR.'));
     } finally {
       setBusy(false);
     }
@@ -255,7 +268,7 @@ const SaasBilling = () => {
 
   const checkPaymentStatus = async () => {
     if (busy || checkingPayment) return;
-    setBusy(true); setCheckingPayment(true); setError(''); setNotice('');
+    setBusy(true); setCheckingPayment(true); setActionError(null); setNotice('');
     const checkedInvoiceCode = vietQrInvoice.invoiceCode || 'hiện tại';
     try {
       const res = await apiClient
@@ -263,6 +276,7 @@ const SaasBilling = () => {
         .catch(() => apiClient.get<Record<string, unknown>>('/api/v1/saas-billing/subscription'));
       if (res?.data) {
         applyBillingData(res.data);
+        setLoadError(null);
         const statusLabel = resolveSubscriptionStatusLabel(String(res.data.subscriptionStatus ?? res.data.status ?? 'ACTIVE'));
         const rawInvoices = Array.isArray(res.data.recentInvoices) ? (res.data.recentInvoices as Array<Record<string, unknown>>) : [];
         const matchedPaid = rawInvoices.some((inv) => String(inv.invoiceCode ?? '') === checkedInvoiceCode && String(inv.status ?? '').toUpperCase() === 'PAID');
@@ -274,7 +288,7 @@ const SaasBilling = () => {
         }
       }
     } catch (err) {
-      setError(extractErrorText(err, 'Không thể kiểm tra trạng thái giao dịch từ máy chủ.'));
+      setActionError(extractStructuredError(err, 'Không thể kiểm tra trạng thái giao dịch từ máy chủ.'));
     } finally {
       setBusy(false); setCheckingPayment(false);
     }
@@ -282,7 +296,7 @@ const SaasBilling = () => {
 
   const confirmVietQrWebhook = async () => {
     if (busy) return;
-    setBusy(true); setError(''); setNotice('');
+    setBusy(true); setActionError(null); setNotice('');
     try {
       const res = await apiClient.post<Record<string, unknown>>('/api/v1/permissions/saas/subscription-billing/webhook-vietqr', {
         invoiceCode: vietQrInvoice.invoiceCode || undefined, planCode: selectedPlanCode,
@@ -295,7 +309,7 @@ const SaasBilling = () => {
       await loadSubscription();
       setVietQrInvoice((prev) => ({ ...prev, status: 'PAID' }));
     } catch (err) {
-      setError(extractErrorText(err, 'Không thể xác nhận thanh toán tự động qua Webhook.'));
+      setActionError(extractStructuredError(err, 'Không thể xác nhận thanh toán tự động qua Webhook.'));
     } finally {
       setBusy(false);
     }
@@ -345,6 +359,21 @@ const SaasBilling = () => {
     { key: 'users', title: 'Tài khoản nhân sự', unit: 'tài khoản nhân sự', used: billing.activeUsers, max: billing.maxUsers, tier: userTier },
   ];
 
+  if (loading && !hasLoadedOnce && !loadError) {
+    return (
+      <UiPage className="saas-billing-compact-page">
+        <UiPageHeader
+          eyebrow="Quản trị & Gói dịch vụ SaaS"
+          title="Gói thuê bao & Thanh toán SaaS"
+          description="Theo dõi chu kỳ cước, hạn mức vận hành theo thời gian thực và thanh toán nâng cấp tự động qua chuyển khoản Napas247 VietQR."
+        />
+        <UiCard title="Đang đồng bộ dữ liệu gói thuê bao & hạn mức vận hành">
+          <UiSkeleton lines={6} label="Đang tải thông tin gói dịch vụ SaaS..." data-testid="saas-billing-loading-skeleton" />
+        </UiCard>
+      </UiPage>
+    );
+  }
+
   return (
     <UiPage className="saas-billing-compact-page">
       <UiPageHeader
@@ -363,13 +392,31 @@ const SaasBilling = () => {
           </button>
         </div>
       ) : null}
-      {error && <div role="alert">{error}</div>}
-      {loading && <p role="status">Đang tải thông tin gói dịch vụ SaaS...</p>}
+      {loadError && (
+        <UiErrorBanner
+          data-testid="saas-billing-error-banner"
+          title="Không thể tải dữ liệu gói thuê bao SaaS"
+          message={loadError.message}
+          errorCode={loadError.errorCode}
+          correlationId={loadError.correlationId}
+          onRetry={() => void loadSubscription()}
+        />
+      )}
+      {actionError && (
+        <UiErrorBanner
+          data-testid="saas-billing-action-error-banner"
+          message={actionError.message}
+          errorCode={actionError.errorCode}
+          correlationId={actionError.correlationId}
+        />
+      )}
+      {loading && <UiSkeleton lines={4} label="Đang tải thông tin gói dịch vụ SaaS..." data-testid="saas-billing-loading-skeleton" />}
 
       <SaasBillingSummaryAndQuotas
         billing={billing} busy={busy} editingTaxCode={editingTaxCode} setEditingTaxCode={setEditingTaxCode}
         taxCodeDraft={taxCodeDraft} setTaxCodeDraft={setTaxCodeDraft} saveTaxCode={saveTaxCode}
         loadSubscription={loadSubscription} quotaGaugeItems={quotaGaugeItems} createVietQrInvoice={createVietQrInvoice}
+        hasLoadError={Boolean(loadError)} onRetryLoad={() => void loadSubscription()}
       />
 
       <div className="saas-billing-mid-grid" style={{ alignItems: 'start' }}>
@@ -387,13 +434,20 @@ const SaasBilling = () => {
           isInvoicePaid={isInvoicePaid} isInvoiceExpired={isInvoiceExpired} remainingSeconds={remainingSeconds}
           displayAmountVnd={displayAmountVnd} copiedField={copiedField} copyToClipboard={copyToClipboard}
           vietQrInvoice={vietQrInvoice} hasActiveMatchingInvoice={hasActiveMatchingInvoice}
+          hasLoadError={Boolean(loadError) && !hasLoadedOnce}
           autoRefreshQr={autoRefreshQr} setAutoRefreshQr={setAutoRefreshQr}
           showQaWebhookSimulator={showQaWebhookSimulator} notice={notice}
           checkPaymentStatus={checkPaymentStatus} createVietQrInvoice={createVietQrInvoice} confirmVietQrWebhook={confirmVietQrWebhook}
         />
       </div>
 
-      <SaasBillingInvoiceHistoryCard billing={billing} currentCycleText={currentCycleText} nextCycle={nextCycle} />
+      <SaasBillingInvoiceHistoryCard
+        billing={billing}
+        currentCycleText={currentCycleText}
+        nextCycle={nextCycle}
+        hasLoadError={Boolean(loadError)}
+        onRetryLoad={() => void loadSubscription()}
+      />
 
       <UiCard
         title="Bảng gói cước thuê bao SaaS & thanh toán gia hạn VietQR"

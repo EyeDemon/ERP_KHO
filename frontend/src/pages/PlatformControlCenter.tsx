@@ -2,6 +2,7 @@ import React, { useCallback, useContext, useEffect, useState } from 'react';
 import { useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import apiClient from '../services/apiClient';
+import { UiErrorBanner } from '../ui/ProductionUi';
 import { clearActiveImpersonationState, setActiveImpersonationState } from '../config/portalMode';
 import { PlatformTenantsAndQuotaSection, type PlatformTenantItem } from '../modules/platform/PlatformTenantsAndQuotaSection';
 import { PlatformHealthAndWorkersSection, type PlatformBillingInvoiceItem, type PlatformIntegrationMetrics, type PlatformWorkerHealthItem } from '../modules/platform/PlatformHealthAndWorkersSection';
@@ -54,6 +55,7 @@ export const PlatformControlCenter: React.FC = () => {
   const [beneficiary, setBeneficiary] = useState<PlatformBeneficiaryInfo>(EMPTY_PLATFORM_BENEFICIARY);
   const [selectedSupportTenantId, setSelectedSupportTenantId] = useState<number>(1);
   const [activeImpersonation, setActiveImpersonation] = useState<ActiveImpersonationSession | null>(() => mapStoredToSession(actorUsername));
+  const [loadError, setLoadError] = useState<{ message: string; errorCode?: string; correlationId?: string } | null>(null);
   const [notice, setNotice] = useState<{ tone: 'success' | 'warning' | 'danger' | 'info'; message: string; errorCode?: string; correlationId?: string } | null>(null);
 
   useEffect(() => {
@@ -64,6 +66,8 @@ export const PlatformControlCenter: React.FC = () => {
   }, [actorUsername]);
 
   const loadPlatformData = useCallback(async () => {
+    setLoadError(null);
+    setNotice((prev) => (prev?.tone === 'danger' ? null : prev));
     let authFailure: { message: string; errorCode: string; correlationId?: string } | null = null;
     const captureFetch = async (url: string) => {
       try {
@@ -71,11 +75,15 @@ export const PlatformControlCenter: React.FC = () => {
       } catch (err) {
         const anyErr = err as { response?: { status?: number; headers?: Record<string, string>; data?: { errorCode?: string; code?: string; message?: string; correlationId?: string } } };
         const st = anyErr?.response?.status ?? 0;
-        if ((st === 401 || st === 403) && !authFailure) {
+        if ((st === 401 || st === 403 || st >= 500) && !authFailure) {
           const d = anyErr?.response?.data;
+          const rawMsg = (d?.message || '')
+            .replace(/\s*\(CorrelationId:\s*[^)]+\)/gi, '')
+            .replace(/\s*\[[A-Za-z0-9_.:-]{2,}\]\s*$/g, '')
+            .trim();
           authFailure = {
-            message: d?.message || 'Tài khoản không có quyền truy cập dữ liệu Quản trị nền tảng.',
-            errorCode: d?.errorCode || d?.code || String(st),
+            message: rawMsg || (st === 401 || st === 403 ? 'Tài khoản không có quyền truy cập dữ liệu Quản trị nền tảng.' : 'Không thể tải dữ liệu Quản trị nền tảng. Vui lòng thử lại sau.'),
+            errorCode: d?.errorCode || d?.code || `HTTP_${st}`,
             correlationId: anyErr?.response?.headers?.['x-correlation-id'] || d?.correlationId,
           };
         }
@@ -93,7 +101,9 @@ export const PlatformControlCenter: React.FC = () => {
     ]);
 
     if (authFailure) {
-      setNotice({ tone: 'danger', ...(authFailure as { message: string; errorCode: string; correlationId?: string }) });
+      const resolvedFailure = authFailure as { message: string; errorCode: string; correlationId?: string };
+      setLoadError(resolvedFailure);
+      setNotice({ tone: 'danger', ...resolvedFailure });
     }
 
     if (dashRes?.data) {
@@ -328,19 +338,35 @@ export const PlatformControlCenter: React.FC = () => {
   return (
     <div data-testid="platform-control-center-page" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <span data-testid="platform-active-role-badge" style={{ display: 'none' }}>{activeRole}</span>
-      {notice ? (
+      {loadError ? (
+        <UiErrorBanner
+          data-testid="platform-action-notice"
+          title="Không thể tải dữ liệu Quản trị nền tảng"
+          message={loadError.message}
+          errorCode={loadError.errorCode}
+          correlationId={loadError.correlationId}
+          onRetry={() => void loadPlatformData()}
+        />
+      ) : notice?.tone === 'danger' ? (
+        <UiErrorBanner
+          data-testid="platform-action-notice"
+          message={notice.message}
+          errorCode={notice.errorCode}
+          correlationId={notice.correlationId}
+        />
+      ) : notice ? (
         <div
-          role={notice.tone === 'danger' ? 'alert' : 'status'}
-          aria-live={notice.tone === 'danger' ? 'assertive' : 'polite'}
+          role="status"
+          aria-live="polite"
           data-testid="platform-action-notice"
           style={{
             padding: '10px 14px', borderRadius: 8, fontSize: 12.5, fontWeight: 600, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8,
-            backgroundColor: notice.tone === 'warning' ? '#fffbeb' : notice.tone === 'danger' ? '#fef2f2' : '#ecfdf5',
-            color: notice.tone === 'warning' ? '#92400e' : notice.tone === 'danger' ? '#991b1b' : '#047857',
-            border: `1px solid ${notice.tone === 'warning' ? '#fde68a' : notice.tone === 'danger' ? '#fecaca' : '#a7f3d0'}`,
+            backgroundColor: notice.tone === 'warning' ? '#fffbeb' : '#ecfdf5',
+            color: notice.tone === 'warning' ? '#92400e' : '#047857',
+            border: `1px solid ${notice.tone === 'warning' ? '#fde68a' : '#a7f3d0'}`,
           }}
         >
-          {notice.tone === 'danger' || notice.tone === 'warning' ? (
+          {notice.tone === 'warning' ? (
             <AlertCircle size={16} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0 }} />
           ) : (
             <CheckCircle2 size={16} strokeWidth={2} aria-hidden="true" style={{ flexShrink: 0 }} />
@@ -350,11 +376,6 @@ export const PlatformControlCenter: React.FC = () => {
           ) : (
             <span>{notice.message}</span>
           )}
-          {notice.errorCode ? (
-            <code className="ui-err-code">
-              {notice.errorCode}{notice.correlationId ? ` • ${notice.correlationId}` : ''}
-            </code>
-          ) : null}
         </div>
       ) : null}
 
@@ -369,6 +390,8 @@ export const PlatformControlCenter: React.FC = () => {
           rawDashboardEvents={rawDashboardEvents}
           auditLogs={auditLogs}
           invoices={invoices}
+          hasLoadError={Boolean(loadError)}
+          onRetryLoad={() => void loadPlatformData()}
           onStopImpersonation={handleStopImpersonation}
           onNavigate={(targetPath) => navigate(targetPath)}
         />
@@ -377,6 +400,7 @@ export const PlatformControlCenter: React.FC = () => {
       <PlatformTenantsAndQuotaSection
         tenants={tenants} showTenantsTable={showTenantsTable} showQuotaView={showQuotaView}
         canWriteTenantStatus={canWriteTenantStatus} canWriteQuota={canWriteQuota} canImpersonate={canImpersonate}
+        hasLoadError={Boolean(loadError)} onRetryLoad={() => void loadPlatformData()}
         onConfirmTenantStatus={handleConfirmTenantStatus} onSaveTenantQuota={handleSaveTenantQuota}
         onLaunchSupportForTenant={(tid) => { setSelectedSupportTenantId(tid); navigate('/platform/support'); }}
         onNavigatePath={(targetPath) => navigate(targetPath)}
@@ -390,6 +414,8 @@ export const PlatformControlCenter: React.FC = () => {
         canWriteBilling={canWriteBilling}
         activeRole={activeRole}
         currentActor={actorUsername}
+        hasLoadError={Boolean(loadError)}
+        onRetryLoad={() => void loadPlatformData()}
         onReconcileInvoice={handleReconcileInvoice}
         onResetReconcileInvoice={handleResetReconcileInvoice}
       />

@@ -26,9 +26,11 @@ export function PartnerDebtStorageSnapshotCard({
       title="Đối Soát & Chốt Số Dư Lưu Kho 3PL Hàng Ngày (Theo Pallet • Thể tích m³ • Vị trí kệ)"
       subtitle="Tổng hợp sản lượng chiếm chỗ thực tế theo Chủ hàng để tính phí lưu kho tự động cuối ngày và lũy kế tháng"
     >
-      <div className="ui-inline-wrap" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <div className="ui-inline-wrap" style={{ gap: 8 }}>
-          <UiBadge tone="success">Định mức tính phí: Ngày-Pallet • Ngày-m³ • Ngày-Vị trí kệ</UiBadge>
+      <div className="ui-inline-wrap" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, minWidth: 0, maxWidth: '100%' }}>
+        <div className="ui-inline-wrap" style={{ gap: 8, minWidth: 0, maxWidth: '100%' }}>
+          <span className="ui-badge success" style={{ whiteSpace: 'normal', maxWidth: '100%', flexShrink: 1, lineHeight: 1.35, overflowWrap: 'anywhere' }}>
+            Định mức tính phí: Ngày-Pallet • Ngày-m³ • Ngày-Vị trí kệ
+          </span>
           <UiBadge>{`Số chủ hàng đang lưu kho: ${storageSnapshots.length}`}</UiBadge>
         </div>
         <div className="ui-inline-wrap" style={{ gap: 8 }}>
@@ -36,6 +38,7 @@ export function PartnerDebtStorageSnapshotCard({
             type="button"
             data-testid="btn-capture-3pl-snapshot"
             disabled={snapshotBusy}
+            title={snapshotBusy ? 'Hệ thống đang chốt số dư lưu kho 3PL hôm nay' : undefined}
             onClick={() => void onCaptureSnapshot()}
           >
             {snapshotBusy ? 'Đang chốt số dư...' : 'Chốt Số Dư Lưu Kho Hôm Nay'}
@@ -44,6 +47,7 @@ export function PartnerDebtStorageSnapshotCard({
             type="button"
             className="ui-btn-secondary"
             disabled={snapshotBusy}
+            title={snapshotBusy ? 'Hệ thống đang tải lại số dư lưu kho 3PL' : undefined}
             onClick={() => void onReloadSnapshots()}
           >
             Tải lại Số Dư Lưu Kho 3PL

@@ -4,6 +4,7 @@ import { RefreshCw, Unlock } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import { currentRole } from '../services/authorization';
 import { conflictErrorMessage, extractConflictCode } from '../services/permissionPresentation';
+import { useIsMobileViewport } from '../modules/outbound/OutboundSalesOrderMobileCards';
 import {
   UiBadge,
   UiCard,
@@ -58,19 +59,19 @@ const toneOf = (status: string): 'neutral' | 'success' | 'warning' | 'danger' =>
 
 const reservationStatusLabel = (status: string) => ({
   Active: 'Đang giữ',
-  PartiallyConsumed: 'Đã xuất một phần',
-  PartiallyAllocated: 'Đã phân bổ một phần',
+  PartiallyConsumed: 'Xuất một phần',
+  PartiallyAllocated: 'Phân bổ một phần',
   Allocated: 'Đã phân bổ',
-  Consumed: 'Đã xuất kho',
+  Consumed: 'Đã tiêu thụ',
   Released: 'Đã giải phóng',
   Expired: 'Đã hết hạn',
   Cancelled: 'Đã hủy',
 }[status] ?? status);
 
 const sourceTypeLabel = (sourceType: string) => ({
-  ExportReceipt: 'Phiếu xuất kho',
   SalesOrder: 'Đơn bán hàng',
-  StockTransfer: 'Phiếu điều chuyển',
+  ExportReceipt: 'Phiếu xuất kho',
+  TransferOrder: 'Lệnh chuyển kho',
   OutboundOrder: 'Đơn xuất hàng',
   Manual: 'Giữ hàng thủ công',
 }[sourceType] ?? sourceType);
@@ -78,6 +79,7 @@ const sourceTypeLabel = (sourceType: string) => ({
 export default function StockReservations() {
   const inRouter = useInRouterContext();
   const canOperate = currentRole() !== 'Viewer';
+  const isMobile = useIsMobileViewport();
   const [data, setData] = useState<Page>({ items: [], totalRecords: 0, pageIndex: 1, pageSize: 20 });
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
@@ -181,7 +183,12 @@ export default function StockReservations() {
         title="Giữ hàng"
         description="Theo dõi lượng tồn đã cam kết theo kho, sản phẩm, chứng từ nguồn và thời hạn giữ hàng."
         actions={canOperate ? (
-          <button type="button" disabled={busy} onClick={() => void expire()}>
+          <button
+            type="button"
+            disabled={busy}
+            title={busy ? 'Hệ thống đang xử lý tác vụ dọn bản ghi hết hạn' : undefined}
+            onClick={() => void expire()}
+          >
             <RefreshCw size={16} aria-hidden="true" /> Dọn hết hạn
           </button>
         ) : undefined}
@@ -241,7 +248,12 @@ export default function StockReservations() {
           <UiMetric value={expiringSoonCount} label="Bản ghi sắp hết hạn (24h)" />
         </UiMetricGrid>
         <div className="ui-inline-actions" style={{ marginTop: 8 }}>
-          <button type="button" disabled={sweepBusy || busy} onClick={() => void sweepExpiredPreview()}>
+          <button
+            type="button"
+            disabled={sweepBusy || busy}
+            title={sweepBusy || busy ? 'Hệ thống đang rà soát bản ghi giữ hàng sắp hết hạn' : undefined}
+            onClick={() => void sweepExpiredPreview()}
+          >
             Rà soát &amp; Cảnh báo Giữ hàng Sắp hết hạn
           </button>
           {sweepPreview && (
@@ -271,46 +283,44 @@ export default function StockReservations() {
       </UiToolbar>
 
       <UiCard title="Danh sách giữ hàng">
-        <UiTableScroll>
-          <table className="ui-table-compact" aria-label="Danh sách giữ hàng">
-            <thead>
-              <tr>
-                <th style={{ whiteSpace: 'nowrap', minWidth: 155 }}>Mã giữ</th>
-                <th style={{ minWidth: 145 }}>Sản phẩm</th>
-                <th style={{ minWidth: 110 }}>Kho</th>
-                <th style={{ minWidth: 115 }}>Nguồn</th>
-                <th style={{ minWidth: 86, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Ban đầu</th>
-                <th style={{ minWidth: 86, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Còn giữ</th>
-                <th style={{ minWidth: 96, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Đã phân bổ</th>
-                <th style={{ minWidth: 108, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Chưa phân bổ</th>
-                <th style={{ minWidth: 125, whiteSpace: 'nowrap' }}>Hết hạn</th>
-                <th style={{ minWidth: 105, whiteSpace: 'nowrap' }}>Trạng thái</th>
-                {canOperate && <th style={{ whiteSpace: 'nowrap', minWidth: 115 }}>Thao tác</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {loading && data.items.length === 0 ? (
-                <tr><td className="ui-empty-cell" colSpan={canOperate ? 11 : 10}>Đang tải...</td></tr>
-              ) : data.items.length === 0 ? (
-                <tr><td className="ui-empty-cell" colSpan={canOperate ? 11 : 10}>Không có bản ghi giữ hàng phù hợp.</td></tr>
-              ) : data.items.map((item) => (
-                <tr key={item.id}>
-                  <td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.reservationCode}</strong></td>
-                  <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.productCode}</strong> – {item.productName}</td>
-                  <td>{item.warehouseName}</td>
-                  <td>{sourceTypeLabel(item.sourceType)}{item.sourceCode ? ` / ${item.sourceCode}` : ''}</td>
-                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.quantity}</td>
-                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}><strong>{item.remainingQuantity}</strong></td>
-                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.allocatedQuantity}</td>
-                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.allocatableQuantity}</td>
-                  <td>{new Date(item.expiresAt).toLocaleString('vi-VN')}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}><UiBadge tone={toneOf(item.status)}>{reservationStatusLabel(item.status)}</UiBadge></td>
-                  {canOperate && <td style={{ whiteSpace: 'nowrap' }}>
+        {isMobile ? (
+          <div data-testid="stock-reservations-mobile-cards" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 10 }}>
+            {loading && data.items.length === 0 ? (
+              <p role="status">Đang tải...</p>
+            ) : data.items.length === 0 ? (
+              <p>Không có bản ghi giữ hàng phù hợp.</p>
+            ) : data.items.map((item) => (
+              <article
+                key={item.id}
+                data-testid={`stock-reservation-card-${item.id}`}
+                style={{ padding: 12, borderRadius: 10, border: '1px solid #cbd5e1', background: '#ffffff', display: 'grid', gap: 6, minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+                  <strong className="ui-code" style={{ fontSize: 13.5, color: '#0f172a' }}>{item.reservationCode}</strong>
+                  <UiBadge tone={toneOf(item.status)}>{reservationStatusLabel(item.status)}</UiBadge>
+                </div>
+                <div style={{ fontSize: 12.5, color: '#0f172a', overflowWrap: 'anywhere' }}>
+                  <strong className="ui-code">{item.productCode}</strong> – {item.productName}
+                </div>
+                <div style={{ fontSize: 12, color: '#475569', overflowWrap: 'anywhere' }}>
+                  {item.warehouseName} • {sourceTypeLabel(item.sourceType)}{item.sourceCode ? ` / ${item.sourceCode}` : ''}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '4px 10px', fontSize: 12.5, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                  <span>Ban đầu: <strong>{item.quantity}</strong></span>
+                  <span>Còn giữ: <strong>{item.remainingQuantity}</strong></span>
+                  <span>Đã phân bổ: <strong>{item.allocatedQuantity}</strong></span>
+                  <span>Chưa phân bổ: <strong>{item.allocatableQuantity}</strong></span>
+                </div>
+                <div style={{ fontSize: 12, color: '#475569', fontVariantNumeric: 'tabular-nums' }}>
+                  Hết hạn: {new Date(item.expiresAt).toLocaleString('vi-VN')}
+                </div>
+                {canOperate ? (
+                  <div style={{ paddingTop: 4 }}>
                     {item.status === 'Active' && item.sourceType === 'Manual' ? (
                       <button
                         type="button"
                         disabled={busy}
-                        style={{ whiteSpace: 'nowrap' }}
+                        title={busy ? 'Hệ thống đang xử lý tác vụ giải phóng giữ hàng' : `Giải phóng ${item.reservationCode}`}
                         aria-label={`Giải phóng ${item.reservationCode}`}
                         onClick={() => void release(item)}
                       >
@@ -320,19 +330,91 @@ export default function StockReservations() {
                       <span title="Bản ghi giữ hàng này thuộc quyền quản lý của chứng từ gốc. Vui lòng thao tác trực tiếp trên Phiếu xuất hoặc Đơn hàng.">
                         <UiBadge tone="neutral">Quản lý theo chứng từ</UiBadge>
                       </span>
-                    ) : '—'}
-                  </td>}
+                    ) : null}
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        ) : (
+          <UiTableScroll>
+            <table className="ui-table-compact" aria-label="Danh sách giữ hàng">
+              <thead>
+                <tr>
+                  <th style={{ whiteSpace: 'nowrap', minWidth: 96 }}>Mã giữ</th>
+                  <th style={{ minWidth: 128 }}>Sản phẩm</th>
+                  <th style={{ minWidth: 92 }}>Kho</th>
+                  <th style={{ minWidth: 96 }}>Nguồn</th>
+                  <th style={{ minWidth: 76, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Ban đầu</th>
+                  <th style={{ minWidth: 76, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Còn giữ</th>
+                  <th style={{ minWidth: 82, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Đã PB</th>
+                  <th style={{ minWidth: 86, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>Chưa PB</th>
+                  <th style={{ minWidth: 96 }}>Hết hạn</th>
+                  <th style={{ minWidth: 92, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                  {canOperate && <th style={{ whiteSpace: 'nowrap', minWidth: 148 }}>Thao tác</th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </UiTableScroll>
+              </thead>
+              <tbody>
+                {loading && data.items.length === 0 ? (
+                  <tr><td className="ui-empty-cell" colSpan={canOperate ? 11 : 10}>Đang tải...</td></tr>
+                ) : data.items.length === 0 ? (
+                  <tr><td className="ui-empty-cell" colSpan={canOperate ? 11 : 10}>Không có bản ghi giữ hàng phù hợp.</td></tr>
+                ) : data.items.map((item) => (
+                  <tr key={item.id}>
+                    <td style={{ whiteSpace: 'nowrap' }}><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.reservationCode}</strong></td>
+                    <td><strong className="ui-code" style={{ whiteSpace: 'nowrap' }}>{item.productCode}</strong> – {item.productName}</td>
+                    <td>{item.warehouseName}</td>
+                    <td>{sourceTypeLabel(item.sourceType)}{item.sourceCode ? ` / ${item.sourceCode}` : ''}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.quantity}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}><strong>{item.remainingQuantity}</strong></td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.allocatedQuantity}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{item.allocatableQuantity}</td>
+                    <td style={{ fontVariantNumeric: 'tabular-nums' }}>{new Date(item.expiresAt).toLocaleString('vi-VN')}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}><UiBadge tone={toneOf(item.status)}>{reservationStatusLabel(item.status)}</UiBadge></td>
+                    {canOperate && <td style={{ whiteSpace: 'nowrap' }}>
+                      {item.status === 'Active' && item.sourceType === 'Manual' ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          title={busy ? 'Hệ thống đang xử lý tác vụ giải phóng giữ hàng' : `Giải phóng ${item.reservationCode}`}
+                          style={{ whiteSpace: 'nowrap' }}
+                          aria-label={`Giải phóng ${item.reservationCode}`}
+                          onClick={() => void release(item)}
+                        >
+                          <Unlock size={16} aria-hidden="true" /> Giải phóng
+                        </button>
+                      ) : ['Active', 'PartiallyConsumed', 'PartiallyAllocated', 'Allocated'].includes(item.status) && item.sourceType !== 'Manual' ? (
+                        <span title="Bản ghi giữ hàng này thuộc quyền quản lý của chứng từ gốc. Vui lòng thao tác trực tiếp trên Phiếu xuất hoặc Đơn hàng.">
+                          <UiBadge tone="neutral"><span style={{ whiteSpace: 'nowrap' }}>Quản lý theo chứng từ</span></UiBadge>
+                        </span>
+                      ) : '—'}
+                    </td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </UiTableScroll>
+        )}
 
         {pages > 1 && (
           <div className="ui-pagination" aria-label="Phân trang giữ hàng">
-            <button type="button" disabled={loading || data.pageIndex <= 1} onClick={() => void load(data.pageIndex - 1)}>Trước</button>
+            <button
+              type="button"
+              disabled={loading || data.pageIndex <= 1}
+              title={data.pageIndex <= 1 ? 'Đang ở trang đầu tiên của danh sách giữ hàng' : undefined}
+              onClick={() => void load(data.pageIndex - 1)}
+            >
+              Trước
+            </button>
             <span>Trang {data.pageIndex} / {pages}</span>
-            <button type="button" disabled={loading || data.pageIndex >= pages} onClick={() => void load(data.pageIndex + 1)}>Sau</button>
+            <button
+              type="button"
+              disabled={loading || data.pageIndex >= pages}
+              title={data.pageIndex >= pages ? 'Đang ở trang cuối cùng của danh sách giữ hàng' : undefined}
+              onClick={() => void load(data.pageIndex + 1)}
+            >
+              Sau
+            </button>
           </div>
         )}
       </UiCard>

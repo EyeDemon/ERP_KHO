@@ -64,9 +64,11 @@ export function BusinessPartnerListSection({
           <UiMetric value={addressDeclaredCount} label="Đã chuẩn hóa địa chỉ giao nhận" />
           <UiMetric value={missingContactInfoCount} label="Thiếu thông tin liên hệ" />
         </UiMetricGrid>
-        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-          <UiBadge tone="success">Thanh toán không tiền mặt &gt;= 5.000.000 ₫ (Luật Thuế GTGT 48/2024/QH15 &amp; NĐ 181/2025/NĐ-CP)</UiBadge>
-          <span style={{ fontSize: 12.5, color: '#334155' }}>
+        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, minWidth: 0, maxWidth: '100%' }}>
+          <span className="ui-badge success" style={{ whiteSpace: 'normal', maxWidth: '100%', flexShrink: 1, lineHeight: 1.35, overflowWrap: 'anywhere' }}>
+            Thanh toán không tiền mặt &gt;= 5.000.000 ₫ (Luật Thuế GTGT 48/2024/QH15 &amp; NĐ 181/2025/NĐ-CP)
+          </span>
+          <span style={{ fontSize: 12.5, color: '#334155', overflowWrap: 'anywhere' }}>
             Chuẩn hóa Mã số thuế (10/13 số) / Mã định danh CCCD (12 số - TT 86/2024/TT-BTC) &amp; Tài khoản ngân hàng thụ hưởng.
           </span>
         </div>
@@ -169,9 +171,9 @@ export function BusinessPartnerListSection({
             Tổng số trên trang: <strong>{items.length}</strong> đối tác • Trang {page}/{pages} (tối đa 10 bản ghi/trang)
           </span>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button type="button" disabled={page <= 1} onClick={() => setPage(value => value - 1)}>Trước</button>
+            <button type="button" disabled={page <= 1} title={page <= 1 ? 'Đang ở trang đầu tiên' : undefined} onClick={() => setPage(value => value - 1)}>Trước</button>
             <span style={{ fontSize: 12.5, fontVariantNumeric: 'tabular-nums' }}>Trang {page}/{pages}</span>
-            <button type="button" disabled={page >= pages} onClick={() => setPage(value => value + 1)}>Sau</button>
+            <button type="button" disabled={page >= pages} title={page >= pages ? 'Đang ở trang cuối cùng' : undefined} onClick={() => setPage(value => value + 1)}>Sau</button>
           </div>
         </div>
       </UiCard>

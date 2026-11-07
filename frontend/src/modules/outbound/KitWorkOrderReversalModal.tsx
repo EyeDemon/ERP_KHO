@@ -83,14 +83,16 @@ export const KitWorkOrderReversalModal: React.FC<KitWorkOrderReversalModalProps>
             </div>
             <button
               type="button"
-              aria-label="Đóng hộp thoại"
+              className="ui-icon-touch-target"
+              aria-label="Đóng hộp thoại đảo lệnh lắp ráp"
+              title="Đóng hộp thoại đảo lệnh lắp ráp"
               disabled={busy}
               onClick={onClose}
               style={{
-                width: 34,
-                height: 34,
-                minWidth: 34,
-                minHeight: 34,
+                width: 40,
+                height: 40,
+                minWidth: 40,
+                minHeight: 40,
                 padding: 0,
                 borderRadius: 8,
                 border: '1px solid #cbd5e1',
@@ -103,6 +105,7 @@ export const KitWorkOrderReversalModal: React.FC<KitWorkOrderReversalModalProps>
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
+                boxSizing: 'border-box',
               }}
             >
               ×
@@ -183,24 +186,37 @@ export const KitWorkOrderReversalModal: React.FC<KitWorkOrderReversalModalProps>
               display: 'flex',
               justifyContent: 'flex-end',
               alignItems: 'center',
+              flexWrap: 'wrap',
               gap: 10,
               paddingTop: 10,
               borderTop: '1px solid #e2e8f0',
             }}
           >
+            {!isReasonValid ? (
+              <span
+                id="kit-reversal-disabled-reason"
+                data-testid="kit-reversal-disabled-reason"
+                style={{ fontSize: 12, fontWeight: 600, color: '#b45309', marginRight: 'auto' }}
+              >
+                Nhập tối thiểu 10 ký tự lý do để mở khóa xác nhận.
+              </span>
+            ) : null}
             <button
               type="button"
               className="ui-btn ui-btn-secondary"
               disabled={busy}
               onClick={onClose}
+              style={{ minHeight: 44 }}
             >
               Hủy
             </button>
             <button
               type="submit"
               data-testid="btn-confirm-kit-reversal"
+              aria-describedby={!isReasonValid ? 'kit-reversal-disabled-reason' : undefined}
               disabled={!isReasonValid || busy}
               style={{
+                minHeight: 44,
                 background: isReasonValid ? '#dc2626' : '#fca5a5',
                 color: '#ffffff',
                 borderColor: isReasonValid ? '#b91c1c' : '#fca5a5',

@@ -264,14 +264,14 @@ export default function Approvals() {
               <table className="ui-table-compact" aria-label="Hàng đợi phê duyệt">
                 <thead>
                   <tr>
-                    <th>Loại</th>
-                    <th>Mã</th>
-                    <th>Kho</th>
-                    <th>Người tạo</th>
-                    <th>Thời gian gửi</th>
-                    <th style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đã chờ</th>
-                    <th>Mức SLA</th>
-                    <th>Hành động</th>
+                    <th style={{ whiteSpace: 'nowrap', minWidth: 84 }}>Loại</th>
+                    <th style={{ whiteSpace: 'nowrap', minWidth: 92 }}>Mã</th>
+                    <th style={{ whiteSpace: 'nowrap', minWidth: 112 }}>Kho</th>
+                    <th style={{ whiteSpace: 'nowrap', minWidth: 92 }}>Người tạo</th>
+                    <th style={{ whiteSpace: 'nowrap', minWidth: 118 }}>Thời gian gửi</th>
+                    <th style={{ whiteSpace: 'nowrap', minWidth: 80, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>Đã chờ</th>
+                    <th style={{ whiteSpace: 'nowrap', minWidth: 88 }}>Mức SLA</th>
+                    <th style={{ whiteSpace: 'nowrap', minWidth: 108 }}>Hành động</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -303,7 +303,7 @@ export default function Approvals() {
                           {canApproveItem(item) && (
                             <button
                               type="button"
-                              title="Duyệt"
+                              title={busy ? 'Đang xử lý yêu cầu phê duyệt trước đó' : 'Duyệt'}
                               aria-label={`Duyệt ${item.documentCode}`}
                               disabled={busy}
                               onClick={event => {
@@ -320,7 +320,7 @@ export default function Approvals() {
                           {canRejectItem(item) && (
                             <button
                               type="button"
-                              title="Từ chối"
+                              title={busy ? 'Đang xử lý yêu cầu phê duyệt trước đó' : 'Từ chối'}
                               aria-label={`Từ chối ${item.documentCode}`}
                               disabled={busy}
                               onClick={event => {

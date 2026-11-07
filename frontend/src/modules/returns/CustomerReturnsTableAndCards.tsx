@@ -205,6 +205,7 @@ export const CustomerReturnsTableAndCards: React.FC<CustomerReturnsTableAndCards
                 data-testid={`btn-mobile-disposition-${row.returnCode}`}
                 className="ui-btn ui-btn-secondary"
                 disabled={statusUpper === 'COMPLETED'}
+                title={statusUpper === 'COMPLETED' ? 'Phiếu hàng hoàn này đã hoàn tất phân loại định đoạt' : undefined}
                 onClick={() => void onOpenDisposition(row)}
               >
                 Phân loại định đoạt

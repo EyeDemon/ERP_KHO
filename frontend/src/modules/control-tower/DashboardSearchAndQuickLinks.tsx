@@ -45,7 +45,17 @@ export function DashboardGlobalSearchCard({
           placeholder="Tìm mã SP, mã vạch, lô, sê-ri, mã phiếu..."
           style={{ flex: '1 1 360px', minWidth: 260, fontSize: 13.5 }}
         />
-        <button type="submit" disabled={searchLoading || searchQuery.trim().length < 2}>
+        <button
+          type="submit"
+          disabled={searchLoading || searchQuery.trim().length < 2}
+          title={
+            searchLoading
+              ? 'Đang thực hiện tìm kiếm toàn doanh nghiệp'
+              : searchQuery.trim().length < 2
+                ? 'Nhập tối thiểu 2 ký tự mã SP, mã vạch hoặc mã phiếu để tìm kiếm'
+                : undefined
+          }
+        >
           {searchLoading ? 'Đang tìm...' : 'Tìm kiếm'}
         </button>
         {searchResults.length > 0 && (

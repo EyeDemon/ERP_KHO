@@ -252,7 +252,18 @@ const HandoverManifests = () => {
               placeholder="Quét hoặc nhập mã vận đơn AWB..."
             />
           </label>
-          <button type="submit" data-testid="btn-scan-awb" disabled={busy || !awbInput.trim()}>
+          <button
+            type="submit"
+            data-testid="btn-scan-awb"
+            disabled={busy || !awbInput.trim()}
+            title={
+              busy
+                ? 'Hệ thống đang xác thực mã vận đơn AWB'
+                : !awbInput.trim()
+                  ? 'Quét hoặc nhập mã vận đơn AWB trước khi xác thực'
+                  : undefined
+            }
+          >
             Quét Xác thực AWB
           </button>
         </form>

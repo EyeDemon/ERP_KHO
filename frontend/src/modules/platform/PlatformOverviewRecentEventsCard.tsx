@@ -1,6 +1,6 @@
 import React from 'react';
 import { formatUserDisplayNameVi } from '../../services/permissionPresentation';
-import { UiBadge, UiCard, UiEmptyState } from '../../ui/ProductionUi';
+import { UiBadge, UiCard, UiEmptyState, UiTableScroll } from '../../ui/ProductionUi';
 import { normalizeTenantLegalNameVi, sanitizePlatformJargonVi } from './platformBillingHelpers';
 import type { PlatformBillingInvoiceItem } from './PlatformHealthAndWorkersSection';
 import type { PlatformAuditLogItem } from './PlatformSupportAndAuditSection';
@@ -22,14 +22,49 @@ interface PlatformOverviewRecentEventsCardProps {
   onViewAllAuditLogs: () => void;
 }
 
-const isAuthOrSessionEvent = (actionRaw?: string, entityRaw?: string): boolean => {
+const isAuthOrSessionEvent = (
+  actionRaw?: string | null,
+  entityRaw?: string | null,
+  labelViRaw?: string | null,
+): boolean => {
   const act = (actionRaw ?? '').trim();
   const ent = (entityRaw ?? '').trim();
+  const labelVi = (labelViRaw ?? '').trim();
+  if (/xác thực quản trị/i.test(labelVi) || /^PLATFORM_/i.test(act)) return false;
   if (!act && !ent) return false;
-  if (/^Authentication\./i.test(act)) return true;
-  if (/^(Login|Logout|Refresh|TokenRefresh|LoginSucceeded|LoginFailed)$/i.test(act)) return true;
-  if (/^UserSession$/i.test(ent)) return true;
+  if (/^(Authentication|Auth|Session|Token)\./i.test(act)) return true;
+  if (/^(Login|Logout|Refresh|RefreshToken|TokenRefresh|LoginSucceeded|LoginFailed)/i.test(act)) return true;
+  if (/^(Đăng nhập hệ thống|Làm mới phiên đăng nhập)$/i.test(act)) return true;
+  if (/^(UserSession|RefreshToken)$/i.test(ent)) return true;
   return false;
+};
+
+const VALID_EVENT_TONES = new Set<PlatformOverviewRecentEventItem['tone']>([
+  'success',
+  'warning',
+  'danger',
+  'info',
+  'neutral',
+]);
+
+const resolveEventStatusLabelVi = (
+  explicitStatus: unknown,
+  actionCode: string,
+  tone: PlatformOverviewRecentEventItem['tone'],
+  fallbackLabel: string,
+): string => {
+  if (typeof explicitStatus === 'string' && explicitStatus.trim()) {
+    return sanitizePlatformJargonVi(explicitStatus.trim());
+  }
+  const upper = actionCode.toUpperCase();
+  if (upper.includes('PENDING')) return 'Chờ đối soát';
+  if (upper.includes('RECONCILE') || upper.includes('PAID')) return 'Đã đối soát';
+  if (upper.includes('QUOTA')) return 'Đã áp dụng';
+  if (upper.includes('SUSPEND')) return 'Đã tạm khóa';
+  if (tone === 'success') return 'Hoạt động tốt';
+  if (tone === 'danger') return 'Cảnh báo';
+  if (tone === 'warning') return 'Cần theo dõi';
+  return fallbackLabel;
 };
 
 const humanizeInlineActorNames = (text: string): string =>
@@ -86,49 +121,61 @@ export const PlatformOverviewRecentEventsCard: React.FC<PlatformOverviewRecentEv
 
   for (let i = 0; i < rawDashboardEvents.length; i += 1) {
     const ev = rawDashboardEvents[i];
-    const rawAction = String(ev.action ?? ev.eventType ?? ev.category ?? '');
+    const rawAction = String(ev.eventTypeCode ?? ev.action ?? ev.eventType ?? ev.category ?? '');
     const rawEntity = String(ev.entityName ?? ev.entityType ?? '');
-    if (isAuthOrSessionEvent(rawAction, rawEntity)) continue;
+    const rawLabelVi = String(ev.eventLabelVi ?? ev.categoryVi ?? '');
+    if (isAuthOrSessionEvent(rawAction, rawEntity, rawLabelVi)) continue;
     const mapped = mapAuditActionCategoryVi(String(ev.category ?? rawAction));
+    const rawTone = String(ev.tone ?? '').trim().toLowerCase() as PlatformOverviewRecentEventItem['tone'];
+    const resolvedTone = VALID_EVENT_TONES.has(rawTone) ? rawTone : mapped.tone;
+    const categoryVi = sanitizePlatformJargonVi(rawLabelVi.trim() || mapped.categoryVi);
     const rawTarget = String(ev.targetVi ?? ev.targetCode ?? ev.tenantCode ?? ev.entityCode ?? 'TENANT-001');
     const cleanTarget = /ERP_KHO|ĐẠI PHÁT/i.test(rawTarget) ? normalizeTenantLegalNameVi(rawTarget, 1) : sanitizePlatformJargonVi(rawTarget);
-    const rawActor = ev.actorUsername ?? ev.actor ?? ev.username;
-    const actorPrefix = typeof rawActor === 'string' && rawActor.trim() ? `${formatUserDisplayNameVi(rawActor)}: ` : '';
+    const rawActor = ev.actorDisplay ?? ev.actorUsername ?? ev.actor ?? ev.username;
+    const actorVi = typeof rawActor === 'string' && rawActor.trim() ? formatUserDisplayNameVi(rawActor.trim()) : '';
     const rawSummary = humanizeInlineActorNames(
       String(ev.summaryVi ?? ev.descriptionVi ?? ev.message ?? 'Ghi nhận sự kiện điều hành nền tảng SaaS'),
     );
-    const summaryVi = actorPrefix && !rawSummary.includes(formatUserDisplayNameVi(String(rawActor)))
-      ? `${actorPrefix}${rawSummary}`
+    const summaryVi = actorVi && !rawSummary.includes(actorVi) && !/^Hệ thống\b/i.test(actorVi)
+      ? `${actorVi}: ${rawSummary}`
       : rawSummary;
-    pushUniqueEvent(rawAction || mapped.categoryVi, {
+    pushUniqueEvent(rawAction || categoryVi, {
       id: String(ev.id ?? `dash-ev-${i}`),
-      timestampVi: formatIsoToViDateTime(String(ev.timestampVi ?? ev.occurredAtUtc ?? ev.createdAtUtc ?? '')),
-      categoryVi: sanitizePlatformJargonVi(String(ev.categoryVi ?? mapped.categoryVi)),
+      timestampVi: formatIsoToViDateTime(String(ev.timestampVi ?? ev.timestampUtc ?? ev.occurredAtUtc ?? ev.createdAtUtc ?? '')),
+      categoryVi,
       targetVi: cleanTarget,
       summaryVi,
-      statusLabelVi: String(ev.statusLabelVi ?? mapped.statusLabelVi),
-      tone: mapped.tone,
+      statusLabelVi: resolveEventStatusLabelVi(ev.statusLabelVi, rawAction, resolvedTone, mapped.statusLabelVi),
+      tone: resolvedTone,
     });
   }
 
   for (let i = 0; i < auditLogs.length && rows.length < 6; i += 1) {
     const log = auditLogs[i];
-    if (isAuthOrSessionEvent(log.action, log.entityName)) continue;
+    if (isAuthOrSessionEvent(log.action, log.entityName, log.actionLabelVi)) continue;
     const mapped = mapAuditActionCategoryVi(log.action);
-    const targetCode = log.tenantId
-      ? `TENANT-${String(log.tenantId).padStart(3, '0')}`
-      : log.entityId
-        ? `${sanitizePlatformJargonVi(log.entityName)} #${log.entityId}`
-        : sanitizePlatformJargonVi(log.entityName) || 'HỆ THỐNG';
-    const actorVi = formatUserDisplayNameVi(log.username);
-    const baseSummary = log.reason
-      ? humanizeInlineActorNames(log.reason)
-      : `Thực thi tác vụ ${sanitizePlatformJargonVi(log.action)} trên ${sanitizePlatformJargonVi(log.entityName)}`;
+    const categoryVi = log.actionLabelVi?.trim() ? sanitizePlatformJargonVi(log.actionLabelVi) : mapped.categoryVi;
+    const safeEntityVi = /^(UserSession|RefreshToken)$/i.test((log.entityName || '').trim())
+      ? 'Phiên xác thực quản trị'
+      : sanitizePlatformJargonVi(log.entityName);
+    const targetCode = log.targetCodeVi?.trim()
+      ? sanitizePlatformJargonVi(log.targetCodeVi)
+      : log.tenantId
+        ? `TENANT-${String(log.tenantId).padStart(3, '0')}`
+        : log.entityId
+          ? `${safeEntityVi} #${log.entityId}`
+          : safeEntityVi || 'HỆ THỐNG';
+    const actorVi = log.actorDisplayVi?.trim() || formatUserDisplayNameVi(log.username);
+    const baseSummary = log.summaryVi?.trim()
+      ? humanizeInlineActorNames(log.summaryVi)
+      : log.reason
+        ? humanizeInlineActorNames(log.reason)
+        : `Thực thi tác vụ ${categoryVi} trên ${targetCode}`;
     const summaryVi = baseSummary.includes(actorVi) ? baseSummary : `${actorVi} — ${baseSummary}`;
-    pushUniqueEvent(log.action || mapped.categoryVi, {
+    pushUniqueEvent(log.action || categoryVi, {
       id: `audit-${log.id ?? i}`,
       timestampVi: formatIsoToViDateTime(log.timestamp),
-      categoryVi: mapped.categoryVi,
+      categoryVi,
       targetVi: targetCode,
       summaryVi,
       statusLabelVi: mapped.statusLabelVi,
@@ -183,7 +230,7 @@ export const PlatformOverviewRecentEventsCard: React.FC<PlatformOverviewRecentEv
             detail="Các giao dịch đối soát hóa đơn SaaS, điều chỉnh hạn ngạch và thao tác quản trị sẽ hiển thị tại đây theo thời gian thực."
           />
         ) : (
-          <div style={{ overflowX: 'auto' }} data-testid="platform-overview-recent-events-card">
+          <UiTableScroll data-testid="platform-overview-recent-events-card" ariaLabel="Bảng nhật ký sự kiện quản trị nền tảng gần đây">
             <table className="ui-table ui-table-compact" data-testid="platform-overview-recent-events-table">
               <thead>
                 <tr>
@@ -216,7 +263,7 @@ export const PlatformOverviewRecentEventsCard: React.FC<PlatformOverviewRecentEv
                 ))}
               </tbody>
             </table>
-          </div>
+          </UiTableScroll>
         )}
       </UiCard>
     </div>

@@ -121,8 +121,8 @@ export const PlatformQuotaDrawerAndModals: React.FC<PlatformQuotaDrawerAndModals
               <button
                 type="button"
                 aria-label="Đóng hộp thoại"
-                className="platform-btn platform-btn-secondary"
-                style={{ padding: '4px 8px' }}
+                className="platform-btn platform-btn-secondary ui-icon-touch-target"
+                style={{ padding: '4px 8px', minWidth: 40, minHeight: 40 }}
                 onClick={onCloseSuspendModal}
               >
                 <X size={15} strokeWidth={2} aria-hidden="true" />
@@ -164,9 +164,24 @@ export const PlatformQuotaDrawerAndModals: React.FC<PlatformQuotaDrawerAndModals
                 </label>
                 <textarea id="suspend-reason-input" rows={2} data-testid="input-suspend-reason" placeholder="Nhập lý do tạm khóa cụ thể..." value={suspendReason} onChange={(e) => setSuspendReason(e.target.value)} />
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 12 }}>
+              {!isSuspendConfirmValid && !submittingStatus ? (
+                <div
+                  id="suspend-submit-disabled-helper"
+                  data-testid="suspend-submit-disabled-helper"
+                  style={{ fontSize: 11.5, fontWeight: 600, color: '#64748b', marginTop: 8, lineHeight: 1.35 }}
+                >
+                  Cần nhập đúng mã {modalTenant.tenantCode}, chọn phân loại lý do và ghi chú quản trị (≥ 10 ký tự) để bật nút xác nhận.
+                </div>
+              ) : null}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
                 <button type="button" className="platform-btn platform-btn-secondary" data-testid="btn-cancel-suspend-modal" onClick={onCloseSuspendModal}>Hủy bỏ</button>
-                <button type="submit" className="platform-btn platform-btn-danger" data-testid="btn-confirm-suspend-submit" disabled={!isSuspendConfirmValid || submittingStatus}>
+                <button
+                  type="submit"
+                  className="platform-btn platform-btn-danger"
+                  data-testid="btn-confirm-suspend-submit"
+                  aria-describedby={!isSuspendConfirmValid && !submittingStatus ? 'suspend-submit-disabled-helper' : undefined}
+                  disabled={!isSuspendConfirmValid || submittingStatus}
+                >
                   {modalTargetStatus === 'SUSPENDED' ? 'Xác nhận tạm khóa doanh nghiệp' : 'Xác nhận mở khóa doanh nghiệp'}
                 </button>
               </div>
@@ -299,7 +314,7 @@ export const PlatformQuotaDrawerAndModals: React.FC<PlatformQuotaDrawerAndModals
                     {formatMinLengthCounterVi(quotaReasonLen, 10)}
                   </span>
                 </label>
-                <textarea id="drawer-quota-reason" rows={2} data-testid="input-quota-reason" placeholder="Nhập lý do điều chỉnh hạn mức..." value={quotaReason} onChange={(e) => setQuotaReason(e.target.value)} />
+                <textarea id="drawer-quota-reason" rows={2} data-testid="input-quota-reason" placeholder="Lý do điều chỉnh..." value={quotaReason} onChange={(e) => setQuotaReason(e.target.value)} />
               </div>
               <div
                 style={{

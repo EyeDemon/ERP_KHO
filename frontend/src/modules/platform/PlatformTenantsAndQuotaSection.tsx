@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { FileText, History, MoreHorizontal, PauseCircle, PlayCircle } from 'lucide-react';
 import { formatUserDisplayNameVi } from '../../services/permissionPresentation';
-import { UiBadge, UiCard } from '../../ui/ProductionUi';
+import { UiBadge, UiCard, UiTableScroll } from '../../ui/ProductionUi';
 import { normalizeTenantLegalNameVi, normalizeTenantTaxCode } from './platformBillingHelpers';
 import { PlatformQuotaDrawerAndModals } from './PlatformQuotaDrawerAndModals';
 import { PlatformQuotasUtilizationCard } from './PlatformQuotasUtilizationCard';
+import { PlatformTenantsMobileCards } from './PlatformTenantsMobileCards';
+import { useIsPlatformMobile768 } from './usePlatformMobileViewport';
 
 export interface PlatformTenantItem {
   tenantId: number; tenantCode: string; companyName: string; taxCode: string; taxpayerType: string;
@@ -17,6 +19,7 @@ export interface PlatformTenantItem {
 interface Props {
   tenants: PlatformTenantItem[]; showTenantsTable: boolean; showQuotaView: boolean;
   canWriteTenantStatus: boolean; canWriteQuota: boolean; canImpersonate: boolean;
+  hasLoadError?: boolean; onRetryLoad?: () => void;
   onConfirmTenantStatus: (tenantId: number, nextStatus: string, reason: string, confirmationCode: string) => Promise<void>;
   onSaveTenantQuota: (
     tenantId: number,
@@ -33,8 +36,10 @@ interface Props {
 
 export const PlatformTenantsAndQuotaSection: React.FC<Props> = ({
   tenants, showTenantsTable, showQuotaView, canWriteTenantStatus, canWriteQuota, canImpersonate,
+  hasLoadError = false, onRetryLoad,
   onConfirmTenantStatus, onSaveTenantQuota, onLaunchSupportForTenant, onNavigatePath,
 }) => {
+  const isMobile768 = useIsPlatformMobile768();
   const [openMenuTenantId, setOpenMenuTenantId] = useState<number | null>(null);
   const [expandedReasonTenantId, setExpandedReasonTenantId] = useState<number | null>(null);
   const [modalTenant, setModalTenant] = useState<PlatformTenantItem | null>(null);
@@ -126,19 +131,37 @@ export const PlatformTenantsAndQuotaSection: React.FC<Props> = ({
           subtitle="Quản trị trạng thái hoạt động, tạm khóa/mở khóa có kiểm soát và khởi tạo phiên hỗ trợ kỹ thuật chỉ đọc"
         >
           <div style={{ overflow: 'visible', paddingBottom: openMenuTenantId ? 140 : 0 }}>
-            <table className="ui-table" data-testid="platform-tenants-table">
-              <thead>
-                <tr>
-                  <th style={{ minWidth: 88 }}>Mã DN</th>
-                  <th style={{ minWidth: 160 }}>Doanh nghiệp &amp; Chủ sở hữu</th>
-                  <th style={{ minWidth: 112 }}>MST / CCCD</th>
-                  <th style={{ minWidth: 112 }}>Gói cước</th>
-                  <th style={{ minWidth: 128, textAlign: 'right' }}>Đơn tháng này</th>
-                  <th style={{ minWidth: 116, textAlign: 'right' }}>Kho &amp; Nhân sự</th>
-                  <th style={{ minWidth: 116 }}>Trạng thái</th>
-                  <th style={{ minWidth: 140 }}>Thao tác</th>
-                </tr>
-              </thead>
+            {isMobile768 ? (
+              <PlatformTenantsMobileCards
+                tenants={tenants}
+                canWriteTenantStatus={canWriteTenantStatus}
+                canWriteQuota={canWriteQuota}
+                canImpersonate={canImpersonate}
+                openMenuTenantId={openMenuTenantId}
+                setOpenMenuTenantId={setOpenMenuTenantId}
+                expandedReasonTenantId={expandedReasonTenantId}
+                setExpandedReasonTenantId={setExpandedReasonTenantId}
+                openQuotaDrawer={openQuotaDrawer}
+                openSuspendModal={openSuspendModal}
+                onLaunchSupportForTenant={onLaunchSupportForTenant}
+                onNavigatePath={onNavigatePath}
+              />
+            ) : (
+            <UiTableScroll ariaLabel="Bảng quản lý vòng đời doanh nghiệp thuê bao">
+              <div style={{ paddingBottom: openMenuTenantId ? 140 : 0 }}>
+                <table className="ui-table" data-testid="platform-tenants-table">
+                  <thead>
+                    <tr>
+                      <th style={{ minWidth: 80, whiteSpace: 'nowrap' }}>Mã DN</th>
+                      <th style={{ minWidth: 148 }}>Doanh nghiệp &amp; Chủ sở hữu</th>
+                      <th style={{ minWidth: 104, whiteSpace: 'nowrap' }}>MST / CCCD</th>
+                      <th style={{ minWidth: 108, whiteSpace: 'nowrap' }}>Gói cước</th>
+                      <th style={{ minWidth: 118, textAlign: 'right', whiteSpace: 'nowrap' }}>Đơn tháng này</th>
+                      <th style={{ minWidth: 108, textAlign: 'right', whiteSpace: 'nowrap' }}>Kho &amp; Nhân sự</th>
+                      <th style={{ minWidth: 108, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                      <th style={{ minWidth: 132, whiteSpace: 'nowrap' }}>Thao tác</th>
+                    </tr>
+                  </thead>
               <tbody>
                 {tenants.map((t) => {
                   const isSuspended = t.lifecycleStatus === 'SUSPENDED' || t.status === 'SUSPENDED';
@@ -202,7 +225,7 @@ export const PlatformTenantsAndQuotaSection: React.FC<Props> = ({
                               <span>Mở khóa lại</span>
                             </button>
                           ) : null}
-                          <button type="button" aria-label={`Mở menu thao tác nâng cao cho ${t.tenantCode}`} className="platform-btn platform-btn-secondary" data-testid={`btn-tenant-more-menu-${t.tenantId}`} onClick={() => setOpenMenuTenantId((prev) => (prev === t.tenantId ? null : t.tenantId))}>
+                          <button type="button" aria-label={`Mở menu thao tác nâng cao cho ${t.tenantCode}`} title={`Mở menu thao tác nâng cao cho ${t.tenantCode}`} className="platform-btn platform-btn-secondary" data-testid={`btn-tenant-more-menu-${t.tenantId}`} onClick={() => setOpenMenuTenantId((prev) => (prev === t.tenantId ? null : t.tenantId))}>
                             <MoreHorizontal size={16} strokeWidth={2} aria-hidden="true" />
                           </button>
                           {openMenuTenantId === t.tenantId ? (
@@ -241,6 +264,9 @@ export const PlatformTenantsAndQuotaSection: React.FC<Props> = ({
                 })}
               </tbody>
             </table>
+              </div>
+            </UiTableScroll>
+            )}
           </div>
         </UiCard>
       ) : null}
@@ -250,6 +276,8 @@ export const PlatformTenantsAndQuotaSection: React.FC<Props> = ({
           tenants={tenants}
           activeQuotaTarget={activeQuotaTarget}
           hasDrawerOpen={Boolean(drawerTenant)}
+          hasLoadError={hasLoadError}
+          onRetryLoad={onRetryLoad}
           canWriteQuota={canWriteQuota}
           submittingQuota={submittingQuota}
           isBelowUsage={isBelowUsage}

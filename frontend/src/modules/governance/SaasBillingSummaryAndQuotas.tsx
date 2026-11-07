@@ -33,6 +33,8 @@ export interface SaasBillingSummaryAndQuotasProps {
   loadSubscription: () => void;
   quotaGaugeItems: QuotaGaugeItem[];
   createVietQrInvoice: (overridePlanCode?: 'STARTER' | 'GROWTH' | 'ENTERPRISE') => void;
+  hasLoadError?: boolean;
+  onRetryLoad?: () => void;
 }
 
 const LEGEND_ITEMS: Array<{ color: string; label: string }> = [
@@ -54,7 +56,11 @@ export const SaasBillingSummaryAndQuotas: React.FC<SaasBillingSummaryAndQuotasPr
   loadSubscription,
   quotaGaugeItems,
   createVietQrInvoice,
+  hasLoadError = false,
+  onRetryLoad,
 }) => {
+  const summaryCardOpacity = hasLoadError ? 0.68 : 1;
+
   return (
     <UiCard
       title="Mức sử dụng trong chu kỳ"
@@ -65,38 +71,48 @@ export const SaasBillingSummaryAndQuotas: React.FC<SaasBillingSummaryAndQuotasPr
           style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 6 }}
           data-testid="saas-billing-period-summary"
         >
-          <div style={{ padding: '4px 10px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <div style={{ padding: '4px 10px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', opacity: summaryCardOpacity }}>
             <div style={{ fontSize: 11, color: '#475569' }}>Gói dịch vụ đang áp dụng</div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 1 }}>
-              <strong style={{ fontSize: 13.5, color: '#0f172a' }}>{billing.planName}</strong>
-              <UiBadge
-                tone={
-                  /SUSPEND|READ_ONLY|LOCK|CANCEL/i.test(billing.subscriptionStatus)
-                    ? 'danger'
-                    : /PAST_DUE|OVERDUE/i.test(billing.subscriptionStatus)
-                      ? 'warning'
-                      : 'success'
-                }
-              >
-                {resolveSubscriptionStatusLabel(billing.subscriptionStatus)}
-              </UiBadge>
+              <strong style={{ fontSize: 13.5, color: hasLoadError ? '#64748b' : '#0f172a' }}>
+                {hasLoadError ? '—' : billing.planName}
+              </strong>
+              {hasLoadError ? (
+                <UiBadge tone="neutral">Chưa tải dữ liệu</UiBadge>
+              ) : (
+                <UiBadge
+                  tone={
+                    /SUSPEND|READ_ONLY|LOCK|CANCEL/i.test(billing.subscriptionStatus)
+                      ? 'danger'
+                      : /PAST_DUE|OVERDUE/i.test(billing.subscriptionStatus)
+                        ? 'warning'
+                        : 'success'
+                  }
+                >
+                  {resolveSubscriptionStatusLabel(billing.subscriptionStatus)}
+                </UiBadge>
+              )}
             </div>
           </div>
-          <div style={{ padding: '4px 10px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <div style={{ padding: '4px 10px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', opacity: summaryCardOpacity }}>
             <div style={{ fontSize: 11, color: '#475569' }}>Chu kỳ cước hiện tại</div>
-            <strong style={{ display: 'block', fontSize: 13, color: '#0f172a', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
-              {formatDateVi(billing.currentPeriodStartUtc)} → {formatDateVi(billing.currentPeriodEndUtc)}
+            <strong style={{ display: 'block', fontSize: 13, color: hasLoadError ? '#64748b' : '#0f172a', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
+              {hasLoadError ? '—' : `${formatDateVi(billing.currentPeriodStartUtc)} → ${formatDateVi(billing.currentPeriodEndUtc)}`}
             </strong>
           </div>
-          <div style={{ padding: '4px 10px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <div style={{ padding: '4px 10px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', opacity: summaryCardOpacity }}>
             <div style={{ fontSize: 11, color: '#475569' }}>Ngày gia hạn tiếp theo</div>
-            <strong style={{ display: 'block', fontSize: 13, color: '#0F172A', fontWeight: 700, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
-              {formatDateVi(billing.nextRenewalDateUtc)}
+            <strong style={{ display: 'block', fontSize: 13, color: hasLoadError ? '#64748b' : '#0F172A', fontWeight: 700, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
+              {hasLoadError ? '—' : formatDateVi(billing.nextRenewalDateUtc)}
             </strong>
           </div>
-          <div style={{ padding: '4px 10px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <div style={{ padding: '4px 10px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', opacity: summaryCardOpacity }}>
             <div style={{ fontSize: 11, color: '#475569' }}>Hóa đơn điện tử GTGT (VAT)</div>
-            {editingTaxCode ? (
+            {hasLoadError ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginTop: 1 }}>
+                <strong style={{ fontSize: 12.5, color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>MST: —</strong>
+              </div>
+            ) : editingTaxCode ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
                 <input
                   aria-label="Mã số thuế doanh nghiệp"
@@ -144,20 +160,27 @@ export const SaasBillingSummaryAndQuotas: React.FC<SaasBillingSummaryAndQuotasPr
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-          <div className="ui-inline-wrap" style={{ gap: 10 }} data-testid="saas-quota-tier-legend">
-            {LEGEND_ITEMS.map((lg) => (
-              <span key={lg.label} className="ui-legend-item">
-                <span className="ui-legend-dot" style={{ backgroundColor: lg.color }} aria-hidden="true" />
-                <span>{lg.label}</span>
-              </span>
-            ))}
-          </div>
+          {!hasLoadError ? (
+            <div className="ui-inline-wrap" style={{ gap: 10 }} data-testid="saas-quota-tier-legend">
+              {LEGEND_ITEMS.map((lg) => (
+                <span key={lg.label} className="ui-legend-item">
+                  <span className="ui-legend-dot" style={{ backgroundColor: lg.color }} aria-hidden="true" />
+                  <span>{lg.label}</span>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span style={{ fontSize: 12, color: '#64748b' }}>Chưa tải được dữ liệu hạn mức sử dụng từ máy chủ</span>
+          )}
           <button
             type="button"
             data-testid="btn-refresh-saas-quota"
             disabled={busy}
-            onClick={() => void loadSubscription()}
-            style={{ ...secondaryBtnStyle, minHeight: 26, padding: '2px 10px', fontSize: 11.5 }}
+            onClick={() => {
+              if (onRetryLoad) onRetryLoad();
+              else void loadSubscription();
+            }}
+            style={{ ...secondaryBtnStyle, minHeight: 36, padding: '4px 12px', fontSize: 12 }}
           >
             Làm mới hạn mức
           </button>
@@ -179,16 +202,27 @@ export const SaasBillingSummaryAndQuotas: React.FC<SaasBillingSummaryAndQuotasPr
                 border: '1px solid #cbd5e1',
                 minWidth: 0,
                 boxSizing: 'border-box',
+                opacity: summaryCardOpacity,
               }}
             >
               <div
-                data-testid={item.tier.atCeiling ? `quota-ceiling-alert-${item.key}` : undefined}
+                data-testid={!hasLoadError && item.tier.atCeiling ? `quota-ceiling-alert-${item.key}` : undefined}
                 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6, minHeight: 24, minWidth: 0 }}
               >
                 <strong style={{ fontSize: 12.5, color: '#0f172a', whiteSpace: 'normal', lineHeight: 1.25, minWidth: 0 }}>
                   {item.title}
                 </strong>
-                <UiBadge tone={item.tier.tone}>{item.tier.label}</UiBadge>
+                {hasLoadError ? (
+                  <span
+                    data-testid={`quota-badge-error-${item.key}`}
+                    style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}
+                    aria-label="Chưa xác định trạng thái hạn mức"
+                  >
+                    —
+                  </span>
+                ) : (
+                  <UiBadge tone={item.tier.tone}>{item.tier.label}</UiBadge>
+                )}
               </div>
 
               <div
@@ -200,18 +234,18 @@ export const SaasBillingSummaryAndQuotas: React.FC<SaasBillingSummaryAndQuotasPr
                   height: 20,
                   fontSize: 14,
                   fontWeight: 700,
-                  color: '#0f172a',
+                  color: hasLoadError ? '#64748b' : '#0f172a',
                   textAlign: 'right',
                   fontVariantNumeric: 'tabular-nums',
                 }}
               >
-                {item.used.toLocaleString('vi-VN')} / {item.max.toLocaleString('vi-VN')} {item.unit}
+                {hasLoadError ? '—' : `${item.used.toLocaleString('vi-VN')} / ${item.max.toLocaleString('vi-VN')} ${item.unit}`}
               </div>
 
               <div
                 role="progressbar"
                 aria-label={item.title}
-                aria-valuenow={item.tier.pct}
+                aria-valuenow={hasLoadError ? 0 : item.tier.pct}
                 aria-valuemin={0}
                 aria-valuemax={115}
                 style={{ position: 'relative', height: 7, alignSelf: 'center', borderRadius: 999, background: '#cbd5e1', overflow: 'hidden' }}
@@ -220,7 +254,7 @@ export const SaasBillingSummaryAndQuotas: React.FC<SaasBillingSummaryAndQuotasPr
                 <div title="Mốc trần hạn mức 100%" style={{ position: 'absolute', left: `${Math.round((100 / 115) * 100)}%`, top: 0, bottom: 0, width: 2, background: '#991b1b', zIndex: 2 }} />
                 <div
                   style={{
-                    width: `${Math.min(100, Math.round((item.tier.pct / 115) * 100))}%`,
+                    width: hasLoadError ? '0%' : `${Math.min(100, Math.round((item.tier.pct / 115) * 100))}%`,
                     height: '100%',
                     background: item.tier.pct > 100 ? '#dc2626' : item.tier.pct === 100 ? '#ea580c' : item.tier.pct >= 80 ? '#d97706' : '#1d4ed8',
                   }}
@@ -228,32 +262,38 @@ export const SaasBillingSummaryAndQuotas: React.FC<SaasBillingSummaryAndQuotasPr
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, height: 22, fontSize: 11.5, color: '#475569', fontVariantNumeric: 'tabular-nums' }}>
-                <span>Đã dùng {item.tier.pct}%</span>
-                {item.tier.atCeiling ? (
-                  <button
-                    type="button"
-                    data-testid={`btn-upgrade-now-${item.key}`}
-                    style={{
-                      padding: '1px 7px',
-                      minHeight: 22,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: '#1d4ed8',
-                      background: '#eff6ff',
-                      border: '1px solid #93c5fd',
-                      borderRadius: 6,
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                    }}
-                    onClick={() => {
-                      const nextPlan = billing.planCode === 'STARTER' || billing.planCode === 'FREE_TRIAL' ? 'GROWTH' : 'ENTERPRISE';
-                      void createVietQrInvoice(nextPlan);
-                    }}
-                  >
-                    Nâng cấp ngay →
-                  </button>
+                {hasLoadError ? (
+                  <span>Chưa có dữ liệu — bấm Thử lại</span>
                 ) : (
-                  <span style={{ fontSize: 11.5, color: '#475569' }}>An toàn</span>
+                  <>
+                    <span>Đã dùng {item.tier.pct}%</span>
+                    {item.tier.atCeiling ? (
+                      <button
+                        type="button"
+                        data-testid={`btn-upgrade-now-${item.key}`}
+                        style={{
+                          padding: '1px 7px',
+                          minHeight: 22,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: '#1d4ed8',
+                          background: '#eff6ff',
+                          border: '1px solid #93c5fd',
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                        onClick={() => {
+                          const nextPlan = billing.planCode === 'STARTER' || billing.planCode === 'FREE_TRIAL' ? 'GROWTH' : 'ENTERPRISE';
+                          void createVietQrInvoice(nextPlan);
+                        }}
+                      >
+                        Nâng cấp ngay →
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: 11.5, color: '#475569' }}>An toàn</span>
+                    )}
+                  </>
                 )}
               </div>
             </div>

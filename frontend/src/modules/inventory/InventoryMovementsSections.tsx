@@ -35,7 +35,7 @@ export const MovableBucketsTableCard: React.FC<MovableBucketsTableCardProps> = (
       <p role="status">Đang tải nhóm tồn kho...</p>
     ) : (
       <UiTableScroll>
-        <table className="ui-table-compact" aria-label="Internal move buckets">
+        <table className="ui-table-compact" aria-label="Danh sách nhóm tồn kho có thể di chuyển">
           <thead>
             <tr>
               <th style={{ minWidth: 135 }}>Sản phẩm</th>
@@ -83,6 +83,11 @@ export const MovableBucketsTableCard: React.FC<MovableBucketsTableCardProps> = (
                         type="button"
                         style={{ whiteSpace: 'nowrap' }}
                         disabled={x.onHandQuantity - x.reservedQuantity <= 0}
+                        title={
+                          x.onHandQuantity - x.reservedQuantity <= 0
+                            ? 'Nhóm tồn kho này không còn số lượng khả dụng chưa giữ chỗ để di chuyển'
+                            : undefined
+                        }
                         onClick={() => onSelectBucket(x)}
                       >
                         Di chuyển

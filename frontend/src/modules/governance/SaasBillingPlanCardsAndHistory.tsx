@@ -65,6 +65,7 @@ export const SaasBillingPlanCardsGrid: React.FC<SaasBillingPlanCardsGridProps> =
               </ul>
               {downgradeWarning && (
                 <div
+                  id={`plan-downgrade-warning-${plan.code}`}
                   data-testid={`plan-downgrade-warning-${plan.code}`}
                   style={{ marginTop: 8, padding: '6px 10px', borderRadius: 6, background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: 12, fontWeight: 600, lineHeight: 1.45 }}
                 >
@@ -82,21 +83,30 @@ export const SaasBillingPlanCardsGrid: React.FC<SaasBillingPlanCardsGridProps> =
                     ✓ Gói dịch vụ đang áp dụng
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    data-testid={`btn-select-plan-${plan.code}`}
-                    disabled={busy || Boolean(downgradeWarning)}
-                    style={{
-                      width: '100%', padding: '8px 12px', borderRadius: 6, fontSize: 13, fontWeight: 600,
-                      cursor: busy || Boolean(downgradeWarning) ? 'not-allowed' : 'pointer',
-                      background: downgradeWarning ? '#e2e8f0' : isSelected ? '#1d4ed8' : '#ffffff',
-                      color: downgradeWarning ? '#475569' : isSelected ? '#ffffff' : '#1d4ed8',
-                      border: downgradeWarning ? '1px solid #cbd5e1' : '1.5px solid #1d4ed8',
-                    }}
-                    onClick={(e) => { e.stopPropagation(); handleSelectPlan(plan.code); }}
-                  >
-                    {downgradeWarning ? 'Chưa đủ điều kiện hạ gói' : plan.buttonLabel}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      data-testid={`btn-select-plan-${plan.code}`}
+                      disabled={busy || Boolean(downgradeWarning)}
+                      aria-describedby={downgradeWarning ? `plan-downgrade-warning-${plan.code}` : busy ? `plan-busy-note-${plan.code}` : undefined}
+                      style={{
+                        width: '100%', minHeight: 44, padding: '8px 12px', borderRadius: 6, fontSize: 13, fontWeight: 600,
+                        cursor: busy || Boolean(downgradeWarning) ? 'not-allowed' : 'pointer',
+                        background: downgradeWarning ? '#e2e8f0' : isSelected ? '#1d4ed8' : '#ffffff',
+                        color: downgradeWarning ? '#475569' : isSelected ? '#ffffff' : '#1d4ed8',
+                        border: downgradeWarning ? '1px solid #cbd5e1' : '1.5px solid #1d4ed8',
+                        boxSizing: 'border-box',
+                      }}
+                      onClick={(e) => { e.stopPropagation(); handleSelectPlan(plan.code); }}
+                    >
+                      {downgradeWarning ? 'Chưa đủ điều kiện hạ gói' : plan.buttonLabel}
+                    </button>
+                    {busy && !downgradeWarning && (
+                      <small id={`plan-busy-note-${plan.code}`} style={{ display: 'block', marginTop: 4, fontSize: 11.5, color: '#475569' }}>
+                        Đang đồng bộ giao dịch với máy chủ...
+                      </small>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -114,17 +124,60 @@ export interface SaasBillingInvoiceHistoryCardProps {
     dueDateText: string;
     shortRange: string;
   };
+  hasLoadError?: boolean;
+  onRetryLoad?: () => void;
 }
 
 export const SaasBillingInvoiceHistoryCard: React.FC<SaasBillingInvoiceHistoryCardProps> = ({
-  billing, currentCycleText, nextCycle,
+  billing, currentCycleText, nextCycle, hasLoadError = false, onRetryLoad,
 }) => {
   return (
     <UiCard
       title="Lịch sử hóa đơn & đối soát thanh toán"
       subtitle="Danh sách các hóa đơn VietQR đã khởi tạo, kỳ cước áp dụng, ngày phát hành, thời điểm thanh toán và trạng thái kích hoạt gói dịch vụ"
     >
-      {billing.recentInvoices.length === 0 ? (
+      {hasLoadError ? (
+        <div
+          data-testid="saas-invoice-history-load-error"
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '12px 14px',
+            borderRadius: 8,
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            color: '#991b1b',
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 600 }}>
+            Không thể tải danh sách hóa đơn thanh toán do gián đoạn kết nối máy chủ.
+          </span>
+          {onRetryLoad && (
+            <button
+              type="button"
+              data-testid="btn-retry-saas-invoices"
+              onClick={onRetryLoad}
+              style={{
+                background: '#ffffff',
+                border: '1px solid #fca5a5',
+                color: '#991b1b',
+                fontWeight: 700,
+                borderRadius: 6,
+                cursor: 'pointer',
+                minHeight: 44,
+                padding: '8px 14px',
+                fontSize: 13,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Thử lại
+            </button>
+          )}
+        </div>
+      ) : billing.recentInvoices.length === 0 ? (
         <p style={{ fontSize: 13, color: '#475569', margin: 0 }} data-testid="saas-invoice-history-empty">
           Chưa có hóa đơn thanh toán nào trong kỳ hiện tại. Bấm &ldquo;Cập nhật / Tạo mã VietQR cho gói đang chọn&rdquo; để khởi tạo lệnh thanh toán mới.
         </p>

@@ -148,17 +148,18 @@ export function StockCardS12DnPanel({
               ))}
             </select>
           </label>
-          <label className="ui-field" style={{ minWidth: 240 }}>
+          <label className="ui-field" style={{ flex: '1 1 280px', minWidth: 240, width: '100%' }}>
             <span>Sản phẩm (SKU)</span>
             <select
               aria-label="Sản phẩm lập Thẻ kho S12-DN"
+              style={{ width: '100%' }}
               value={resolvedProdId}
               onChange={e => setProductId(Number(e.target.value))}
             >
               {uniqueProducts.length === 0 && <option value={1}>SKU-1001 — Sản phẩm mặc định</option>}
               {uniqueProducts.map(p => (
                 <option key={p.productId} value={p.productId}>
-                  {p.productCode} — {p.productName}
+                  {p.productCode} — {p.productName.length > 18 ? p.productName.slice(0, 18).trim() : p.productName}
                 </option>
               ))}
             </select>
