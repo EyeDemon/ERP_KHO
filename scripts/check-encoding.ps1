@@ -65,85 +65,82 @@ foreach ($gf in $gitFiles) {
     }
 }
 
-# 2 & 3. Fail-closed Baseline Loading & Validation
+# 2 & 3. Fail-closed Baseline Loading & Validation (Optional in source-only clean clones where .agent/ is gitignored)
 $baselinePath = Join-Path $repoRoot ".agent/encoding-baseline.json"
 $baseline = @{}
 
-if (-not (Test-Path -LiteralPath $baselinePath -PathType Leaf)) {
-    [Console]::Error.WriteLine("FATAL: Baseline file missing at $baselinePath")
-    exit 1
-}
+if (Test-Path -LiteralPath $baselinePath -PathType Leaf) {
+    $blContent = $null
+    $strictUtf8Baseline = [System.Text.UTF8Encoding]::new($false, $true)
+    try {
+        # Validate strict UTF-8 at byte level (will throw on invalid sequences)
+        $rawBytes = [IO.File]::ReadAllBytes($baselinePath)
+        [void]$strictUtf8Baseline.GetString($rawBytes)
+        # Parse JSON using Get-Content -Raw to avoid PS 5.1 pipeline serializer bug
+        $blContent = Get-Content -Raw -LiteralPath $baselinePath -Encoding UTF8 | ConvertFrom-Json
+    } catch {
+        [Console]::Error.WriteLine("FATAL: Baseline file contains invalid UTF-8 byte sequences or malformed JSON")
+        exit 1
+    }
 
-$blContent = $null
-$strictUtf8Baseline = [System.Text.UTF8Encoding]::new($false, $true)
-try {
-    # Validate strict UTF-8 at byte level (will throw on invalid sequences)
-    $rawBytes = [IO.File]::ReadAllBytes($baselinePath)
-    [void]$strictUtf8Baseline.GetString($rawBytes)
-    # Parse JSON using Get-Content -Raw to avoid PS 5.1 pipeline serializer bug
-    $blContent = Get-Content -Raw -LiteralPath $baselinePath -Encoding UTF8 | ConvertFrom-Json
-} catch {
-    [Console]::Error.WriteLine("FATAL: Baseline file contains invalid UTF-8 byte sequences or malformed JSON")
-    exit 1
-}
-
-if ($null -ne $blContent) {
-    foreach ($entry in $blContent) {
-        if ([string]::IsNullOrWhiteSpace($entry.path)) {
-            [Console]::Error.WriteLine("FATAL: Baseline entry missing 'path'")
-            exit 1
-        }
-        if ([string]::IsNullOrWhiteSpace($entry.defect)) {
-            [Console]::Error.WriteLine("FATAL: Baseline entry missing 'defect'")
-            exit 1
-        }
-        if ([string]::IsNullOrWhiteSpace($entry.hash)) {
-            [Console]::Error.WriteLine("FATAL: Baseline entry missing 'hash'")
-            exit 1
-        }
-
-        # Path validation
-        $p = $entry.path -replace '\\', '/'
-        if ($p -match "\.\./") {
-            [Console]::Error.WriteLine("FATAL: Baseline path escapes workspace (contains '../'): $p")
-            exit 1
-        }
-        if ($p.StartsWith("/") -or $p -match "^[A-Za-z]:") {
-            [Console]::Error.WriteLine("FATAL: Baseline path must be relative to repository root: $p")
-            exit 1
-        }
-
-        # Defect validation
-        $allowedDefects = @("INVALID_UTF8", "U\+FFFD", "MOJIBAKE", "CONTROL_CHAR_U\+[0-9A-F]{4}")
-        $validDefect = $false
-        foreach ($d in $allowedDefects) {
-            if ($entry.defect -match "^$d$") { $validDefect = $true; break }
-        }
-        if (-not $validDefect) {
-            [Console]::Error.WriteLine("FATAL: Baseline defect invalid: $($entry.defect)")
-            exit 1
-        }
-        if ($entry.defect -match "^CONTROL_CHAR_U\+([0-9A-Fa-f]{4})$") {
-            $hexValue = [Convert]::ToInt32($matches[1], 16)
-            $allowedControls = @(0x0009, 0x000A, 0x000D)
-            if ($hexValue -gt 0x001F -or $allowedControls -contains $hexValue) {
-                [Console]::Error.WriteLine("FATAL: Baseline defect specifies non-C0 or explicitly allowed control char: $($entry.defect)")
+    if ($null -ne $blContent) {
+        foreach ($entry in $blContent) {
+            if ([string]::IsNullOrWhiteSpace($entry.path)) {
+                [Console]::Error.WriteLine("FATAL: Baseline entry missing 'path'")
                 exit 1
             }
-        }
+            if ([string]::IsNullOrWhiteSpace($entry.defect)) {
+                [Console]::Error.WriteLine("FATAL: Baseline entry missing 'defect'")
+                exit 1
+            }
+            if ([string]::IsNullOrWhiteSpace($entry.hash)) {
+                [Console]::Error.WriteLine("FATAL: Baseline entry missing 'hash'")
+                exit 1
+            }
 
-        # Hash validation
-        if (-not ($entry.hash -cmatch "^[0-9a-f]{64}$")) {
-            [Console]::Error.WriteLine("FATAL: Baseline hash must be exactly 64 lowercase hex characters: $($entry.hash)")
-            exit 1
-        }
+            # Path validation
+            $p = $entry.path -replace '\\', '/'
+            if ($p -match "\.\./") {
+                [Console]::Error.WriteLine("FATAL: Baseline path escapes workspace (contains '../'): $p")
+                exit 1
+            }
+            if ($p.StartsWith("/") -or $p -match "^[A-Za-z]:") {
+                [Console]::Error.WriteLine("FATAL: Baseline path must be relative to repository root: $p")
+                exit 1
+            }
 
-        $key = $p + "|" + $entry.defect + "|" + $entry.hash
-        if ($baseline.ContainsKey($key)) {
-            [Console]::Error.WriteLine("FATAL: Duplicate identical baseline key found: $key")
-            exit 1
+            # Defect validation
+            $allowedDefects = @("INVALID_UTF8", "U\+FFFD", "MOJIBAKE", "CONTROL_CHAR_U\+[0-9A-F]{4}")
+            $validDefect = $false
+            foreach ($d in $allowedDefects) {
+                if ($entry.defect -match "^$d$") { $validDefect = $true; break }
+            }
+            if (-not $validDefect) {
+                [Console]::Error.WriteLine("FATAL: Baseline defect invalid: $($entry.defect)")
+                exit 1
+            }
+            if ($entry.defect -match "^CONTROL_CHAR_U\+([0-9A-Fa-f]{4})$") {
+                $hexValue = [Convert]::ToInt32($matches[1], 16)
+                $allowedControls = @(0x0009, 0x000A, 0x000D)
+                if ($hexValue -gt 0x001F -or $allowedControls -contains $hexValue) {
+                    [Console]::Error.WriteLine("FATAL: Baseline defect specifies non-C0 or explicitly allowed control char: $($entry.defect)")
+                    exit 1
+                }
+            }
+
+            # Hash validation
+            if (-not ($entry.hash -cmatch "^[0-9a-f]{64}$")) {
+                [Console]::Error.WriteLine("FATAL: Baseline hash must be exactly 64 lowercase hex characters: $($entry.hash)")
+                exit 1
+            }
+
+            $key = $p + "|" + $entry.defect + "|" + $entry.hash
+            if ($baseline.ContainsKey($key)) {
+                [Console]::Error.WriteLine("FATAL: Duplicate identical baseline key found: $key")
+                exit 1
+            }
+            $baseline[$key] = $true
         }
-        $baseline[$key] = $true
     }
 }
 

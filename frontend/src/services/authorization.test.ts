@@ -1,55 +1,154 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
 import {
-  canApproveExportImmediately,
-  canManageCatalogs,
-  canManageWarehouses,
-  canOperateWarehouse,
-  canRunExportMutation,
+  CANONICAL_APP_ROLES,
+  PLATFORM_APP_ROLES,
+  beginPermissionRefresh,
+  canReadInventoryCost,
+  canViewApprovals,
   canViewStocktakes,
+  currentPermissions,
+  currentRole,
   currentUserId,
-  type AppRole,
+  hasPermission,
+  isPlatformRole,
+  setCurrentPermissions,
+  usePermission,
 } from './authorization';
+import {
+  formatMinLengthCounterVi,
+  formatUserDisplayNameVi,
+  isPlatformRoleName,
+  roleChipLabel,
+  roleLabel,
+} from './permissionPresentation';
 
-const roles: AppRole[] = ['Admin', 'Manager', 'WarehouseStaff', 'Viewer'];
-
-describe('frontend authorization matrix', () => {
-  it('limits warehouse catalog mutations to Admin', () => {
-    expect(roles.filter(canManageWarehouses)).toEqual(['Admin']);
+describe('frontend authorization matrix & 10-role RBAC helpers', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
   });
 
-  it('limits product and unit mutations to Admin and Manager', () => {
-    expect(roles.filter(canManageCatalogs)).toEqual(['Admin', 'Manager']);
+  it('ignores late identity responses after a newer refresh or access clearing', () => {
+    const oldRequest = beginPermissionRefresh();
+    const authoritativeRequest = beginPermissionRefresh();
+    setCurrentPermissions(['receipt.read'], oldRequest);
+    expect(hasPermission('receipt.read')).toBe(false);
+    setCurrentPermissions([], authoritativeRequest);
+    setCurrentPermissions(['receipt.read'], oldRequest);
+    expect(hasPermission('receipt.read')).toBe(false);
+    const pendingRequest = beginPermissionRefresh();
+    setCurrentPermissions([]);
+    setCurrentPermissions(['permission.assign'], pendingRequest);
+    expect(hasPermission('permission.assign')).toBe(false);
+    const freshRequest = beginPermissionRefresh();
+    setCurrentPermissions(['receipt.read'], freshRequest);
+    expect(hasPermission('receipt.read')).toBe(true);
   });
 
-  it('keeps Viewer read-only and outside stocktake operations', () => {
-    expect(roles.filter(canOperateWarehouse)).toEqual(['Admin', 'Manager', 'WarehouseStaff']);
-    expect(roles.filter(canViewStocktakes)).toEqual(['Admin', 'Manager', 'WarehouseStaff']);
+  it('uses explicit permission codes instead of role names and fails closed on canReadInventoryCost', () => {
+    for (const highRole of ['SuperAdmin', 'Admin', 'Manager', 'Accountant']) {
+      localStorage.setItem('role', highRole);
+      setCurrentPermissions(['inventory.read']);
+      expect(hasPermission('location.manage')).toBe(false);
+      expect(canReadInventoryCost()).toBe(false);
+    }
+
+    setCurrentPermissions([
+      'inventory.cost.read',
+      'location.manage',
+      'product.update',
+      'putaway.execute',
+      'receipt.complete',
+      'receipt.update',
+    ]);
+    expect(canReadInventoryCost()).toBe(true);
+    expect(hasPermission('location.manage')).toBe(true);
+    expect(hasPermission('product.update')).toBe(true);
+    expect(hasPermission('putaway.execute')).toBe(true);
+    expect(hasPermission('receipt.complete')).toBe(true);
   });
 
-  it('disables export mutations for every role while the maintenance switch is off', () => {
-    expect(roles.filter(role => canRunExportMutation(role, false))).toEqual([]);
-    expect(roles.filter(role => canRunExportMutation(role, true)))
-      .toEqual(['Admin', 'Manager', 'WarehouseStaff']);
+  it('recognizes all 10 canonical roles, separates PLATFORM vs CUSTOMER_TENANT roles, and localizes labels in Vietnamese', () => {
+    expect(CANONICAL_APP_ROLES).toHaveLength(10);
+    expect(PLATFORM_APP_ROLES).toEqual(['SuperAdmin', 'BillingAdmin', 'SupportAdmin', 'SecurityAuditor']);
+
+    for (const role of CANONICAL_APP_ROLES) {
+      localStorage.setItem('role', role);
+      expect(currentRole()).toBe(role);
+      const expectedPlatform = ['SuperAdmin', 'BillingAdmin', 'SupportAdmin', 'SecurityAuditor'].includes(role);
+      expect(isPlatformRole()).toBe(expectedPlatform);
+      expect(isPlatformRole(role)).toBe(expectedPlatform);
+      expect(isPlatformRoleName(role)).toBe(expectedPlatform);
+
+      expect(roleLabel(role)).not.toContain(`Vai trò ${role}`);
+      expect(roleChipLabel(role, 10)).not.toContain(role);
+      expect(roleChipLabel(role, 10)).toContain('(10)');
+    }
+
+    expect(roleChipLabel('Admin', 141)).toBe('Quản trị công ty (141)');
+    expect(roleChipLabel('Manager', 98)).toBe('Quản lý kho (98)');
+    expect(roleChipLabel('Supervisor', 54)).toBe('Giám sát & QC (54)');
+    expect(roleChipLabel('Accountant', 42)).toBe('Kế toán kho (42)');
+    expect(roleChipLabel('WarehouseStaff', 36)).toBe('Nhân viên kho (36)');
+    expect(roleChipLabel('Viewer', 18)).toBe('Kiểm toán nội bộ (18)');
+
+    expect(formatUserDisplayNameVi('qa_admin', 'SuperAdmin')).toBe('Chủ dự án (SuperAdmin)');
+    expect(formatUserDisplayNameVi('tenant_admin', 'Admin')).toBe('Quản trị viên Đại Phát');
+    expect(formatUserDisplayNameVi('qa_staff_wh01', 'WarehouseStaff')).toBe('Nhân viên kho WH01');
+    expect(formatMinLengthCounterVi(6, 10)).toBe('Còn thiếu 4 ký tự (Tối thiểu 10 ký tự)');
+    expect(formatMinLengthCounterVi(56, 10)).toBe('Đã nhập 56 ký tự (Đạt yêu cầu ≥ 10 ký tự)');
+
+    localStorage.setItem('role', 'UnknownBogusRole');
+    expect(currentRole()).toBe('Viewer');
+    expect(isPlatformRole()).toBe(false);
   });
 
-  it('limits immediate export approval to checker roles regardless of the legacy staff flag', () => {
-    expect(canApproveExportImmediately('Admin', false)).toBe(true);
-    expect(canApproveExportImmediately('Manager', false)).toBe(true);
-    expect(canApproveExportImmediately('WarehouseStaff', false)).toBe(false);
-    expect(canApproveExportImmediately('WarehouseStaff', true)).toBe(false);
-    expect(canApproveExportImmediately('Viewer', true)).toBe(false);
+  it('gates canViewStocktakes safely across Viewer and non-SuperAdmin platform sub-roles', () => {
+    setCurrentPermissions([]);
+    for (const deniedRole of ['Viewer', 'BillingAdmin', 'SupportAdmin', 'SecurityAuditor']) {
+      localStorage.setItem('role', deniedRole);
+      expect(canViewStocktakes()).toBe(false);
+    }
+
+    for (const allowedRole of ['SuperAdmin', 'Admin', 'Manager', 'Supervisor', 'Accountant', 'WarehouseStaff']) {
+      localStorage.setItem('role', allowedRole);
+      expect(canViewStocktakes()).toBe(true);
+    }
+  });
+
+  it('deduplicates permissions and fails closed for malformed storage', () => {
+    setCurrentPermissions(['putaway.read', 'putaway.read', 'receipt.read']);
+    expect(currentPermissions()).toEqual(['putaway.read', 'receipt.read']);
+    expect(hasPermission('putaway.read')).toBe(true);
+    localStorage.setItem('permissions', '{bad json');
+    expect(currentPermissions()).toEqual([]);
+    expect(hasPermission('putaway.read')).toBe(false);
+  });
+
+  it('updates mounted action visibility when effective permissions change', () => {
+    const view = renderHook(() => usePermission('putaway.execute'));
+    expect(view.result.current).toBe(false);
+    act(() => setCurrentPermissions(['putaway.execute']));
+    expect(view.result.current).toBe(true);
+    act(() => setCurrentPermissions([]));
+    expect(view.result.current).toBe(false);
+    view.unmount();
+  });
+
+  it('allows Approval Center visibility from outbound read or SuperAdmin/Admin/Manager', () => {
+    localStorage.setItem('role', 'Viewer');
+    setCurrentPermissions(['export_receipt.read']);
+    expect(canViewApprovals()).toBe(true);
+    setCurrentPermissions([]);
+    expect(canViewApprovals()).toBe(false);
+
+    localStorage.setItem('role', 'SuperAdmin');
+    expect(canViewApprovals()).toBe(true);
   });
 
   it('reads only a valid positive integer user id from session metadata', () => {
-    const values = new Map<string, string>();
-    Object.defineProperty(globalThis, 'localStorage', {
-      configurable: true,
-      value: {
-        getItem: (key: string) => values.get(key) ?? null,
-        setItem: (key: string, value: string) => values.set(key, value),
-      },
-    });
-
     expect(currentUserId()).toBeNull();
     localStorage.setItem('userId', '17');
     expect(currentUserId()).toBe(17);

@@ -1,25 +1,51 @@
-import { useEffect, useState } from 'react';
-import { ArrowRight, Check, PackageCheck, Plus, Send, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Plus } from 'lucide-react';
 import apiClient from '../services/apiClient';
-import { currentUserId } from '../services/authorization';
-import { completeIdempotentAction, idempotencyHeaders } from '../services/idempotency';
+import { currentRole, currentUserId, usePermission } from '../services/authorization';
+import { UiPage, UiPageHeader } from '../ui/ProductionUi';
 import './StockTransfers.css';
-
-type Warehouse = { id: number; name: string };
-type Product = { id: number; code: string; name: string };
-type Line = { productId: number | ''; quantity: number | ''; note: string };
-type TransferLine = { productId: number; productCode: string; productName: string; requestedQuantity: number; dispatchedQuantity: number; receivedQuantity: number; missingQuantity: number; damagedQuantity: number; inTransitQuantity: number; note?: string };
-type Transfer = { id: number; code: string; sourceWarehouseId: number; sourceWarehouseName: string; destinationWarehouseId: number; destinationWarehouseName: string; status: string | number; note?: string; createdBy: number; createdAt: string; approvedAt?: string; dispatchedAt?: string; receivedAt?: string; completedAt?: string; cancelledAt?: string; details: TransferLine[] };
-
-const statusNames = ['Draft', 'Approved', 'InTransit', 'Received', 'Completed', 'Cancelled'];
-const statusLabel: Record<string, string> = { Draft: 'Nháp', Approved: 'Đã duyệt', InTransit: 'Đang vận chuyển', Received: 'Đã nhận', Completed: 'Hoàn tất', Cancelled: 'Đã hủy' };
-const normalizeStatus = (status: string | number) => typeof status === 'number' ? statusNames[status] : status;
+import StockTransferDetailsDialog from './StockTransferDetailsDialog';
+import {
+  StockTransferDraftModal,
+  StockTransferInTransitCard,
+  StockTransferListCard,
+} from '../modules/inventory/StockTransferSections';
+import {
+  fetchInTransitTransfers,
+  fetchStockTransferPageData,
+  postTransferCommand,
+  StockTransferFilterToolbar,
+  submitTransferDraft,
+  type StockTransferFilters,
+} from '../modules/inventory/StockTransferFilterToolbar';
+import {
+  executeSimulateNetworkRebalancing,
+  executeVerifyInTransitSeal,
+  normalizeStatus,
+  statusLabel,
+  statusNames,
+  statusTone,
+  useDraftModalFocusTrap,
+  validateTransferDraft,
+  validateTransferReceive,
+  type InTransitItem,
+  type Line,
+  type NetworkRebalancingResult,
+  type Product,
+  type SealVerificationResult,
+  type Transfer,
+  type Warehouse,
+} from '../modules/inventory/stockTransfersShared';
 
 export default function StockTransfers() {
-  const role = localStorage.getItem('role') || 'Viewer';
-  const canWrite = ['Admin', 'Manager', 'WarehouseStaff'].includes(role);
-  const canApprove = ['Admin', 'Manager'].includes(role);
+  const role = currentRole();
+  const hasCreatePermission = usePermission('stock_transfer.create');
+  const hasApprovePermission = usePermission('stock_transfer.approve');
+  const canWrite = hasCreatePermission || ['Admin', 'Manager', 'WarehouseStaff'].includes(role);
+  const canApprove = hasApprovePermission || ['Admin', 'Manager'].includes(role);
+  const canReturn = usePermission('inventory_reversal.create');
   const userId = currentUserId();
+
   const [items, setItems] = useState<Transfer[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -27,83 +53,323 @@ export default function StockTransfers() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingRevision, setEditingRevision] = useState<number | null>(null);
+  const [draftConflict, setDraftConflict] = useState(false);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
+  const draftDialogRef = useRef<HTMLFormElement>(null);
   const [sourceId, setSourceId] = useState<number | ''>('');
   const [destinationId, setDestinationId] = useState<number | ''>('');
   const [note, setNote] = useState('');
+  const [internalTransferOrderNo, setInternalTransferOrderNo] = useState('');
+  const [transporterName, setTransporterName] = useState('');
+  const [vehiclePlateNumber, setVehiclePlateNumber] = useState('');
   const [lines, setLines] = useState<Line[]>([{ productId: '', quantity: '', note: '' }]);
-  const [filters, setFilters] = useState({ search: '', status: '', sourceWarehouseId: '', destinationWarehouseId: '' });
+  const [filters, setFilters] = useState<StockTransferFilters>({ search: '', status: '', sourceWarehouseId: '', destinationWarehouseId: '' });
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [receive, setReceive] = useState<Record<number, { receivedQuantity: number; missingQuantity: number; damagedQuantity: number }>>({});
   const [actionInFlight, setActionInFlight] = useState(false);
+  const [createInFlight, setCreateInFlight] = useState(false);
+  const [governanceBusy, setGovernanceBusy] = useState(false);
+  const [showInTransit, setShowInTransit] = useState(false);
+  const [inTransitItems, setInTransitItems] = useState<InTransitItem[]>([]);
+  const [inTransitLoading, setInTransitLoading] = useState(false);
+  const [sealVerification, setSealVerification] = useState<SealVerificationResult | null>(null);
+  const [networkRebalancing, setNetworkRebalancing] = useState<NetworkRebalancingResult | null>(null);
+  const actionInFlightRef = useRef(false);
+  const createInFlightRef = useRef(false);
+  const listRequestSequence = useRef(0);
+  const detailRequestSequence = useRef(0);
 
-  const load = async () => {
-    setLoading(true); setError('');
+  const loadInTransit = async () => {
+    setInTransitLoading(true);
     try {
-      const params = { ...filters, pageIndex: page, pageSize: 15 };
-      const [transfers, warehouseResult, productResult] = await Promise.all([
-        apiClient.get('/api/stock-transfers', { params }), apiClient.get('/api/warehouses'), apiClient.get('/api/products')
-      ]);
-      setItems(transfers.data.items); setTotalPages(transfers.data.totalPages || 1);
-      setWarehouses(warehouseResult.data); setProducts(productResult.data);
-    } catch (e: any) { setError(e.response?.data?.message || 'Không thể tải dữ liệu điều chuyển.'); }
-    finally { setLoading(false); }
+      setInTransitItems(await fetchInTransitTransfers(filters));
+    } catch (failure: any) {
+      setInTransitItems([]);
+      setError(failure?.response?.data?.message || 'Không thể tải dữ liệu tồn kho đang vận chuyển.');
+    } finally {
+      setInTransitLoading(false);
+    }
   };
 
-  // Filtering is submitted explicitly; page changes trigger the current query.
+  const toggleInTransit = () => {
+    const next = !showInTransit;
+    setShowInTransit(next);
+    if (next) void loadInTransit();
+  };
+
+  const load = async (requestedPage = page) => {
+    const requestSequence = ++listRequestSequence.current;
+    setLoading(true);
+    setError('');
+    try {
+      const data = await fetchStockTransferPageData(filters, requestedPage);
+      if (requestSequence !== listRequestSequence.current) return;
+      setItems(data.items);
+      setTotalPages(data.totalPages);
+      setWarehouses(data.warehouses);
+      setProducts(data.products);
+      if (data.refLoadError) setError(data.refLoadError);
+    } catch (failure: any) {
+      if (requestSequence === listRequestSequence.current) {
+        setError(failure.response?.data?.message || 'Không thể tải dữ liệu điều chuyển.');
+      }
+    } finally {
+      if (requestSequence === listRequestSequence.current) setLoading(false);
+    }
+  };
+
   // oxlint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void load(); }, [page]);
+  useEffect(() => {
+    void load(page);
+  }, [page]);
+
+  const applyFilters = () => {
+    if (showInTransit) void loadInTransit();
+    if (page === 1) void load(1);
+    else setPage(1);
+  };
+
+  const showTransferDetail = (transfer: Transfer) => {
+    setSelected(transfer);
+    setReceive(
+      Object.fromEntries(
+        transfer.details.map((line) => [
+          line.productId,
+          { receivedQuantity: line.dispatchedQuantity, missingQuantity: 0, damagedQuantity: 0 },
+        ]),
+      ),
+    );
+  };
 
   const openDetail = async (id: number) => {
+    const requestSequence = ++detailRequestSequence.current;
     try {
-      const response = await apiClient.get(`/api/stock-transfers/${id}`);
-      setSelected(response.data);
-      setReceive(Object.fromEntries(response.data.details.map((x: TransferLine) => [x.productId, { receivedQuantity: x.dispatchedQuantity, missingQuantity: 0, damagedQuantity: 0 }])));
-    } catch (e: any) { setError(e.response?.data?.message || 'Không thể tải chi tiết phiếu.'); }
+      const response = await apiClient.get(`/api/v1/stock-transfers/${id}`);
+      if (requestSequence !== detailRequestSequence.current) return;
+      showTransferDetail(response.data as Transfer);
+    } catch (failure: any) {
+      if (requestSequence === detailRequestSequence.current) {
+        setError(failure.response?.data?.message || 'Không thể tải chi tiết phiếu.');
+      }
+    }
+  };
+
+  const openNewDraft = () => {
+    setEditingId(null);
+    setEditingRevision(null);
+    setDraftConflict(false);
+    setSourceId('');
+    setDestinationId('');
+    setNote('');
+    setLines([{ productId: '', quantity: '', note: '' }]);
+    setError('');
+    setShowCreate(true);
+  };
+
+  const openDraftEditor = (transfer: Omit<Transfer, 'draftRevision'> & { draftRevision?: number }) => {
+    if (!canWrite || normalizeStatus(transfer.status) !== 'Draft' || transfer.reverseOfTransferId) return;
+    if (!Number.isSafeInteger(transfer.draftRevision) || !transfer.draftRevision || transfer.draftRevision < 1) {
+      setError('Phiếu nháp thiếu phiên bản hợp lệ. Không thể lưu; hãy tải lại chi tiết phiếu.');
+      return;
+    }
+    detailRequestSequence.current += 1;
+    setEditingId(transfer.id);
+    setEditingRevision(transfer.draftRevision);
+    setDraftConflict(false);
+    setSourceId(transfer.sourceWarehouseId);
+    setDestinationId(transfer.destinationWarehouseId);
+    setNote(transfer.note ?? '');
+    setLines(transfer.details.map((line) => ({ productId: line.productId, quantity: line.requestedQuantity, note: line.note ?? '' })));
+    setError('');
+    setSelected(null);
+    setShowCreate(true);
+  };
+
+  const closeDraftEditor = () => {
+    if (createInFlightRef.current) return;
+    setShowCreate(false);
+    setEditingId(null);
+    setEditingRevision(null);
+    setDraftConflict(false);
+    setError('');
+    createButtonRef.current?.focus();
+  };
+
+  useDraftModalFocusTrap(showCreate, draftDialogRef, createInFlightRef, closeDraftEditor);
+
+  const reloadConflictedDraft = async () => {
+    if (editingId === null || createInFlightRef.current) return;
+    const id = editingId;
+    createInFlightRef.current = true;
+    setCreateInFlight(true);
+    try {
+      const response = await apiClient.get<Transfer>(`/api/v1/stock-transfers/${id}`);
+      const latest = response.data;
+      if (normalizeStatus(latest.status) === 'Draft' && !latest.reverseOfTransferId) {
+        openDraftEditor(latest);
+      } else {
+        detailRequestSequence.current += 1;
+        setShowCreate(false);
+        setEditingId(null);
+        setEditingRevision(null);
+        setDraftConflict(false);
+        setError('');
+        showTransferDetail(latest);
+        void load();
+      }
+    } catch (failure: any) {
+      setError(failure.response?.data?.message || 'Không thể tải lại phiếu. Hãy kiểm tra kết nối và thử lại.');
+    } finally {
+      createInFlightRef.current = false;
+      setCreateInFlight(false);
+    }
   };
 
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (sourceId === destinationId) return setError('Kho nguồn và kho đích phải khác nhau.');
-    if (lines.some(x => !x.productId || Number(x.quantity) <= 0)) return setError('Mỗi dòng phải có sản phẩm và số lượng lớn hơn 0.');
-    if (new Set(lines.map(x => x.productId)).size !== lines.length) return setError('Sản phẩm không được trùng dòng.');
+    if (createInFlightRef.current || (editingId !== null && draftConflict)) return;
+    const validationErr = validateTransferDraft({ editingId, editingRevision, sourceId, destinationId, warehouses, products, lines, note });
+    if (validationErr) return setError(validationErr);
+
+    const editId = editingId;
+    createInFlightRef.current = true;
+    setCreateInFlight(true);
     try {
-      const payload = { sourceWarehouseId: sourceId, destinationWarehouseId: destinationId, note, details: lines };
-      const action = `transfer-create:${JSON.stringify(payload)}`;
-      await apiClient.post('/api/stock-transfers', payload, { headers: idempotencyHeaders(action) });
-      completeIdempotentAction(action);
-      setShowCreate(false); setLines([{ productId: '', quantity: '', note: '' }]); setSourceId(''); setDestinationId(''); setNote(''); await load();
-    } catch (e: any) { setError(e.response?.data?.message || 'Không thể tạo phiếu.'); }
+      await submitTransferDraft({
+        editId,
+        editingRevision,
+        sourceId,
+        destinationId,
+        note,
+        lines,
+        internalTransferOrderNo,
+        transporterName,
+        vehiclePlateNumber,
+      });
+      setShowCreate(false);
+      setEditingId(null);
+      setEditingRevision(null);
+      setDraftConflict(false);
+      createButtonRef.current?.focus();
+      setLines([{ productId: '', quantity: '', note: '' }]);
+      setSourceId('');
+      setDestinationId('');
+      setNote('');
+      await load();
+      if (editId !== null) await openDetail(editId);
+    } catch (failure: any) {
+      if (editId !== null && failure.response?.status === 409) {
+        setDraftConflict(true);
+      }
+      setError(
+        failure.response?.data?.message ||
+          (editingId === null ? 'Không thể tạo phiếu.' : 'Không thể cập nhật phiếu; hãy kiểm tra trạng thái mới nhất.'),
+      );
+    } finally {
+      createInFlightRef.current = false;
+      setCreateInFlight(false);
+    }
   };
 
   const act = async (action: string, body?: unknown) => {
-    if (!selected || !confirm(`Xác nhận thao tác ${statusLabel[action] || action}?`)) return;
-    if (actionInFlight) return;
+    if (!selected || actionInFlightRef.current) return;
+    const label = action === 'return' ? 'hoàn trả về kho nguồn' : action === 'reverse-draft' ? 'lập phiếu điều chuyển ngược' : statusLabel[action] || action;
+    if (!window.confirm(`Xác nhận thao tác ${label}?`)) return;
+
+    actionInFlightRef.current = true;
     setActionInFlight(true);
-    const logicalAction = `transfer-${action}:${selected.id}`;
-    try { await apiClient.post(`/api/stock-transfers/${selected.id}/${action}`, body, { headers: idempotencyHeaders(logicalAction) }); completeIdempotentAction(logicalAction); await openDetail(selected.id); await load(); }
-    catch (e: any) { setError(e.response?.data?.message || 'Thao tác không thành công.'); }
-    finally { setActionInFlight(false); }
+    try {
+      const data = await postTransferCommand(selected.id, action, body);
+      await openDetail(action === 'reverse-draft' ? data.id : selected.id);
+      await load();
+    } catch (failure: any) {
+      setError(failure.response?.data?.message || 'Thao tác không thành công.');
+    } finally {
+      actionInFlightRef.current = false;
+      setActionInFlight(false);
+    }
   };
 
-  const submitReceive = () => act('receive', { details: selected?.details.map(x => ({ productId: x.productId, ...receive[x.productId] })) });
+  const submitReceive = async (): Promise<void> => {
+    if (!selected || actionInFlightRef.current) return;
+    const validationErr = validateTransferReceive(selected, receive);
+    if (validationErr) return setError(validationErr);
+    setError('');
+    await act('receive', { details: selected.details.map((line) => ({ productId: line.productId, ...receive[line.productId] })) });
+  };
+
+  const handleVerifySeal = async () => {
+    if (governanceBusy) return;
+    setGovernanceBusy(true); setError('');
+    try { setSealVerification(await executeVerifyInTransitSeal(items)); }
+    catch (err: any) { setSealVerification(null); setError(err?.response?.data?.message || err?.message || 'Không thể xác minh niêm phong HU và đối chiếu hàng đang đi đường.'); }
+    finally { setGovernanceBusy(false); }
+  };
+
+  const handleSimulateRebalancing = async () => {
+    if (governanceBusy) return;
+    setGovernanceBusy(true); setError('');
+    try { setNetworkRebalancing(await executeSimulateNetworkRebalancing(filters)); }
+    catch (err: any) { setNetworkRebalancing(null); setError(err?.response?.data?.message || err?.message || 'Không thể mô phỏng tái cân bằng tồn kho mạng lưới.'); }
+    finally { setGovernanceBusy(false); }
+  };
+
   const status = selected ? normalizeStatus(selected.status) : '';
 
-  return <div className="transfer-page">
-    <div className="transfer-heading"><div><h1>Điều chuyển kho</h1><p>Theo dõi hàng từ kho nguồn đến khi kho đích xác nhận.</p></div>{canWrite && <button className="primary" onClick={() => setShowCreate(true)}><Plus size={18}/> Tạo phiếu</button>}</div>
-    <div className="transfer-filters">
-      <input placeholder="Tìm mã phiếu" value={filters.search} onChange={e => setFilters({ ...filters, search: e.target.value })}/>
-      <select value={filters.status} onChange={e => setFilters({ ...filters, status: e.target.value })}><option value="">Mọi trạng thái</option>{statusNames.map((x, i) => <option key={x} value={i}>{statusLabel[x]}</option>)}</select>
-      <select value={filters.sourceWarehouseId} onChange={e => setFilters({ ...filters, sourceWarehouseId: e.target.value })}><option value="">Mọi kho nguồn</option>{warehouses.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
-      <select value={filters.destinationWarehouseId} onChange={e => setFilters({ ...filters, destinationWarehouseId: e.target.value })}><option value="">Mọi kho đích</option>{warehouses.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
-      <button onClick={() => { setPage(1); void load(); }}>Lọc</button>
-    </div>
-    {error && <div className="transfer-error">{error}<button aria-label="Đóng" onClick={() => setError('')}><X size={16}/></button></div>}
-    {loading ? <div className="transfer-empty">Đang tải...</div> : items.length === 0 ? <div className="transfer-empty">Chưa có phiếu điều chuyển phù hợp.</div> : <div className="transfer-table-wrap"><table><thead><tr><th>Mã phiếu</th><th>Luồng kho</th><th>Trạng thái</th><th>Ngày tạo</th></tr></thead><tbody>{items.map(x => <tr key={x.id} onClick={() => void openDetail(x.id)}><td><strong>{x.code}</strong></td><td>{x.sourceWarehouseName} <ArrowRight size={14}/> {x.destinationWarehouseName}</td><td><span className={`status ${normalizeStatus(x.status)}`}>{statusLabel[normalizeStatus(x.status)]}</span></td><td>{new Date(x.createdAt).toLocaleString('vi-VN')}</td></tr>)}</tbody></table></div>}
-    <div className="transfer-pagination"><button disabled={page <= 1} onClick={() => setPage(page - 1)}>Trước</button><span>{page} / {totalPages}</span><button disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Sau</button></div>
+  return (
+    <UiPage>
+      <div className="transfer-page">
+        <UiPageHeader
+          eyebrow="Kiểm soát tồn kho"
+          title="Điều chuyển kho"
+          description="Theo dõi hàng từ kho nguồn, duyệt xuất, trạng thái đang vận chuyển đến khi kho đích xác nhận và hoàn tất."
+          actions={canWrite ? <button type="button" ref={createButtonRef} className="ui-primary-button" onClick={openNewDraft}><Plus size={17} aria-hidden="true" /> Tạo phiếu</button> : undefined}
+        />
 
-    {showCreate && <div className="transfer-modal"><form className="transfer-dialog" onSubmit={create}><div className="dialog-title"><h2>Tạo phiếu điều chuyển</h2><button type="button" aria-label="Đóng" onClick={() => setShowCreate(false)}><X/></button></div><div className="warehouse-pair"><label>Kho nguồn<select required value={sourceId} onChange={e => setSourceId(Number(e.target.value) || '')}><option value="">Chọn kho</option>{warehouses.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label><ArrowRight/><label>Kho đích<select required value={destinationId} onChange={e => setDestinationId(Number(e.target.value) || '')}><option value="">Chọn kho</option>{warehouses.filter(x => x.id !== sourceId).map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label></div><label>Ghi chú<textarea value={note} onChange={e => setNote(e.target.value)}/></label><div className="line-header"><h3>Sản phẩm</h3><button type="button" onClick={() => setLines([...lines, { productId: '', quantity: '', note: '' }])}><Plus size={16}/> Thêm dòng</button></div>{lines.map((line, index) => <div className="transfer-line" key={index}><select required value={line.productId} onChange={e => { const next = [...lines]; next[index].productId = Number(e.target.value) || ''; setLines(next); }}><option value="">Chọn sản phẩm</option>{products.map(x => <option key={x.id} value={x.id}>{x.code} - {x.name}</option>)}</select><input required type="number" min="0.0001" step="0.0001" placeholder="Số lượng" value={line.quantity} onChange={e => { const next = [...lines]; next[index].quantity = Number(e.target.value) || ''; setLines(next); }}/><button type="button" aria-label="Xóa dòng" onClick={() => setLines(lines.filter((_, i) => i !== index))}><X size={17}/></button></div>)}<div className="dialog-actions"><button type="button" onClick={() => setShowCreate(false)}>Đóng</button><button className="primary" type="submit">Tạo phiếu</button></div></form></div>}
+        <StockTransferFilterToolbar
+          error={error} showCreate={showCreate} hasSelected={Boolean(selected)} onClearError={() => setError('')}
+          items={items} actionInFlight={actionInFlight} createInFlight={createInFlight} governanceBusy={governanceBusy}
+          sealVerification={sealVerification} networkRebalancing={networkRebalancing}
+          onVerifySeal={() => void handleVerifySeal()} onSimulateRebalancing={() => void handleSimulateRebalancing()}
+          filters={filters} setFilters={setFilters} warehouses={warehouses} showInTransit={showInTransit}
+          onApplyFilters={applyFilters} onToggleInTransit={toggleInTransit}
+        />
 
-    {selected && <div className="transfer-modal"><div className="transfer-dialog detail"><div className="dialog-title"><div><h2>{selected.code}</h2><span className={`status ${status}`}>{statusLabel[status]}</span></div><button aria-label="Đóng" onClick={() => setSelected(null)}><X/></button></div><div className="timeline">{['Draft','Approved','InTransit','Received','Completed'].map((x, i) => <div className={statusNames.indexOf(status) >= i && status !== 'Cancelled' ? 'done' : ''} key={x}><span>{i + 1}</span><small>{statusLabel[x]}</small></div>)}</div><p className="route"><strong>{selected.sourceWarehouseName}</strong><ArrowRight/><strong>{selected.destinationWarehouseName}</strong></p><div className="transfer-table-wrap"><table><thead><tr><th>Sản phẩm</th><th>Yêu cầu</th><th>Đã xuất</th><th>Thực nhận</th><th>Thiếu</th><th>Hỏng</th></tr></thead><tbody>{selected.details.map(x => <tr key={x.productId}><td>{x.productCode} - {x.productName}</td><td>{x.requestedQuantity}</td><td>{x.dispatchedQuantity}</td>{status === 'InTransit' ? <><td><input type="number" min="0" step="0.0001" value={receive[x.productId]?.receivedQuantity ?? 0} onChange={e => setReceive({ ...receive, [x.productId]: { ...receive[x.productId], receivedQuantity: Number(e.target.value) } })}/></td><td><input type="number" min="0" step="0.0001" value={receive[x.productId]?.missingQuantity ?? 0} onChange={e => setReceive({ ...receive, [x.productId]: { ...receive[x.productId], missingQuantity: Number(e.target.value) } })}/></td><td><input type="number" min="0" step="0.0001" value={receive[x.productId]?.damagedQuantity ?? 0} onChange={e => setReceive({ ...receive, [x.productId]: { ...receive[x.productId], damagedQuantity: Number(e.target.value) } })}/></td></> : <><td>{x.receivedQuantity}</td><td>{x.missingQuantity}</td><td>{x.damagedQuantity}</td></>}</tr>)}</tbody></table></div><div className="dialog-actions">{canWrite && ['Draft','Approved'].includes(status) && <button disabled={actionInFlight} className="danger" onClick={() => void act('cancel')}>Hủy phiếu</button>}{canApprove && selected.createdBy !== userId && status === 'Draft' && <button disabled={actionInFlight} onClick={() => void act('approve')}><Check size={17}/> Duyệt</button>}{canWrite && status === 'Approved' && <button disabled={actionInFlight} onClick={() => void act('dispatch')}><Send size={17}/> Xuất kho</button>}{canWrite && status === 'InTransit' && <button disabled={actionInFlight} onClick={() => void submitReceive()}><PackageCheck size={17}/> Xác nhận nhận</button>}{canWrite && status === 'Received' && <button disabled={actionInFlight} className="primary" onClick={() => void act('complete')}>Hoàn tất</button>}</div></div></div>}
-  </div>;
+        {showInTransit && (
+          <StockTransferInTransitCard inTransitLoading={inTransitLoading} inTransitItems={inTransitItems} onOpenDetail={(id) => void openDetail(id)} />
+        )}
+
+        <StockTransferListCard loading={loading} items={items} page={page} totalPages={totalPages} onSetPage={setPage} onOpenDetail={(id) => void openDetail(id)} />
+
+        {showCreate && (
+          <StockTransferDraftModal
+            draftDialogRef={draftDialogRef} editingId={editingId} editingRevision={editingRevision}
+            draftConflict={draftConflict} createInFlight={createInFlight} error={error}
+            sourceId={sourceId} setSourceId={setSourceId} destinationId={destinationId} setDestinationId={setDestinationId}
+            note={note} setNote={setNote}
+            internalTransferOrderNo={internalTransferOrderNo} setInternalTransferOrderNo={setInternalTransferOrderNo}
+            transporterName={transporterName} setTransporterName={setTransporterName}
+            vehiclePlateNumber={vehiclePlateNumber} setVehiclePlateNumber={setVehiclePlateNumber}
+            lines={lines} setLines={setLines} warehouses={warehouses} products={products}
+            onCloseDraftEditor={closeDraftEditor} onReloadConflictedDraft={() => void reloadConflictedDraft()}
+            onSubmitCreate={(event) => void create(event)}
+          />
+        )}
+
+        {selected && (
+          <StockTransferDetailsDialog
+            key={selected.id} selected={selected} error={error} status={status}
+            statusNames={statusNames} statusLabel={statusLabel} statusTone={statusTone}
+            canWrite={canWrite} canReturn={canReturn} canApprove={canApprove}
+            userId={userId} actionInFlight={actionInFlight} receive={receive} setReceive={setReceive}
+            onClose={() => { detailRequestSequence.current += 1; setSelected(null); setError(''); }}
+            onEdit={openDraftEditor} onAction={act} onReceive={submitReceive} onOpenTransfer={openDetail}
+          />
+        )}
+      </div>
+    </UiPage>
+  );
 }

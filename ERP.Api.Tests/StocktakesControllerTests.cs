@@ -22,7 +22,12 @@ namespace ERP.Api.Tests
         {
             _mockService = new Mock<IStocktakeService>();
             _mockQueryService = new Mock<IStocktakeQueryService>();
-            _controller = new StocktakesController(_mockService.Object, _mockQueryService.Object);
+            _controller = new StocktakesController(
+                _mockService.Object,
+                _mockQueryService.Object,
+                Mock.Of<IStocktakeOperationsService>(),
+                Mock.Of<IWarehouseAuthorizationService>(),
+                Mock.Of<ICurrentUser>());
         }
 
         private void SetupUserClaims(string? userIdClaim)

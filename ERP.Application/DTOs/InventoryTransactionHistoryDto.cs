@@ -12,6 +12,14 @@ namespace ERP.Application.DTOs
         public int WarehouseId { get; set; }
         public string? WarehouseName { get; set; }
         public string TransactionType { get; set; } = string.Empty;
+        public string InventoryStatus { get; set; } = string.Empty;
+        public string? FromInventoryStatus { get; set; }
+        public string? ToInventoryStatus { get; set; }
+        public int? LotId { get; set; }
+        public string? LotNumber { get; set; }
+        public DateTime? ExpiryDate { get; set; }
+        public int? SerialId { get; set; }
+        public string? SerialNumber { get; set; }
         public decimal Quantity { get; set; }
         public int? ReferenceId { get; set; }
         public string? ReferenceType { get; set; }

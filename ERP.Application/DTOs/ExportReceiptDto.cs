@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ERP.Domain.Enums;
 
 namespace ERP.Application.DTOs
@@ -7,6 +8,7 @@ namespace ERP.Application.DTOs
         public int Id { get; set; }
         public string Code { get; set; } = string.Empty;
         public int WarehouseId { get; set; }
+        public string? WarehouseCode { get; set; }
         public string? WarehouseName { get; set; }
         public string Status { get; set; } = string.Empty;
         public string? Note { get; set; }
@@ -20,6 +22,29 @@ namespace ERP.Application.DTOs
         public int? DispatchedBy { get; set; }
         public string? DispatchedByName { get; set; }
         public DateTime? DispatchedAt { get; set; }
+        public int? CustomerId { get; set; }
+        public string? CustomerCode { get; set; }
+        public string? CustomerName { get; set; }
+        public int? SalesOrderId { get; set; }
+        public int? ShipmentId { get; set; }
+        public string? MarketplaceOrderId { get; set; }
+        public string? CarrierCode { get; set; }
+        public string? TrackingNumber { get; set; }
+        public string? AwbLabelUrl { get; set; }
+        public int AwbPrintCount { get; set; }
+        public DateTime? AwbFirstPrintedAtUtc { get; set; }
+        public DateTime? MarketplaceShipByUtc { get; set; }
+        public string? EInvoiceStatus { get; set; }
+        public string? EInvoiceProvider { get; set; }
+        public string? EInvoiceNumber { get; set; }
+        public string? BuyerTaxCode { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public decimal? SubTotalAmount { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public decimal? TaxAmount { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public decimal? TotalAmount { get; set; }
+        public string? RowVersion { get; set; }
         public bool AllowPerReceiptDispatchMode { get; set; }
         public bool AllowWarehouseStaffDirectDispatch { get; set; }
         public bool WriteEnabled { get; set; }
@@ -33,9 +58,22 @@ namespace ERP.Application.DTOs
         public int ProductId { get; set; }
         public string? ProductCode { get; set; }
         public string? ProductName { get; set; }
+        public string? UnitName { get; set; } = "THÙNG";
         public decimal Quantity { get; set; }
-        public decimal UnitPrice { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public decimal? UnitPrice { get; set; }
+        public decimal TaxPercent { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public decimal? LineSubTotal { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public decimal? LineTaxAmount { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public decimal? LineTotal { get; set; }
         public string? Note { get; set; }
+        public int? BaseUomIdSnapshot { get; set; }
+        public string? BaseUomCodeSnapshot { get; set; } = "THÙNG";
+        public string? BaseUomNameSnapshot { get; set; } = "THÙNG";
+        public int? BaseUomDecimalPlacesSnapshot { get; set; }
         public decimal? AvailableQuantity { get; set; }
     }
     public class CreateExportReceiptDto
@@ -43,6 +81,20 @@ namespace ERP.Application.DTOs
         public string Code { get; set; } = string.Empty;
         public int WarehouseId { get; set; }
         public string? Note { get; set; }
+        public int? CustomerId { get; set; }
+        public int? SalesOrderId { get; set; }
+        public int? ShipmentId { get; set; }
+        public string? MarketplaceOrderId { get; set; }
+        public string? CarrierCode { get; set; }
+        public string? TrackingNumber { get; set; }
+        public string? AwbLabelUrl { get; set; }
+        public int AwbPrintCount { get; set; }
+        public DateTime? AwbFirstPrintedAtUtc { get; set; }
+        public DateTime? MarketplaceShipByUtc { get; set; }
+        public string? EInvoiceStatus { get; set; }
+        public string? EInvoiceProvider { get; set; }
+        public string? EInvoiceNumber { get; set; }
+        public string? BuyerTaxCode { get; set; }
         public List<CreateExportReceiptDetailDto> Details { get; set; } = new();
     }
 
@@ -51,6 +103,7 @@ namespace ERP.Application.DTOs
         public int ProductId { get; set; }
         public decimal Quantity { get; set; }
         public decimal UnitPrice { get; set; }
+        public decimal TaxPercent { get; set; }
         public string? Note { get; set; }
     }
 }

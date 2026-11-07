@@ -10,11 +10,18 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
     {
         builder.ToTable("Users");
         builder.HasKey(x => x.Id);
+        builder.Property(x => x.SecurityDomain).IsRequired().HasMaxLength(32).HasDefaultValue("CUSTOMER_TENANT");
         builder.Property(x => x.Username).IsRequired().HasMaxLength(50);
-        builder.HasIndex(x => x.Username).IsUnique();
+        builder.HasIndex(x => new { x.TenantId, x.Username }).IsUnique().HasDatabaseName("UX_Users_TenantId_Username");
         builder.Property(x => x.PasswordHash).IsRequired().HasMaxLength(256);
         builder.Property(x => x.FullName).IsRequired().HasMaxLength(100);
         builder.Property(x => x.Email).HasMaxLength(100);
+        builder.Property(x => x.WarehouseAccessRevision).IsConcurrencyToken();
+        builder.Property(x => x.SecurityRevision).IsConcurrencyToken();
+        builder.Property(x => x.TotpSecretProtected).HasMaxLength(512);
+        builder.Property(x => x.TotpEnrollmentStatus).IsRequired().HasMaxLength(32).HasDefaultValue("IDLE");
+        builder.Property(x => x.TotpRecoveryCodeHashesJson).HasMaxLength(2000);
+        builder.Property(x => x.TotpActivatedAtUtc);
 
         builder.HasOne(x => x.Role)
                .WithMany(r => r.Users)

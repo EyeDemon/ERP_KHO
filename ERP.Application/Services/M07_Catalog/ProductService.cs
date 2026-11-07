@@ -1,0 +1,272 @@
+using ERP.Application.Common;
+using ERP.Application.DTOs;
+using ERP.Application.Exceptions;
+using ERP.Application.Interfaces;
+using ERP.Domain.Entities;
+using ERP.Domain.Interfaces;
+
+namespace ERP.Application.Services
+{
+    public class ProductService : IProductService
+    {
+        private readonly IProductRepository _productRepository;
+        private readonly IProductCatalogService _catalogService;
+
+        public ProductService(IProductRepository productRepository, IProductCatalogService catalogService)
+        {
+            _productRepository = productRepository;
+            _catalogService = catalogService;
+        }
+
+        public async Task<IEnumerable<ProductDto>> GetAllProductsAsync(CancellationToken cancellationToken = default)
+        {
+            var products = await _productRepository.GetProductsWithDetailsAsync(cancellationToken);
+            return products.Select(Map);
+        }
+
+        public async Task<PagedResult<ProductDto>> GetPagedProductsAsync(int pageIndex, int pageSize, string? keyword, CancellationToken cancellationToken = default)
+        {
+            if (pageIndex < 1) pageIndex = 1;
+            if (pageSize < 1) pageSize = 20;
+            if (pageSize > 100) pageSize = 100;
+
+            var (items, totalRecords) = await _productRepository.GetPagedAsync(pageIndex, pageSize, keyword, cancellationToken);
+
+            var dtos = items.Select(Map).ToList();
+
+            return new PagedResult<ProductDto>
+            {
+                Items = dtos,
+                TotalRecords = totalRecords,
+                PageIndex = pageIndex,
+                PageSize = pageSize
+            };
+        }
+
+        public async Task<ProductDto> GetProductByIdAsync(int id, CancellationToken cancellationToken = default)
+        {
+            var p = await _productRepository.GetByIdAsync(id, cancellationToken);
+            if (p == null) throw new NotFoundException($"Không tìm thấy sản phẩm id {id}");
+
+            return Map(p);
+        }
+
+        public static int ResolveMaxSkusForPlan(string? planCode)
+        {
+            var normalized = (planCode ?? string.Empty).Trim().ToUpperInvariant();
+            return normalized switch
+            {
+                "FREE_TRIAL" or "TRIAL" => 500,
+                "STARTER" => 2000,
+                "GROWTH" or "PRO" => 20000,
+                "ENTERPRISE" or "ENTERPRISE_SAAS" => 100000,
+                _ => 2000
+            };
+        }
+
+        public async Task<ProductDto> CreateProductAsync(CreateProductDto dto, string username, CancellationToken cancellationToken = default)
+        {
+            dto.Code = dto.Code.Trim();
+            if (await _productRepository.IsMaxSkusExceededAsync(cancellationToken))
+            {
+                throw new ForbiddenException(
+                    "Đã đạt giới hạn số lượng danh mục SKU tối đa của gói thuê bao hiện tại. Vui lòng nâng cấp gói để tạo thêm sản phẩm.",
+                    "SUBSCRIPTION_MAX_SKUS_EXCEEDED");
+            }
+            var exists = await _productRepository.ExistsByCodeAsync(dto.Code, null, cancellationToken);
+            if (exists) throw new BusinessRuleException($"Mã sản phẩm {dto.Code} đã tồn tại");
+            var storageClass = NormalizeStorageClass(dto.StorageClass);
+            ValidateStorageProfile(dto.UnitWeightKg, dto.UnitVolumeM3, dto.UnitPalletEquivalent);
+            var trackingType = ParseTrackingType(dto.TrackingType);
+            ValidateTrackingPolicy(trackingType, dto.ExpiryControl, dto.ShelfLifeDays);
+            var product = new Product
+            {
+                Code = dto.Code,
+                Name = (dto.Name ?? string.Empty).Trim(),
+                Description = dto.Description?.Trim(),
+                StorageClass = storageClass,
+                UnitWeightKg = dto.UnitWeightKg,
+                UnitVolumeM3 = dto.UnitVolumeM3,
+                UnitPalletEquivalent = dto.UnitPalletEquivalent,
+                TrackingType = trackingType,
+                ExpiryControl = dto.ExpiryControl,
+                ShelfLifeDays = dto.ShelfLifeDays,
+                UnitId = dto.UnitId,
+                CategoryId = dto.CategoryId,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _catalogService.AddProductAsync(product, cancellationToken);
+
+            return await GetProductByIdAsync(product.Id, cancellationToken);
+        }
+
+        private static string? NormalizeNullableUom(string? value)
+        {
+            if (value is null) return null;
+            var trimmed = value.Trim();
+            return trimmed is "" or "QA_UNIT" or "QA-PCS" ? "THÙNG" : trimmed;
+        }
+
+        private static string NormalizeRequiredUom(string? value)
+        {
+            var trimmed = (value ?? string.Empty).Trim();
+            return trimmed is "" or "QA_UNIT" or "QA-PCS" ? "THÙNG" : trimmed;
+        }
+
+        public static ProductDto Map(Product p) => new()
+        {
+            Id = p.Id,
+            Code = (p.Code ?? string.Empty).Trim(),
+            Name = (p.Name ?? string.Empty).Trim(),
+            Description = p.Description?.Trim(),
+            StorageClass = p.StorageClass?.Trim(),
+            UnitWeightKg = p.UnitWeightKg,
+            UnitVolumeM3 = p.UnitVolumeM3,
+            UnitPalletEquivalent = p.UnitPalletEquivalent,
+            TrackingType = p.TrackingType.ToString(),
+            ExpiryControl = p.ExpiryControl,
+            ShelfLifeDays = p.ShelfLifeDays,
+            UnitId = p.UnitId,
+            UnitName = NormalizeNullableUom(p.Unit?.Name),
+            UnitCode = NormalizeNullableUom(p.Unit?.Code),
+            UnitDecimalPlaces = p.Unit?.DecimalPlaces ?? 4,
+            Uoms = new[]
+                {
+                    new ProductUomDto
+                    {
+                        UnitId = p.UnitId,
+                        UnitCode = p.Unit is null ? string.Empty : NormalizeRequiredUom(p.Unit.Code),
+                        UnitName = p.Unit is null ? string.Empty : NormalizeRequiredUom(p.Unit.Name),
+                        DecimalPlaces = p.Unit?.DecimalPlaces ?? 4,
+                        ConversionFactor = 1,
+                        Version = 1
+                    }
+                }
+                .Concat((p.Uoms ?? [])
+                    .Where(x => x.IsActive && x.EffectiveFromUtc <= DateTime.UtcNow && x.UnitId != p.UnitId)
+                    .GroupBy(x => x.UnitId)
+                    .Select(group => group.OrderByDescending(x => x.Version).First())
+                    .Select(x => new ProductUomDto
+                    {
+                        UnitId = x.UnitId,
+                        UnitCode = NormalizeRequiredUom(x.Unit?.Code),
+                        UnitName = NormalizeRequiredUom(x.Unit?.Name),
+                        DecimalPlaces = x.Unit?.DecimalPlaces ?? 4,
+                        ConversionFactor = x.ConversionFactor,
+                        Version = x.Version
+                    }))
+                .ToList(),
+            CategoryId = p.CategoryId,
+            CategoryCode = p.Category?.Code?.Trim(),
+            CategoryName = p.Category?.Name?.Trim(),
+            Barcodes = (p.Barcodes ?? []).Select(x => new ProductBarcodeDto { Id = x.Id, ProductId = x.ProductId, Value = (x.Value ?? string.Empty).Trim() }).ToList(),
+            IsActive = p.IsActive,
+            CreatedAt = p.CreatedAt
+        };
+
+        public async Task UpdateProductAsync(int id, UpdateProductDto dto, string username, CancellationToken cancellationToken = default)
+        {
+            var product = await _productRepository.GetByIdAsync(id, cancellationToken);
+            if (product == null) throw new NotFoundException($"Không tìm thấy sản phẩm id {id}");
+
+            bool? hasTransactions = null;
+            Task<bool> HasTransactionsAsync() => hasTransactions is { } cached
+                ? Task.FromResult(cached)
+                : LoadHasTransactionsAsync();
+            async Task<bool> LoadHasTransactionsAsync()
+            {
+                var result = await _productRepository.HasTransactionsAsync(id, cancellationToken);
+                hasTransactions = result;
+                return result;
+            }
+
+            if (product.UnitId > 0 && product.UnitId != dto.UnitId && await HasTransactionsAsync())
+                throw new BusinessRuleException("Không thể thay đổi đơn vị tính cơ sở của sản phẩm đã phát sinh giao dịch hoặc còn tồn kho.");
+
+            if (product.IsActive && !dto.IsActive && await HasTransactionsAsync())
+                throw new BusinessRuleException("Không thể ngừng hoạt động sản phẩm đã phát sinh giao dịch hoặc còn tồn kho/giữ chỗ.");
+
+            product.Name = (dto.Name ?? string.Empty).Trim();
+            product.Description = dto.Description?.Trim();
+            product.UnitId = dto.UnitId;
+            product.IsActive = dto.IsActive;
+            if (dto.UpdateTrackingPolicy || !string.IsNullOrWhiteSpace(dto.TrackingType))
+            {
+                var trackingType = ParseTrackingType(dto.TrackingType);
+                var expiryControl = dto.UpdateTrackingPolicy ? dto.ExpiryControl : product.ExpiryControl;
+                var shelfLifeDays = dto.UpdateTrackingPolicy ? dto.ShelfLifeDays : product.ShelfLifeDays;
+                ValidateTrackingPolicy(trackingType, expiryControl, shelfLifeDays);
+                var changed = trackingType != product.TrackingType ||
+                              expiryControl != product.ExpiryControl ||
+                              shelfLifeDays != product.ShelfLifeDays;
+                if (changed && await HasTransactionsAsync())
+                    throw new BusinessRuleException("Không thể đổi Lot/Serial/Expiry policy khi sản phẩm đã có tồn hoặc giao dịch kho.");
+                product.TrackingType = trackingType;
+                product.ExpiryControl = expiryControl;
+                product.ShelfLifeDays = shelfLifeDays;
+            }
+            if (dto.UpdateStorageProfile)
+            {
+                product.StorageClass = NormalizeStorageClass(dto.StorageClass);
+                ValidateStorageProfile(dto.UnitWeightKg, dto.UnitVolumeM3, dto.UnitPalletEquivalent);
+                product.UnitWeightKg = dto.UnitWeightKg;
+                product.UnitVolumeM3 = dto.UnitVolumeM3;
+                product.UnitPalletEquivalent = dto.UnitPalletEquivalent;
+            }
+            product.UpdatedAt = DateTime.UtcNow;
+
+            await _productRepository.UpdateAsync(product, cancellationToken);
+        }
+
+        private static ERP.Domain.Enums.ProductTrackingType ParseTrackingType(string? value)
+        {
+            var normalized = string.IsNullOrWhiteSpace(value) ? "None" : value.Trim();
+            if (!Enum.TryParse<ERP.Domain.Enums.ProductTrackingType>(normalized, true, out var parsed) ||
+                !Enum.IsDefined(parsed))
+                throw new BusinessRuleException("Tracking Type chỉ hỗ trợ None, Lot hoặc Serial.");
+            return parsed;
+        }
+
+        private static void ValidateTrackingPolicy(
+            ERP.Domain.Enums.ProductTrackingType trackingType,
+            bool expiryControl,
+            int? shelfLifeDays)
+        {
+            if (expiryControl && trackingType == ERP.Domain.Enums.ProductTrackingType.None)
+                throw new BusinessRuleException("Expiry Control yêu cầu sản phẩm theo dõi Lot hoặc Serial.");
+            if (shelfLifeDays.HasValue && shelfLifeDays <= 0)
+                throw new BusinessRuleException("Shelf Life Days phải lớn hơn 0.");
+            if (!expiryControl && shelfLifeDays.HasValue)
+                throw new BusinessRuleException("Shelf Life Days chỉ được cấu hình khi bật Expiry Control.");
+        }
+
+        private static string? NormalizeStorageClass(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            var normalized = value.Trim().ToUpperInvariant();
+            if (normalized.Length > 32 || normalized.Any(ch => !((ch >= 'A' && ch <= 'Z') || char.IsDigit(ch) || ch is '-' or '_')))
+                throw new BusinessRuleException("Storage Class chỉ được dùng chữ A-Z, số, dấu gạch ngang hoặc gạch dưới.");
+            return normalized;
+        }
+
+        private static void ValidateStorageProfile(decimal? weightKg, decimal? volumeM3, decimal? palletEquivalent)
+        {
+            if (weightKg.HasValue && weightKg <= 0) throw new BusinessRuleException("Trọng lượng đơn vị phải lớn hơn 0.");
+            if (volumeM3.HasValue && volumeM3 <= 0) throw new BusinessRuleException("Thể tích đơn vị phải lớn hơn 0.");
+            if (palletEquivalent.HasValue && palletEquivalent <= 0) throw new BusinessRuleException("Pallet-equivalent đơn vị phải lớn hơn 0.");
+        }
+
+        public async Task DeleteProductAsync(int id, CancellationToken cancellationToken = default)
+        {
+            var product = await _productRepository.GetByIdAsync(id, cancellationToken);
+            if (product == null) throw new NotFoundException($"Không tìm thấy sản phẩm id {id}");
+
+            var hasTx = await _productRepository.HasTransactionsAsync(id, cancellationToken);
+            if (hasTx) throw new BusinessRuleException("Không thể xóa sản phẩm đã có giao dịch kho");
+
+            await _productRepository.DeleteAsync(product, cancellationToken);
+        }
+    }
+}

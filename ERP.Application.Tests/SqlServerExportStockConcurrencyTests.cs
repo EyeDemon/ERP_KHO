@@ -1,10 +1,12 @@
 using ERP.Application.Services;
+using ERP.Application.Interfaces;
 using ERP.Domain.Entities;
 using ERP.Domain.Enums;
 using ERP.Domain.Exceptions;
 using ERP.Domain.Interfaces;
 using ERP.Infrastructure.Persistence;
 using ERP.Infrastructure.Repositories;
+using ERP.Infrastructure.Services;
 using ERP.Application.Options;
 using FluentAssertions;
 using Microsoft.Data.SqlClient;
@@ -114,17 +116,27 @@ public class SqlServerExportStockConcurrencyTests
             receiptRepository = new BarrierExportReceiptRepository(receiptRepository, barrier);
         }
 
+        var warehouseId = await context.ExportReceipts.Where(x => x.Id == receiptId).Select(x => x.WarehouseId).SingleAsync();
+        var current = new CurrentUser(userId);
+        var warehouseAuthorization = new TestWarehouseAuthorization(warehouseId);
+        var unitOfWork = new UnitOfWork(context);
+        var stockRepository = new InventoryStockRepository(context);
+        var reservationService = new StockReservationService(
+            context, stockRepository, unitOfWork, warehouseAuthorization, current, new StockReservationOptions());
         var service = new ExportReceiptService(
             receiptRepository,
-            new InventoryStockRepository(context),
+            stockRepository,
             new InventoryTransactionRepository(context),
-            new UnitOfWork(context),
+            unitOfWork,
             new AuditLogRepository(context),
+            warehouseAuthorization,
+            current,
+            reservationService,
             options);
 
         try
         {
-            await service.ApproveAsync(receiptId, userId);
+            await service.ApproveAndDispatchAsync(receiptId, userId);
             return null;
         }
         catch (Exception exception)
@@ -173,6 +185,23 @@ public class SqlServerExportStockConcurrencyTests
         public Task DeleteAsync(ExportReceipt entity, CancellationToken cancellationToken = default) => _inner.DeleteAsync(entity, cancellationToken);
     }
 
+    private sealed record CurrentUser(int UserId) : ICurrentUser
+    {
+        public bool IsAuthenticated => true;
+        public bool IsGlobalAdmin => false;
+        public string Role => "Manager";
+    }
+
+    private sealed class TestWarehouseAuthorization(int warehouseId) : IWarehouseAuthorizationService
+    {
+        public Task<IReadOnlyList<int>> GetAccessibleWarehouseIdsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<int>>([warehouseId]);
+        public Task<bool> CanAccessWarehouseAsync(int id, CancellationToken cancellationToken = default) =>
+            Task.FromResult(id == warehouseId);
+        public Task EnsureWarehouseAccessAsync(int id, CancellationToken cancellationToken = default) =>
+            id == warehouseId ? Task.CompletedTask : Task.FromException(new UnauthorizedAccessException());
+    }
+
     private sealed class SqlServerScenario : IAsyncDisposable
     {
         private readonly string _connectionString;
@@ -205,6 +234,9 @@ public class SqlServerExportStockConcurrencyTests
             var unit = new Unit { Code = $"{prefix}U", Name = "SQL concurrency unit", IsActive = true };
             var warehouse = new Warehouse { Code = $"{prefix}W", Name = "SQL concurrency warehouse", IsActive = true };
             context.AddRange(role, unit, warehouse);
+            await context.SaveChangesAsync();
+            var location = new WarehouseLocation { WarehouseId = warehouse.Id, Code = "LEGACY", Name = "Legacy stock", LocationType = WarehouseLocationType.Legacy, IsActive = true, IsPickable = true, IsSystemManaged = true };
+            context.Add(location);
             await context.SaveChangesAsync();
 
             var creator = new User
@@ -240,6 +272,7 @@ public class SqlServerExportStockConcurrencyTests
             {
                 ProductId = product.Id,
                 WarehouseId = warehouse.Id,
+                LocationId = location.Id,
                 Quantity = initialStocks[index]
             }));
 
@@ -307,11 +340,17 @@ public class SqlServerExportStockConcurrencyTests
         public async ValueTask DisposeAsync()
         {
             await using var context = CreateContext(_connectionString);
+            await context.Database.ExecuteSqlRawAsync("DISABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
             await context.InventoryTransactions
                 .Where(transaction => transaction.ReferenceType == "ExportReceipt" && transaction.ReferenceId.HasValue && ReceiptIds.Contains(transaction.ReferenceId.Value))
                 .ExecuteDeleteAsync();
+            await context.Database.ExecuteSqlRawAsync("ENABLE TRIGGER dbo.TR_InventoryTransactions_Immutable_AppendOnly ON dbo.InventoryTransactions;");
             await context.AuditLogs
                 .Where(log => log.EntityName == "ExportReceipt" && log.EntityId.HasValue && ReceiptIds.Contains(log.EntityId.Value))
+                .ExecuteDeleteAsync();
+            await context.StockReservations
+                .Where(reservation => reservation.SourceType == "ExportReceipt" &&
+                    reservation.SourceId.HasValue && ReceiptIds.Contains(reservation.SourceId.Value))
                 .ExecuteDeleteAsync();
             await context.ExportReceiptDetails
                 .Where(detail => ReceiptIds.Contains(detail.ExportReceiptId))
@@ -324,6 +363,7 @@ public class SqlServerExportStockConcurrencyTests
                 .ExecuteDeleteAsync();
             await context.Products.Where(product => product.Code.StartsWith(_prefix)).ExecuteDeleteAsync();
             await context.Users.Where(user => user.Username.StartsWith(_prefix)).ExecuteDeleteAsync();
+            await context.WarehouseLocations.Where(location => location.WarehouseId == WarehouseId).ExecuteDeleteAsync();
             await context.Warehouses.Where(warehouse => warehouse.Code.StartsWith(_prefix)).ExecuteDeleteAsync();
             await context.Units.Where(unit => unit.Code.StartsWith(_prefix)).ExecuteDeleteAsync();
             await context.Roles.Where(role => role.RoleName.StartsWith(_prefix)).ExecuteDeleteAsync();

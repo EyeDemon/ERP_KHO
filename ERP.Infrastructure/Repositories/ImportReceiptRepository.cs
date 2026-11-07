@@ -34,12 +34,28 @@ namespace ERP.Infrastructure.Repositories
             _warehouseAuthorization = warehouseAuthorization;
         }
 
-        public async Task<ImportReceipt?> GetByIdWithDetailsAsync(int id)
+        public Task<ImportReceipt?> GetByIdWithDetailsAsync(int id) => LoadWithDetailsAsync(id, false);
+
+        public Task<ImportReceipt?> GetByIdWithDetailsForUpdateAsync(int id) => LoadWithDetailsAsync(id, true);
+
+        private async Task<ImportReceipt?> LoadWithDetailsAsync(int id, bool forUpdate)
         {
-            var query = _dbSet
+            // Status alone does not protect two partial QC updates that remain QcPending.
+            var tenantId = _context.CurrentTenantId;
+            var source = forUpdate && _context.Database.IsSqlServer()
+                ? _dbSet.FromSqlInterpolated($"SELECT * FROM dbo.ImportReceipts WITH (UPDLOCK,HOLDLOCK) WHERE TenantId = {tenantId} AND Id = {id}")
+                : _dbSet.AsQueryable();
+            var query = source
                 .Include(i => i.Warehouse)
+                .Include(i => i.Supplier)
+                .Include(i => i.PurchaseOrder)
+                .Include(i => i.Asn)
                 .Include(i => i.Details)
-                    .ThenInclude(d => d.Product).AsQueryable();
+                    .ThenInclude(d => d.Product)
+                        .ThenInclude(p => p.Unit)
+                .Include(i => i.CreatedByUser)
+                .Include(i => i.ApprovedByUser)
+                .AsQueryable();
             if (_warehouseAuthorization is not null)
             {
                 var allowedWarehouseIds = await _warehouseAuthorization.GetAccessibleWarehouseIdsAsync();
@@ -51,7 +67,17 @@ namespace ERP.Infrastructure.Repositories
         public async Task<IEnumerable<ImportReceipt>> GetAllWithDetailsAsync(ERP.Domain.Enums.ReceiptStatus? status)
         {
             var query = _dbSet
+                .AsNoTracking()
+                .AsSplitQuery()
                 .Include(i => i.Warehouse)
+                .Include(i => i.Supplier)
+                .Include(i => i.PurchaseOrder)
+                .Include(i => i.Asn)
+                .Include(i => i.Details)
+                    .ThenInclude(d => d.Product)
+                        .ThenInclude(p => p.Unit)
+                .Include(i => i.CreatedByUser)
+                .Include(i => i.ApprovedByUser)
                 .AsQueryable();
 
             if (_warehouseAuthorization is not null)
@@ -82,6 +108,8 @@ namespace ERP.Infrastructure.Repositories
         {
             try
             {
+                if (entity.SupplierId.HasValue && !await _context.BusinessPartners.AnyAsync(x => x.Id == entity.SupplierId && x.IsActive && x.IsSupplier, cancellationToken))
+                    throw new BusinessRuleException("Nhà cung cấp không tồn tại, không hoạt động hoặc sai vai trò.");
                 return await base.AddAsync(entity, cancellationToken);
             }
             catch (DbUpdateException ex)

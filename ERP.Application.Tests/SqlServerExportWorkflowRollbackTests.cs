@@ -6,6 +6,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using ERP.TestSupport;
 
 namespace ERP.Application.Tests;
 
@@ -21,13 +22,13 @@ public sealed class SqlServerExportWorkflowRollbackTests
         await using var context = database.CreateContext();
         var migrator = context.GetService<IMigrator>();
 
-        await migrator.MigrateAsync();
+        await PermissionMigrationBootstrap.MigrateAsync(context, database.RunId, "qa_rollback_bootstrap");
         (await HasDispatchColumnsAsync(context)).Should().BeTrue();
 
         await migrator.MigrateAsync(PreviousMigration);
         (await HasDispatchColumnsAsync(context)).Should().BeFalse();
 
-        await migrator.MigrateAsync();
+        await PermissionMigrationBootstrap.MigrateAsync(context, database.RunId, "qa_rollback_bootstrap");
         (await HasDispatchColumnsAsync(context)).Should().BeTrue();
     }
 
@@ -36,7 +37,7 @@ public sealed class SqlServerExportWorkflowRollbackTests
     {
         await using var database = await OwnedTemporaryMigrationDatabase.CreateAsync(BaseConnectionString());
         await using var context = database.CreateContext();
-        await context.Database.MigrateAsync();
+        await PermissionMigrationBootstrap.MigrateAsync(context, database.RunId, "qa_rollback_bootstrap");
 
         var role = new Role { RoleName = "RollbackTestRole" };
         var warehouse = new Warehouse { Code = "RB_WH", Name = "Rollback test warehouse", IsActive = true };
@@ -67,7 +68,7 @@ public sealed class SqlServerExportWorkflowRollbackTests
         var error = await act.Should().ThrowAsync<SqlException>();
         error.Which.Number.Should().Be(51011);
         (await HasDispatchColumnsAsync(context)).Should().BeTrue();
-        (await context.ExportReceipts.CountAsync(x => x.Id == receipt.Id)).Should().Be(beforeCount);
+        (await context.ExportReceipts.IgnoreQueryFilters().CountAsync(x => x.Id == receipt.Id)).Should().Be(beforeCount);
         (await context.Database.GetAppliedMigrationsAsync()).Should().Contain("20260825104054_AddExportReceiptDispatchWorkflow");
     }
 
@@ -77,9 +78,16 @@ public sealed class SqlServerExportWorkflowRollbackTests
     private static async Task<bool> HasDispatchColumnsAsync(ErpKhoDbContext context)
     {
         await context.Database.OpenConnectionAsync();
-        await using var command = context.Database.GetDbConnection().CreateCommand();
-        command.CommandText = "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID('ExportReceipts') AND name IN ('DispatchMode','DispatchedAt','DispatchedBy')";
-        return Convert.ToInt32(await command.ExecuteScalarAsync()) == 3;
+        try
+        {
+            await using var command = context.Database.GetDbConnection().CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID('ExportReceipts') AND name IN ('DispatchMode','DispatchedAt','DispatchedBy')";
+            return Convert.ToInt32(await command.ExecuteScalarAsync()) == 3;
+        }
+        finally
+        {
+            await context.Database.CloseConnectionAsync();
+        }
     }
 
 }

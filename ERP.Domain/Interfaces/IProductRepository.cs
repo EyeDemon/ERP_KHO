@@ -8,5 +8,6 @@ namespace ERP.Domain.Interfaces
         Task<bool> ExistsByCodeAsync(string code, int? excludeId = null, CancellationToken cancellationToken = default);
         Task<IEnumerable<Product>> GetProductsWithDetailsAsync(CancellationToken cancellationToken = default);
         Task<(IReadOnlyList<Product> Items, int TotalRecords)> GetPagedAsync(int pageIndex, int pageSize, string? keyword, CancellationToken cancellationToken = default);
+        Task<bool> IsMaxSkusExceededAsync(CancellationToken cancellationToken = default) => Task.FromResult(false);
     }
 }

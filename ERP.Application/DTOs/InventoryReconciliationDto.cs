@@ -1,5 +1,143 @@
 namespace ERP.Application.DTOs
 {
+    public sealed class InventoryReconciliationWarehouseDto
+    {
+        public int Id { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+    }
+
+    // Evidence only. No command or projection repair can be derived from this
+    // read model without a separately authorized, audited correction process.
+    public sealed class InventoryReconciliationInvestigationDto
+    {
+        public int ProductId { get; set; }
+        public string ProductCode { get; set; } = string.Empty;
+        public string ProductName { get; set; } = string.Empty;
+        public int WarehouseId { get; set; }
+        public string WarehouseName { get; set; } = string.Empty;
+        // Bucket IDs are keyset-paged independently of Ledger events. This
+        // high-water ID excludes newly inserted buckets. SQL Server detail
+        // requests use a scoped SERIALIZABLE read transaction, but quantities
+        // and statuses remain CURRENT across separate HTTP page requests;
+        // anchors/fingerprint do NOT freeze later pages.
+        // Current-state bucket evidence is explicitly scoped to one status.
+        public string BucketStatus { get; set; } = "Available";
+        public int BucketAnchorId { get; set; }
+        public int? BucketAfterId { get; set; }
+        public int? NextBucketAfterId { get; set; }
+        public bool BucketHasRowsAfterAnchor { get; set; }
+        // Warehouse/product-wide high-water independent of selected-status pages.
+        // New QC/Quarantine buckets invalidate the eight-status comparison.
+        public int AllStatusBucketAnchorId { get; set; }
+        public bool AllStatusBucketHasRowsAfterAnchor { get; set; }
+        // Aggregate baseline, not an atomic stock snapshot or access token.
+        public string AllStatusBucketAggregateFingerprint { get; set; } = string.Empty;
+        public bool AllStatusBucketAggregateChanged { get; set; }
+        // Chosen status of the immutable Ledger history, independent of bucket scope.
+        public string EventStatus { get; set; } = "Available";
+        public int EventAnchorId { get; set; }
+        // Cursor excludes the named ID (strict less-than); every query is
+        // independently authorized within an exact warehouse/product scope.
+        public int? EventBeforeId { get; set; }
+        public int? NextEventBeforeId { get; set; }
+        public bool LedgerHasEventsAfterAnchor { get; set; }
+        // A newer Ledger event or bucket ID invalidates comparison to CURRENT stock.
+        // Legacy all-status arithmetic remains visible only as read-only evidence.
+        public bool EvidenceAnchorsStale { get; set; }
+        // Authoritative advisory verdict: never certify a stale pinned anchor.
+        // These nullable comparison totals are distinct from historical Ledger
+        // arithmetic; SQL Server locks each detail request consistently, not
+        // an immutable cross-request SQL snapshot.
+        public string SnapshotComparisonStatus { get; set; } = "Indeterminate";
+        public decimal? SnapshotComparisonExpectedQuantity { get; set; }
+        public decimal? SnapshotComparisonDifference { get; set; }
+        public int EventCount { get; set; }
+        public int BucketCount { get; set; }
+        public bool EventsTruncated { get; set; }
+        public bool BucketsTruncated { get; set; }
+        public decimal CurrentQuantity { get; set; }
+        public decimal ExpectedQuantity { get; set; }
+        public decimal Difference { get; set; }
+        public bool AvailableLedgerExpectedIsPartial { get; set; }
+        // Distinguish missing non-AVAILABLE Ledger from malformed events:
+        // both prevent a trusted conclusion, but require different follow-up.
+        public bool HistoryInsufficientForNonAvailableStock { get; set; }
+        public bool IsReadOnly { get; set; } = true;
+        // All-status evidence is independently aggregated from the same
+        // authorized warehouse/product and immutable Ledger anchor.
+        // Unsupported historical events make expected totals indeterminate,
+        // never a zero-valued "repair" proposal.
+        public decimal AllStatusCurrentQuantity { get; set; }
+        public decimal AllStatusReservedQuantity { get; set; }
+        // Separate eight-status verdict. A zero grand-total difference can
+        // conceal offsetting QC and Quarantine mismatches.
+        public string AllStatusStatus { get; set; } = "Indeterminate";
+        public decimal? AllStatusExpectedQuantity { get; set; }
+        public decimal? AllStatusDifference { get; set; }
+        public int UnclassifiedLedgerEventCount { get; set; }
+        // Physical legacy bucket status IDs outside the canonical eight.
+        // Their quantities remain in aggregate totals but poison comparison.
+        public int UnclassifiedStockBucketCount { get; set; }
+        // Buckets with negative reservation or ReservedQuantity > Quantity.
+        // This is an integrity anomaly, not an authorization to patch Balance.
+        public int InvalidReservationBucketCount { get; set; }
+        // Physical negative buckets need separate read-only investigation.
+        public int NegativePhysicalBucketCount { get; set; }
+        public IReadOnlyList<InventoryReconciliationStatusEvidenceDto> StatusBreakdown { get; set; } = [];
+        public IReadOnlyList<InventoryReconciliationEvidenceEventDto> Events { get; set; } = [];
+        public IReadOnlyList<InventoryReconciliationEvidenceBucketDto> Buckets { get; set; } = [];
+    }
+
+    public sealed class InventoryReconciliationStatusEvidenceDto
+    {
+        public string Status { get; set; } = string.Empty;
+        public decimal CurrentQuantity { get; set; }
+        public decimal ReservedQuantity { get; set; }
+        public int BucketCount { get; set; }
+        public decimal DirectLedgerNetQuantity { get; set; }
+        public decimal StatusChangeInQuantity { get; set; }
+        public decimal StatusChangeOutQuantity { get; set; }
+        // Null when any relevant Ledger event cannot be classified safely.
+        public decimal? ExpectedQuantity { get; set; }
+        public decimal? Difference { get; set; }
+    }
+
+    public sealed class InventoryReconciliationEvidenceBucketDto
+    {
+        public int InventoryStockId { get; set; }
+        public int? LocationId { get; set; }
+        public string? LocationCode { get; set; }
+        public int? LotId { get; set; }
+        public string? LotNumber { get; set; }
+        public int? SerialId { get; set; }
+        public string? SerialNumber { get; set; }
+        public decimal Quantity { get; set; }
+        public decimal ReservedQuantity { get; set; }
+    }
+
+    public sealed class InventoryReconciliationEvidenceEventDto
+    {
+        public int TransactionId { get; set; }
+        public string InventoryStatus { get; set; } = string.Empty;
+        public string? FromInventoryStatus { get; set; }
+        public string? ToInventoryStatus { get; set; }
+        public string TransactionType { get; set; } = string.Empty;
+        public int? LocationId { get; set; }
+        public string? LocationCode { get; set; }
+        public int? LotId { get; set; }
+        public string? LotNumber { get; set; }
+        public int? SerialId { get; set; }
+        public string? SerialNumber { get; set; }
+        public decimal Quantity { get; set; }
+        // Null means the transaction type has no validated sign mapping.
+        // Never confuse unknown with the legitimate zero sign of Move/Reversal.
+        public decimal? SignedQuantity { get; set; }
+        public string? ReferenceType { get; set; }
+        public int? ReferenceId { get; set; }
+        public DateTime TransactionDate { get; set; }
+    }
+
     public class InventoryReconciliationDto
     {
         public int ProductId { get; set; }
@@ -8,8 +146,27 @@ namespace ERP.Application.DTOs
         public int WarehouseId { get; set; }
         public string WarehouseName { get; set; } = string.Empty;
         public decimal CurrentQuantity { get; set; }
-        public decimal ExpectedQuantity { get; set; }
-        public decimal Difference { get; set; }
+        // Unsupported or malformed history makes a pair indeterminate;
+        // nullable values serialize as JSON null, never invented zero.
+        public decimal? ExpectedQuantity { get; set; }
+        public decimal? Difference { get; set; }
+        // All eight statuses, independent of legacy AVAILABLE summary.
+        // A zero grand-total difference does NOT mean each status matches.
+        public decimal AllStatusCurrentQuantity { get; set; }
+        public decimal? AllStatusExpectedQuantity { get; set; }
+        public decimal? AllStatusDifference { get; set; }
+        public string AllStatusStatus { get; set; } = "Indeterminate";
+        // Missing non-AVAILABLE Ledger history is distinct from invalid events.
+        public bool HistoryInsufficientForNonAvailableStock { get; set; }
+        public int UnclassifiedLedgerEventCount { get; set; }
+        public int UnclassifiedStockBucketCount { get; set; }
+        // Buckets with negative reservation or ReservedQuantity > Quantity.
+        // This is an integrity anomaly, not an authorization to patch Balance.
+        public int InvalidReservationBucketCount { get; set; }
+        // Physical negative buckets need separate read-only investigation.
+        public int NegativePhysicalBucketCount { get; set; }
+        public decimal StatusChangeInQuantity { get; set; }
+        public decimal StatusChangeOutQuantity { get; set; }
         public decimal ImportQuantity { get; set; }
         public decimal ExportQuantity { get; set; }
         public decimal TransferInQuantity { get; set; }

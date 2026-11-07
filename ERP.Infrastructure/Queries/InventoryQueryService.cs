@@ -2,6 +2,7 @@ using ERP.Application.DTOs;
 using ERP.Application.Interfaces;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using ERP.Domain.Enums;
 
 namespace ERP.Infrastructure.Queries
 {
@@ -23,9 +24,20 @@ namespace ERP.Infrastructure.Queries
 
         public async Task<IEnumerable<InventoryStockDto>> GetCurrentStockAsync(int? warehouseId, int? productId, string? keyword, decimal? lowStockThreshold)
         {
-            var query = _context.InventoryStocks.AsNoTracking();
+            var now = DateTime.UtcNow;
+            var today = now.Date;
+            var query = _context.InventoryStocks.AsNoTracking()
+                .UnlockedAt(_context, now)
+                .Where(s =>
+                    s.Status == InventoryStatus.Available &&
+                    (s.Lot == null || !s.Lot.ExpiryDate.HasValue || s.Lot.ExpiryDate.Value >= today) &&
+                    (!s.LocationId.HasValue || (s.Location != null && s.Location.IsActive && !s.Location.IsBlocked && s.Location.IsPickable && s.Location.LocationType != WarehouseLocationType.Receiving)));
             if (_warehouseAuthorization is not null)
             {
+                if (warehouseId.HasValue)
+                {
+                    await _warehouseAuthorization.EnsureWarehouseAccessAsync(warehouseId.Value);
+                }
                 var allowedWarehouseIds = await _warehouseAuthorization.GetAccessibleWarehouseIdsAsync();
                 query = query.Where(s => allowedWarehouseIds.Contains(s.WarehouseId));
             }
@@ -47,27 +59,35 @@ namespace ERP.Infrastructure.Queries
                                          s.Product.Name.ToLower().Contains(lowerKeyword));
             }
 
-            if (lowStockThreshold.HasValue)
+            var projectedQuery = query.GroupBy(s=>new{s.ProductId,s.Product.Code,s.Product.Name,UnitName=s.Product.Unit!=null?s.Product.Unit.Name:string.Empty,s.WarehouseId,WarehouseName=s.Warehouse.Name}).Select(g => new InventoryStockDto
             {
-                query = query.Where(s => s.Quantity - s.ReservedQuantity <= lowStockThreshold.Value);
-            }
-
-            var projectedQuery = query.Select(s => new InventoryStockDto
-            {
-                ProductId = s.ProductId,
-                ProductCode = s.Product.Code,
-                ProductName = s.Product.Name,
-                UnitName = s.Product.Unit != null ? s.Product.Unit.Name : string.Empty,
-                WarehouseId = s.WarehouseId,
-                WarehouseName = s.Warehouse.Name,
-                Quantity = s.Quantity,
-                OnHandQuantity = s.Quantity,
-                ReservedQuantity = s.ReservedQuantity,
-                AvailableQuantity = s.Quantity - s.ReservedQuantity,
-                LastUpdated = s.LastUpdated
+                ProductId = g.Key.ProductId, ProductCode=g.Key.Code, ProductName=g.Key.Name, UnitName=g.Key.UnitName,
+                WarehouseId=g.Key.WarehouseId, WarehouseName=g.Key.WarehouseName, Quantity=g.Sum(s=>s.Quantity), OnHandQuantity=g.Sum(s=>s.Quantity),
+                ReservedQuantity=g.Sum(s=>s.ReservedQuantity),
+                AvailableQuantity=g.Sum(s=>s.Quantity - (s.ReservedQuantity >= s.AllocatedQuantity ? s.ReservedQuantity : s.AllocatedQuantity) - s.LockedQuantity),
+                LastUpdated=g.Max(s=>s.LastUpdated)
             });
 
-            return await projectedQuery.ToListAsync();
+            if (lowStockThreshold.HasValue)
+            {
+                projectedQuery = projectedQuery.Where(x => x.AvailableQuantity <= lowStockThreshold.Value);
+            }
+
+            var items = await projectedQuery.ToListAsync();
+            foreach (var item in items)
+            {
+                item.ProductCode = (item.ProductCode ?? string.Empty).Trim();
+                item.ProductName = (item.ProductName ?? string.Empty).Trim();
+                item.WarehouseName = (item.WarehouseName ?? string.Empty).Trim();
+                var rawUnit = (item.UnitName ?? string.Empty).Trim();
+                item.UnitName = string.IsNullOrWhiteSpace(rawUnit) ||
+                                string.Equals(rawUnit, "QA_UNIT", System.StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(rawUnit, "QA-PCS", System.StringComparison.OrdinalIgnoreCase)
+                    ? "THÙNG"
+                    : rawUnit;
+            }
+
+            return items;
         }
     }
 }

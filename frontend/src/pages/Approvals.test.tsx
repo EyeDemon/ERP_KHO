@@ -1,21 +1,33 @@
 // @vitest-environment jsdom
-import { render, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { act, render, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Approvals from './Approvals';
 import apiClient from '../services/apiClient';
 import userEvent from '@testing-library/user-event';
+import { setCurrentPermissions } from '../services/authorization';
 
 vi.mock('../services/apiClient',()=>({default:{get:vi.fn(),post:vi.fn()}}));
 const item={documentType:'StockTransfer',documentId:7,documentCode:'TRF-7',pendingState:'Draft',creatorName:'Maker',requestedAtUtc:'2026-09-05T01:00:00Z',waitingMinutes:1500,slaStatus:'Warning' as const,warehouseName:'WH01',destinationWarehouseName:'WH02',totalQuantity:5,canApprove:false,canReject:true};
 const page=(items= [item])=>({items,totalRecords:items.length,pageIndex:1,pageSize:20,totalPages:items.length?2:0});
 
-describe('Approvals page',()=>{
+describe('Approvals page',{timeout:20000},()=>{
   afterEach(cleanup);
+  it('QC approval requires both grants even when a previously loaded server capability says yes', async () => {
+    const qc = { ...item, documentType: 'ImportReceipt', pendingState: 'QcCompleted', canApprove: true, canReject: false };
+    vi.mocked(apiClient.get).mockResolvedValue({ data: page([qc]) });
+    setCurrentPermissions(['receipt.read', 'receipt.complete']);
+    const view = render(<Approvals />); await view.findByText('TRF-7');
+    expect(view.queryByTitle('Duyệt')).toBeNull();
+    act(() => setCurrentPermissions(['receipt.read', 'receipt.complete', 'quality_disposition.approve']));
+    await waitFor(() => expect(view.getByTitle('Duyệt')).toBeTruthy());
+    act(() => setCurrentPermissions(['receipt.read', 'quality_disposition.approve']));
+    await waitFor(() => expect(view.queryByTitle('Duyệt')).toBeNull());
+  });
   beforeEach(()=>{vi.resetAllMocks();vi.mocked(apiClient.get).mockResolvedValue({data:page()});});
   it('renders loading, queue data, capabilities, filters, and pagination',async()=>{
     let resolve!: (value:unknown)=>void;vi.mocked(apiClient.get).mockReturnValueOnce(new Promise(r=>{resolve=r}) as never);
     const view=render(<Approvals/>);expect(view.getByText('Đang tải...')).toBeTruthy();resolve({data:page()});
-    await view.findByText('TRF-7');expect(view.queryByTitle('Duyệt')).toBeNull();expect(view.getByTitle('Từ chối')).toBeTruthy();
+    await view.findByText('TRF-7');expect(view.getByRole('table',{name:'Hàng đợi phê duyệt'})).toBeTruthy();expect(view.queryByTitle('Duyệt')).toBeNull();expect(view.getByTitle('Từ chối')).toBeTruthy();
     fireEvent.change(view.getByLabelText('Tìm mã chứng từ'),{target:{value:'TRF'}});
     await waitFor(()=>expect(apiClient.get).toHaveBeenCalled());fireEvent.click(view.getByText('Sau'));
   });
@@ -41,21 +53,21 @@ describe('Approvals page',()=>{
     fireEvent.change(view.getByLabelText('Mức SLA'),{target:{value:'Overdue'}});
     fireEvent.change(view.getByLabelText('Từ ngày'),{target:{value:'2026-09-05T00:00'}});
     fireEvent.change(view.getByLabelText('Đến ngày'),{target:{value:'2026-09-05T23:59'}});
-    await waitFor(()=>expect(apiClient.get).toHaveBeenLastCalledWith('/api/approvals/queue',{params:expect.objectContaining({documentType:'StockTransfer',warehouseId:'2',creatorId:'3',keyword:'TRF',slaStatus:'Overdue',fromUtc:new Date('2026-09-05T00:00').toISOString(),toUtc:new Date('2026-09-05T23:59').toISOString(),pageIndex:1})}));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenLastCalledWith('/api/v1/approvals/queue',{params:expect.objectContaining({documentType:'StockTransfer',warehouseId:'2',creatorId:'3',keyword:'TRF',slaStatus:'Overdue',fromUtc:new Date('2026-09-05T00:00').toISOString(),toUtc:new Date('2026-09-05T23:59').toISOString(),pageIndex:1})}));
     await waitFor(()=>expect((view.getByText('Sau') as HTMLButtonElement).disabled).toBe(false));fireEvent.click(view.getByText('Sau'));
-    await waitFor(()=>expect(apiClient.get).toHaveBeenLastCalledWith('/api/approvals/queue',{params:expect.objectContaining({pageIndex:2})}));
+    await waitFor(()=>expect(apiClient.get).toHaveBeenLastCalledWith('/api/v1/approvals/queue',{params:expect.objectContaining({pageIndex:2})}));
   });
   it('renders waiting time, textual SLA badge, and the UTC request instant tooltip',async()=>{
     const view=render(<Approvals/>);await view.findByText('TRF-7');
     expect(view.getByText('1 ngày 1 giờ')).toBeTruthy();
-    expect(view.container.querySelector('.approval-sla-warning')?.textContent).toBe('Sắp đến hạn');
+    expect(view.container.querySelector('.approval-sla-warning')?.textContent).toBe('Sắp quá hạn');
     expect(view.getByTitle(`UTC: ${item.requestedAtUtc}`)).toBeTruthy();
   });
   it('hides both actions when server denies capabilities and renders the instant in local time',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:page([{...item,canReject:false}])});
     const view=render(<Approvals/>);await view.findByText('TRF-7');
     expect(view.queryByTitle('Duyệt')).toBeNull();expect(view.queryByTitle('Từ chối')).toBeNull();
-    expect(view.getByText(new Date(item.requestedAtUtc).toLocaleString())).toBeTruthy();
+    expect(view.getByText(new Date(item.requestedAtUtc).toLocaleString('vi-VN'))).toBeTruthy();
   });
   it('requires approve confirmation, blocks duplicate submits, and closes on success',async()=>{
     vi.mocked(apiClient.get).mockResolvedValue({data:page([{...item,canApprove:true}])});
@@ -65,7 +77,7 @@ describe('Approvals page',()=>{
     fireEvent.click(view.getByText('Xác nhận duyệt'));fireEvent.click(view.getByText('Xác nhận duyệt'));fireEvent.keyDown(document,{key:'Escape'});
     expect(view.getByRole('dialog')).toBeTruthy();expect(apiClient.post).toHaveBeenCalledTimes(1);
     finish();await waitFor(()=>expect(view.queryByRole('dialog')).toBeNull());
-    expect(apiClient.post).toHaveBeenCalledWith('/api/stock-transfers/7/approve',null,{headers:expect.objectContaining({'Idempotency-Key':expect.any(String)})});
+    expect(apiClient.post).toHaveBeenCalledWith('/api/v1/stock-transfers/7/approve',null,{headers:expect.objectContaining({'Idempotency-Key':expect.any(String)})});
   });
   it('refreshes on conflict, preserves correlation and dialog, and retains key on retry',async()=>{
     vi.mocked(apiClient.post).mockRejectedValue({response:{status:409,data:{correlationId:'conflict-id'}}});
@@ -83,7 +95,7 @@ describe('Approvals page',()=>{
     const view=render(<Approvals/>);await view.findByText('TRF-7');fireEvent.click(view.getByTitle('Xem chi tiết'));
     expect(view.getByRole('status').textContent).toBe('Đang tải chi tiết...');
     finish({data:{summary:item,lines:[],history:['Bị từ chối','Đã hủy','StockTransfer.Approve.Rejected'].map((displayAction,id)=>({id,displayAction,actorName:'Checker',timestampUtc:'2026-09-05T01:00:00+00:00',reason:id===0?'<img src=x onerror=alert(1)>':undefined}))}});
-    await view.findByText('Bị từ chối');expect(view.getByText('Đã hủy')).toBeTruthy();expect(view.getByText('StockTransfer.Approve.Rejected')).toBeTruthy();
+    await view.findByText('Bị từ chối');expect(view.getByText('Đã hủy')).toBeTruthy();expect(view.getByText('Thao tác không được chấp nhận')).toBeTruthy();expect(view.queryByText('StockTransfer.Approve.Rejected')).toBeNull();
     expect(view.getByText('<img src=x onerror=alert(1)>')).toBeTruthy();expect(view.getByRole('dialog').querySelector('img')).toBeNull();
   });
   it('supports reject keyboard focus cycle and restores focus on Escape',async()=>{

@@ -11,9 +11,17 @@ public class ImportReceiptConfiguration : IEntityTypeConfiguration<ImportReceipt
         builder.ToTable("ImportReceipts");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Code).IsRequired().HasMaxLength(50);
-        builder.HasIndex(x => x.Code).IsUnique();
+        builder.HasIndex(x => new { x.TenantId, x.Code }).IsUnique().HasDatabaseName("UX_ImportReceipts_TenantId_Code");
         builder.Property(x => x.Status).IsConcurrencyToken();
+        builder.Property(x => x.RowVersion).IsConcurrencyToken();
         builder.Property(x => x.Note).HasMaxLength(500);
+        builder.Property(x => x.SupplierCodeSnapshot).HasMaxLength(50);
+        builder.Property(x => x.SupplierNameSnapshot).HasMaxLength(200);
+        builder.HasOne(x => x.Supplier).WithMany(x => x.ImportReceipts).HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.PurchaseOrder).WithMany().HasForeignKey(x => x.PurchaseOrderId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.Asn).WithMany().HasForeignKey(x => x.AsnId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => x.AsnId).IsUnique().HasFilter("[AsnId] IS NOT NULL AND [Status] <> 2");
+        builder.HasIndex(x => x.PurchaseOrderId);
 
         builder.HasOne(x => x.Warehouse)
                .WithMany(w => w.ImportReceipts)

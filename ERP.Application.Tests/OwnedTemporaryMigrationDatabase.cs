@@ -13,6 +13,7 @@ internal sealed class OwnedTemporaryMigrationDatabase : IAsyncDisposable
     private readonly string _runId;
     private bool _disposed;
     internal string DatabaseName => _databaseName;
+    internal string DatabaseConnection => _databaseConnection;
     internal string RunId => _runId;
 
     private OwnedTemporaryMigrationDatabase(
@@ -103,6 +104,7 @@ internal sealed class OwnedTemporaryMigrationDatabase : IAsyncDisposable
             verify.Parameters.AddWithValue("@database", _databaseName);
             var markerCount = Convert.ToInt32(await verify.ExecuteScalarAsync());
             OwnedDatabasePolicy.EnsureOwnership(_databaseName, _runId, database.Database, OwnedDatabasePolicy.MarkerType, _runId, _databaseName, markerCount);
+            SqlConnection.ClearPool(database);
         }
 
         await using var master = new SqlConnection(_masterConnection);

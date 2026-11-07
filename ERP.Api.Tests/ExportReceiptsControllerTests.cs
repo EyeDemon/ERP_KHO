@@ -18,7 +18,12 @@ namespace ERP.Api.Tests
         public ExportReceiptsControllerTests()
         {
             _mockService = new Mock<IExportReceiptService>();
-            _controller = new ExportReceiptsController(_mockService.Object);
+            _controller = new ExportReceiptsController(
+                _mockService.Object,
+                Mock.Of<IExportReceiptOperationsService>(),
+                Mock.Of<IWarehouseAuthorizationService>(),
+                Mock.Of<ICurrentUser>(),
+                Mock.Of<IHandoverManifestService>());
         }
 
         private void SetupUserClaims(string? userIdClaim)

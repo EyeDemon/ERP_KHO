@@ -3,7 +3,7 @@ using Microsoft.Data.SqlClient;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace ERP.Application.Tests;
+namespace ERP.Application.Tests.Operational;
 
 [Trait("Category", "Operational")]
 [Trait("Operation", "Backup")]

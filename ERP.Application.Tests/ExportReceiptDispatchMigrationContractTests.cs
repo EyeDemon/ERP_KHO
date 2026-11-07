@@ -26,6 +26,23 @@ public sealed class ExportReceiptDispatchMigrationContractTests
     }
 
     [Fact]
+    public void LocationSplitLedgerMigration_AddsLocationToIdempotencyKeyAndGuardsDowngrade()
+    {
+        var up = LocationSplitProbe.BuildUpOperations();
+        up.OfType<CreateIndexOperation>().Should().ContainSingle(x =>
+            x.Name == "IX_InventoryTransactions_ExportReceiptReference" &&
+            x.IsUnique &&
+            x.Filter == "[ReferenceType] = 'ExportReceipt'" &&
+            x.Columns.SequenceEqual(new[] { "ReferenceType", "ReferenceId", "TransactionType", "ProductId", "WarehouseId", "LocationId" }));
+
+        var down = LocationSplitProbe.BuildDownOperations();
+        down.First().Should().BeOfType<SqlOperation>().Subject.Sql.Should().Contain("THROW 51012");
+        down.OfType<CreateIndexOperation>().Should().ContainSingle(x =>
+            x.Name == "IX_InventoryTransactions_ExportReceiptReference" &&
+            x.Columns.SequenceEqual(new[] { "ReferenceType", "ReferenceId", "TransactionType", "ProductId", "WarehouseId" }));
+    }
+
+    [Fact]
     public void Down_RefusesToEraseDispatchMeaningAndDropsOnlyAfterGuard()
     {
         var operations = MigrationProbe.BuildDownOperations();
@@ -35,6 +52,23 @@ public sealed class ExportReceiptDispatchMigrationContractTests
         guard.Should().Contain("THROW 51011");
         operations.OfType<DropColumnOperation>().Select(x => x.Name)
             .Should().BeEquivalentTo("DispatchMode", "DispatchedAt", "DispatchedBy");
+    }
+
+    private sealed class LocationSplitProbe : AllowLocationSplitExportLedger
+    {
+        public static IReadOnlyList<MigrationOperation> BuildUpOperations()
+        {
+            var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.SqlServer");
+            new LocationSplitProbe().Up(builder);
+            return builder.Operations;
+        }
+
+        public static IReadOnlyList<MigrationOperation> BuildDownOperations()
+        {
+            var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.SqlServer");
+            new LocationSplitProbe().Down(builder);
+            return builder.Operations;
+        }
     }
 
     private sealed class MigrationProbe : AddExportReceiptDispatchWorkflow

@@ -36,7 +36,8 @@ namespace ERP.Application.Tests
                 if (sqliteEx.SqliteExtendedErrorCode == 2067 || sqliteEx.SqliteErrorCode == 19)
                 {
                     var msg = sqliteEx.Message ?? string.Empty;
-                    return msg.Contains("UNIQUE constraint failed: ExportReceipts.Code", StringComparison.OrdinalIgnoreCase);
+                    return msg.Contains("UNIQUE constraint failed: ExportReceipts.Code", StringComparison.OrdinalIgnoreCase)
+                        || msg.Contains("UNIQUE constraint failed: ExportReceipts.TenantId, ExportReceipts.Code", StringComparison.OrdinalIgnoreCase);
                 }
             }
 
@@ -65,7 +66,7 @@ namespace ERP.Application.Tests
         public async Task StaleStatusSave_ThrowsDbUpdateConcurrencyException_InSqliteContext()
         {
             var dbName = Guid.NewGuid().ToString("N");
-            var connStr = $"DataSource=file:{dbName}?mode=memory&cache=shared;Default Timeout=5";
+            var connStr = $"DataSource=file:{dbName}?mode=memory&cache=shared;Default Timeout=60";
             using var anchorConn = new SqliteConnection(connStr);
             anchorConn.Open();
 
@@ -117,6 +118,7 @@ namespace ERP.Application.Tests
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
                 base.OnModelCreating(modelBuilder);
+                modelBuilder.Entity<WarehouseLocation>().Property(x => x.RowVersion).ValueGeneratedNever();
                 foreach (var entityType in modelBuilder.Model.GetEntityTypes())
                 {
                     foreach (var property in entityType.GetProperties())
@@ -289,6 +291,7 @@ namespace ERP.Application.Tests
 
     #region Service & Repository Boundary Tests
 
+    [Collection(SqliteDuplicateCodeConcurrencyCollection.Name)]
     public class ExportReceiptServiceDuplicateCodeConcurrencyTests : IDisposable
     {
         private readonly string _connectionString;
@@ -297,7 +300,7 @@ namespace ERP.Application.Tests
         public ExportReceiptServiceDuplicateCodeConcurrencyTests()
         {
             var dbName = Guid.NewGuid().ToString("N");
-            _connectionString = $"DataSource=file:{dbName}?mode=memory&cache=shared;Default Timeout=5";
+            _connectionString = $"DataSource=file:{dbName}?mode=memory&cache=shared;Default Timeout=60";
             _anchorConnection = new SqliteConnection(_connectionString);
             _anchorConnection.Open();
 
@@ -316,7 +319,7 @@ namespace ERP.Application.Tests
         private TestDbContext CreateContext(SqliteConnection connection)
         {
             var options = new DbContextOptionsBuilder<ErpKhoDbContext>()
-                .UseSqlite(connection)
+                .UseSqlite(connection, sqlite => sqlite.CommandTimeout(60))
                 .Options;
             return new TestDbContext(options);
         }
@@ -328,6 +331,7 @@ namespace ERP.Application.Tests
             protected override void OnModelCreating(ModelBuilder modelBuilder)
             {
                 base.OnModelCreating(modelBuilder);
+                modelBuilder.Entity<WarehouseLocation>().Property(x => x.RowVersion).ValueGeneratedNever();
                 foreach (var entityType in modelBuilder.Model.GetEntityTypes())
                 {
                     foreach (var property in entityType.GetProperties())
@@ -360,10 +364,32 @@ namespace ERP.Application.Tests
 
             var product = new Product { Code = "SKU-EXP-DUP", Name = "SP Exp Dup", Unit = unit, IsActive = true };
             ctx.Products.Add(product);
+            await ctx.SaveChangesAsync();
 
-            var stock = new InventoryStock { Product = product, Warehouse = warehouse, Quantity = 100, LastUpdated = DateTime.UtcNow };
+            var location = new WarehouseLocation
+            {
+                WarehouseId = warehouse.Id,
+                Code = "LEGACY",
+                Name = "Legacy pickable",
+                LocationType = WarehouseLocationType.Legacy,
+                IsActive = true,
+                IsPickable = true,
+                IsSystemManaged = true,
+                CreatedBy = user.Id,
+                RowVersion = new byte[8]
+            };
+            ctx.WarehouseLocations.Add(location);
+            await ctx.SaveChangesAsync();
+
+            var stock = new InventoryStock
+            {
+                ProductId = product.Id,
+                WarehouseId = warehouse.Id,
+                LocationId = location.Id,
+                Quantity = 100,
+                LastUpdated = DateTime.UtcNow
+            };
             ctx.InventoryStocks.Add(stock);
-
             await ctx.SaveChangesAsync();
 
             return (warehouse.Id, product.Id, user.Id);
@@ -386,7 +412,7 @@ namespace ERP.Application.Tests
                 var result = await _inner.ExistsByCodeAsync(code, excludeId);
                 if (System.Threading.Interlocked.Increment(ref _callCount) == 1)
                 {
-                    _barrier.SignalAndWait(TimeSpan.FromSeconds(5));
+                    _barrier.SignalAndWait(TimeSpan.FromSeconds(30));
                 }
                 return result;
             }

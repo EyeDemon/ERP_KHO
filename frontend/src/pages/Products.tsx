@@ -1,396 +1,388 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import apiClient from '../services/apiClient';
-import { canManageCatalogs, currentRole } from '../services/authorization';
-
-interface Product {
-  id: number;
-  code: string;
-  name: string;
-  description?: string;
-  unitId: number;
-  unitName?: string;
-  isActive: boolean;
-}
-
-interface Unit {
-  id: number;
-  code: string;
-  name: string;
-  isActive: boolean;
-}
-
-const PAGE_SIZE = 10;
+import { hasPermission, usePermission } from '../services/authorization';
+import { categoryChanged, categoryRequest, normalizeBarcodeInput, sanitizeScannerCode } from './productCatalog';
+import { UiPage, UiPageHeader } from '../ui/ProductionUi';
+import {
+  type Category,
+  formatStorageClass,
+  messageOf,
+  normalizeStorageClassPayload,
+  PAGE_SIZE,
+  type Product,
+  type ProductCatalogTab,
+  type ProductFormState,
+  sanitizeProductDescription,
+  type Unit,
+} from '../modules/catalog/ProductCatalogTypes';
+import {
+  ProductCategoriesAndUomSection,
+  ProductChannelMappingSection,
+} from '../modules/catalog/ProductDrawerAndCategorySection';
+import { ProductCatalogTabs, ProductListTabSection } from '../modules/catalog/ProductListSection';
+import { ProductBundleAndGiftSection } from '../modules/catalog/ProductBundleAndGiftSection';
 
 const Products = () => {
-  const canManage = canManageCatalogs(currentRole());
+  const canManage = usePermission('product.update');
+  const canRead = usePermission('product.read');
+  const canReadUnits = usePermission('uom.read');
+  const canCreate = usePermission('product.create');
+  const canDeactivate = usePermission('product.deactivate');
+  const canReadCategories = usePermission('product_category.read');
+  const canManageCategories = usePermission('product_category.manage');
+  const canManageBarcodes = usePermission('product_barcode.manage');
+  const [activeTab, setActiveTab] = useState<ProductCatalogTab>('products');
   const [products, setProducts] = useState<Product[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
-  const [unitsLoading, setUnitsLoading] = useState(false);
-  const [unitsError, setUnitsError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-
-  // Search and Pagination
-  const [searchTerm, setSearchTerm] = useState('');
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-
-  // Form State
-  const [showForm, setShowForm] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState<Partial<Product>>({
-    code: '',
-    name: '',
-    description: '',
-    unitId: 0,
-    isActive: true
+  const [loading, setLoading] = useState(false);
+  const [scan, setScan] = useState('');
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+  const [editing, setEditing] = useState<Product | null>(null);
+  const [form, setForm] = useState<ProductFormState>({
+    code: '', name: '', description: '', storageClass: '', unitWeightKg: '', unitVolumeM3: '',
+    unitPalletEquivalent: '', trackingType: 'None', expiryControl: false, shelfLifeDays: '',
+    unitId: 0, categoryId: '', isActive: true,
   });
-  const [formError, setFormError] = useState('');
-  const [formLoading, setFormLoading] = useState(false);
+  const [categoryForm, setCategoryForm] = useState({ code: '', name: '' });
+  const [categorySearch, setCategorySearch] = useState('');
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [barcode, setBarcode] = useState('');
+  const [uomProductId, setUomProductId] = useState<number>(0);
+  const [uomUnitId, setUomUnitId] = useState<number>(0);
+  const [uomFactor, setUomFactor] = useState<string>('20');
+  const mutationLock = useRef(false);
+  const [mutating, setMutating] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [skuAuditResult, setSkuAuditResult] = useState<{ auditId: string; fefoPolicyStatus: string; packagingHierarchyStatus: string } | null>(null);
+  const [categoryPolicyResult, setCategoryPolicyResult] = useState<{ verificationId: string; status: string } | null>(null);
 
-  const fetchProducts = async () => {
+  const mutate = async (action: () => Promise<void>) => {
+    if (mutationLock.current) return;
+    mutationLock.current = true; setMutating(true); setError('');
+    try { await action(); }
+    finally { mutationLock.current = false; setMutating(false); }
+  };
+
+  const load = useCallback(async () => {
     setLoading(true);
-    setError('');
     try {
-      const res = await apiClient.get('/api/products');
-      setProducts(res.data);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Lỗi khi tải danh sách sản phẩm');
-    } finally {
-      setLoading(false);
-    }
-  };
+      const [p, u, c] = await Promise.all([
+        canRead ? apiClient.get('/api/v1/products') : Promise.resolve({ data: [] }),
+        canReadUnits ? apiClient.get('/api/v1/units') : Promise.resolve({ data: [] }),
+        canReadCategories ? apiClient.get('/api/v1/product-categories') : Promise.resolve({ data: [] }),
+      ]);
+      const rawProducts = hasPermission('product.read') && Array.isArray(p.data) ? (p.data as Product[]) : [];
+      setProducts(rawProducts.map(item => ({ ...item, description: sanitizeProductDescription(item.description) })));
+      setUnits(hasPermission('uom.read') ? u.data : []);
+      setCategories(hasPermission('product_category.read') ? c.data : []);
+    } catch (e) {
+      setProducts([]); setCategories([]); setUnits([]); setEditing(null);
+      setError(messageOf(e, 'Không thể tải dữ liệu sản phẩm.'));
+    } finally { setLoading(false); }
+  }, [canRead, canReadUnits, canReadCategories]);
 
-  const fetchUnits = async () => {
-    setUnitsLoading(true);
-    setUnitsError('');
-    try {
-      const res = await apiClient.get('/api/units');
-      setUnits(res.data);
-    } catch (err: any) {
-      const errMsg = err.response?.data?.message || 'Lỗi khi tải danh sách đơn vị tính';
-      setUnitsError(errMsg);
-      console.error('Lỗi khi tải danh sách đơn vị tính', err);
-    } finally {
-      setUnitsLoading(false);
-    }
-  };
+  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { setEditing(null); setEditingCategory(null); setNotice(''); }, [canRead, canManage, canManageBarcodes, canManageCategories]);
 
-  useEffect(() => {
-    fetchProducts();
-    fetchUnits();
-  }, []);
+  const filtered = useMemo(() => {
+    const cleanSearch = sanitizeScannerCode(search);
+    const q = cleanSearch.toLowerCase();
+    return q
+      ? products.filter(p => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.barcodes?.some(b => b.value.includes(cleanSearch)))
+      : products;
+  }, [products, search]);
 
-  // Filter and Paginate
-  const filteredProducts = useMemo(() => {
-    if (!searchTerm) return products;
-    const lowerTerm = searchTerm.toLowerCase();
-    return products.filter(
-      p => p.code.toLowerCase().includes(lowerTerm) || p.name.toLowerCase().includes(lowerTerm)
-    );
-  }, [products, searchTerm]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const visibleProducts = useMemo(() => filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE), [filtered, currentPage]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
-  
-  // Empty page protection
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [totalPages, currentPage]);
+  const governanceSummary = useMemo(() => {
+    const active = products.filter(p => p.isActive);
+    const lotCount = products.filter(p => p.trackingType === 'Lot').length;
+    const serialCount = products.filter(p => p.trackingType === 'Serial').length;
+    const expiryCount = products.filter(p => Boolean(p.expiryControl)).length;
+    const dimensionCount = products.filter(p => p.unitWeightKg != null || p.unitVolumeM3 != null || p.unitPalletEquivalent != null).length;
+    const incomplete = active
+      .filter(p => (p.unitWeightKg == null && p.unitVolumeM3 == null) || (p.expiryControl && p.shelfLifeDays == null))
+      .slice(0, 10);
+    return { activeCount: active.length, lotCount, serialCount, expiryCount, dimensionCount, incomplete };
+  }, [products]);
 
-  const paginatedProducts = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredProducts.slice(start, start + PAGE_SIZE);
-  }, [filteredProducts, currentPage]);
+  useEffect(() => { if (currentPage > totalPages) setCurrentPage(totalPages); }, [currentPage, totalPages]);
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
-    setCurrentPage(1); // Reset page on search
-  };
-
-  const handleAddNew = () => {
-    setIsEditing(false);
-    setFormData({
-      code: '',
-      name: '',
-      description: '',
-      unitId: units.length > 0 ? units[0].id : 0,
-      isActive: true
+  const createMode = () => {
+    setEditing(null);
+    setForm({
+      code: '', name: '', description: '', storageClass: '', unitWeightKg: '', unitVolumeM3: '',
+      unitPalletEquivalent: '', trackingType: 'None', expiryControl: false, shelfLifeDays: '',
+      unitId: units[0]?.id || 0, categoryId: '', isActive: true,
     });
-    setFormError('');
-    setShowForm(true);
-    setSuccessMsg('');
   };
 
-  const handleEdit = (product: Product) => {
-    setIsEditing(true);
-    setFormData({ ...product });
-    setFormError('');
-    setShowForm(true);
-    setSuccessMsg('');
+  const editMode = (p: Product) => {
+    setActiveTab('products'); setShowCreateForm(true); setEditing(p);
+    setForm({
+      code: p.code, name: p.name, description: sanitizeProductDescription(p.description),
+      storageClass: formatStorageClass(p.storageClass), unitWeightKg: p.unitWeightKg?.toString() || '',
+      unitVolumeM3: p.unitVolumeM3?.toString() || '', unitPalletEquivalent: p.unitPalletEquivalent?.toString() || '',
+      trackingType: p.trackingType || 'None', expiryControl: p.expiryControl || false,
+      shelfLifeDays: p.shelfLifeDays?.toString() || '', unitId: p.unitId, categoryId: p.categoryId || '', isActive: p.isActive,
+    });
+    setBarcode('');
   };
 
-  const handleCancelForm = () => {
-    setShowForm(false);
-    setFormError('');
-  };
+  const nullableNumber = (value: string) => (value.trim() === '' ? null : Number(value));
+  const storageProfile = () => ({
+    storageClass: normalizeStorageClassPayload(form.storageClass),
+    unitWeightKg: nullableNumber(form.unitWeightKg),
+    unitVolumeM3: nullableNumber(form.unitVolumeM3),
+    unitPalletEquivalent: nullableNumber(form.unitPalletEquivalent),
+  });
+  const trackingPolicy = () => ({
+    trackingType: form.trackingType,
+    expiryControl: form.expiryControl,
+    shelfLifeDays: form.expiryControl ? nullableNumber(form.shelfLifeDays) : null,
+  });
 
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
-    let finalValue: any = value;
-    if (type === 'checkbox') {
-      finalValue = (e.target as HTMLInputElement).checked;
-    } else if (name === 'unitId') {
-      finalValue = parseInt(value, 10);
-    }
-    setFormData(prev => ({ ...prev, [name]: finalValue }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const saveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    setFormError('');
-    setSuccessMsg('');
-
-    if (!formData.code || !formData.code.trim()) {
-      setFormError('Mã sản phẩm không được để trống.');
-      return;
-    }
-    if (!formData.name || !formData.name.trim()) {
-      setFormError('Tên sản phẩm không được để trống.');
-      return;
-    }
-    if (!formData.unitId) {
-      setFormError('Vui lòng chọn đơn vị tính.');
-      return;
-    }
-
-    setFormLoading(true);
-    try {
-      if (isEditing && formData.id) {
-        const updatePayload = {
-          name: formData.name,
-          description: formData.description,
-          unitId: formData.unitId,
-          isActive: formData.isActive
-        };
-        await apiClient.put(`/api/products/${formData.id}`, updatePayload);
-        setSuccessMsg('Cập nhật sản phẩm thành công.');
-      } else {
-        const createPayload = {
-          code: formData.code,
-          name: formData.name,
-          description: formData.description,
-          unitId: formData.unitId
-        };
-        await apiClient.post('/api/products', createPayload);
-        setSuccessMsg('Thêm mới sản phẩm thành công.');
-      }
-      setShowForm(false);
-      fetchProducts();
-    } catch (err: any) {
-      setFormError(err.response?.data?.message || 'Lỗi khi lưu sản phẩm.');
-    } finally {
-      setFormLoading(false);
-    }
+    if (editing ? !canManage : !canCreate) return;
+    await mutate(async () => {
+      try {
+        const cleanDesc = sanitizeProductDescription(form.description) || null;
+        if (editing) {
+          await apiClient.put(`/api/v1/products/${editing.id}`, {
+            name: form.name, description: cleanDesc, unitId: form.unitId, isActive: form.isActive,
+            updateStorageProfile: true, updateTrackingPolicy: true, ...storageProfile(), ...trackingPolicy(),
+          });
+          if (categoryChanged(editing.categoryId, form.categoryId)) {
+            await apiClient.put(`/api/v1/products/${editing.id}/category`, categoryRequest(form.categoryId));
+          }
+        } else {
+          await apiClient.post('/api/v1/products', {
+            code: sanitizeScannerCode(form.code), name: form.name, description: cleanDesc, unitId: form.unitId,
+            ...storageProfile(), ...trackingPolicy(), ...categoryRequest(form.categoryId),
+          });
+        }
+        setNotice('Đã lưu sản phẩm.'); createMode(); await load();
+      } catch (e) { setError(messageOf(e, 'Không thể lưu sản phẩm.')); }
+    });
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Bạn có chắc muốn xóa sản phẩm này?')) return;
-    setSuccessMsg('');
-    setError('');
-    try {
-      await apiClient.delete(`/api/products/${id}`);
-      setSuccessMsg('Xóa sản phẩm thành công.');
-      fetchProducts();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Lỗi khi xóa sản phẩm');
-    }
+  const addCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canManageCategories) return;
+    await mutate(async () => {
+      try {
+        if (editingCategory) await apiClient.put(`/api/v1/product-categories/${editingCategory.id}`, { name: categoryForm.name, isActive: editingCategory.isActive });
+        else await apiClient.post('/api/v1/product-categories', { code: sanitizeScannerCode(categoryForm.code), name: categoryForm.name });
+        setCategoryForm({ code: '', name: '' }); setEditingCategory(null); await load();
+      } catch (e) { setError(messageOf(e, editingCategory ? 'Không thể cập nhật danh mục.' : 'Không thể thêm danh mục.')); }
+    });
   };
+
+  const editCategory = (c: Category) => { setEditingCategory(c); setCategoryForm({ code: c.code, name: c.name }); };
+  const toggleCategory = async (c: Category) => mutate(async () => {
+    try { await apiClient.put(`/api/v1/product-categories/${c.id}`, { name: c.name, isActive: !c.isActive }); await load(); }
+    catch (e) { setError(messageOf(e, 'Không thể cập nhật danh mục.')); }
+  });
+  const deleteCategory = async (id: number) => mutate(async () => {
+    try { await apiClient.delete(`/api/v1/product-categories/${id}`); await load(); }
+    catch (e) { setError(messageOf(e, 'Không thể xóa danh mục.')); }
+  });
+
+  const refreshEditing = async () => {
+    if (editing) editMode((await apiClient.get(`/api/v1/products/${editing.id}`)).data);
+    await load();
+  };
+
+  const addBarcode = async () => {
+    if (!editing || !canManageBarcodes) return;
+    await mutate(async () => {
+      try { await apiClient.post(`/api/v1/products/${editing.id}/barcodes`, { value: normalizeBarcodeInput(barcode) }); await refreshEditing(); }
+      catch (e) { setError(messageOf(e, 'Không thể thêm mã vạch.')); }
+    });
+  };
+
+  const deleteBarcode = async (id: number) => {
+    if (!editing || !canManageBarcodes) return;
+    await mutate(async () => {
+      try { await apiClient.delete(`/api/v1/products/${editing.id}/barcodes/${id}`); await refreshEditing(); }
+      catch (e) { setError(messageOf(e, 'Không thể xóa mã vạch.')); }
+    });
+  };
+
+  const activeUomProduct = useMemo(() => products.find(p => p.id === (editing?.id || uomProductId)) || products[0] || null, [products, editing, uomProductId]);
+
+  const addProductUom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetProduct = activeUomProduct;
+    if (!targetProduct) return;
+    const selectedUnit = units.find(u => u.id === Number(uomUnitId)) || units[0];
+    const factor = Math.max(1, Number(uomFactor) || 1);
+    await mutate(async () => {
+      try {
+        await apiClient.post(`/api/v1/products/${targetProduct.id}/uoms`, { unitId: selectedUnit?.id || Number(uomUnitId) || 1, conversionFactorToBase: factor, conversionFactor: factor });
+        setProducts(prev => prev.map(item => item.id === targetProduct.id ? {
+          ...item,
+          uoms: [
+            ...(item.uoms || []).filter(u => u.unitId !== (selectedUnit?.id || Number(uomUnitId) || 1)),
+            { id: Date.now(), unitId: selectedUnit?.id || Number(uomUnitId) || 1, unitCode: selectedUnit?.code || 'BOX', unitName: selectedUnit?.name || 'Thùng', conversionFactor: factor, conversionFactorToBase: factor },
+          ],
+        } : item));
+        setNotice(`Đã cập nhật quy đổi đơn vị tính cho sản phẩm ${targetProduct.code}.`);
+      } catch (err) { setError(messageOf(err, 'Không thể cập nhật quy đổi đơn vị tính.')); }
+    });
+  };
+
+  const removeProductUom = async (productId: number, uomIdOrUnitId: number) => mutate(async () => {
+    try {
+      await apiClient.delete(`/api/v1/products/${productId}/uoms/${uomIdOrUnitId}`);
+      setProducts(prev => prev.map(item => item.id === productId ? { ...item, uoms: (item.uoms || []).filter(u => (u.id ?? u.unitId) !== uomIdOrUnitId) } : item));
+      setNotice('Đã xóa quy đổi đơn vị tính phụ.');
+    } catch (err) { setError(messageOf(err, 'Không thể xóa quy đổi đơn vị tính phụ.')); }
+  });
+
+  const deleteProduct = async (id: number) => {
+    if (!canDeactivate || !window.confirm('Bạn có chắc muốn xóa sản phẩm này?')) return;
+    await mutate(async () => {
+      try { await apiClient.delete(`/api/v1/products/${id}`); setNotice('Đã xóa sản phẩm.'); await load(); }
+      catch (e) { setError(messageOf(e, 'Không thể xóa sản phẩm.')); }
+    });
+  };
+
+  const lookup = async (e: React.FormEvent) => {
+    e.preventDefault(); setError(''); setNotice('');
+    try {
+      const p = (await apiClient.get('/api/v1/product-barcodes/lookup', { params: { value: sanitizeScannerCode(scan) } })).data as Product;
+      setSearch(p.code); setNotice(`Mã vạch thuộc sản phẩm ${p.code} – ${p.name}.`);
+    } catch (e) { setSearch(''); setError(messageOf(e, 'Không tìm thấy mã vạch.')); }
+  };
+
+  const triggerAutoAuditGovernance = async () => mutate(async () => {
+    try {
+      const res = await apiClient.post('/api/v1/products/auto-audit-governance', {});
+      if (res?.data?.auditId) setSkuAuditResult(res.data);
+      else { setSkuAuditResult(null); setError('Phản hồi kiểm định hồ sơ kỹ thuật SKU không hợp lệ từ máy chủ.'); }
+    } catch (failure) { setSkuAuditResult(null); setError(messageOf(failure, 'Không thể thực hiện kiểm định.')); }
+  });
+
+  const verifyCategoryStoragePolicy = async () => mutate(async () => {
+    try {
+      const res = await apiClient.post('/api/v1/product-categories/verify-storage-policy', {});
+      if (res?.data?.verificationId && res?.data?.status) setCategoryPolicyResult({ verificationId: String(res.data.verificationId), status: String(res.data.status) });
+      else { setCategoryPolicyResult(null); setError('Phản hồi kiểm định chính sách bảo quản danh mục không hợp lệ từ máy chủ.'); }
+    } catch (failure) { setCategoryPolicyResult(null); setError(messageOf(failure, 'Không thể thực hiện kiểm định.')); }
+  });
 
   return (
-    <div>
-      <h2>Quản lý danh mục Sản phẩm</h2>
-      
-      {successMsg && <div style={{ color: 'green', marginBottom: '10px' }}>{successMsg}</div>}
-      {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
+    <UiPage>
+      <UiPageHeader
+        eyebrow="Dữ liệu nền"
+        title="Sản phẩm"
+        description="Quản lý sản phẩm, danh mục, đa đơn vị tính (quy đổi), đa mã vạch, ánh xạ SKU đa sàn TMĐT, chính sách hạn dùng, kiểm định chất lượng và dung sai nhận hàng."
+      />
 
-      {!showForm ? (
-        <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '15px' }}>
-            <input 
-              type="text" 
-              placeholder="Tìm kiếm theo mã hoặc tên..." 
-              value={searchTerm}
-              onChange={handleSearchChange}
-              style={{ padding: '8px', minWidth: '200px', flex: '1', maxWidth: '300px' }}
-            />
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              {unitsLoading && <span>Đang tải danh sách đơn vị...</span>}
-              {unitsError && <span style={{ color: 'red' }}>{unitsError} <button onClick={fetchUnits} style={{cursor: 'pointer'}}>Thử lại</button></span>}
-              {canManage && <button
-                onClick={handleAddNew} 
-                disabled={unitsLoading || !!unitsError}
-                style={{ padding: '8px 16px', cursor: (unitsLoading || !!unitsError) ? 'not-allowed' : 'pointer', backgroundColor: (unitsLoading || !!unitsError) ? '#95a5a6' : '#3498db', color: '#fff', border: 'none', borderRadius: '4px' }}>
-                Thêm mới
-              </button>}
-            </div>
-          </div>
+      {notice && <p role="status" className="ui-success-text">{notice}</p>}
+      {error && <p role="alert">{error}</p>}
+      {mutating && <p role="status">Đang xử lý...</p>}
 
-          {loading ? (
-            <div>Đang tải...</div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#ecf0f1', textAlign: 'left' }}>
-                    <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Mã SP</th>
-                    <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Tên SP</th>
-                    <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Mô tả</th>
-                    <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Đơn vị</th>
-                    <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Trạng thái</th>
-                    {canManage && <th style={{ padding: '10px', border: '1px solid #bdc3c7' }}>Hành động</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedProducts.map(p => (
-                    <tr key={p.id}>
-                      <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{p.code}</td>
-                      <td style={{ padding: '10px', border: '1px solid #bdc3c7', wordBreak: 'break-word', maxWidth: '200px' }}>{p.name}</td>
-                      <td style={{ padding: '10px', border: '1px solid #bdc3c7', wordBreak: 'break-word', maxWidth: '300px' }}>{p.description}</td>
-                      <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{p.unitName || p.unitId}</td>
-                      <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>{p.isActive ? 'Hoạt động' : 'Khóa'}</td>
-                      {canManage && <td style={{ padding: '10px', border: '1px solid #bdc3c7' }}>
-                        <button 
-                          onClick={() => handleEdit(p)} 
-                          disabled={unitsLoading || !!unitsError}
-                          style={{ marginRight: '10px', cursor: (unitsLoading || !!unitsError) ? 'not-allowed' : 'pointer', opacity: (unitsLoading || !!unitsError) ? 0.6 : 1 }}
-                        >Sửa</button>
-                        <button onClick={() => handleDelete(p.id)} style={{ color: 'red', cursor: 'pointer' }}>Xóa</button>
-                      </td>}
-                    </tr>
-                  ))}
-                  {filteredProducts.length === 0 && (
-                    <tr>
-                      <td colSpan={canManage ? 6 : 5} style={{ textAlign: 'center', padding: '20px' }}>
-                        Không tìm thấy sản phẩm nào
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-              
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div style={{ marginTop: '15px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }}>
-                  <button 
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(1)}
-                  >
-                    &laquo; Đầu
-                  </button>
-                  <button 
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(prev => prev - 1)}
-                  >
-                    &lsaquo; Trước
-                  </button>
-                  <span>Trang {currentPage} / {totalPages}</span>
-                  <button 
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage(prev => prev + 1)}
-                  >
-                    Sau &rsaquo;
-                  </button>
-                  <button 
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage(totalPages)}
-                  >
-                    Cuối &raquo;
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      ) : (
-        <div style={{ border: '1px solid #bdc3c7', padding: '20px', borderRadius: '4px', maxWidth: '600px' }}>
-          <h3>{isEditing ? 'Sửa sản phẩm' : 'Thêm mới sản phẩm'}</h3>
-          {formError && <div style={{ color: 'red', marginBottom: '15px' }}>{formError}</div>}
-          <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>Mã sản phẩm <span style={{ color: 'red' }}>*</span></label>
-              <input 
-                type="text" 
-                name="code" 
-                value={formData.code || ''} 
-                onChange={handleFormChange}
-                style={{ width: '100%', padding: '8px', boxSizing: 'border-box', backgroundColor: isEditing ? '#f2f2f2' : '#fff' }}
-                disabled={formLoading || isEditing}
-              />
-            </div>
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>Tên sản phẩm <span style={{ color: 'red' }}>*</span></label>
-              <input 
-                type="text" 
-                name="name" 
-                value={formData.name || ''} 
-                onChange={handleFormChange}
-                style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
-                disabled={formLoading}
-              />
-            </div>
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>Mô tả</label>
-              <textarea 
-                name="description" 
-                value={formData.description || ''} 
-                onChange={handleFormChange}
-                style={{ width: '100%', padding: '8px', boxSizing: 'border-box', minHeight: '80px' }}
-                disabled={formLoading}
-              />
-            </div>
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px' }}>Đơn vị tính <span style={{ color: 'red' }}>*</span></label>
-              <select 
-                name="unitId" 
-                value={formData.unitId || ''} 
-                onChange={handleFormChange}
-                style={{ width: '100%', padding: '8px', boxSizing: 'border-box' }}
-                disabled={formLoading}
-              >
-                <option value="">-- Chọn đơn vị tính --</option>
-                {units.map(u => (
-                  <option key={u.id} value={u.id}>{u.name} ({u.code})</option>
-                ))}
-              </select>
-            </div>
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                <input 
-                  type="checkbox" 
-                  name="isActive" 
-                  checked={formData.isActive || false}
-                  onChange={handleFormChange}
-                  disabled={formLoading}
-                  style={{ marginRight: '8px' }}
-                />
-                Trạng thái hoạt động
-              </label>
-            </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button type="submit" disabled={formLoading} style={{ padding: '8px 16px', cursor: 'pointer', backgroundColor: '#2ecc71', color: '#fff', border: 'none', borderRadius: '4px' }}>
-                {formLoading ? 'Đang lưu...' : 'Lưu'}
-              </button>
-              <button type="button" onClick={handleCancelForm} disabled={formLoading} style={{ padding: '8px 16px', cursor: 'pointer' }}>
-                Hủy
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-    </div>
+      <ProductCatalogTabs activeTab={activeTab} setActiveTab={setActiveTab} />
+
+      <ProductListTabSection
+        activeTab={activeTab}
+        products={products}
+        categories={categories}
+        units={units}
+        governanceSummary={governanceSummary}
+        mutating={mutating}
+        triggerAutoAuditGovernance={triggerAutoAuditGovernance}
+        verifyCategoryStoragePolicy={verifyCategoryStoragePolicy}
+        skuAuditResult={skuAuditResult}
+        categoryPolicyResult={categoryPolicyResult}
+        lookup={lookup}
+        scan={scan}
+        setScan={setScan}
+        search={search}
+        setSearch={setSearch}
+        currentPage={currentPage}
+        setCurrentPage={setCurrentPage}
+        totalPages={totalPages}
+        filteredCount={filtered.length}
+        visibleProducts={visibleProducts}
+        loading={loading}
+        editing={editing}
+        canManage={canManage}
+        canCreate={canCreate}
+        canManageBarcodes={canManageBarcodes}
+        canReadCategories={canReadCategories}
+        canDeactivate={canDeactivate}
+        showCreateForm={showCreateForm}
+        setShowCreateForm={setShowCreateForm}
+        createMode={createMode}
+        editMode={editMode}
+        saveProduct={saveProduct}
+        deleteProduct={deleteProduct}
+        form={form}
+        setForm={setForm}
+        barcode={barcode}
+        setBarcode={setBarcode}
+        addBarcode={addBarcode}
+        deleteBarcode={deleteBarcode}
+      />
+
+      <ProductCategoriesAndUomSection
+        activeTab={activeTab}
+        canManageCategories={canManageCategories}
+        canManage={canManage}
+        canCreate={canCreate}
+        categorySearch={categorySearch}
+        setCategorySearch={setCategorySearch}
+        categoryForm={categoryForm}
+        setCategoryForm={setCategoryForm}
+        editingCategory={editingCategory}
+        setEditingCategory={setEditingCategory}
+        addCategory={addCategory}
+        editCategory={editCategory}
+        toggleCategory={toggleCategory}
+        deleteCategory={deleteCategory}
+        categories={categories}
+        mutating={mutating}
+        products={products}
+        units={units}
+        activeUomProduct={activeUomProduct}
+        setUomProductId={setUomProductId}
+        uomUnitId={uomUnitId}
+        setUomUnitId={setUomUnitId}
+        uomFactor={uomFactor}
+        setUomFactor={setUomFactor}
+        addProductUom={addProductUom}
+        removeProductUom={removeProductUom}
+      />
+
+      <ProductChannelMappingSection
+        activeTab={activeTab}
+        products={products}
+        activeUomProduct={activeUomProduct}
+        mutating={mutating}
+        mutate={mutate}
+        setNotice={setNotice}
+        setError={setError}
+      />
+
+      <ProductBundleAndGiftSection
+        activeTab={activeTab}
+        products={products}
+        activeUomProduct={activeUomProduct}
+        mutating={mutating}
+        mutate={mutate}
+        setNotice={setNotice}
+        setError={setError}
+      />
+    </UiPage>
   );
 };
-
 export default Products;

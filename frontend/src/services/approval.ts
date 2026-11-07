@@ -8,7 +8,10 @@ export const validRejectReason = (value: string): boolean => {
 };
 
 export const approvalDisplayAction = (action: string): string => {
+  if (['Bị từ chối', 'Đã hủy', 'Đã duyệt'].includes(action)) return action;
   if (action === 'ApprovalRejected') return 'Bị từ chối';
   if (action.endsWith('.Cancelled')) return 'Đã hủy';
-  return action;
+  if (action.endsWith('.Approved')) return 'Đã duyệt';
+  if (action.endsWith('.Rejected')) return 'Thao tác không được chấp nhận';
+  return 'Đã cập nhật chứng từ';
 };

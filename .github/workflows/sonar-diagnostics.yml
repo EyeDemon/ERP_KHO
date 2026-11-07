@@ -1,0 +1,51 @@
+name: Sonar Diagnostics
+
+on:
+  push:
+    branches:
+      - feature/erp-wms-complete-ui-blueprint
+
+permissions:
+  contents: read
+  checks: read
+
+jobs:
+  sonar-annotations:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print Sonar annotations
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            let sonar;
+            for (let attempt = 0; attempt < 36; attempt += 1) {
+              const response = await github.rest.checks.listForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: context.sha,
+                per_page: 100,
+              });
+              sonar = response.data.check_runs.find((run) => run.name === 'SonarCloud Code Analysis');
+              if (sonar && sonar.status === 'completed') break;
+              await sleep(10000);
+            }
+
+            if (!sonar) {
+              core.setFailed('SonarCloud check not found.');
+              return;
+            }
+
+            const annotations = await github.rest.checks.listAnnotations({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: sonar.id,
+              per_page: 100,
+            });
+
+            core.info(`SONAR_CHECK_ID=${sonar.id}`);
+            for (const item of annotations.data) {
+              core.info(
+                `SONAR_ANNOTATION|${item.path}|${item.start_line}-${item.end_line}|${item.annotation_level}|${item.title ?? ''}|${item.message}`,
+              );
+            }

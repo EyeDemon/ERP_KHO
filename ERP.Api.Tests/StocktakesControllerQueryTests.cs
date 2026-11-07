@@ -21,7 +21,13 @@ namespace ERP.Api.Tests
             var type = typeof(StocktakesController);
             var authAttribute = type.GetCustomAttributes(typeof(AuthorizeAttribute), true).FirstOrDefault() as AuthorizeAttribute;
             Assert.NotNull(authAttribute);
-            Assert.Equal(AppRoles.AdminManagerOrStaff, authAttribute.Roles);
+            Assert.Null(authAttribute.Roles);
+            var getAllPerm = type.GetMethod("GetAll")!
+                .GetCustomAttributes(typeof(PermissionAuthorizeAttribute), true)
+                .Cast<PermissionAuthorizeAttribute>()
+                .FirstOrDefault();
+            Assert.NotNull(getAllPerm);
+            Assert.Equal(AppPermissions.StocktakeRead, getAllPerm.Permission);
         }
 
         [Fact]
@@ -38,7 +44,12 @@ namespace ERP.Api.Tests
 
             mockQueryService.Setup(s => s.GetStocktakesAsync()).ReturnsAsync(mockData);
 
-            var controller = new StocktakesController(mockService.Object, mockQueryService.Object);
+            var controller = new StocktakesController(
+                mockService.Object,
+                mockQueryService.Object,
+                Mock.Of<IStocktakeOperationsService>(),
+                Mock.Of<IWarehouseAuthorizationService>(),
+                Mock.Of<ICurrentUser>());
 
             var result = await controller.GetAll();
             
@@ -65,7 +76,12 @@ namespace ERP.Api.Tests
 
             mockQueryService.Setup(s => s.GetStocktakeByIdAsync(1)).ReturnsAsync(mockData);
 
-            var controller = new StocktakesController(mockService.Object, mockQueryService.Object);
+            var controller = new StocktakesController(
+                mockService.Object,
+                mockQueryService.Object,
+                Mock.Of<IStocktakeOperationsService>(),
+                Mock.Of<IWarehouseAuthorizationService>(),
+                Mock.Of<ICurrentUser>());
 
             var result = await controller.GetById(1);
             

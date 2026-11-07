@@ -11,5 +11,9 @@ namespace ERP.Application.DTOs
         public string Username { get; set; } = string.Empty;
         public string Role { get; set; } = string.Empty;
         public int UserId { get; set; }
+        public int TenantId { get; set; } = 1;
+        public string TenantCode { get; set; } = "DEFAULT";
+        public string SecurityDomain { get; set; } = "CUSTOMER_TENANT";
+        public bool RequiresTwoFactor { get; set; }
     }
 }

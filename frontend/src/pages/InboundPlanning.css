@@ -1,0 +1,232 @@
+.inbound-planning-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--ui-space-4);
+  align-items: start;
+}
+
+.inbound-planning-list-card,
+.inbound-planning-detail-card {
+  min-width: 0;
+}
+
+.inbound-planning-table button {
+  min-height: 28px;
+  padding: 4px 6px;
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  font-size: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.inbound-planning-table button:hover:not(:disabled),
+.inbound-planning-table button:active:not(:disabled) {
+  background: transparent;
+}
+
+.inbound-planning-numeric {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.inbound-planning-detail-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ui-space-2) var(--ui-space-4);
+  margin-bottom: var(--ui-space-4);
+}
+
+.inbound-planning-detail-meta > div {
+  min-width: 0;
+}
+
+.inbound-planning-actions {
+  display: flex;
+  gap: var(--ui-space-2);
+  flex-wrap: wrap;
+  margin: 0 0 var(--ui-space-4);
+}
+
+.inbound-planning-form {
+  display: grid;
+  gap: var(--ui-space-4);
+}
+
+.inbound-planning-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ui-space-3);
+}
+
+.inbound-planning-form label,
+.inbound-planning-line label {
+  display: grid;
+  gap: var(--ui-space-1);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.inbound-planning-form input,
+.inbound-planning-form select,
+.inbound-planning-form textarea,
+.inbound-planning-line input,
+.inbound-planning-line select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.inbound-planning-form .span-2 {
+  grid-column: 1 / -1;
+}
+
+.inbound-planning-lines {
+  display: grid;
+  gap: var(--ui-space-2);
+}
+
+.inbound-planning-form,
+.inbound-planning-form-grid,
+.inbound-planning-lines {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.inbound-planning-line,
+.inbound-planning-line-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--ui-space-2);
+  align-items: end;
+  padding: var(--ui-space-3);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-background);
+  min-width: 0;
+}
+
+.inbound-planning-line.compact,
+.inbound-planning-line-grid.compact {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  align-items: end;
+}
+
+.inbound-planning-line > button,
+.inbound-planning-line-grid > button {
+  height: 38px;
+  align-self: end;
+}
+
+.inbound-planning-form-actions {
+  display: flex;
+  gap: var(--ui-space-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.inbound-planning-helper {
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: 12px;
+}
+
+.inbound-planning-notice {
+  border: 1px solid var(--ui-border);
+  background: var(--ui-background);
+  border-radius: var(--ui-radius);
+  padding: var(--ui-space-3);
+  color: var(--ui-muted);
+}
+
+.inbound-planning-notice strong {
+  color: var(--ui-foreground);
+}
+
+.inbound-planning-status-filter {
+  min-width: 180px;
+}
+
+.inbound-planning-search {
+  min-width: 320px;
+}
+
+.inbound-planning-summary {
+  margin-bottom: var(--ui-space-1);
+}
+
+@media (max-width: 1100px) {
+  .inbound-planning-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inbound-planning-line,
+  .inbound-planning-line-grid,
+  .inbound-planning-line.compact,
+  .inbound-planning-line-grid.compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+  }
+
+  .inbound-planning-line > button,
+  .inbound-planning-line-grid > button {
+    justify-self: start;
+    align-self: end;
+  }
+}
+
+@media (max-width: 768px) {
+  .inbound-planning-detail-meta,
+  .inbound-planning-form-grid,
+  .inbound-planning-line,
+  .inbound-planning-line-grid,
+  .inbound-planning-line.compact,
+  .inbound-planning-line-grid.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .inbound-planning-form .span-2 {
+    grid-column: auto;
+  }
+
+  .inbound-planning-status-filter,
+  .inbound-planning-search {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .inbound-planning-list-card .ui-table-scroll,
+  .inbound-planning-detail-card .ui-table-scroll {
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .inbound-planning-list-card table,
+  .inbound-planning-detail-card table {
+    display: table;
+    table-layout: fixed;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .inbound-planning-list-card th,
+  .inbound-planning-list-card td,
+  .inbound-planning-detail-card th,
+  .inbound-planning-detail-card td {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    padding: 6px 4px !important;
+    font-size: 12px;
+  }
+}
+
+

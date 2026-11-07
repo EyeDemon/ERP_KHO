@@ -189,10 +189,11 @@ public sealed class ApprovalHttpIntegrationTests
         await database.MigrateAndSeedAsync();
         await using var db = Context(database.ConnectionString);
         var users = await db.Users.OrderBy(x => x.Id).ToArrayAsync(); var warehouse = await db.Warehouses.SingleAsync();
+        db.UserWarehouses.Add(new UserWarehouse { UserId = users[1].Id, WarehouseId = warehouse.Id, CreatedBy = users[0].Id });
         var instant = new DateTime(2026, 9, 5, 1, 2, 3, DateTimeKind.Utc);
-        var receipt = new ImportReceipt { Code = "UTC-HTTP", CreatedBy = users[0].Id, WarehouseId = warehouse.Id, CreatedAt = instant };
+        var receipt = new ImportReceipt { Code = "UTC-HTTP", CreatedBy = users[0].Id, WarehouseId = warehouse.Id, CreatedAt = instant, Status = ReceiptStatus.Received };
         db.ImportReceipts.Add(receipt); await db.SaveChangesAsync();
-        db.AuditLogs.Add(new AuditLog { UserId = users[1].Id, Action = "ApprovalRejected", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = warehouse.Id, Timestamp = instant, OldValues = "Status: Draft", NewValues = "Status: Cancelled", Result = "Success", Reason = "Synthetic contract evidence" });
+        db.AuditLogs.Add(new AuditLog { UserId = users[1].Id, Action = "ApprovalRejected", EntityName = "ImportReceipt", EntityId = receipt.Id, WarehouseId = warehouse.Id, Timestamp = instant, OldValues = "Status: Received", NewValues = "Status: Cancelled", Result = "Success", Reason = "Synthetic contract evidence" });
         await db.SaveChangesAsync();
         (await db.ImportReceipts.AsNoTracking().SingleAsync(x => x.Id == receipt.Id)).CreatedAt.Kind.Should().Be(DateTimeKind.Unspecified);
         await using var factory = Factory(database.ConnectionString);

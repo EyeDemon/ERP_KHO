@@ -86,7 +86,7 @@ namespace ERP.Application.Tests
 
             capturedStocktake.Should().NotBeNull();
             capturedStocktake!.WarehouseId.Should().Be(1);
-            capturedStocktake.Status.Should().Be(ReceiptStatus.Draft);
+            capturedStocktake.Status.Should().Be(StocktakeStatus.Draft);
             capturedStocktake.Details.Should().HaveCount(2);
             
             var firstDetail = capturedStocktake.Details.ElementAt(0);

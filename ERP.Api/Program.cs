@@ -2,6 +2,7 @@ using ERP.Api.Middleware;
 using ERP.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Security.Claims;
@@ -13,6 +14,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using ERP.Application.Common;
 using ERP.Api.Health;
 
+using Microsoft.AspNetCore.DataProtection;
 using Serilog;
 using Serilog.Events;
 
@@ -33,6 +35,13 @@ builder.Host.UseSerilog();
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient();
+var dpKeysDir = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtection-Keys");
+Directory.CreateDirectory(dpKeysDir);
+builder.Services.AddDataProtection()
+    .SetApplicationName("ERP_KHO")
+    .PersistKeysToFileSystem(new DirectoryInfo(dpKeysDir));
+
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 if (!builder.Environment.IsDevelopment() && !builder.Environment.IsEnvironment("Testing") && allowedOrigins.Length == 0)
     throw new InvalidOperationException("Cors:AllowedOrigins must be configured outside Development/Testing.");
@@ -44,8 +53,8 @@ builder.Services.AddCors(options =>
     options.AddPolicy("ConfiguredOrigins", policy =>
     {
         policy.WithOrigins(allowedOrigins)
-              .WithHeaders("Authorization", "Content-Type", "Accept")
-              .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+              .WithHeaders("Authorization", "Content-Type", "Accept", "Idempotency-Key", "X-Support-Impersonation-Token", "X-Support-Session-Code", "X-Portal-Scope", "X-Platform-Role-Preview", "X-Totp-Code", "X-Recovery-Code", "X-Correlation-Id")
+              .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
               .AllowCredentials();
     });
 });
@@ -118,9 +127,17 @@ builder.Services.AddHealthChecks()
 // DI Registrations
 builder.Services.AddScoped<ERP.Domain.Interfaces.IProductRepository, ERP.Infrastructure.Repositories.ProductRepository>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IProductService, ERP.Application.Services.ProductService>();
+builder.Services.AddScoped<ERP.Domain.Interfaces.IProductCatalogRepository, ERP.Infrastructure.Repositories.ProductCatalogRepository>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IProductCatalogService, ERP.Application.Services.ProductCatalogService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IBusinessPartnerService, ERP.Infrastructure.Services.BusinessPartnerService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPartnerDebtService, ERP.Infrastructure.Services.PartnerDebtService>();
 
 builder.Services.AddScoped<ERP.Domain.Interfaces.IWarehouseRepository, ERP.Infrastructure.Repositories.WarehouseRepository>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IWarehouseService, ERP.Application.Services.WarehouseService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IWarehouseCalendarService, ERP.Infrastructure.Services.WarehouseCalendarService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IDockYardService, ERP.Infrastructure.Services.DockYardService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IInboundPlanningService, ERP.Infrastructure.Services.InboundPlanningService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IReceiptInboundPlanningIntegration, ERP.Infrastructure.Services.ReceiptInboundPlanningIntegration>();
 
 builder.Services.AddScoped<ERP.Domain.Interfaces.IUnitRepository, ERP.Infrastructure.Repositories.UnitRepository>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IUnitService, ERP.Application.Services.UnitService>();
@@ -132,6 +149,8 @@ builder.Services.AddScoped<ERP.Domain.Interfaces.IStocktakeRepository, ERP.Infra
 builder.Services.AddScoped<ERP.Application.Interfaces.IStocktakeService, ERP.Application.Services.StocktakeService>();
 
 builder.Services.AddScoped<ERP.Domain.Interfaces.IImportReceiptRepository, ERP.Infrastructure.Repositories.ImportReceiptRepository>();
+builder.Services.AddScoped<ERP.Infrastructure.Services.ReceiptInventoryIdentityService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IReceiptInventoryIdentityService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.ReceiptInventoryIdentityService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IImportReceiptService, ERP.Application.Services.ImportReceiptService>();
 
 builder.Services.AddScoped<ERP.Domain.Interfaces.IUnitOfWork, ERP.Infrastructure.Repositories.UnitOfWork>();
@@ -143,6 +162,13 @@ builder.Services.AddScoped<ERP.Domain.Interfaces.IReportRepository, ERP.Infrastr
 builder.Services.AddScoped<ERP.Application.Interfaces.IReportService, ERP.Application.Services.ReportService>();
 
 builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryQueryService, ERP.Infrastructure.Queries.InventoryQueryService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryStatusService, ERP.Infrastructure.Services.InventoryStatusService>();
+builder.Services.AddScoped<ERP.Infrastructure.Services.InventoryLockService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryLockService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.InventoryLockService>());
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryLockEvaluator>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.InventoryLockService>());
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryMovementService, ERP.Infrastructure.Services.InventoryMovementService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryReversalService, ERP.Infrastructure.Services.InventoryReversalService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryTraceabilityQueryService, ERP.Infrastructure.Queries.InventoryTraceabilityQueryService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryTransactionQueryService, ERP.Infrastructure.Queries.InventoryTransactionQueryService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryReconciliationQueryService, ERP.Infrastructure.Queries.InventoryReconciliationQueryService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IStocktakeQueryService, ERP.Infrastructure.Queries.StocktakeQueryService>();
@@ -155,6 +181,7 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IPasswordHasherService, ER
 builder.Services.AddScoped<ERP.Application.Interfaces.ITokenService, ERP.Infrastructure.Services.TokenService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IAuthService, ERP.Application.Services.AuthService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.ICurrentUser, ERP.Api.Authorization.HttpCurrentUser>();
+builder.Services.AddScoped<ERP.Application.Interfaces.ITenantContext, ERP.Api.Authorization.HttpTenantContext>();
 builder.Services.AddScoped<ERP.Api.Infrastructure.RequestMetadata>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IRequestMetadata>(sp => sp.GetRequiredService<ERP.Api.Infrastructure.RequestMetadata>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IWarehouseAuthorizationService, ERP.Infrastructure.Services.WarehouseAuthorizationService>();
@@ -164,8 +191,64 @@ builder.Services.AddScoped<ERP.Application.Interfaces.IUserSessionService, ERP.I
 builder.Services.AddScoped<ERP.Application.Interfaces.IAccessTokenSessionValidator, ERP.Infrastructure.Services.AccessTokenSessionValidator>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IStockTransferService, ERP.Infrastructure.Services.StockTransferService>();
 builder.Services.AddScoped<ERP.Application.Interfaces.IStockReservationService, ERP.Infrastructure.Services.StockReservationService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IStockAllocationService, ERP.Infrastructure.Services.StockAllocationService>();
+builder.Services.AddScoped<ERP.Infrastructure.Services.PickingTaskIntegration>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPickingTaskIntegration>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PickingTaskIntegration>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.PickingService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPickingService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PickingService>());
+builder.Services.AddScoped<ERP.Application.Interfaces.IPickingDispatchReadiness>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PickingService>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.PackingSessionIntegration>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPackingSessionIntegration>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PackingSessionIntegration>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.PackingService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPackingService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PackingService>());
+builder.Services.AddScoped<ERP.Application.Interfaces.IPackingDispatchReadiness>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PackingService>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.ShipmentIntegration>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IShipmentIntegration>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.ShipmentIntegration>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.ShipmentService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IShipmentService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.ShipmentService>());
+builder.Services.AddScoped<ERP.Application.Interfaces.IShipmentDispatchReadiness>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.ShipmentService>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.SalesOrderBackorderService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.ISalesOrderBackorderService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.SalesOrderBackorderService>());
 builder.Services.AddScoped<ERP.Application.Interfaces.IApprovalWorkflowService, ERP.Infrastructure.Services.ApprovalWorkflowService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IReceivingDiscrepancyService, ERP.Infrastructure.Services.ReceivingDiscrepancyService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IHandoverManifestService, ERP.Infrastructure.Services.HandoverManifestService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.ISaasBillingService, ERP.Infrastructure.Services.SaasBillingService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IDataImportService, ERP.Infrastructure.Services.DataImportService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IWmsGovernanceOperationsService, ERP.Infrastructure.Services.WmsGovernanceOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IInventoryControlOperationsService, ERP.Infrastructure.Services.InventoryControlOperationsService>();
+builder.Services.AddSingleton<ERP.Application.Interfaces.ICarrierIntegrationAdapter, ERP.Infrastructure.Services.Carriers.GhnCarrierAdapter>();
+builder.Services.AddSingleton<ERP.Application.Interfaces.ICarrierIntegrationAdapter, ERP.Infrastructure.Services.Carriers.GhtkCarrierAdapter>();
+builder.Services.AddSingleton<ERP.Application.Interfaces.ICarrierIntegrationAdapter, ERP.Infrastructure.Services.Carriers.ViettelPostCarrierAdapter>();
+builder.Services.AddSingleton<ERP.Application.Interfaces.ICarrierIntegrationAdapter, ERP.Infrastructure.Services.Carriers.JtExpressCarrierAdapter>();
+builder.Services.AddSingleton<ERP.Application.Interfaces.ICarrierIntegrationRegistry, ERP.Infrastructure.Services.Carriers.VietnamCarrierIntegrationRegistry>();
+builder.Services.AddSingleton<ERP.Application.Interfaces.IMarketplaceChannelAdapter, ERP.Infrastructure.Services.Marketplaces.ShopeeChannelAdapter>();
+builder.Services.AddSingleton<ERP.Application.Interfaces.IMarketplaceChannelAdapter, ERP.Infrastructure.Services.Marketplaces.TikTokShopChannelAdapter>();
+builder.Services.AddSingleton<ERP.Application.Interfaces.IMarketplaceChannelRegistry, ERP.Infrastructure.Services.Marketplaces.MarketplaceChannelRegistry>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IShipmentOperationsService, ERP.Infrastructure.Services.ShipmentOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPermissionOperationsService, ERP.Infrastructure.Services.PermissionOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IImportReceiptOperationsService, ERP.Infrastructure.Services.ImportReceiptOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPickingTaskOperationsService, ERP.Infrastructure.Services.PickingTaskOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IStocktakeOperationsService, ERP.Infrastructure.Services.StocktakeOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPackingSessionOperationsService, ERP.Infrastructure.Services.PackingSessionOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IProductOperationsService, ERP.Infrastructure.Services.ProductOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IExportReceiptOperationsService, ERP.Infrastructure.Services.ExportReceiptOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.ISalesOrderOperationsService, ERP.Infrastructure.Services.SalesOrderOperationsService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IReportOperationsService, ERP.Infrastructure.Services.ReportOperationsService>();
+builder.Services.AddScoped<ERP.Infrastructure.Services.TotpLoginStepUpService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.ITotpLoginVerifier>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.TotpLoginStepUpService>());
+builder.Services.AddScoped<ERP.Infrastructure.Services.PutawayService>();
+builder.Services.AddScoped<ERP.Application.Interfaces.IPutawayService>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PutawayService>());
+builder.Services.AddScoped<ERP.Application.Interfaces.IReceiptPutawayIntegration>(sp => sp.GetRequiredService<ERP.Infrastructure.Services.PutawayService>());
 builder.Services.AddSingleton(TimeProvider.System);
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddHostedService<ERP.Api.Hosting.BuyerPiiRetentionAnonymizerJob>();
+    builder.Services.AddHostedService<ERP.Api.Hosting.IntegrationOutboxDispatcherJob>();
+    builder.Services.AddHostedService<ERP.Api.Hosting.SoftReservationExpiryJob>();
+    builder.Services.AddHostedService<ERP.Api.Hosting.DailyInventoryIntegrityJob>();
+    builder.Services.AddHostedService<ERP.Api.Hosting.ThreePlDailySnapshotJob>();
+    builder.Services.AddHostedService<ERP.Api.Hosting.DatabaseBackupHostedService>();
+}
 var approvalAgingOptions = builder.Configuration.GetSection("ApprovalAging").Get<ERP.Application.Options.ApprovalAgingOptions>() ?? new ERP.Application.Options.ApprovalAgingOptions();
 approvalAgingOptions.Validate();
 builder.Services.AddSingleton(approvalAgingOptions);
@@ -175,11 +258,21 @@ exportReceiptOptions.WriteEnabled = builder.Configuration.GetValue("ExportWorkfl
 _ = exportReceiptOptions.GetDefaultMode();
 builder.Services.AddSingleton(exportReceiptOptions);
 
-// Configure JWT Authentication (Fail-Fast: no fallback, reject placeholder/empty)
+// Configure JWT Authentication (Fail-Fast: no fallback, reject placeholder/empty outside Testing)
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = jwtSettings["Secret"];
+if (builder.Environment.IsEnvironment("Testing")
+    && (string.IsNullOrWhiteSpace(secretKey)
+        || secretKey == "__SET_IN_USER_SECRETS_OR_ENV__"
+        || secretKey == "__EPHEMERAL_TESTING_JWT_SECRET__"))
+{
+    secretKey = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(48));
+    builder.Configuration["JwtSettings:Secret"] = secretKey;
+}
 
-if (string.IsNullOrWhiteSpace(secretKey) || secretKey == "__SET_IN_USER_SECRETS_OR_ENV__")
+if (string.IsNullOrWhiteSpace(secretKey)
+    || secretKey == "__SET_IN_USER_SECRETS_OR_ENV__"
+    || secretKey == "__EPHEMERAL_TESTING_JWT_SECRET__")
 {
     throw new InvalidOperationException("JWT Secret is not configured. Application cannot start.");
 }
@@ -197,6 +290,7 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
+        ClockSkew = TimeSpan.Zero,
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
@@ -213,6 +307,13 @@ builder.Services.AddAuthentication(options =>
                 return;
             }
 
+            if (int.TryParse(context.Principal?.FindFirstValue(ERP.Application.Interfaces.TenantClaimTypes.TenantId), out var tenantId) && tenantId > 0)
+            {
+                context.HttpContext.RequestServices
+                    .GetRequiredService<ErpKhoDbContext>()
+                    .UseTenant(tenantId);
+            }
+
             var validator = context.HttpContext.RequestServices
                 .GetRequiredService<ERP.Application.Interfaces.IAccessTokenSessionValidator>();
             if (!await validator.IsActiveAsync(userId, jti, context.HttpContext.RequestAborted))
@@ -223,10 +324,28 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy(ERP.Api.Authorization.ApprovalPolicies.Checker,
-        policy => policy.RequireAuthenticatedUser().RequireRole(
-            ERP.Api.Authorization.AppRoles.Admin,
-            ERP.Api.Authorization.AppRoles.Manager));
+    options.AddPolicy(ERP.Api.Authorization.ApprovalPolicies.Checker, policy =>
+        policy.RequireAuthenticatedUser().RequireAssertion(ctx =>
+        {
+            if (ctx.Resource is HttpContext httpContext)
+            {
+                var currentUser = httpContext.RequestServices.GetService<ERP.Application.Interfaces.ICurrentUser>();
+                if (currentUser is not null)
+                {
+                    return currentUser.HasPermission(ERP.Api.Authorization.AppPermissions.ApprovalApprove)
+                        || currentUser.HasPermission(ERP.Api.Authorization.AppPermissions.ReceiptComplete)
+                        || currentUser.HasPermission(ERP.Api.Authorization.AppPermissions.ExportReceiptApprove)
+                        || currentUser.HasPermission(ERP.Api.Authorization.AppPermissions.StocktakeManage)
+                        || currentUser.HasPermission(ERP.Api.Authorization.AppPermissions.InventoryMovementCreate);
+                }
+            }
+
+            var role = ctx.User.FindFirstValue(ClaimTypes.Role);
+            return role is ERP.Api.Authorization.AppRoles.Admin
+                or ERP.Api.Authorization.AppRoles.Manager
+                or ERP.Api.Authorization.AppRoles.Supervisor
+                or ERP.Api.Authorization.AppRoles.SuperAdmin;
+        }));
 });
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -236,9 +355,32 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Global Exception Handling
-app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
 app.UseMiddleware<ERP.Api.Infrastructure.CorrelationIdMiddleware>();
+app.Use(async (ctx, next) =>
+{
+    ctx.Response.OnStarting(() =>
+    {
+        ctx.Response.Headers.TryAdd("X-Content-Type-Options", "nosniff");
+        ctx.Response.Headers.TryAdd("X-Frame-Options", "DENY");
+        ctx.Response.Headers.TryAdd("Referrer-Policy", "strict-origin-when-cross-origin");
+        ctx.Response.Headers.TryAdd("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+        return Task.CompletedTask;
+    });
+    await next();
+});
+app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
+app.Use(async (ctx, next) =>
+{
+    if (ctx.Request.Path.Value?.Contains("webhook", StringComparison.OrdinalIgnoreCase) == true)
+    {
+        ctx.Request.EnableBuffering();
+    }
+    await next();
+});
 app.UseSerilogRequestLogging();
 
 app.UseRouting();
@@ -254,13 +396,14 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseAuthentication();
+app.UseMiddleware<ERP.Api.Middleware.SupportImpersonationMiddleware>();
 app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();
 
 var healthEndpointsEnabled = builder.Configuration.GetValue(
     "Health:Enabled",
-    !app.Environment.IsDevelopment());
+    true);
 if (healthEndpointsEnabled)
 {
     app.MapHealthChecks("/health/live", new HealthCheckOptions
@@ -288,4 +431,3 @@ static Task WriteHealthResponseAsync(HttpContext context, HealthReport report)
 }
 
 public partial class Program { }
-

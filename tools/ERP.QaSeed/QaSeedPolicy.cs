@@ -26,8 +26,14 @@ public static class QaSeedPolicy
     public static SqlConnectionStringBuilder ValidateLocalConnection(string connectionString)
     {
         var connection = new SqlConnectionStringBuilder(connectionString);
+        var isLocalDataSource =
+            connection.DataSource.StartsWith("(localdb)\\", StringComparison.OrdinalIgnoreCase) ||
+            connection.DataSource.Equals(".\\SQLEXPRESS", StringComparison.OrdinalIgnoreCase) ||
+            connection.DataSource.Equals("localhost\\SQLEXPRESS", StringComparison.OrdinalIgnoreCase) ||
+            connection.DataSource.Equals(".", StringComparison.OrdinalIgnoreCase) ||
+            connection.DataSource.Equals("localhost", StringComparison.OrdinalIgnoreCase);
         if (!string.Equals(connection.InitialCatalog, "ERP_KHO", StringComparison.Ordinal) ||
-            !connection.DataSource.StartsWith("(localdb)\\", StringComparison.OrdinalIgnoreCase) ||
+            !isLocalDataSource ||
             !connection.IntegratedSecurity)
         {
             throw new InvalidOperationException("QA seed requires Windows-authenticated SQL Server LocalDB database ERP_KHO.");

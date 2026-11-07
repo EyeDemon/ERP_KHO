@@ -13,6 +13,8 @@ describe('approval workflow presentation', () => {
   it('keeps business rejection distinct from cancellation and security rejection', () => {
     expect(approvalDisplayAction('ApprovalRejected')).toBe('Bị từ chối');
     expect(approvalDisplayAction('ImportReceipt.Cancelled')).toBe('Đã hủy');
-    expect(approvalDisplayAction('Approval.Reject.Rejected')).toBe('Approval.Reject.Rejected');
+    expect(approvalDisplayAction('Approval.Reject.Rejected')).toBe('Thao tác không được chấp nhận');
+    expect(approvalDisplayAction('ImportReceipt.Approved')).toBe('Đã duyệt');
+    expect(approvalDisplayAction('Unknown.TechnicalAction')).toBe('Đã cập nhật chứng từ');
   });
 });
